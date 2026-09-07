@@ -129,9 +129,7 @@ def test_only_403_quota_exhaustion_reasons_are_confirmed_quota(tmp_path):
 def test_google_quota_exhaustion_reason_blocks_the_current_slot(tmp_path, reason):
     ledger = make_ledger(tmp_path)
     with pytest.raises(YouTubeQuotaUnavailable) as caught:
-        ledger.execute(
-            SimpleNamespace(execute=lambda: (_ for _ in ()).throw(HttpFailure(reason))), "videos.update"
-        )
+        ledger.execute(SimpleNamespace(execute=lambda: (_ for _ in ()).throw(HttpFailure(reason))), "videos.update")
 
     assert caught.value.code == "youtube_quota_exhausted"
     assert caught.value.reason == reason

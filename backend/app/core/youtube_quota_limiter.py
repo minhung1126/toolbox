@@ -180,10 +180,12 @@ class YouTubeQuotaLimiter:
 
     def _method_meta(self, method: str) -> dict[str, Any] | None:
         registries = (
-            YOUTUBE_UPLOAD_QUOTA_METHODS,
-        ) if self.bucket == VIDEO_UPLOADS_BUCKET else (
-            YOUTUBE_QUOTA_METHODS,
-            YOUTUBE_AUXILIARY_QUOTA_METHODS,
+            (YOUTUBE_UPLOAD_QUOTA_METHODS,)
+            if self.bucket == VIDEO_UPLOADS_BUCKET
+            else (
+                YOUTUBE_QUOTA_METHODS,
+                YOUTUBE_AUXILIARY_QUOTA_METHODS,
+            )
         )
         for registry in registries:
             meta = registry.get(method)

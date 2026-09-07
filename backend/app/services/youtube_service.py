@@ -275,10 +275,9 @@ def update_single_video_metadata(
         if not items:
             raise ValueError(f"YouTube 找不到影片 ID：{video_id}。")
         current_snippet = items[0]["snippet"]
-    if (
-        str(current_snippet.get("title") or "") == str(new_title or "")
-        and normalize_description(current_snippet.get("description")) == normalize_description(new_description)
-    ):
+    if str(current_snippet.get("title") or "") == str(new_title or "") and normalize_description(
+        current_snippet.get("description")
+    ) == normalize_description(new_description):
         return {"id": video_id, "snippet": dict(current_snippet), "unchanged": True}
     category_id = current_snippet.get("categoryId")
     if not category_id:
@@ -324,15 +323,38 @@ def set_video_public(
     video_id: str,
     current_video: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Set a video public, treating an already-public video as success."""
+    """Set a video public and reconcile an ambiguous provider response.
+
+    YouTube may commit a non-idempotent update and then fail while returning
+    the response (for example, when the connection is interrupted).  A
+    second status read lets the workflow distinguish that case from a real
+    publish failure, so the UI does not report a successful publish as failed.
+    """
 
     status = get_video_status(context, video_id, current_video)
     if status.get("privacyStatus") == "public":
         return {"id": video_id, "status": status, "already_public": True}
     service = get_youtube_service(context)
-    status["privacyStatus"] = "public"
-    request = service.videos().update(part="status", body={"id": video_id, "status": status})
-    return _execute_with_quota(request, "videos.update", context)
+    request = service.videos().update(
+        part="status",
+        body={"id": video_id, "status": {"privacyStatus": "public"}},
+    )
+    try:
+        return _execute_with_quota(request, "videos.update", context)
+    except YouTubeQuotaUnavailable:
+        raise
+    except Exception as update_error:
+        # The write may have reached YouTube even when its response did not.
+        # Do not hide the original error unless the fresh read proves that the
+        # requested state was committed.
+        try:
+            confirmed_status = get_video_status(context, video_id)
+        except Exception:
+            raise update_error
+        if confirmed_status.get("privacyStatus") == "public":
+            logger.warning("YouTube publish response was ambiguous; video %s is public", video_id)
+            return {"id": video_id, "status": confirmed_status, "reconciled": True}
+        raise update_error
 
 
 def remove_playlist_item(context: YouTubeRequestContext, playlist_item_id: Optional[str]) -> Dict[str, Any]:
