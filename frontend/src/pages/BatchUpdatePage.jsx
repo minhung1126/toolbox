@@ -961,7 +961,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
       <div className="glass-panel card-padding playlist-input-panel">
         <label className="form-label" htmlFor="batch-playlist-id"><PlaySquare size={14} /> 共用 To-Post 播放清單</label>
         <SourceLinkInput id="batch-playlist-id" value={playlistId} sourceType="youtube-playlist" readOnly disabled={executing || loadingVideos} />
-        <p className="section-desc">此播放清單由 YouTube 設定統一管理；舊版草稿設定中的播放清單 override 會被忽略。</p>
+        <p className="section-desc">此播放清單由 YouTube 設定統一管理。</p>
       </div>
 
       <TeamPersonFilterPanel

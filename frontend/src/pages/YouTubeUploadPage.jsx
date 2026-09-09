@@ -455,7 +455,7 @@ export default function YouTubeUploadPage({ sysSettings = {}, authUser, mode = '
 
       {!isJobPage && !driveScopeReady && (
         <StatusMessage tone="warning" title="尚未取得 Google Drive 權限" action={<button type="button" className="btn btn-secondary status-message-action" onClick={reauthorizeDrive}>重新授權 Google Drive</button>}>
-          <span>目前登入 token 只有舊的 Google 權限；重新授權後才能讀取你貼上的 Drive ID／網址。</span>
+          <span>尚未取得 Google Drive 讀取權限；重新授權後才能讀取 Drive ID／網址。</span>
         </StatusMessage>
       )}
       {error && !jobNotFound && <StatusMessage tone="error" title="上傳流程無法繼續"><span>{error}</span></StatusMessage>}
@@ -464,7 +464,7 @@ export default function YouTubeUploadPage({ sysSettings = {}, authUser, mode = '
       {!isJobPage && <form className="glass-panel card-padding card-stack" onSubmit={loadPreview}>
         <div>
           <h2 className="panel-title"><Upload size={19} /> Drive 來源</h2>
-          <p className="panel-description">支援 Drive 資料夾 ID／網址、單一影片 ID／網址。第一版只讀取資料夾第一層。</p>
+          <p className="panel-description">支援 Drive 資料夾 ID／網址、單一影片 ID／網址；資料夾讀取第一層內容。</p>
         </div>
         <div className="form-group">
           <label className="form-label" htmlFor="youtube-drive-source">Google Drive ID／網址</label>

@@ -21,13 +21,6 @@ Creator Tools 是以 FastAPI 與 React/Vite 建置的創作者工作流控制台
 - YouTube 預設播放清單與每個 slot 的 quota 使用分離 API 與儲存動作；播放清單可填 ID 或 YouTube URL。
 - API 錯誤固定為 `detail.code`、`detail.message`、`detail.retryable`、`detail.field_errors`，provider 原始回應與 token 不會回傳前端。
 
-## 操作安全與錯誤處理
-
-- 公開／移出清單與批次覆寫都必須先讀取並顯示完整預覽；執行請求會帶入後端簽署的短效 token。
-- 後端在任何寫入前重新驗證帳號、YouTube slot、播放清單、試算表與影片 metadata；資料變更時回傳 `409 stale_preview`，不執行任何寫入。
-- YouTube 預設播放清單與每個 slot 的 quota 使用分離 API 與儲存動作；播放清單可填 ID 或 YouTube URL。
-- API 錯誤固定為 `detail.code`、`detail.message`、`detail.retryable`、`detail.field_errors`，provider 原始回應與 token 不會回傳前端。
-
 ## 專案結構
 
 ```text

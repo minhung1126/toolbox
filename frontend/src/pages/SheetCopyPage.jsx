@@ -305,7 +305,7 @@ export default function SheetCopyPage({ sysSettings }) {
                           <button
                             type="button"
                             className="sheet-copy-row-remove-btn"
-                            title={`隱藏第 ${row.row_number} 列（不影響 Sheet 檔案）`}
+                            title={`隱藏第 ${row.row_number} 列`}
                             aria-label={`移除第 ${row.row_number} 列`}
                             onClick={() => handleDismissRow(row.row_number)}
                           >
