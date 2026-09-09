@@ -748,6 +748,17 @@ textarea {
   color: #9ee2be;
 }
 
+.sheet-copy-restore-btn {
+  border-color: #3b4d5e;
+  background: #1e293b;
+  color: var(--text-main);
+}
+
+.sheet-copy-restore-btn:hover {
+  background: #28384d;
+  border-color: var(--primary);
+}
+
 .mobile-app-bar {
   background: #0b121b;
   border-bottom-color: #223344;

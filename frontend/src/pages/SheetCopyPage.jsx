@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Clipboard, FileSpreadsheet, Search } from 'lucide-react';
+import { Check, Clipboard, FileSpreadsheet, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { api } from '../services/api';
 import SheetDataSourcePanel from '../components/SheetDataSourcePanel';
 import TeamPersonFilterPanel from '../components/TeamPersonFilterPanel';
@@ -37,6 +37,7 @@ export default function SheetCopyPage({ sysSettings }) {
   const [columns, setColumns] = useState([]);
   const [visibleKeys, setVisibleKeys] = useState(Array.isArray(saved.visibleKeys) ? saved.visibleKeys : []);
   const [rows, setRows] = useState([]);
+  const [dismissedRowNumbers, setDismissedRowNumbers] = useState([]);
   const [query, setQuery] = useState(saved.query || '');
   const [autoCollapse, setAutoCollapse] = useState(saved.autoCollapse === true);
   const [loading, setLoading] = useState(false);
@@ -101,6 +102,7 @@ export default function SheetCopyPage({ sysSettings }) {
     worksheetRequestRef.current = requestId;
     setWorksheetName(name);
     setRows([]);
+    setDismissedRowNumbers([]);
     setColumns([]);
     setSourceError('');
     try {
@@ -124,6 +126,7 @@ export default function SheetCopyPage({ sysSettings }) {
     }
     setLoading(true);
     setSourceError('');
+    setDismissedRowNumbers([]);
     try {
       const metadata = await api.getSpreadsheetMetadata(nextSource);
       const nextWorksheets = metadata.worksheets || [];
@@ -158,6 +161,7 @@ export default function SheetCopyPage({ sysSettings }) {
     setSpreadsheetId(nextValue);
     if (nextValue.trim() !== appliedSpreadsheetId.trim()) {
       setSourceError('');
+      setDismissedRowNumbers([]);
     }
   };
 
@@ -168,11 +172,22 @@ export default function SheetCopyPage({ sysSettings }) {
   const visibleColumns = columns.filter((column) => visibleKeys.includes(column.key));
   const keyword = query.trim().toLocaleLowerCase('zh-TW');
   const displayDisabled = sourceStale || !sourceReady || loading;
-  const filteredRows = sourceStale ? [] : rows.filter((row) => {
+  const candidateRows = sourceStale ? [] : rows.filter((row) => {
     const matchesPeople = !selectedTeam || (row.team === selectedTeam && selectedPeople.includes(row.person_option));
     const matchesQuery = !keyword || visibleColumns.some((column) => String(row.cells[column.index] ?? '').toLocaleLowerCase('zh-TW').includes(keyword));
     return matchesPeople && matchesQuery;
   });
+  const filteredRows = candidateRows.filter((row) => !dismissedRowNumbers.includes(row.row_number));
+
+  const handleDismissRow = (rowNumber) => {
+    setDismissedRowNumbers((current) => (current.includes(rowNumber) ? current : [...current, rowNumber]));
+    setCopyStatus(`已隱藏第 ${rowNumber} 列`);
+  };
+
+  const handleRestoreRows = () => {
+    setDismissedRowNumbers([]);
+    setCopyStatus('已復原顯示所有列');
+  };
 
   const handleCopy = async (row, column) => {
     try {
@@ -184,7 +199,14 @@ export default function SheetCopyPage({ sysSettings }) {
     }
   };
 
-  const emptyMessage = sourceStale ? '資料來源已修改，請先按刷新套用。' : selectedTeam && !selectedPeople.length ? '目前未勾選人物，沒有符合資料。' : '目前篩選條件沒有資料。';
+  const allCandidateRowsHidden = candidateRows.length > 0 && filteredRows.length === 0;
+  const emptyMessage = sourceStale
+    ? '資料來源已修改，請先按刷新套用。'
+    : selectedTeam && !selectedPeople.length
+      ? '目前未勾選人物，沒有符合資料。'
+      : allCandidateRowsHidden
+        ? '所有符合條件的列皆已暫時移除。'
+        : '目前篩選條件沒有資料。';
 
   return (
     <div className="section-gap sheet-copy-page">
@@ -218,8 +240,118 @@ export default function SheetCopyPage({ sysSettings }) {
         </div>
       </section>
 
-      <section className="glass-panel sheet-copy-panel"><header><div><strong>{filteredRows.length} 列結果</strong><small>{autoCollapse ? '內容格已折疊；' : ''}點擊儲存格即複製完整內容。</small></div><span aria-live="polite">{copyStatus}</span></header>
-        {!visibleColumns.length ? <div className="sheet-copy-empty">請至少勾選一個欄位。</div> : !filteredRows.length ? <div className="sheet-copy-empty">{emptyMessage}</div> : <><div className="sheet-copy-scroll-hint" role="note">左右滑動查看完整欄位；列號固定在左側。</div><div className="sheet-copy-scroll"><table><thead><tr><th className="row-number">列</th>{visibleColumns.map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{filteredRows.map((row) => <tr key={row.row_number}><th className="row-number">{row.row_number}</th>{visibleColumns.map((column) => { const id = `${row.row_number}:${column.key}`; const copied = copiedCell === id; const value = String(row.cells[column.index] ?? ''); return <td key={column.key}><button type="button" className={`sheet-copy-cell${autoCollapse ? ' sheet-copy-cell-collapsed' : ''}${copied ? ' copied' : ''}`} title={value || '（空白）'} onClick={() => handleCopy(row, column)}><span className={`sheet-copy-cell-content${autoCollapse ? ' is-collapsed' : ''}`}>{value || <em>（空白）</em>}</span><small>{copied ? <><Check size={14} /> 已複製</> : <><Clipboard size={14} /> 複製</>}</small></button></td>; })}</tr>)}</tbody></table></div></>}
+      <section className="glass-panel sheet-copy-panel">
+        <header>
+          <div className="sheet-copy-panel-title-wrap">
+            <div className="sheet-copy-panel-title-row">
+              <strong>{filteredRows.length} 列結果</strong>
+              {dismissedRowNumbers.length > 0 && (
+                <span className="sheet-copy-dismissed-badge">
+                  （已隱藏 {dismissedRowNumbers.length} 列）
+                  <button
+                    type="button"
+                    className="sheet-copy-restore-btn"
+                    onClick={handleRestoreRows}
+                    title="復原所有已隱藏的列"
+                    aria-label="復原所有已隱藏的列"
+                  >
+                    <RotateCcw size={13} aria-hidden="true" />
+                    復原
+                  </button>
+                </span>
+              )}
+            </div>
+            <small>{autoCollapse ? '內容格已折疊；' : ''}點擊儲存格即複製完整內容。</small>
+          </div>
+          <span aria-live="polite">{copyStatus}</span>
+        </header>
+        {!visibleColumns.length ? (
+          <div className="sheet-copy-empty">請至少勾選一個欄位。</div>
+        ) : !filteredRows.length ? (
+          <div className="sheet-copy-empty">
+            <p>{emptyMessage}</p>
+            {allCandidateRowsHidden && (
+              <button
+                type="button"
+                className="sheet-copy-restore-btn sheet-copy-restore-all-btn"
+                onClick={handleRestoreRows}
+              >
+                <RotateCcw size={13} aria-hidden="true" />
+                復原顯示所有列
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="sheet-copy-scroll-hint" role="note">
+              左右滑動查看完整欄位；列號固定在左側。
+            </div>
+            <div className="sheet-copy-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th className="row-number">列</th>
+                    {visibleColumns.map((column) => (
+                      <th key={column.key}>{column.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.map((row) => (
+                    <tr key={row.row_number}>
+                      <th className="row-number">
+                        <div className="sheet-copy-row-header-content">
+                          <span className="sheet-copy-row-index">{row.row_number}</span>
+                          <button
+                            type="button"
+                            className="sheet-copy-row-remove-btn"
+                            title={`隱藏第 ${row.row_number} 列（不影響 Sheet 檔案）`}
+                            aria-label={`移除第 ${row.row_number} 列`}
+                            onClick={() => handleDismissRow(row.row_number)}
+                          >
+                            <Trash2 size={13} aria-hidden="true" />
+                          </button>
+                        </div>
+                      </th>
+                      {visibleColumns.map((column) => {
+                        const id = `${row.row_number}:${column.key}`;
+                        const copied = copiedCell === id;
+                        const value = String(row.cells[column.index] ?? '');
+                        return (
+                          <td key={column.key}>
+                            <button
+                              type="button"
+                              className={`sheet-copy-cell${autoCollapse ? ' sheet-copy-cell-collapsed' : ''}${copied ? ' copied' : ''}`}
+                              title={value || '（空白）'}
+                              onClick={() => handleCopy(row, column)}
+                            >
+                              <span
+                                className={`sheet-copy-cell-content${autoCollapse ? ' is-collapsed' : ''}`}
+                              >
+                                {value || <em>（空白）</em>}
+                              </span>
+                              <small>
+                                {copied ? (
+                                  <>
+                                    <Check size={14} /> 已複製
+                                  </>
+                                ) : (
+                                  <>
+                                    <Clipboard size={14} /> 複製
+                                  </>
+                                )}
+                              </small>
+                            </button>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </section>
     </div>
   );
