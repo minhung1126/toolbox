@@ -15,7 +15,11 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from backend.app.api.router import api_router
 from backend.app.core.config import settings
 from backend.app.core.error_contract import normalize_http_detail, validation_field_errors
-from backend.app.services.youtube_upload_jobs import start_upload_worker, stop_upload_worker
+from backend.app.tools.builtin import register_builtin_tools
+from backend.app.tools.registry import tool_registry
+
+# Ensure built-in tools are registered
+register_builtin_tools()
 
 logger = logging.getLogger(__name__)
 
@@ -41,15 +45,15 @@ def frontend_cache_control(path: str, content_type: str | None) -> str | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    start_upload_worker()
+    await tool_registry.run_startup(app)
     try:
         yield
     finally:
-        stop_upload_worker()
+        await tool_registry.run_shutdown(app)
 
 
 app = FastAPI(
-    title="Creator Tools Dashboard API",
+    title="Toolbox Dashboard API",
     description="FastAPI backend for Google OAuth, Google Sheets, and direct YouTube workflows.",
     version="1.1.0",
     lifespan=lifespan,

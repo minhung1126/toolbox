@@ -25,16 +25,21 @@ Toolbox 是以 Docker 容器化運行的多功能工具箱平台，採用 **Fast
 
 ## 系統架構與資料持久化
 
+完整的系統模組化設計、外掛外掛規格與新工具開發指南請參閱 [系統架構設計與模組化開發指南 (docs/ARCHITECTURE.md)](docs/ARCHITECTURE.md)。
+
 ```text
 toolbox/
 ├── backend/app/
 │   ├── main.py              # FastAPI 啟動入口、Lifespan 管理與 SPA 靜態託管
 │   ├── api/                 # /api/v1/ 路由入口
-│   ├── tools/               # 工具箱模組擴充目錄 (Catalog 與外掛工具)
+│   ├── tools/               # 工具箱模組擴充目錄 (ToolRegistry, Plugin 規格與內建外掛)
 │   ├── core/                # 共享底層 (安全加密、設定、Session、配額限制器)
 │   └── services/            # 核心服務 (Google Auth, Drive, Sheets, YouTube)
-├── frontend/src/            # React 18 + Vite SPA 前端
-├── docs/                    # 部署、Google API 與配額說明手冊
+├── frontend/src/
+│   ├── tools/               # 前端模組化工具目錄與動態導覽配置
+│   ├── pages/               # 各工具頁面
+│   └── components/          # 共用 Glassmorphism UI 元件
+├── docs/                    # 架構、部署、Google API 與配額說明手冊
 ├── data/                    # 執行期持久化資料 (憑證、Session、配額帳本，Git 不提交)
 ├── Dockerfile               # Node 20 + Python 3.11 兩階段高效率容器映像建置
 ├── docker-compose.yml       # 本機運行與 GHCR 映像拉取 Compose 配置

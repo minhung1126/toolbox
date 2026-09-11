@@ -1,18 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Activity, CheckCircle2, ChevronDown, Clapperboard, Copy, FileSpreadsheet, Info, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Send, Settings, Smartphone, Upload, Video, X, Youtube } from 'lucide-react';
+import { CheckCircle2, ChevronDown, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, Video, X } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { youtubeIsConnected } from '../utils/youtubeRouting';
 import { PATHS } from '../routes/paths';
+import { getSystemNavItems, getToolNavGroups } from '../tools/catalog';
 
-const youtubeItems = [
-  { id: 'youtube_upload', to: PATHS.youtubeUploadNew, label: '上傳至 YouTube', icon: Upload },
-  { id: 'youtube_video_drafts', to: PATHS.youtubeVideoDrafts, label: 'Video 草稿', icon: Clapperboard },
-  { id: 'youtube_shorts_drafts', to: PATHS.youtubeShortsDrafts, label: 'Shorts 草稿', icon: Smartphone },
-  { id: 'publish_clean', to: PATHS.youtubePublishCleanup, label: '發布草稿', icon: Send },
-  { id: 'youtube_settings', to: PATHS.youtubeConnections, label: 'YouTube 設定', icon: Settings, activePrefix: PATHS.youtubeSettings },
-];
-const sheetItems = [{ id: 'sheet_copy', to: PATHS.sheetCopy, label: '內容複製', icon: Copy }];
+const toolNavGroups = getToolNavGroups();
+const systemNavItems = getSystemNavItems();
+const youtubeGroup = toolNavGroups.find((g) => g.id === 'youtube') || { items: [] };
+const sheetGroup = toolNavGroups.find((g) => g.id === 'sheet') || { items: [] };
+const youtubeItems = youtubeGroup.items;
+const sheetItems = sheetGroup.items;
 
 function pathIsActive(pathname, item) {
   if (item.activePrefix) return pathname === item.activePrefix || pathname.startsWith(`${item.activePrefix}/`);
@@ -123,10 +122,9 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
       <div className="sidebar-brand"><div className="brand-mark"><Video size={24} aria-hidden="true" /></div><div className="sidebar-brand-copy"><h2>Creator Tools</h2><p>創作者自動化控制台</p></div><button type="button" className="sidebar-toggle" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} aria-label={sidebarToggleLabel} title={sidebarToggleLabel} aria-expanded={!sidebarCollapsed} aria-controls="primary-navigation"><SidebarToggleIcon size={20} aria-hidden="true" /></button><button ref={closeButtonRef} type="button" className="drawer-close" onClick={closeDrawer} aria-label="關閉導覽選單"><X size={22} aria-hidden="true" /></button></div>
       <nav className="sidebar-nav">
         {item({ id: 'dashboard', to: PATHS.dashboard, label: '儀表板總覽', icon: LayoutDashboard })}
-        {item({ id: 'api_health', to: PATHS.systemHealth, label: 'API健康度', icon: Activity })}
-        {item({ id: 'system_info', to: PATHS.systemInfo, label: '系統／部署資訊', icon: Info })}
-        {group('youtube', 'YouTube', Youtube, youtubeOpen, setYoutubeOpen, youtubeItems, youtubeActive)}
-        {group('sheet', 'Sheet', FileSpreadsheet, sheetOpen, setSheetOpen, sheetItems, sheetActive)}
+        {systemNavItems.map((sysItem) => item(sysItem))}
+        {group('youtube', 'YouTube', youtubeGroup.icon, youtubeOpen, setYoutubeOpen, youtubeItems, youtubeActive)}
+        {group('sheet', 'Sheet', sheetGroup.icon, sheetOpen, setSheetOpen, sheetItems, sheetActive)}
         {item({ id: 'settings', to: PATHS.googleSettings, label: '帳號與 Google 設定', icon: Settings, activePrefix: '/settings' })}
       </nav>
       <div className="sidebar-footer"><div className="glass-panel account-card"><strong className="account-title">帳號資訊</strong><span className="badge badge-connected account-status"><CheckCircle2 size={12} />控制台已登入</span><p className="account-email">{authUser?.email}</p><span className={`badge account-youtube-status ${youtubeAuthorized ? 'badge-connected' : 'badge-disconnected'}`}>{youtubeAuthorized ? 'YouTube 已授權' : 'YouTube 未連結'}</span><button type="button" className="logout-button" onClick={onLogout}>登出控制台</button></div></div>
