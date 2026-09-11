@@ -238,8 +238,16 @@ class CredentialStore:
             return self._get_public(storage_key, subject) or {}
 
     def save_google_connection(self, token_dict: Dict[str, Any], owner_sub: str) -> Dict[str, Any]:
-        """Persist the control-panel login/Sheets connection for one OIDC subject."""
+        """Persist the control-panel login connection for one OIDC subject."""
         return self._save_connection("google", token_dict, owner_sub)
+
+    def save_sheets_connection(self, token_dict: Dict[str, Any], owner_sub: str) -> Dict[str, Any]:
+        """Persist a dedicated Google Sheets connection for one OIDC subject."""
+        return self._save_connection("sheets", token_dict, owner_sub)
+
+    def save_drive_connection(self, token_dict: Dict[str, Any], owner_sub: str) -> Dict[str, Any]:
+        """Persist a dedicated Google Drive connection for one OIDC subject."""
+        return self._save_connection("drive", token_dict, owner_sub)
 
     def save_youtube_connection(
         self, token_dict: Dict[str, Any], owner_sub: str, slot: str = "primary"
@@ -255,6 +263,12 @@ class CredentialStore:
 
     def get_google_credentials(self, owner_sub: str) -> Optional[Dict[str, Any]]:
         return self._get_credentials("google", owner_sub)
+
+    def get_sheets_credentials(self, owner_sub: str) -> Optional[Dict[str, Any]]:
+        return self._get_credentials("sheets", owner_sub)
+
+    def get_drive_credentials(self, owner_sub: str) -> Optional[Dict[str, Any]]:
+        return self._get_credentials("drive", owner_sub)
 
     def get_youtube_credentials(self, owner_sub: str, slot: str = "primary") -> Optional[Dict[str, Any]]:
         slot_name = normalize_youtube_slot(slot)
@@ -276,6 +290,12 @@ class CredentialStore:
 
     def get_google_public(self, owner_sub: str) -> Optional[Dict[str, Any]]:
         return self._get_public("google", owner_sub)
+
+    def get_sheets_public(self, owner_sub: str) -> Optional[Dict[str, Any]]:
+        return self._get_public("sheets", owner_sub)
+
+    def get_drive_public(self, owner_sub: str) -> Optional[Dict[str, Any]]:
+        return self._get_public("drive", owner_sub)
 
     def get_youtube_public(self, owner_sub: str, slot: str = "primary") -> Optional[Dict[str, Any]]:
         slot_name = normalize_youtube_slot(slot)
@@ -310,6 +330,20 @@ class CredentialStore:
             "google", message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
         )
 
+    def mark_sheets_refresh_failed(
+        self, message: str, *, owner_sub: str, requires_reauthorization: bool = False
+    ) -> None:
+        self._mark_refresh_failed(
+            "sheets", message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
+        )
+
+    def mark_drive_refresh_failed(
+        self, message: str, *, owner_sub: str, requires_reauthorization: bool = False
+    ) -> None:
+        self._mark_refresh_failed(
+            "drive", message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
+        )
+
     def mark_youtube_refresh_failed(
         self,
         message: str,
@@ -337,6 +371,12 @@ class CredentialStore:
 
     def clear_google(self, owner_sub: str) -> None:
         self._clear("google", owner_sub)
+
+    def clear_sheets(self, owner_sub: str) -> None:
+        self._clear("sheets", owner_sub)
+
+    def clear_drive(self, owner_sub: str) -> None:
+        self._clear("drive", owner_sub)
 
     def clear_youtube(self, owner_sub: str, slot: str = "primary") -> None:
         self._clear(f"youtube_{normalize_youtube_slot(slot)}", owner_sub)

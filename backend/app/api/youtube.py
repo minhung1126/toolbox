@@ -11,6 +11,7 @@ from backend.app.core.config import normalize_youtube_slot
 from backend.app.core.dependencies import (
     require_account_subject,
     require_login_credentials,
+    require_sheets_credentials,
     require_youtube_context,
 )
 from backend.app.core.error_contract import http_error
@@ -524,7 +525,7 @@ def _verify_playlist_preview_token(
 def create_batch_metadata_preview(
     payload: BatchUpdateInput,
     creds: YouTubeRequestContext = Depends(require_youtube_context),
-    sheet_creds: Credentials = Depends(require_login_credentials),
+    sheet_creds: Credentials = Depends(require_sheets_credentials),
 ):
     """Build a signed, account-bound batch plan without performing writes."""
 
@@ -710,7 +711,7 @@ def _direct_workflow_response(
 def run_batch_metadata_update(
     payload: BatchUpdateInput,
     creds: YouTubeRequestContext = Depends(require_youtube_context),
-    sheet_creds: Credentials = Depends(require_login_credentials),
+    sheet_creds: Credentials = Depends(require_sheets_credentials),
     _rate_limit: None = Depends(enforce_workflow_rate_limit),
 ):
     """Validate and update selected videos synchronously, returning one result per video."""

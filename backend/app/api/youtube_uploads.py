@@ -14,7 +14,11 @@ from pydantic import BaseModel, Field, model_validator
 
 from backend.app.core.account_state import get_account_setting
 from backend.app.core.config import settings
-from backend.app.core.dependencies import require_account_subject, require_login_credentials
+from backend.app.core.dependencies import (
+    require_account_subject,
+    require_drive_credentials,
+    require_login_credentials,
+)
 from backend.app.core.error_contract import http_error
 from backend.app.core.google_drive_input import parse_google_drive_input
 from backend.app.core.preview import build_preview_token, input_digest, verify_preview_token
@@ -466,7 +470,7 @@ def _recheck_drive_snapshot(credentials: Credentials, snapshot: dict[str, Any]) 
 def preview_drive_upload(
     payload: DriveUploadPreviewInput,
     request: Request,
-    creds: Credentials = Depends(require_login_credentials),
+    creds: Credentials = Depends(require_drive_credentials),
     owner_sub: str = Depends(require_account_subject),
 ):
     if not has_drive_read_scope(creds):
@@ -566,7 +570,7 @@ def preview_drive_upload(
 def create_upload_job(
     payload: DriveUploadJobInput,
     request: Request,
-    creds: Credentials = Depends(require_login_credentials),
+    creds: Credentials = Depends(require_drive_credentials),
     owner_sub: str = Depends(require_account_subject),
 ):
     snapshot = payload.preview_snapshot

@@ -11,6 +11,7 @@ vi.mock('../services/api', () => ({
     createYoutubeDriveUploadJob: vi.fn(),
     getYoutubeDriveUploadJob: vi.fn(),
     getAuthUrl: vi.fn(),
+    getDriveAuthUrl: vi.fn(),
   },
 }));
 
@@ -260,5 +261,27 @@ describe('YouTubeUploadPage quota admission', () => {
     }));
     expect(decision.previewCanExecute).toBe(true);
     expect(decision.canCreate).toBe(false);
+  });
+
+  it('shows drive authorization warning when drive is not connected and initiates drive auth', async () => {
+    api.getDriveAuthUrl.mockResolvedValue({ auth_url: 'https://accounts.google.com/o/oauth2/auth?drive=1' });
+    render(
+      <MemoryRouter initialEntries={['/youtube/uploads/new']}>
+        <YouTubeUploadPage
+          authUser={{
+            sub: 'user-1',
+            authorizations: { drive: { connected: false } },
+            google_scopes: { drive_readonly: false },
+          }}
+          sysSettings={{ default_playlist_id: 'playlist-1' }}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('尚未取得 Google 雲端硬碟權限')).toBeInTheDocument();
+    const authBtn = screen.getByRole('button', { name: '授權 Google 雲端硬碟' });
+    expect(authBtn).toBeInTheDocument();
+    fireEvent.click(authBtn);
+    await waitFor(() => expect(api.getDriveAuthUrl).toHaveBeenCalledTimes(1));
   });
 });

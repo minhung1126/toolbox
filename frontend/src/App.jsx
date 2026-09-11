@@ -51,6 +51,7 @@ function authUserFromResponse(response) {
     last_refreshed_at: response.last_refreshed_at,
     last_refresh_error: response.last_refresh_error,
     google_scopes: response.google_scopes,
+    authorizations: response.authorizations,
     youtube: response.youtube,
   };
 }
@@ -264,6 +265,16 @@ export function AppContent() {
           const updatedUser = await fetchUser({ source: 'oauth-callback' });
           if (updatedUser) await fetchSettings();
           setOauthReturnPath(consumeOAuthReturnPath('google', PATHS.dashboard));
+        } else if (authResult?.type === 'sheets_success') {
+          toast.success('Google 試算表授權成功');
+          await fetchUser({ source: 'sheets-oauth-callback' });
+          setOauthReturnPath(consumeOAuthReturnPath('sheets', PATHS.googleSheetSettings));
+          if (user) await fetchSettings();
+        } else if (authResult?.type === 'drive_success') {
+          toast.success('Google 雲端硬碟授權成功');
+          await fetchUser({ source: 'drive-oauth-callback' });
+          setOauthReturnPath(consumeOAuthReturnPath('drive', PATHS.youtubeUpload));
+          if (user) await fetchSettings();
         } else if (authResult?.type === 'youtube_success') {
           toast.success('YouTube 頻道 Google 授權成功');
           await fetchUser({ source: 'youtube-oauth-callback' });
@@ -275,6 +286,16 @@ export function AppContent() {
           setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
           setAuthError(message);
           toast.error(message);
+        } else if (authResult?.type === 'sheets_error') {
+          const message = 'Google 試算表授權失敗，請重新嘗試。';
+          toast.error(message);
+          setOauthReturnPath(consumeOAuthReturnPath('sheets', PATHS.googleSheetSettings));
+          if (user) await fetchSettings();
+        } else if (authResult?.type === 'drive_error') {
+          const message = 'Google 雲端硬碟授權失敗，請重新嘗試。';
+          toast.error(message);
+          setOauthReturnPath(consumeOAuthReturnPath('drive', PATHS.youtubeUpload));
+          if (user) await fetchSettings();
         } else if (authResult?.type === 'youtube_error') {
           const message = 'YouTube 頻道 Google 授權失敗，請重新嘗試。';
           toast.error(message);

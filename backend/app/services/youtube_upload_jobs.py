@@ -387,11 +387,17 @@ class YouTubeUploadWorker:
             return
         owner_sub = str(job.get("owner_sub") or "")
         try:
-            login_token = credential_store.get_google_credentials(owner_sub)
+            drive_token = credential_store.get_drive_credentials(owner_sub) or credential_store.get_google_credentials(
+                owner_sub
+            )
             youtube_token = credential_store.get_youtube_credentials(owner_sub, slot=job.get("youtube_slot", "primary"))
-            if not login_token or not youtube_token:
+            if not drive_token or not youtube_token:
                 raise PermissionError("Google OAuth 憑證不存在，請重新授權。")
-            login_creds = build_credentials_from_dict(login_token, credential_key="google", owner_sub=owner_sub)
+            drive_creds = build_credentials_from_dict(
+                drive_token,
+                credential_key="drive" if credential_store.get_drive_credentials(owner_sub) else "google",
+                owner_sub=owner_sub,
+            )
             youtube_slot = normalize_youtube_slot(job.get("youtube_slot", "primary"))
             youtube_creds = build_credentials_from_dict(
                 youtube_token,
@@ -399,7 +405,7 @@ class YouTubeUploadWorker:
                 owner_sub=owner_sub,
                 slot=youtube_slot,
             )
-            if not has_drive_read_scope(login_creds):
+            if not has_drive_read_scope(drive_creds):
                 raise PermissionError("Google Drive 權限不足，請重新授權 Google Drive。")
             context = YouTubeRequestContext(
                 slot=youtube_slot,
@@ -434,7 +440,7 @@ class YouTubeUploadWorker:
                     self._cancel_remaining(owner_sub, job_id, index)
                     return
                 try:
-                    self._process_item(login_creds, context, owner_sub, job_id, index)
+                    self._process_item(drive_creds, context, owner_sub, job_id, index)
                 except YouTubeQuotaUnavailable:
                     fallback_context = self._alternate_context(context, job, attempted_slots)
                     if fallback_context is None:
@@ -447,7 +453,7 @@ class YouTubeUploadWorker:
                     retry_job = self.store.get(owner_sub, job_id)
                     retry_item = (retry_job or {}).get("items", [])[index]
                     if retry_item.get("status") not in {ITEM_DONE, "skipped"}:
-                        self._process_item(login_creds, context, owner_sub, job_id, index)
+                        self._process_item(drive_creds, context, owner_sub, job_id, index)
             self.store.update_internal(
                 job_id,
                 lambda current: current.update(

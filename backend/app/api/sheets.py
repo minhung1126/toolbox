@@ -6,7 +6,7 @@ from google.oauth2.credentials import Credentials
 from pydantic import BaseModel, Field
 
 from backend.app.core.account_state import get_account_setting
-from backend.app.core.dependencies import require_account_subject, require_login_credentials
+from backend.app.core.dependencies import require_account_subject, require_sheets_credentials
 from backend.app.core.error_contract import http_error
 from backend.app.services.provider_errors import map_google_sheets_error
 from backend.app.services.sheets_service import (
@@ -48,7 +48,7 @@ def resolve_spreadsheet_id(value: Optional[str], owner_sub: str) -> str:
 @router.post("/metadata")
 def spreadsheet_metadata(
     payload: SpreadsheetInput,
-    creds: Credentials = Depends(require_login_credentials),
+    creds: Credentials = Depends(require_sheets_credentials),
     owner_sub: str = Depends(require_account_subject),
 ):
     target_id = resolve_spreadsheet_id(payload.spreadsheet_url_or_id, owner_sub)
@@ -62,7 +62,7 @@ def spreadsheet_metadata(
 @router.post("/parse-options")
 def parse_sheet_teams(
     payload: ParseSheetsInput,
-    creds: Credentials = Depends(require_login_credentials),
+    creds: Credentials = Depends(require_sheets_credentials),
     owner_sub: str = Depends(require_account_subject),
 ):
     target_id = resolve_spreadsheet_id(payload.spreadsheet_url_or_id, owner_sub)
@@ -76,7 +76,7 @@ def parse_sheet_teams(
 @router.post("/people")
 def get_team_people(
     payload: GetPeopleInput,
-    creds: Credentials = Depends(require_login_credentials),
+    creds: Credentials = Depends(require_sheets_credentials),
     owner_sub: str = Depends(require_account_subject),
 ):
     target_id = resolve_spreadsheet_id(payload.spreadsheet_url_or_id, owner_sub)
@@ -91,7 +91,7 @@ def get_team_people(
 @router.post("/random-member-preview")
 def random_member_preview(
     payload: RandomMemberPreviewInput,
-    creds: Credentials = Depends(require_login_credentials),
+    creds: Credentials = Depends(require_sheets_credentials),
     owner_sub: str = Depends(require_account_subject),
 ):
     target_id = resolve_spreadsheet_id(payload.spreadsheet_url_or_id, owner_sub)
@@ -107,7 +107,7 @@ def random_member_preview(
 @router.post("/copy-table")
 def copyable_sheet_table(
     payload: ParseSheetsInput,
-    creds: Credentials = Depends(require_login_credentials),
+    creds: Credentials = Depends(require_sheets_credentials),
     owner_sub: str = Depends(require_account_subject),
 ):
     target_id = resolve_spreadsheet_id(payload.spreadsheet_url_or_id, owner_sub)

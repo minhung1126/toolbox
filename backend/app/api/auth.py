@@ -22,11 +22,17 @@ from backend.app.core.security import (
 )
 from backend.app.core.session_store import SESSION_MAX_AGE, session_store
 from backend.app.services.google_auth import (
+    DRIVE_SCOPES,
     LOGIN_SCOPES,
+    SHEETS_SCOPES,
     YOUTUBE_SCOPES,
     exchange_code_for_tokens,
+    get_drive_credentials,
     get_login_credentials,
+    get_sheets_credentials,
     get_youtube_credentials,
+    has_drive_read_scope,
+    has_sheets_scope,
     login_scope_status,
 )
 from backend.app.services.google_auth import (
@@ -41,12 +47,21 @@ OAUTH_FLOW_COOKIE = settings.oauth_flow_cookie_name
 OAUTH_FLOW_MAX_AGE = 10 * 60
 SESSION_COOKIE = settings.session_cookie_name
 LOGIN_FLOW = "login"
+SHEETS_FLOW = "sheets"
+DRIVE_FLOW = "drive"
 YOUTUBE_FLOW = "youtube"
 
 
 def redirect_with_auth_error(message: str, flow_type: str = LOGIN_FLOW) -> RedirectResponse:
     """Redirect to the frontend with a safely encoded OAuth error."""
-    hash_key = "youtube_auth_error" if flow_type == YOUTUBE_FLOW else "auth_error"
+    if flow_type == YOUTUBE_FLOW:
+        hash_key = "youtube_auth_error"
+    elif flow_type == SHEETS_FLOW:
+        hash_key = "sheets_auth_error"
+    elif flow_type == DRIVE_FLOW:
+        hash_key = "drive_auth_error"
+    else:
+        hash_key = "auth_error"
     response = RedirectResponse(url=f"{settings.frontend_url}/#{hash_key}={quote(message, safe='')}")
     _delete_flow_cookie(response)
     return response
@@ -140,6 +155,8 @@ def get_auth_config():
         "has_client_id": bool(settings.GOOGLE_CLIENT_ID),
         "has_client_secret": bool(settings.GOOGLE_CLIENT_SECRET),
         "login_scopes": list(LOGIN_SCOPES),
+        "sheets_scopes": list(SHEETS_SCOPES),
+        "drive_scopes": list(DRIVE_SCOPES),
         "youtube_scopes": list(YOUTUBE_SCOPES),
         "youtube_default_slot": settings.youtube_default_slot,
         "youtube_slots": youtube_slots,
@@ -148,7 +165,7 @@ def get_auth_config():
 
 @router.get("/url")
 def get_google_auth_url(response: Response):
-    """Generate the control-panel login/Sheets OAuth URL."""
+    """Generate the control-panel login OAuth URL."""
     _check_oauth_configuration(LOGIN_FLOW)
     if settings.allowlist_required and not settings.allowed_google_emails:
         raise http_error(503, "google_allowlist_not_configured", "HTTPS／正式環境必須設定允許的 Google 帳號。")
@@ -166,6 +183,76 @@ def get_google_auth_url(response: Response):
     except Exception as exc:
         logger.error("Failed to generate login auth URL: %s", type(exc).__name__)
         raise http_error(500, "oauth_url_failed", "無法建立 Google 登入授權網址，請稍後再試。", retryable=True) from exc
+
+
+@router.get("/sheets/url")
+def get_sheets_auth_url(request: Request, response: Response):
+    """Generate the dedicated Google Sheets OAuth URL for an authenticated user."""
+    _check_oauth_configuration(SHEETS_FLOW)
+    session_id = _get_authenticated_session_id(request)
+    try:
+        url, state, code_verifier = build_google_auth_url(SHEETS_FLOW)
+        _set_flow_cookie(
+            response,
+            flow_type=SHEETS_FLOW,
+            state=state,
+            code_verifier=code_verifier,
+            session_id=session_id,
+        )
+        return {"auth_url": url}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to generate sheets auth URL: %s", type(exc).__name__)
+        raise http_error(
+            500, "sheets_oauth_url_failed", "無法建立 Google 試算表授權網址，請稍後再試。", retryable=True
+        ) from exc
+
+
+@router.post("/sheets/disconnect")
+def disconnect_sheets(request: Request):
+    """Disconnect the dedicated Google Sheets authorization."""
+    session_id = _get_authenticated_session_id(request)
+    session_data = session_store.get(session_id) or {}
+    owner_sub = str(((session_data.get("user") or {}).get("sub") or "")).strip()
+    credential_store.clear_sheets(owner_sub)
+    logger.info("Google Sheets authorization disconnected for sub: %s", owner_sub)
+    return {"status": "sheets_disconnected"}
+
+
+@router.get("/drive/url")
+def get_drive_auth_url(request: Request, response: Response):
+    """Generate the dedicated Google Drive OAuth URL for an authenticated user."""
+    _check_oauth_configuration(DRIVE_FLOW)
+    session_id = _get_authenticated_session_id(request)
+    try:
+        url, state, code_verifier = build_google_auth_url(DRIVE_FLOW)
+        _set_flow_cookie(
+            response,
+            flow_type=DRIVE_FLOW,
+            state=state,
+            code_verifier=code_verifier,
+            session_id=session_id,
+        )
+        return {"auth_url": url}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to generate drive auth URL: %s", type(exc).__name__)
+        raise http_error(
+            500, "drive_oauth_url_failed", "無法建立 Google 雲端硬碟授權網址，請稍後再試。", retryable=True
+        ) from exc
+
+
+@router.post("/drive/disconnect")
+def disconnect_drive(request: Request):
+    """Disconnect the dedicated Google Drive authorization."""
+    session_id = _get_authenticated_session_id(request)
+    session_data = session_store.get(session_id) or {}
+    owner_sub = str(((session_data.get("user") or {}).get("sub") or "")).strip()
+    credential_store.clear_drive(owner_sub)
+    logger.info("Google Drive authorization disconnected for sub: %s", owner_sub)
+    return {"status": "drive_disconnected"}
 
 
 @router.get("/youtube/{slot}/url")
@@ -213,7 +300,7 @@ def google_oauth_callback(
         else None
     )
     flow_type = (flow_state or {}).get("flow_type", LOGIN_FLOW)
-    if flow_type not in {LOGIN_FLOW, YOUTUBE_FLOW}:
+    if flow_type not in {LOGIN_FLOW, SHEETS_FLOW, DRIVE_FLOW, YOUTUBE_FLOW}:
         flow_type = LOGIN_FLOW
     flow_slot = "primary"
     if flow_type == YOUTUBE_FLOW:
@@ -224,11 +311,14 @@ def google_oauth_callback(
 
     if error:
         logger.info("Google OAuth provider returned an error: %s", error)
-        message = (
-            "YouTube 頻道 Google 授權遭拒，請重新嘗試。"
-            if flow_type == YOUTUBE_FLOW
-            else "Google 登入授權遭拒，請重新嘗試。"
-        )
+        if flow_type == YOUTUBE_FLOW:
+            message = "YouTube 頻道 Google 授權遭拒，請重新嘗試。"
+        elif flow_type == SHEETS_FLOW:
+            message = "Google 試算表授權遭拒，請重新嘗試。"
+        elif flow_type == DRIVE_FLOW:
+            message = "Google 雲端硬碟授權遭拒，請重新嘗試。"
+        else:
+            message = "Google 登入授權遭拒，請重新嘗試。"
         if error_description:
             logger.debug("Google OAuth error description: %s", error_description)
         return redirect_with_auth_error(message, flow_type)
@@ -237,11 +327,14 @@ def google_oauth_callback(
         return redirect_with_auth_error("Google OAuth callback 缺少 code 或 state。", flow_type)
 
     if not flow_state:
-        message = (
-            "YouTube Google OAuth 工作階段已逾時，請重新嘗試。"
-            if flow_type == YOUTUBE_FLOW
-            else "Google OAuth 工作階段已逾時，請重新登入。"
-        )
+        if flow_type == YOUTUBE_FLOW:
+            message = "YouTube Google OAuth 工作階段已逾時，請重新嘗試。"
+        elif flow_type == SHEETS_FLOW:
+            message = "Google 試算表 OAuth 工作階段已逾時，請重新嘗試。"
+        elif flow_type == DRIVE_FLOW:
+            message = "Google 雲端硬碟 OAuth 工作階段已逾時，請重新嘗試。"
+        else:
+            message = "Google OAuth 工作階段已逾時，請重新登入。"
         return redirect_with_auth_error(message, flow_type)
 
     expected_state = flow_state.get("state")
@@ -260,6 +353,30 @@ def google_oauth_callback(
             slot=flow_slot,
         )
         user_info = token_dict.get("user") or {}
+
+        if flow_type in {SHEETS_FLOW, DRIVE_FLOW}:
+            session_id = request.cookies.get(SESSION_COOKIE)
+            expected_session_id = flow_state.get("session_id")
+            session_data = session_store.get(session_id) if session_id else None
+            owner_sub = str(((session_data or {}).get("user") or {}).get("sub") or "").strip()
+            login_credentials = get_login_credentials(session_id)
+            if (
+                not session_id
+                or not expected_session_id
+                or not secrets.compare_digest(session_id, str(expected_session_id))
+                or not owner_sub
+                or not login_credentials
+                or not login_credentials.valid
+            ):
+                return redirect_with_auth_error("控制台登入已失效，請重新登入後再進行授權。", flow_type)
+            if flow_type == SHEETS_FLOW:
+                credential_store.save_sheets_connection(token_dict, owner_sub=owner_sub)
+                response = RedirectResponse(url=f"{settings.frontend_url}/#sheets_auth_success=1")
+            else:
+                credential_store.save_drive_connection(token_dict, owner_sub=owner_sub)
+                response = RedirectResponse(url=f"{settings.frontend_url}/#drive_auth_success=1")
+            _delete_flow_cookie(response)
+            return response
 
         if flow_type == YOUTUBE_FLOW:
             session_id = request.cookies.get(SESSION_COOKIE)
@@ -295,7 +412,7 @@ def google_oauth_callback(
         subject = str(user_info.get("sub") or user_info.get("id") or "").strip()
         if not subject:
             raise RuntimeError("Google OAuth 使用者資料缺少 OIDC subject")
-        # Keep login/Sheets OAuth secrets in the encrypted persistent store. The
+        # Keep login OAuth secrets in the encrypted persistent store. The
         # browser session only carries the account identity and a random id.
         credential_store.save_google_connection(token_dict, owner_sub=subject)
         session_id = session_store.create(
@@ -320,17 +437,20 @@ def google_oauth_callback(
         return response
     except Exception as exc:
         logger.error("OAuth callback error (%s/%s): %s", flow_type, flow_slot, type(exc).__name__)
-        message = (
-            "YouTube 頻道 Google 授權失敗，請重新嘗試。"
-            if flow_type == YOUTUBE_FLOW
-            else "Google OAuth 登入失敗，請重新嘗試。"
-        )
+        if flow_type == YOUTUBE_FLOW:
+            message = "YouTube 頻道 Google 授權失敗，請重新嘗試。"
+        elif flow_type == SHEETS_FLOW:
+            message = "Google 試算表授權失敗，請重新嘗試。"
+        elif flow_type == DRIVE_FLOW:
+            message = "Google 雲端硬碟授權失敗，請重新嘗試。"
+        else:
+            message = "Google OAuth 登入失敗，請重新嘗試。"
         return redirect_with_auth_error(message, flow_type)
 
 
 @router.get("/user")
 def get_user_status(request: Request):
-    """Check control-panel login and independent YouTube authorization status."""
+    """Check control-panel login, sheets, drive, and YouTube authorization status."""
     session_id = request.cookies.get(SESSION_COOKIE)
     session_data = session_store.get(session_id) or {}
     session_sub = str(((session_data.get("user") or {}).get("sub") or "")).strip() or None
@@ -344,7 +464,37 @@ def get_user_status(request: Request):
 
     user_info = session_data.get("user") or {"email": "Authenticated User"}
     token_status = credential_store.get_google_public(session_sub) or {}
-    google_scope_status = login_scope_status(creds)
+
+    sheets_creds = get_sheets_credentials(session_id=session_id, owner_sub=session_sub)
+    drive_creds = get_drive_credentials(session_id=session_id, owner_sub=session_sub)
+    sheets_public = credential_store.get_sheets_public(session_sub) or {}
+    drive_public = credential_store.get_drive_public(session_sub) or {}
+
+    sheets_connected = bool(sheets_creds and sheets_creds.valid and has_sheets_scope(sheets_creds))
+    drive_connected = bool(drive_creds and drive_creds.valid and has_drive_read_scope(drive_creds))
+
+    authorizations = {
+        "sheets": {
+            "connected": sheets_connected,
+            "user": sheets_public.get("user") or (user_info if sheets_connected and not sheets_public else None),
+            "scopes": sorted(getattr(sheets_creds, "scopes", None) or sheets_public.get("scopes") or []),
+            "token_status": sheets_public.get("status", "active" if sheets_connected else "not_connected"),
+            "token_expires_at": sheets_public.get("token_expires_at"),
+            "last_refreshed_at": sheets_public.get("last_refreshed_at"),
+            "last_refresh_error": sheets_public.get("last_refresh_error"),
+        },
+        "drive": {
+            "connected": drive_connected,
+            "user": drive_public.get("user") or (user_info if drive_connected and not drive_public else None),
+            "scopes": sorted(getattr(drive_creds, "scopes", None) or drive_public.get("scopes") or []),
+            "token_status": drive_public.get("status", "active" if drive_connected else "not_connected"),
+            "token_expires_at": drive_public.get("token_expires_at"),
+            "last_refreshed_at": drive_public.get("last_refreshed_at"),
+            "last_refresh_error": drive_public.get("last_refresh_error"),
+        },
+    }
+
+    google_scope_status = login_scope_status(creds, sheets_credentials=sheets_creds, drive_credentials=drive_creds)
 
     youtube_slots = {}
     for slot, slot_config in settings.youtube_oauth_slots.items():
@@ -398,6 +548,7 @@ def get_user_status(request: Request):
         "last_refreshed_at": token_status.get("last_refreshed_at"),
         "last_refresh_error": token_status.get("last_refresh_error"),
         "google_scopes": google_scope_status,
+        "authorizations": authorizations,
         "youtube": youtube_connection,
     }
 

@@ -1,7 +1,9 @@
 import React from 'react';
-import { FileSpreadsheet, RefreshCw } from 'lucide-react';
+import { FileSpreadsheet, Key, RefreshCw } from 'lucide-react';
 import SourceLinkInput from './SourceLinkInput';
 import { EmptyState, StatusMessage } from './StatusMessage';
+import { api } from '../services/api';
+import { saveOAuthReturnPath } from '../utils/authReturnPath';
 
 export default function SheetDataSourcePanel({
   spreadsheetId, onSpreadsheetIdChange, worksheets = [], worksheetName = '', onWorksheetChange,
@@ -10,6 +12,18 @@ export default function SheetDataSourcePanel({
   const sourceDisabled = disabled || loading;
   const dependentDisabled = disabled || loading || stale || !sourceReady;
   const worksheetDisabled = dependentDisabled || !worksheets.length;
+  const isScopeError = /google_sheets_scope_required|試算表權限不足|授權.*試算表/i.test(error);
+
+  const handleAuthorizeSheets = async () => {
+    try {
+      saveOAuthReturnPath('sheets', window.location.pathname + window.location.search);
+      const res = await api.getSheetsAuthUrl();
+      if (res?.auth_url) window.location.href = res.auth_url;
+    } catch (err) {
+      console.error('Failed to get sheets auth url:', err);
+    }
+  };
+
   return (
     <section className={`filter-panel${dependentDisabled ? ' filter-panel-disabled' : ''}`}>
       <div className="filter-panel-header">
@@ -43,7 +57,17 @@ export default function SheetDataSourcePanel({
           tone="error"
           status="failed"
           title="資料來源刷新失敗"
-          action={<button type="button" className="btn btn-secondary status-message-action" onClick={onRefresh} disabled={sourceDisabled}>重試</button>}
+          action={
+            isScopeError ? (
+              <button type="button" className="btn btn-primary status-message-action" onClick={handleAuthorizeSheets}>
+                <Key size={15} /> 授權 Google 試算表
+              </button>
+            ) : (
+              <button type="button" className="btn btn-secondary status-message-action" onClick={onRefresh} disabled={sourceDisabled}>
+                重試
+              </button>
+            )
+          }
         >{error}</StatusMessage>
       )}
     </section>

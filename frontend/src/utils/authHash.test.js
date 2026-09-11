@@ -4,6 +4,10 @@ describe('OAuth callback hash parsing', () => {
   it('uses exact Google callback keys', () => {
     expect(parseAuthHash('#auth_success=1')).toEqual({ type: 'google_success', value: '1' });
     expect(parseAuthHash('#auth_error=safe')).toEqual({ type: 'google_error', value: 'safe' });
+    expect(parseAuthHash('#sheets_auth_success=1')).toEqual({ type: 'sheets_success', value: '1' });
+    expect(parseAuthHash('#sheets_auth_error=denied')).toEqual({ type: 'sheets_error', value: 'denied' });
+    expect(parseAuthHash('#drive_auth_success=1')).toEqual({ type: 'drive_success', value: '1' });
+    expect(parseAuthHash('#drive_auth_error=denied')).toEqual({ type: 'drive_error', value: 'denied' });
     expect(parseAuthHash('#not_auth_success=1')).toBeNull();
   });
 

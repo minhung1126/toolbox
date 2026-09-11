@@ -77,18 +77,18 @@ export default function LoginPage({ initialError, returnTo }) {
 
         {/* Description */}
         <p className="login-description">
-          歡迎使用 Creator Tools。開啟控制台與共用 Google Sheet 功能前，請先登入控制台 Google 帳號；YouTube 頻道授權會在登入後的 YouTube 設定頁另外管理。
+          歡迎使用 Toolbox 控制台。請使用 Google 帳號登入系統；Google 試算表、Google 雲端硬碟與 YouTube 頻道授權皆已獨立拆開，可在登入後於各自對應頁面中依需要授權。
         </p>
 
         {/* Feature List */}
         <div className="login-features">
           <div className="feature-item">
             <CheckCircle2 size={18} className="feature-icon" />
-            <span>以 <strong>Google Sheets API 唯讀權限</strong> 讀取影片標題與對照資料</span>
+            <span>獨立的身分認證：僅索取基本個人資料與 Email 驗證控制台身分</span>
           </div>
           <div className="feature-item">
             <CheckCircle2 size={18} className="feature-icon" />
-            <span><strong>YouTube 頻道授權</strong> 與控制台 Google 登入分開管理</span>
+            <span><strong>模組化權限拆分</strong>：Google 試算表、雲端硬碟、YouTube 頻道分別獨立授權</span>
           </div>
           <div className="feature-item">
             <CheckCircle2 size={18} className="feature-icon" />
@@ -146,7 +146,7 @@ export default function LoginPage({ initialError, returnTo }) {
         </div>
 
         <p className="login-footer">
-          點擊登入會使用 Google OAuth 2.0 登入控制台，並授權本系統以唯讀方式讀取工作流程需要的 Google Sheet；YouTube 頻道存取權會在 YouTube 設定頁另行授權。
+          點擊登入會使用 Google OAuth 2.0 登入控制台；各項工具功能（試算表、雲端硬碟、YouTube 等）可在登入後分別獨立授權。
         </p>
       </div>
     </div>

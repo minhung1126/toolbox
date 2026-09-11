@@ -227,8 +227,11 @@ export default function YouTubeUploadPage({ sysSettings = {}, authUser, mode = '
   const [needsPreview, setNeedsPreview] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
 
-  const driveScopeReady = authUser?.google_scopes?.drive_readonly !== false
-    && authUser?.google_scopes?.drive_reauthorization_required !== true;
+  const driveAuth = authUser?.authorizations?.drive;
+  const driveScopeReady = Boolean(
+    driveAuth?.connected
+      || (authUser?.google_scopes?.drive_readonly && !authUser?.google_scopes?.drive_reauthorization_required)
+  );
   const jobStorageKey = useMemo(() => {
     const accountKey = authUser?.sub || authUser?.email || '';
     return accountKey ? `creator-tools:youtube-upload-job:${accountKey}` : '';
@@ -348,12 +351,12 @@ export default function YouTubeUploadPage({ sysSettings = {}, authUser, mode = '
 
   const reauthorizeDrive = async () => {
     try {
-      saveOAuthReturnPath('google', `${location.pathname}${location.search}`);
-      const response = await api.getAuthUrl();
-      if (!response?.auth_url) throw new Error('無法取得 Google 授權網址。');
+      saveOAuthReturnPath('drive', `${location.pathname}${location.search}`);
+      const response = await api.getDriveAuthUrl();
+      if (!response?.auth_url) throw new Error('無法取得 Google 雲端硬碟授權網址。');
       window.location.href = response.auth_url;
     } catch (authError) {
-      setError(errorText(authError, '無法建立 Google Drive 重新授權流程。'));
+      setError(errorText(authError, '無法建立 Google 雲端硬碟授權流程。'));
     }
   };
 
@@ -454,8 +457,16 @@ export default function YouTubeUploadPage({ sysSettings = {}, authUser, mode = '
       {isJobPage && jobNotFound && <StatusMessage tone="error" title="找不到上傳工作"><span>工作不存在或不屬於目前帳號</span><Link className="btn btn-secondary status-message-action" to={PATHS.youtubeUploadNew}>返回建立上傳工作</Link></StatusMessage>}
 
       {!isJobPage && !driveScopeReady && (
-        <StatusMessage tone="warning" title="尚未取得 Google Drive 權限" action={<button type="button" className="btn btn-secondary status-message-action" onClick={reauthorizeDrive}>重新授權 Google Drive</button>}>
-          <span>尚未取得 Google Drive 讀取權限；重新授權後才能讀取 Drive ID／網址。</span>
+        <StatusMessage
+          tone="warning"
+          title="尚未取得 Google 雲端硬碟權限"
+          action={(
+            <button type="button" className="btn btn-secondary status-message-action" onClick={reauthorizeDrive}>
+              授權 Google 雲端硬碟
+            </button>
+          )}
+        >
+          <span>尚未取得 Google 雲端硬碟讀取權限；完成授權後才能解析並上傳 Drive 影片。</span>
         </StatusMessage>
       )}
       {error && !jobNotFound && <StatusMessage tone="error" title="上傳流程無法繼續"><span>{error}</span></StatusMessage>}

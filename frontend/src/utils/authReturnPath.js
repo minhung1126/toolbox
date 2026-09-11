@@ -2,6 +2,8 @@ import { getCurrentPath, getSafeReturnPath, PATHS } from '../routes/paths';
 
 export const OAUTH_RETURN_KEYS = Object.freeze({
   google: 'creator-tools:oauth-return-to:google',
+  sheets: 'creator-tools:oauth-return-to:sheets',
+  drive: 'creator-tools:oauth-return-to:drive',
   youtube: 'creator-tools:oauth-return-to:youtube',
 });
 

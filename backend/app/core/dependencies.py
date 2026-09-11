@@ -15,7 +15,13 @@ from backend.app.core.error_contract import http_error
 from backend.app.core.session_store import session_store
 from backend.app.core.youtube_context import YouTubeRequestContext
 from backend.app.core.youtube_routing import choose_youtube_slot, estimate_youtube_request_units
-from backend.app.services.google_auth import get_login_credentials
+from backend.app.services.google_auth import (
+    get_drive_credentials,
+    get_login_credentials,
+    get_sheets_credentials,
+    has_drive_read_scope,
+    has_sheets_scope,
+)
 from backend.app.services.youtube_quota_service import get_youtube_quota_tracker
 
 logger = logging.getLogger(__name__)
@@ -39,7 +45,7 @@ def _get_preview_slot_hint(path: str, body: object) -> str | None:
 
 def require_login_credentials(request: Request) -> Credentials:
     """
-    Extract and validate the control-panel login/Sheets credentials from the
+    Extract and validate the control-panel login credentials from the
     session cookie. Raises 401 if the page login is not authenticated.
     """
     session_id = request.cookies.get(settings.session_cookie_name)
@@ -68,6 +74,48 @@ def require_account_subject(
     if not subject:
         raise http_error(401, "login_required", "登入資料缺少 Google OIDC subject，請重新登入。")
     return subject
+
+
+def require_sheets_credentials(
+    request: Request,
+    owner_sub: str = Depends(require_account_subject),
+) -> Credentials:
+    """
+    Extract and validate Google Sheets credentials for the authenticated user.
+    Raises 403 if Google Sheets authorization has not been granted.
+    """
+    session_id = request.cookies.get(settings.session_cookie_name)
+    creds = get_sheets_credentials(session_id=session_id, owner_sub=owner_sub)
+    if not creds or not creds.valid or not has_sheets_scope(creds):
+        logger.warning("Sheets API access attempted without valid Sheets authorization (sub=%s)", owner_sub)
+        raise http_error(
+            403,
+            "google_sheets_scope_required",
+            "Google 試算表權限不足，請先授權 Google 試算表。",
+            reauthorization_required=True,
+        )
+    return creds
+
+
+def require_drive_credentials(
+    request: Request,
+    owner_sub: str = Depends(require_account_subject),
+) -> Credentials:
+    """
+    Extract and validate Google Drive credentials for the authenticated user.
+    Raises 403 if Google Drive authorization has not been granted.
+    """
+    session_id = request.cookies.get(settings.session_cookie_name)
+    creds = get_drive_credentials(session_id=session_id, owner_sub=owner_sub)
+    if not creds or not creds.valid or not has_drive_read_scope(creds):
+        logger.warning("Drive API access attempted without valid Drive authorization (sub=%s)", owner_sub)
+        raise http_error(
+            403,
+            "google_drive_scope_required",
+            "Google Drive 權限不足，請重新授權 Google Drive。",
+            reauthorization_required=True,
+        )
+    return creds
 
 
 async def require_youtube_context(request: Request) -> YouTubeRequestContext:
