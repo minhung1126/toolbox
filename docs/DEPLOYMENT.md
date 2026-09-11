@@ -58,16 +58,26 @@ docker compose logs -f toolbox
 
 ### 方式二：使用 GitHub Container Registry (ghcr.io) 預先建置映像
 
-當代碼推送至 GitHub `main` 分支或建立版號 Tag 時，GitHub Actions 會自動建置並發布映像至 `ghcr.io/<你的使用者名稱>/toolbox:latest`。在伺服器上可直接拉取運行，無須在本機安裝 Node 或編譯：
+當代碼推送至 GitHub `main` 分支時，GitHub Actions (`.github/workflows/publish-container.yml`) 會執行以下自動化作業：
+1. **自動建立並推送 Git Release Tag**：依據變更內容自動推算並建立版號（例如 `v1.0.1`）回寫至 GitHub 儲存庫。
+2. **多重映像標籤打包**：同時將映像發布至 `ghcr.io` 並帶有多種標籤：
+   - **版本 Tag**：例如 `ghcr.io/<你的使用者名稱>/toolbox:v1.0.1`
+   - **Latest Tag**：`ghcr.io/<你的使用者名稱>/toolbox:latest`
+   - **Commit SHA Tag**：`ghcr.io/<你的使用者名稱>/toolbox:sha-<短SHA>` 與完整 SHA 標籤
+3. **多架構支援**：同時編譯 `linux/amd64` 與 `linux/arm64`。
+
+在伺服器上可直接拉取指定版本或 latest 運行，無須在本機安裝 Node 或編譯：
 
 ```powershell
-# 設定要拉取的映像名稱 (可在 .env 設定 IMAGE_NAME，或直接指令指定)
+# 指定要運行的映像版本 (預設拉取 latest，亦可指定特定版本如 v1.0.1)
 $env:IMAGE_NAME="ghcr.io/<你的使用者名稱>/toolbox:latest"
 docker compose pull
 docker compose up -d
 docker compose ps
 docker compose logs -f toolbox
 ```
+
+> **注意**：若要在 GitHub Actions 中自動回寫 Git Tag，請確認 GitHub 倉庫設定 `Settings -> Actions -> General -> Workflow permissions` 設定為 **Read and write permissions**。
 
 `docker compose config` 需要先存在 `.env`，也可用來確認 interpolation 與 volume 路徑。Compose 使用 `./data:/app/data` 保存執行期資料。若伺服器已運行 Watchtower，可配置自動偵測 ghcr.io 更新並無縫重啟。
 
