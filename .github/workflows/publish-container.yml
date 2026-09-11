@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
     paths:
       - Dockerfile
       - backend/**
@@ -51,6 +53,7 @@ jobs:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=sha,format=long,prefix=
+            type=ref,event=tag
             type=raw,value=latest,enable={{is_default_branch}}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}

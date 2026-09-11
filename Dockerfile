@@ -21,6 +21,7 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 
 COPY backend/ ./backend/
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+RUN mkdir -p /app/data
 
 ARG APP_COMMIT_SHA=development
 ENV APP_COMMIT_SHA=${APP_COMMIT_SHA}

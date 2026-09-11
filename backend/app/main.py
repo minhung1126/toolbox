@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -38,10 +39,20 @@ def frontend_cache_control(path: str, content_type: str | None) -> str | None:
     return None
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_upload_worker()
+    try:
+        yield
+    finally:
+        stop_upload_worker()
+
+
 app = FastAPI(
     title="Creator Tools Dashboard API",
     description="FastAPI backend for Google OAuth, Google Sheets, and direct YouTube workflows.",
     version="1.1.0",
+    lifespan=lifespan,
 )
 
 
@@ -110,16 +121,6 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
-
-
-@app.on_event("startup")
-def start_background_workers() -> None:
-    start_upload_worker()
-
-
-@app.on_event("shutdown")
-def stop_background_workers() -> None:
-    stop_upload_worker()
 
 
 @app.middleware("http")

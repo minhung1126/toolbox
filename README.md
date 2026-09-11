@@ -1,38 +1,47 @@
-# Creator Tools
+# Toolbox (多功能工具箱網站)
 
-Creator Tools 是以 FastAPI 與 React/Vite 建置的創作者工作流控制台，使用 Google OAuth 讀取 Google Sheets，並管理 YouTube 草稿、影片資訊更新、發布與播放清單清理。登入 session、帳號工作狀態、加密憑證與 YouTube 配額估算會保存於伺服器端 `data/`。
+Toolbox 是以 Docker 容器化運行的多功能工具箱平台，採用 **FastAPI (Python 3.11+)** 後端搭配 **React/Vite** 前端，架構清晰好維護。
+內建支援由 GitHub Actions 自動測試並建置 Multi-arch（`linux/amd64`, `linux/arm64`）映像自動發布至 **GitHub Container Registry (`ghcr.io`)**。
 
-## 目前功能
+平台首要且完整內建的核心模組為 **Creator Tools**（YouTube 與 Google 創作者自動化工作流控制台），後續可透過模組化架構零耦合擴充其他功能工具。
+所有帳號工作狀態、加密憑證、工作流日誌與 YouTube 配額估算皆嚴格保存於伺服器端 `data/` 目錄，透過 Docker Volume `./data:/app/data` 實現安全持久化與零停機升級。
 
-- Google 控制台登入與 Google Sheets 設定
-- YouTube 主要／次要授權組合、頻道驗證與作用中授權切換
-- YouTube Auto routing：Primary quota 足夠時優先使用 Primary，不足時選用 Secondary；執行途中 quota 失敗也會自動切換並繼續
-- Video／Shorts 草稿的工作表欄位設定、人物篩選與影片資訊更新
-- Google Drive 影片依檔名自然排序、以可恢復背景工作逐部上傳至 YouTube
-- To-Post 播放清單讀取、依上傳時間發布並移出播放清單
-- YouTube Data API 配額估算、安全上限與每個授權組合的雙 bucket ledger
+## 核心功能模組
 
-既有 YouTube API 工作流在 API 請求內執行並直接回傳結果；Drive 影片上傳則建立 `202 + job_id` 的持久化背景工作。預設 Auto routing 會在每個 workflow 開始時以保守 quota 預估選擇 Primary 或 Secondary；執行中的 quota 失敗會自動切換另一個可用 slot 並重試目前操作。需要時可在 YouTube 設定切換為手動模式。
+### 1. 創作者工具模組 (Creator Tools - 核心必要功能)
+- **Google OAuth 登入與白名單控制**：僅允許授權的 Google 信箱登入，AES-256 加密保存 Refresh Token。
+- **Google Sheets 雙向連動**：欄位自動對應、團體與人物篩選。
+- **YouTube 雙授權槽位 (Primary / Secondary)**：支援多頻道或多授權組合切換。
+- **YouTube 智慧自動分流 (Auto Routing)**：Primary 配額充足時優先使用，不足時自動切換 Secondary；執行中若遇配額限制自動平滑切換另一個可用 slot 並重試。
+- **Video／Shorts 草稿管理**：各自指定工作表、標題與描述欄位，批次預覽與防髒寫入保護。
+- **Google Drive 批次上傳**：影片檔名自然排序，以可恢復的背景長任務 (`202 Accepted + job_id`) 串流上傳至 YouTube。
+- **發布草稿與播放清單清理**：自動發布為公開影片並移出 To-Post 清單。
+- **YouTube 配額安全記帳**：每日 10,000 點安全額度雙桶記帳日誌與預估保護。
 
-## 操作安全與錯誤處理
+### 2. 系統診斷與工具箱目錄模組 (Toolbox Catalog & System Utility)
+- **工具箱目錄中心**：`/api/v1/tools` 提供已安裝工具的自描述元數據，便於前端與 API 動態註冊新工具。
+- **即時健康度檢查**：`/api/v1/health` 檢測 OAuth 憑證、YouTube 配額就緒度與環境配置。
+- **系統部署資訊**：`/system/info` 顯示 Commit SHA、版本一致性與容器運行狀態。
 
-- 公開／移出清單與批次覆寫都必須先讀取並顯示完整預覽；執行請求會帶入後端簽署的短效 token。
-- 後端在任何寫入前重新驗證帳號、YouTube slot、播放清單、試算表與影片 metadata；資料變更時回傳 `409 stale_preview`，不執行任何寫入。
-- YouTube 預設播放清單與每個 slot 的 quota 使用分離 API 與儲存動作；播放清單可填 ID 或 YouTube URL。
-- API 錯誤固定為 `detail.code`、`detail.message`、`detail.retryable`、`detail.field_errors`，provider 原始回應與 token 不會回傳前端。
-
-## 專案結構
+## 系統架構與資料持久化
 
 ```text
-backend/app/main.py       FastAPI 應用程式與健康檢查
-backend/app/api/          auth、settings、sheets、youtube 路由
-backend/tests/            後端測試
-frontend/src/             React 應用程式、元件與頁面
-docs/                     OAuth、配額與部署文件
-data/                     執行期資料，不提交至 Git
-Dockerfile                前端建置與 FastAPI production image
-docker-compose.yml        本機／部署用 Compose 設定
+toolbox/
+├── backend/app/
+│   ├── main.py              # FastAPI 啟動入口、Lifespan 管理與 SPA 靜態託管
+│   ├── api/                 # /api/v1/ 路由入口
+│   ├── tools/               # 工具箱模組擴充目錄 (Catalog 與外掛工具)
+│   ├── core/                # 共享底層 (安全加密、設定、Session、配額限制器)
+│   └── services/            # 核心服務 (Google Auth, Drive, Sheets, YouTube)
+├── frontend/src/            # React 18 + Vite SPA 前端
+├── docs/                    # 部署、Google API 與配額說明手冊
+├── data/                    # 執行期持久化資料 (憑證、Session、配額帳本，Git 不提交)
+├── Dockerfile               # Node 20 + Python 3.11 兩階段高效率容器映像建置
+├── docker-compose.yml       # 本機運行與 GHCR 映像拉取 Compose 配置
+└── .github/workflows/       # GitHub Actions (validate-container, publish-container)
 ```
+
+> **維持 `/data` 結構**：所有敏感加密憑證、登入 Session 與長任務狀態皆固定存放在專案根目錄的 `data/`。Docker 透過 `./data:/app/data` 掛載，保證升級容器映像時資料完全不遺失。
 
 ## 本機開發
 

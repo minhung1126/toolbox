@@ -46,15 +46,30 @@ https://your-domain.example/api/v1/auth/callback
 
 ## 建置與啟動
 
+### 方式一：使用本機原始碼直接建置 (Local Build)
+
 ```powershell
 docker compose config
 docker compose build --pull
 docker compose up -d
 docker compose ps
-docker compose logs -f creator-tools
+docker compose logs -f toolbox
 ```
 
-`docker compose config` 需要先存在 `.env`，也可用來確認 interpolation 與 volume 路徑。Compose 使用 `./data:/app/data` 保存執行期資料。
+### 方式二：使用 GitHub Container Registry (ghcr.io) 預先建置映像
+
+當代碼推送至 GitHub `main` 分支或建立版號 Tag 時，GitHub Actions 會自動建置並發布映像至 `ghcr.io/<你的使用者名稱>/toolbox:latest`。在伺服器上可直接拉取運行，無須在本機安裝 Node 或編譯：
+
+```powershell
+# 設定要拉取的映像名稱 (可在 .env 設定 IMAGE_NAME，或直接指令指定)
+$env:IMAGE_NAME="ghcr.io/<你的使用者名稱>/toolbox:latest"
+docker compose pull
+docker compose up -d
+docker compose ps
+docker compose logs -f toolbox
+```
+
+`docker compose config` 需要先存在 `.env`，也可用來確認 interpolation 與 volume 路徑。Compose 使用 `./data:/app/data` 保存執行期資料。若伺服器已運行 Watchtower，可配置自動偵測 ghcr.io 更新並無縫重啟。
 
 ## 前端快取與版本驗證
 
