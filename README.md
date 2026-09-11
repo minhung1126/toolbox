@@ -97,15 +97,25 @@ python -m pytest -q
 docker compose config
 ```
 
-若要執行 Compose，根目錄必須存在 `.env`：
+若要執行 Compose，根目錄必須存在 `.env`。
+
+**使用 GHCR 映像啟動（生產推薦）：**
 
 ```powershell
 copy .env.example .env
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 docker compose ps
+docker compose logs -f toolbox
 ```
 
-Compose 預設把容器的 8000 port 綁到本機 `127.0.0.1:${HOST_PORT}`，並以 `./data:/app/data` 保存執行期資料。
+**若欲在本機從原始碼編譯啟動（開發測試）：**
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
+Compose 預設把容器的 8000 port 綁到主機 `127.0.0.1:${HOST_PORT}`，並以 `./data:/app/data` 保存執行期資料。
 
 ## 文件
 

@@ -1,0 +1,10 @@
+# 本機開發自建映像專用 Compose 設定
+# 使用方式：docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+services:
+  toolbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_COMMIT_SHA: ${APP_COMMIT_SHA:-local}
+    image: toolbox:local

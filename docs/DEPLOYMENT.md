@@ -44,35 +44,30 @@ https://your-domain.example/api/v1/auth/callback
 
 `BIND_HOST`、`PORT` 控制應用程式在容器內的監聽位址；Compose 的 `HOST_PORT` 控制主機端 port。Compose 預設只將主機 `127.0.0.1:${HOST_PORT}` 映射到容器 8000，反向代理若位於另一台主機，請將 bind address 改為明確的私有 LAN 位址並以防火牆限制來源。
 
-## 建置與啟動
+### 推薦方式：使用 GitHub Container Registry (ghcr.io) 預先建置映像
 
-### 方式一：使用本機原始碼直接建置 (Local Build)
+當代碼推送至 GitHub `main` 分支時，GitHub Actions (`.github/workflows/publish-container.yml`) 會自動建置多架構映像並推送到 `ghcr.io/minhung1126/toolbox`。
+
+伺服器上無須安裝 Node.js 或 Python，直接拉取並啟動：
 
 ```powershell
-docker compose config
-docker compose build --pull
+copy .env.example .env
+docker compose pull
 docker compose up -d
 docker compose ps
 docker compose logs -f toolbox
 ```
 
-### 方式二：使用 GitHub Container Registry (ghcr.io) 預先建置映像
+- 預設會拉取 `ghcr.io/minhung1126/toolbox:latest`。
+- 若欲鎖定特定版號（例如 `v1.0.1`）或 Commit SHA，可直接在 `.env` 設定 `IMAGE_NAME=ghcr.io/minhung1126/toolbox:v1.0.1`。
+- 若伺服器已運行 Watchtower，可配置自動偵測 `ghcr.io` 更新並無縫重啟。
 
-當代碼推送至 GitHub `main` 分支時，GitHub Actions (`.github/workflows/publish-container.yml`) 會執行以下自動化作業：
-1. **自動建立並推送 Git Release Tag**：依據變更內容自動推算並建立版號（例如 `v1.0.1`）回寫至 GitHub 儲存庫。
-2. **多重映像標籤打包**：同時將映像發布至 `ghcr.io` 並帶有多種標籤：
-   - **版本 Tag**：例如 `ghcr.io/<你的使用者名稱>/toolbox:v1.0.1`
-   - **Latest Tag**：`ghcr.io/<你的使用者名稱>/toolbox:latest`
-   - **Commit SHA Tag**：`ghcr.io/<你的使用者名稱>/toolbox:sha-<短SHA>` 與完整 SHA 標籤
-3. **多架構支援**：同時編譯 `linux/amd64` 與 `linux/arm64`。
+### 替代方式：從本機原始碼自建映像 (Local Build)
 
-在伺服器上可直接拉取指定版本或 latest 運行，無須在本機安裝 Node 或編譯：
+若在本機開發階段欲直接從原始碼編譯映像：
 
 ```powershell
-# 指定要運行的映像版本 (預設拉取 latest，亦可指定特定版本如 v1.0.1)
-$env:IMAGE_NAME="ghcr.io/<你的使用者名稱>/toolbox:latest"
-docker compose pull
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 docker compose ps
 docker compose logs -f toolbox
 ```

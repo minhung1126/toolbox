@@ -1,11 +1,6 @@
 services:
   toolbox:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        APP_COMMIT_SHA: ${APP_COMMIT_SHA:-local}
-    image: ${IMAGE_NAME:-toolbox:local}
+    image: ${IMAGE_NAME:-ghcr.io/minhung1126/toolbox:latest}
     container_name: toolbox
     ports:
       - "127.0.0.1:${HOST_PORT:-8000}:8000"
