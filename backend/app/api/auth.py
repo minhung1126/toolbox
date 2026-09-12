@@ -13,6 +13,7 @@ from backend.app.core.account_state import (
 )
 from backend.app.core.config import normalize_youtube_slot, settings
 from backend.app.core.credential_store import credential_store
+from backend.app.core.dependencies import get_authenticated_session
 from backend.app.core.error_contract import http_error
 from backend.app.core.runtime_config import runtime_config
 from backend.app.core.security import (
@@ -122,15 +123,7 @@ def _set_flow_cookie(
 
 
 def _get_authenticated_session_id(request: Request) -> str:
-    session_id = request.cookies.get(SESSION_COOKIE)
-    session_data = session_store.get(session_id) if session_id else None
-    user = session_data.get("user") if isinstance(session_data, dict) else None
-    if not str((user or {}).get("sub") or "").strip():
-        raise http_error(401, "login_required", "登入資料缺少 Google OIDC subject，請重新登入。")
-    creds = get_login_credentials(session_id)
-    if not session_id or not creds or not creds.valid:
-        raise http_error(401, "login_required", "請先登入控制台，再連結 YouTube 頻道 Google 帳號。")
-    return session_id
+    return get_authenticated_session(request).session_id
 
 
 def _generate_flow_auth_url(
@@ -163,9 +156,7 @@ def _generate_flow_auth_url(
 
 
 def _disconnect_service(request: Request, clear_fn, service_name: str) -> dict:
-    session_id = _get_authenticated_session_id(request)
-    session_data = session_store.get(session_id) or {}
-    owner_sub = str(((session_data.get("user") or {}).get("sub") or "")).strip()
+    owner_sub = get_authenticated_session(request).subject
     clear_fn(owner_sub)
     logger.info("Google %s authorization disconnected for sub: %s", service_name.capitalize(), owner_sub)
     return {"status": f"{service_name}_disconnected"}
@@ -328,8 +319,9 @@ def google_oauth_callback(
         except ValueError:
             return redirect_with_auth_error("YouTube OAuth slot 驗證失敗。", YOUTUBE_FLOW)
 
-    if error:
-        logger.info("Google OAuth provider returned an error: %s", error)
+    oauth_error = str(error).strip() if isinstance(error, str) and str(error).strip() else None
+    if oauth_error:
+        logger.info("Google OAuth provider returned an error: %s", oauth_error)
         if flow_type == YOUTUBE_FLOW:
             message = "YouTube 頻道 Google 授權遭拒，請重新嘗試。"
         elif flow_type == SHEETS_FLOW:
@@ -338,11 +330,13 @@ def google_oauth_callback(
             message = "Google 雲端硬碟授權遭拒，請重新嘗試。"
         else:
             message = "Google 登入授權遭拒，請重新嘗試。"
-        if error_description:
-            logger.debug("Google OAuth error description: %s", error_description)
+        if isinstance(error_description, str) and error_description.strip():
+            logger.debug("Google OAuth error description: %s", error_description.strip())
         return redirect_with_auth_error(message, flow_type)
 
-    if not code or not state:
+    code_str = str(code).strip() if isinstance(code, str) and str(code).strip() else ""
+    state_str = str(state).strip() if isinstance(state, str) and str(state).strip() else ""
+    if not code_str or not state_str:
         return redirect_with_auth_error("Google OAuth callback 缺少 code 或 state。", flow_type)
 
     if not flow_state:
@@ -361,12 +355,12 @@ def google_oauth_callback(
     if not expected_state or not code_verifier:
         return redirect_with_auth_error("Google OAuth 工作階段資料不完整，請重新嘗試。", flow_type)
 
-    if not secrets.compare_digest(state, expected_state):
+    if not secrets.compare_digest(state_str, expected_state):
         return redirect_with_auth_error("Google OAuth state 驗證失敗，請重新嘗試。", flow_type)
 
     try:
         token_dict = exchange_code_for_tokens(
-            code=code,
+            code=code_str,
             code_verifier=code_verifier,
             purpose=flow_type,
             slot=flow_slot,
@@ -395,7 +389,7 @@ def google_oauth_callback(
             other_public = credential_store.get_youtube_public(owner_sub, slot=other_slot) or {}
             other_channel_id = str(other_public.get("channel_id") or "").strip()
             if other_channel_id and channel_id and other_channel_id != channel_id:
-                raise RuntimeError("YouTube OAuth slot 必須管理同一個頻道")
+                return redirect_with_auth_error("Primary 與 Secondary 槽位必須管理同一個 YouTube 頻道。", YOUTUBE_FLOW)
             credential_store.save_youtube_connection(token_dict, owner_sub=owner_sub, slot=flow_slot)
             response = RedirectResponse(
                 url=f"{settings.frontend_url}/#youtube_auth_success=1&youtube_slot={quote(flow_slot, safe='')}"
@@ -405,10 +399,11 @@ def google_oauth_callback(
 
         email = str(user_info.get("email") or "").strip()
         if not settings.is_google_email_allowed(email):
-            raise RuntimeError("此 Google 帳號不在 ALLOWED_GOOGLE_EMAILS")
+            logger.warning("Disallowed Google account attempted OAuth login: %s", email)
+            return redirect_with_auth_error("此 Google 帳號未列入系統允許名單，無法登入。", LOGIN_FLOW)
         subject = str(user_info.get("sub") or user_info.get("id") or "").strip()
         if not subject:
-            raise RuntimeError("Google OAuth 使用者資料缺少 OIDC subject")
+            return redirect_with_auth_error("Google OAuth 使用者資料缺少 OIDC subject，請重新嘗試。", LOGIN_FLOW)
         # Keep login OAuth secrets in the encrypted persistent store. The
         # browser session only carries the account identity and a random id.
         credential_store.save_google_connection(token_dict, owner_sub=subject)
@@ -538,9 +533,8 @@ def disconnect_youtube_slot(slot: str, request: Request, confirm: bool = Query(F
         slot_name = normalize_youtube_slot(slot)
     except ValueError as exc:
         raise http_error(400, "youtube_slot_invalid", "不支援的 YouTube OAuth slot。") from exc
-    session_id = _get_authenticated_session_id(request)
-    session_data = session_store.get(session_id) or {}
-    owner_sub = str(((session_data.get("user") or {}).get("sub") or "")).strip()
+    auth_session = get_authenticated_session(request)
+    owner_sub = auth_session.subject
     if slot_name == get_account_active_slot(owner_sub) and not confirm:
         raise http_error(
             409,
@@ -564,9 +558,9 @@ def activate_youtube_slot(slot: str, request: Request):
         raise http_error(
             400, "youtube_slot_not_configured", "此 YouTube OAuth slot 尚未完成伺服器設定。", youtube_slot=slot_name
         )
-    session_id = _get_authenticated_session_id(request)
-    session_data = session_store.get(session_id) or {}
-    owner_sub = str(((session_data.get("user") or {}).get("sub") or "")).strip()
+    auth_session = get_authenticated_session(request)
+    owner_sub = auth_session.subject
+    session_id = auth_session.session_id
     public = credential_store.get_youtube_public(owner_sub, slot=slot_name) or {}
     credentials = get_youtube_credentials(session_id, slot=slot_name)
     other_slot = "secondary" if slot_name == "primary" else "primary"

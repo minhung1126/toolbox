@@ -5,6 +5,7 @@ import { api, normalizeYoutubePlaylistInput } from '../services/api';
 import { useToast } from '../components/Toast';
 import SourceLinkInput from '../components/SourceLinkInput';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { useDebouncedAutosave } from '../hooks/useDebouncedAutosave';
 import { YOUTUBE_ROUTING_MODES, youtubeRoutingLabel } from '../utils/youtubeRouting';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
 import { PATHS } from '../routes/paths';
@@ -82,8 +83,38 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
   const [slotEnabled, setSlotEnabled] = useState(false);
   const [savingSlotCreds, setSavingSlotCreds] = useState(false);
   const [showSlotSecret, setShowSlotSecret] = useState(false);
-  const playlistSaveTimerRef = useRef(null);
   const [playlistAutosaveStatus, setPlaylistAutosaveStatus] = useState(null);
+
+  const {
+    mutate: mutatePlaylistAutosave,
+    flush: flushPlaylistAutosave,
+    reset: resetPlaylistAutosave,
+    dirty: isPlaylistDirty,
+  } = useDebouncedAutosave({
+    value: playlistId,
+    delay: 800,
+    compareFn: (a, b) => normalizeYoutubePlaylistInput(a) === normalizeYoutubePlaylistInput(b),
+    onSave: async (nextValue) => {
+      const normalized = normalizeYoutubePlaylistInput(nextValue);
+      if (!normalized) return;
+      await api.updateYoutubePlaylist({ playlistId: normalized });
+    },
+    onSuccess: async (_nextValue, { notify } = {}) => {
+      await refreshSettings?.();
+      setPlaylistAutosaveStatus('saved');
+      if (notify) {
+        setMsg({ type: 'success', text: '預設播放清單已儲存。' });
+        toast.success('預設播放清單已儲存');
+      }
+    },
+    onError: (error, { notify } = {}) => {
+      setPlaylistAutosaveStatus('error');
+      if (notify) {
+        setMsg({ type: 'error', text: error.message || '儲存失敗。' });
+        toast.error(`儲存失敗：${error.message || '未知錯誤'}`);
+      }
+    },
+  });
 
   const handleOpenEditSlot = (slot) => {
     setEditingSlot(slot);
@@ -137,8 +168,11 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
   };
 
   useEffect(() => {
-    setPlaylistId(initial.playlistId);
-  }, [initial.playlistId]);
+    if (!isPlaylistDirty) {
+      setPlaylistId(initial.playlistId);
+      resetPlaylistAutosave(initial.playlistId);
+    }
+  }, [initial.playlistId, isPlaylistDirty, resetPlaylistAutosave]);
 
   useEffect(() => {
     setActiveSlot(youtube.active_slot || 'primary');
@@ -202,7 +236,6 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
 
   const saveResources = async (event) => {
     if (event) event.preventDefault();
-    window.clearTimeout(playlistSaveTimerRef.current);
     const normalizedPlaylistId = normalizeYoutubePlaylistInput(playlistId);
     if (playlistId.trim() && !normalizedPlaylistId) {
       const message = '請輸入合法的 YouTube 播放清單網址或 ID。';
@@ -213,16 +246,9 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
     setBusyAction({ kind: 'playlist' });
     setMsg(null);
     try {
-      await api.updateYoutubePlaylist({
-        playlistId: normalizedPlaylistId,
-      });
-      await refreshSettings();
+      await flushPlaylistAutosave({ notify: true });
       setPlaylistId(normalizedPlaylistId);
-      setPlaylistAutosaveStatus('saved');
-      setMsg({ type: 'success', text: '預設播放清單已儲存。' });
-      toast.success('預設播放清單已儲存');
     } catch (error) {
-      setPlaylistAutosaveStatus('error');
       setMsg({ type: 'error', text: error.message || '儲存失敗。' });
       toast.error(`儲存失敗：${error.message || '未知錯誤'}`);
     } finally {
@@ -232,29 +258,14 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
 
   const handlePlaylistChange = (value) => {
     setPlaylistId(value);
-    window.clearTimeout(playlistSaveTimerRef.current);
     const normalized = normalizeYoutubePlaylistInput(value);
     if (value.trim() && !normalized) {
       setPlaylistAutosaveStatus('invalid');
       return;
     }
     setPlaylistAutosaveStatus('saving');
-    playlistSaveTimerRef.current = window.setTimeout(async () => {
-      try {
-        await api.updateYoutubePlaylist({ playlistId: normalized });
-        await refreshSettings?.();
-        setPlaylistAutosaveStatus('saved');
-      } catch {
-        setPlaylistAutosaveStatus('error');
-      }
-    }, 800);
+    mutatePlaylistAutosave(value);
   };
-
-  useEffect(() => {
-    return () => {
-      window.clearTimeout(playlistSaveTimerRef.current);
-    };
-  }, []);
 
   const isQuotaDirty = (slot) => {
     const d = slotDrafts[slot];

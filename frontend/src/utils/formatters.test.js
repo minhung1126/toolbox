@@ -5,6 +5,7 @@ describe('formatters', () => {
   describe('formatBytes', () => {
     it('handles zero or falsy values', () => {
       expect(formatBytes(0)).toBe('—');
+      expect(formatBytes(-100)).toBe('—');
       expect(formatBytes(null)).toBe('—');
       expect(formatBytes('')).toBe('—');
     });

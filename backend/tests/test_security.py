@@ -64,3 +64,36 @@ def test_credential_store_encrypts_and_rejects_wrong_key(tmp_path: Path, monkeyp
     store._fernet = Fernet(Fernet.generate_key())
     with pytest.raises(RuntimeError):
         store.get_google_credentials("subject-a")
+
+
+def test_revoked_email_is_blocked_on_api_access(tmp_path: Path, monkeypatch):
+    sess_store = SessionStore(tmp_path / "sessions.json")
+    monkeypatch.setattr(dependencies, "session_store", sess_store)
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(dependencies, "get_login_credentials", lambda sid: SimpleNamespace(valid=True))
+
+    sub = "subject-revoked"
+    session_id = sess_store.create(
+        {"credential_provider": "google_login", "user": {"sub": sub, "email": "revoked@example.com"}}
+    )
+
+    # Allow only admin@example.com
+    from backend.app.core.runtime_config import runtime_config
+
+    runtime_config.set_allowed_emails(["admin@example.com"])
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [(b"cookie", f"{dependencies.settings.session_cookie_name}={session_id}".encode())],
+            "query_string": b"",
+            "server": ("testserver", 80),
+        }
+    )
+    with pytest.raises(HTTPException) as error:
+        dependencies.get_authenticated_session(request)
+    assert error.value.status_code == 403
+    assert error.value.detail["code"] == "access_denied"

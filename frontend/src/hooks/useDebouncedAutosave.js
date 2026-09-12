@@ -23,10 +23,13 @@ export function useDebouncedAutosave({
   const editVersionRef = useRef(0);
   const dirtyRef = useRef(false);
 
+  const callbacksRef = useRef({ onSave, onSuccess, onError, compareFn });
+  callbacksRef.current = { onSave, onSuccess, onError, compareFn };
+
   const isSame = useCallback((a, b) => {
-    if (compareFn) return compareFn(a, b);
+    if (callbacksRef.current.compareFn) return callbacksRef.current.compareFn(a, b);
     return a === b;
-  }, [compareFn]);
+  }, []);
 
   const queueSave = useCallback((nextData, { notify = false } = {}) => {
     const version = editVersionRef.current;
@@ -38,17 +41,17 @@ export function useDebouncedAutosave({
         setSaving(true);
       }
       try {
-        await onSave(nextData);
+        await callbacksRef.current.onSave(nextData);
         if (version !== editVersionRef.current) return;
         dirtyRef.current = false;
         if (mountedRef.current) {
           setDirty(false);
         }
         if (!mountedRef.current) return;
-        await onSuccess?.(nextData, { notify });
+        await callbacksRef.current.onSuccess?.(nextData, { notify });
       } catch (error) {
         if (version !== editVersionRef.current || !mountedRef.current) return;
-        onError?.(error, { notify });
+        callbacksRef.current.onError?.(error, { notify });
       } finally {
         if (version === editVersionRef.current && mountedRef.current) {
           setSaving(false);
@@ -63,7 +66,7 @@ export function useDebouncedAutosave({
       () => { if (pendingSaveRef.current === pendingSave) pendingSaveRef.current = null; },
     );
     return request;
-  }, [onSave, onSuccess, onError]);
+  }, []);
 
   queueSaveRef.current = queueSave;
 

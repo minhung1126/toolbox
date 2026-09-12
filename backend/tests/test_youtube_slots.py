@@ -113,6 +113,76 @@ def test_callback_rejects_a_signed_cookie_with_an_invalid_slot():
     assert "youtube_auth_error=" in response.headers["location"]
 
 
+def test_callback_rejects_mismatched_channel_with_specific_error(monkeypatch):
+    payload = sign_timed_data(
+        {
+            "flow_type": auth.YOUTUBE_FLOW,
+            "state": "state",
+            "code_verifier": "verifier",
+            "slot": "secondary",
+            "session_id": "sess-123",
+        },
+        salt=GOOGLE_OAUTH_STATE_SALT,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/auth/callback",
+            "headers": [(b"cookie", f"{auth.OAUTH_FLOW_COOKIE}={payload}".encode())],
+            "query_string": b"code=code&state=state",
+            "server": ("testserver", 80),
+        }
+    )
+    monkeypatch.setattr(auth, "_validate_callback_session", lambda req, state: "owner-sub")
+    monkeypatch.setattr(
+        auth,
+        "exchange_code_for_tokens",
+        lambda **kwargs: {"token": "valid", "channel_id": "channel-new"},
+    )
+    monkeypatch.setattr(
+        auth.credential_store,
+        "get_youtube_public",
+        lambda owner_sub, slot: {"channel_id": "channel-existing"},
+    )
+    response = auth.google_oauth_callback(request, code="code", state="state")
+    assert "youtube_auth_error=" in response.headers["location"]
+    from urllib.parse import unquote
+
+    assert "必須管理同一個 YouTube 頻道" in unquote(response.headers["location"])
+
+
+def test_callback_rejects_disallowed_email_with_specific_error(monkeypatch):
+    payload = sign_timed_data(
+        {"flow_type": auth.LOGIN_FLOW, "state": "state", "code_verifier": "verifier"},
+        salt=GOOGLE_OAUTH_STATE_SALT,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/auth/callback",
+            "headers": [(b"cookie", f"{auth.OAUTH_FLOW_COOKIE}={payload}".encode())],
+            "query_string": b"code=code&state=state",
+            "server": ("testserver", 80),
+        }
+    )
+    monkeypatch.setattr(
+        auth,
+        "exchange_code_for_tokens",
+        lambda **kwargs: {"token": "valid", "user": {"email": "intruder@example.com", "sub": "intruder-sub"}},
+    )
+    from backend.app.core.config import Settings
+
+    monkeypatch.setattr(Settings, "is_google_email_allowed", lambda self, email: email == "admin@example.com")
+
+    response = auth.google_oauth_callback(request, code="code", state="state")
+    assert "auth_error=" in response.headers["location"]
+    from urllib.parse import unquote
+
+    assert "未列入系統允許名單" in unquote(response.headers["location"])
+
+
 def test_slot_api_routes_are_exposed_without_single_slot_aliases():
     paths = main.app.openapi()["paths"]
     assert "/api/v1/auth/youtube/{slot}/url" in paths

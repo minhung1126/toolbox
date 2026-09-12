@@ -96,4 +96,26 @@ describe('useDebouncedAutosave', () => {
 
     expect(onSave).toHaveBeenCalledWith({ foo: 'on-unmount' });
   });
+
+  it('maintains stable callback identity even when recreated callbacks are passed', () => {
+    let callCount = 0;
+    const { result, rerender } = renderHook(() => {
+      callCount += 1;
+      return useDebouncedAutosave({
+        value: { count: callCount },
+        delay: 500,
+        onSave: async () => {},
+      });
+    });
+
+    const firstMutate = result.current.mutate;
+    const firstFlush = result.current.flush;
+    const firstReset = result.current.reset;
+
+    rerender();
+
+    expect(result.current.mutate).toBe(firstMutate);
+    expect(result.current.flush).toBe(firstFlush);
+    expect(result.current.reset).toBe(firstReset);
+  });
 });

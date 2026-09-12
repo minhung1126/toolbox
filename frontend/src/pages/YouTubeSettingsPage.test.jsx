@@ -148,4 +148,18 @@ describe('YouTubeSettingsPage', () => {
     rejectAuth(new Error('測試取消'));
     await waitFor(() => expect(screen.getByRole('button', { name: '連結此 slot' })).toBeEnabled());
   });
+
+  it('flushes pending playlist change on unmount', async () => {
+    const { unmount } = renderPage({ section: 'playlist' });
+    fireEvent.change(screen.getByPlaceholderText('YouTube Playlist ID 或網址'), {
+      target: { value: 'https://www.youtube.com/playlist?list=PL_unmount_flush' },
+    });
+    expect(api.updateYoutubePlaylist).not.toHaveBeenCalled();
+
+    unmount();
+
+    await waitFor(() => expect(api.updateYoutubePlaylist).toHaveBeenCalledWith({
+      playlistId: 'PL_unmount_flush',
+    }));
+  });
 });

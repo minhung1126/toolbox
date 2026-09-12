@@ -7,7 +7,7 @@ Sensitive values are stored separately by credential_store.py.
 
 import logging
 from pathlib import Path
-from threading import Lock
+from threading import RLock
 from typing import Any, Dict
 
 from backend.app.core.persistence import atomic_write_json, read_json_file
@@ -45,7 +45,7 @@ class RuntimeConfig:
 
     def __init__(self, config_path: Path = _CONFIG_FILE):
         self._path = config_path
-        self._lock = Lock()
+        self._lock = RLock()
         self._data: Dict[str, Any] = {}
         self._load()
 
@@ -119,24 +119,35 @@ class RuntimeConfig:
     def set_allowed_emails(self, emails: list[str]) -> list[str]:
         """Normalize, deduplicate, and persist the allowed emails list."""
         cleaned = list(dict.fromkeys(str(e).strip().casefold() for e in emails if str(e).strip()))
-        self.set("allowed_google_emails", cleaned)
+        with self._lock:
+            self._data["allowed_google_emails"] = cleaned
+            self._save()
+        self._notify_settings_sync()
         return cleaned
 
     def add_allowed_email(self, email: str) -> list[str]:
-        """Add a single email to the allowlist."""
-        current = self.get_allowed_emails()
+        """Add a single email to the allowlist atomically."""
         norm = email.strip().casefold()
-        if norm and norm not in current:
-            current.append(norm)
-            self.set("allowed_google_emails", current)
+        with self._lock:
+            current = self.get_allowed_emails()
+            if norm and norm not in current:
+                current.append(norm)
+                self._data["allowed_google_emails"] = current
+                self._save()
+            else:
+                return current
+        self._notify_settings_sync()
         return current
 
     def remove_allowed_email(self, email: str) -> list[str]:
-        """Remove a single email from the allowlist."""
-        current = self.get_allowed_emails()
+        """Remove a single email from the allowlist atomically."""
         norm = email.strip().casefold()
-        updated = [e for e in current if e != norm]
-        self.set("allowed_google_emails", updated)
+        with self._lock:
+            current = self.get_allowed_emails()
+            updated = [e for e in current if e != norm]
+            self._data["allowed_google_emails"] = updated
+            self._save()
+        self._notify_settings_sync()
         return updated
 
     def is_allow_new_users(self) -> bool:
