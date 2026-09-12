@@ -70,35 +70,38 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
         </div>
       </div>
 
-      <h2 className="section-title">功能模組</h2>
-      <div className="feature-grid">
-        {featureCards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <div key={card.id} className="glass-panel glass-panel-interactive feature-card">
-              <div className={`icon-box icon-box-${card.colorTheme || 'primary'}`}><Icon size={28} /></div>
-              <div className="feature-card-copy">
-                <h3>{card.title}</h3>
-                <p>{card.description}</p>
+      {allTools.map((tool) => {
+        const cards = tool.featureCards || [];
+        if (!cards.length) return null;
+        return (
+          <section key={tool.id} className="dashboard-module-group" style={{ marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <h2 className="section-title" style={{ margin: 0, fontSize: '1.25rem' }}>{tool.title || tool.name}</h2>
+                <span className="badge badge-info">{tool.category}</span>
               </div>
-              <Link className="btn btn-primary feature-card-action" to={card.to}>
-                {card.actionLabel} <ArrowRight size={16} />
-              </Link>
+              <p className="section-desc" style={{ margin: 0, fontSize: '0.85rem' }}>{tool.description}</p>
             </div>
-          );
-        })}
-
-        <div className="glass-panel glass-panel-interactive feature-card">
-          <div className="icon-box icon-box-accent"><Settings size={28} /></div>
-          <div className="feature-card-copy">
-            <h3>系統設定</h3>
-            <p>管理系統安全密鑰、Google OAuth 憑證配置與控制台登入白名單。</p>
-          </div>
-          <Link className="btn btn-secondary feature-card-action" to={PATHS.systemSettings}>
-            進入系統設定 <ArrowRight size={16} />
-          </Link>
-        </div>
-      </div>
+            <div className="feature-grid">
+              {cards.map((card) => {
+                const Icon = card.icon;
+                return (
+                  <div key={card.id} className="glass-panel glass-panel-interactive feature-card">
+                    <div className={`icon-box icon-box-${card.colorTheme || 'primary'}`}><Icon size={28} /></div>
+                    <div className="feature-card-copy">
+                      <h3>{card.title}</h3>
+                      <p>{card.description}</p>
+                    </div>
+                    <Link className={`btn btn-${card.colorTheme === 'primary' ? 'primary' : 'secondary'} feature-card-action`} to={card.to}>
+                      {card.actionLabel} <ArrowRight size={16} />
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }

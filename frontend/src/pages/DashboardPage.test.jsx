@@ -45,6 +45,9 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Shorts 草稿')).toBeInTheDocument();
     expect(screen.getByText('發布草稿')).toBeInTheDocument();
     expect(screen.getByText('Sheet 內容複製')).toBeInTheDocument();
+    expect(screen.getByText('系統設定')).toBeInTheDocument();
+    expect(screen.getByText('系統／部署資訊')).toBeInTheDocument();
+    expect(screen.getByText('API 健康度')).toBeInTheDocument();
 
     // Links
     expect(screen.getByRole('link', { name: /進入 Video 草稿/ })).toHaveAttribute(
@@ -62,6 +65,10 @@ describe('DashboardPage', () => {
     expect(screen.getByRole('link', { name: /進入內容複製/ })).toHaveAttribute(
       'href',
       PATHS.sheetCopy
+    );
+    expect(screen.getByRole('link', { name: /進入系統設定/ })).toHaveAttribute(
+      'href',
+      PATHS.systemSettings
     );
   });
 });

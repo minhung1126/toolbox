@@ -95,17 +95,58 @@ export const TOOL_MODULES = Object.freeze([
   {
     id: 'system-utility',
     name: 'System Utility',
-    title: '系統診斷與部署資訊',
+    title: '系統診斷與維運資訊',
     description: '即時監控 Toolbox API 健康狀態、OAuth 憑證就緒度、環境參數與 Commit 部署版本。',
     category: '系統管理',
-    icon: Activity,
+    icon: Shield,
     badge: '系統模組',
     status: 'active',
-    entryUrl: PATHS.systemHealth,
+    entryUrl: PATHS.systemSettings,
+    navGroups: [
+      {
+        id: 'system',
+        label: '系統管理',
+        icon: Shield,
+        items: [
+          { id: 'system_settings', to: PATHS.systemSettings, label: '系統設定', icon: Shield, activePrefix: PATHS.systemSettings },
+          { id: 'system_info', to: PATHS.systemInfo, label: '系統／部署資訊', icon: Info },
+          { id: 'api_health', to: PATHS.systemHealth, label: 'API 健康度', icon: Activity },
+        ],
+      },
+    ],
     navItems: [
-      { id: 'api_health', to: PATHS.systemHealth, label: 'API 健康度', icon: Activity },
-      { id: 'system_info', to: PATHS.systemInfo, label: '系統／部署資訊', icon: Info },
       { id: 'system_settings', to: PATHS.systemSettings, label: '系統設定', icon: Shield, activePrefix: PATHS.systemSettings },
+      { id: 'system_info', to: PATHS.systemInfo, label: '系統／部署資訊', icon: Info },
+      { id: 'api_health', to: PATHS.systemHealth, label: 'API 健康度', icon: Activity },
+    ],
+    featureCards: [
+      {
+        id: 'system_settings_card',
+        title: '系統設定',
+        description: '管理系統安全密鑰、Google OAuth 憑證配置與控制台登入白名單。',
+        to: PATHS.systemSettings,
+        actionLabel: '進入系統設定',
+        icon: Shield,
+        colorTheme: 'accent',
+      },
+      {
+        id: 'system_info_card',
+        title: '系統／部署資訊',
+        description: '檢視執行環境參數、快取配置與當前 Docker 部署 Commit SHA。',
+        to: PATHS.systemInfo,
+        actionLabel: '檢視部署資訊',
+        icon: Info,
+        colorTheme: 'secondary',
+      },
+      {
+        id: 'api_health_card',
+        title: 'API 健康度',
+        description: '即時監控後端 API 就緒狀態、憑證驗證與服務運作指標。',
+        to: PATHS.systemHealth,
+        actionLabel: '檢查 API 健康度',
+        icon: Activity,
+        colorTheme: 'secondary',
+      },
     ],
   },
 ]);
@@ -136,13 +177,28 @@ export function getToolNavGroups() {
  */
 export function getSystemNavItems() {
   const systemTool = getToolById('system-utility');
+  if (systemTool?.navGroups?.[0]?.items) {
+    return systemTool.navGroups[0].items;
+  }
   return systemTool?.navItems || [];
 }
 
 /**
- * Retrieve dashboard feature cards.
+ * Retrieve dashboard feature cards across all modules.
  */
 export function getDashboardFeatureCards() {
-  const creatorTool = getToolById('creator-tools');
-  return creatorTool?.featureCards || [];
+  return TOOL_MODULES.flatMap((tool) => tool.featureCards || []);
+}
+
+/**
+ * Group tools by their declared category.
+ */
+export function getToolsByCategory() {
+  const categories = {};
+  for (const tool of TOOL_MODULES) {
+    const cat = tool.category || '一般工具';
+    if (!categories[cat]) categories[cat] = [];
+    categories[cat].push(tool);
+  }
+  return categories;
 }

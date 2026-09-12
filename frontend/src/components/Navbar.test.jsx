@@ -63,4 +63,18 @@ describe('Navbar', () => {
     expect(systemInfoLink).toHaveAttribute('aria-current', 'page');
     expect(systemInfoLink).toHaveClass('active');
   });
+
+  it('lists System management pages in process order', () => {
+    window.localStorage.clear();
+    render(<NavbarHarness />);
+
+    fireEvent.click(screen.getByRole('button', { name: '系統管理' }));
+    const submenu = document.getElementById('system-submenu');
+    expect(within(submenu).getAllByRole('link').map((link) => link.textContent.trim())).toEqual([
+      '系統設定',
+      '系統／部署資訊',
+      'API 健康度',
+    ]);
+  });
 });
+

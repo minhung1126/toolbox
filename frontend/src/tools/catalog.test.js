@@ -28,11 +28,13 @@ describe('Toolbox Frontend Tool Catalog', () => {
     const groupIds = navGroups.map((g) => g.id);
     expect(groupIds).toContain('youtube');
     expect(groupIds).toContain('sheet');
+    expect(groupIds).toContain('system');
 
     const systemItems = getSystemNavItems();
     const itemIds = systemItems.map((i) => i.id);
     expect(itemIds).toContain('api_health');
     expect(itemIds).toContain('system_info');
+    expect(itemIds).toContain('system_settings');
   });
 
   it('provides dashboard feature cards', () => {
@@ -42,5 +44,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(cardIds).toContain('video_drafts');
     expect(cardIds).toContain('shorts_drafts');
     expect(cardIds).toContain('publish_clean');
+    expect(cardIds).toContain('system_settings_card');
   });
 });
+

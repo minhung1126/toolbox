@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, ChevronDown, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, Video, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, Video, X } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { youtubeIsConnected } from '../utils/youtubeRouting';
@@ -10,8 +10,13 @@ const toolNavGroups = getToolNavGroups();
 const systemNavItems = getSystemNavItems();
 const youtubeGroup = toolNavGroups.find((g) => g.id === 'youtube') || { items: [] };
 const sheetGroup = toolNavGroups.find((g) => g.id === 'sheet') || { items: [] };
+const systemGroup = toolNavGroups.find((g) => g.id === 'system') || {
+  items: systemNavItems,
+  icon: Shield,
+};
 const youtubeItems = youtubeGroup.items;
 const sheetItems = sheetGroup.items;
+const systemItems = systemGroup.items;
 
 function pathIsActive(pathname, item) {
   if (item.activePrefix) return pathname === item.activePrefix || pathname.startsWith(`${item.activePrefix}/`);
@@ -25,6 +30,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
   const { value: savedNavigation, save: saveNavigation } = useAccountWorkState('navigation', {});
   const [youtubeOpen, setYoutubeOpen] = useState(savedNavigation.youtubeOpen ?? pathname.startsWith('/youtube/'));
   const [sheetOpen, setSheetOpen] = useState(savedNavigation.sheetOpen ?? pathname.startsWith('/sheets/'));
+  const [systemOpen, setSystemOpen] = useState(savedNavigation.systemOpen ?? pathname.startsWith('/system/'));
   const [drawerOpen, setDrawerOpen] = useState(false);
   const drawerRef = useRef(null);
   const closeButtonRef = useRef(null);
@@ -38,6 +44,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
   useEffect(() => {
     if (pathname.startsWith('/youtube/')) setYoutubeOpen(true);
     if (pathname.startsWith('/sheets/')) setSheetOpen(true);
+    if (pathname.startsWith('/system/')) setSystemOpen(true);
     setDrawerOpen(false);
   }, [pathname]);
 
@@ -79,8 +86,8 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
   }, [drawerOpen]);
 
   useEffect(() => {
-    saveNavigation({ sidebarCollapsed, youtubeOpen, sheetOpen }, { debounceMs: 150 });
-  }, [saveNavigation, sheetOpen, sidebarCollapsed, youtubeOpen]);
+    saveNavigation({ sidebarCollapsed, youtubeOpen, sheetOpen, systemOpen }, { debounceMs: 150 });
+  }, [saveNavigation, sheetOpen, sidebarCollapsed, systemOpen, youtubeOpen]);
 
   const item = (value, child = false) => {
     const Icon = value.icon;
@@ -109,6 +116,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
 
   const youtubeActive = pathname.startsWith('/youtube/');
   const sheetActive = pathname.startsWith('/sheets/');
+  const systemActive = pathname.startsWith('/system/');
   const SidebarToggleIcon = sidebarCollapsed ? PanelLeftOpen : PanelLeftClose;
   const sidebarToggleLabel = sidebarCollapsed ? '展開側邊選單' : '收起側邊選單';
 
@@ -122,9 +130,9 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
       <div className="sidebar-brand"><div className="brand-mark"><Video size={24} aria-hidden="true" /></div><div className="sidebar-brand-copy"><h2>Toolbox</h2><p>多功能模組化工具箱</p></div><button type="button" className="sidebar-toggle" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} aria-label={sidebarToggleLabel} title={sidebarToggleLabel} aria-expanded={!sidebarCollapsed} aria-controls="primary-navigation"><SidebarToggleIcon size={20} aria-hidden="true" /></button><button ref={closeButtonRef} type="button" className="drawer-close" onClick={closeDrawer} aria-label="關閉導覽選單"><X size={22} aria-hidden="true" /></button></div>
       <nav className="sidebar-nav">
         {item({ id: 'dashboard', to: PATHS.dashboard, label: '儀表板總覽', icon: LayoutDashboard })}
-        {systemNavItems.map((sysItem) => item(sysItem))}
         {group('youtube', 'YouTube', youtubeGroup.icon, youtubeOpen, setYoutubeOpen, youtubeItems, youtubeActive)}
         {group('sheet', 'Sheet', sheetGroup.icon, sheetOpen, setSheetOpen, sheetItems, sheetActive)}
+        {group('system', '系統管理', systemGroup.icon, systemOpen, setSystemOpen, systemItems, systemActive)}
         {item({ id: 'settings', to: PATHS.googleSettings, label: '控制台帳號', icon: Settings, activePrefix: '/settings' })}
       </nav>
       <div className="sidebar-footer"><div className="glass-panel account-card"><strong className="account-title">帳號資訊</strong><span className="badge badge-connected account-status"><CheckCircle2 size={12} />控制台已登入</span><p className="account-email">{authUser?.email}</p><span className={`badge account-youtube-status ${youtubeAuthorized ? 'badge-connected' : 'badge-disconnected'}`}>{youtubeAuthorized ? 'YouTube 已授權' : 'YouTube 未連結'}</span><button type="button" className="logout-button" onClick={onLogout}>登出控制台</button></div></div>
