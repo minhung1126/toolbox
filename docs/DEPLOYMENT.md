@@ -1,6 +1,6 @@
 # Docker 與 production 部署
 
-`Dockerfile` 會先在 Node 20 Alpine 階段執行 `npm ci` 與 `npm run build`，再把 `frontend/dist` 複製到 Python 3.11 image。執行中的 FastAPI 應用程式是 `backend.app.main:app`，容器對外提供 port 8000。
+`Dockerfile` 採用最佳化的多階段分層架構（Stage 1 前端靜態資源打包、Stage 2 後端 Python 虛擬環境獨立依賴建置、Stage 3 極簡生產環境映像），隔離建置環境、有效利用 Docker Layer 快取並縮減最終映像體積。執行中的 FastAPI 應用程式是 `backend.app.main:app`，容器對外提供 port 8000。
 
 ## 準備環境
 
