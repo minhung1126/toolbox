@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { YOUTUBE_ROUTING_MODES, youtubeRoutingLabel } from '../utils/youtubeRouting';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
 import { PATHS } from '../routes/paths';
+import { formatTokenDate, tokenStatusLabel } from '../utils/formatters';
 
 const SLOT_ORDER = ['primary', 'secondary'];
 
@@ -17,21 +18,6 @@ export function initialSettings(defaultPlaylistId, quotaLimit, quotaBuffer) {
     quotaLimit: quotaLimit ?? 10000,
     quotaBuffer: quotaBuffer ?? 1000,
   };
-}
-
-function formatTokenDate(value) {
-  if (!value) return '—';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('zh-TW');
-}
-
-function tokenStatusLabel(status) {
-  return {
-    active: '正常（會自動更新）',
-    refresh_failed: '暫時更新失敗',
-    reauthorization_required: '需要重新授權',
-    not_connected: '尚未連結',
-  }[status] || '未取得狀態';
 }
 
 export function normalizeSlotRecord(slot, record) {

@@ -1,11 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, FileSpreadsheet, Key, RefreshCw, Save, Unlink, XCircle } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { CheckCircle2, FileSpreadsheet, RefreshCw, Save, XCircle } from 'lucide-react';
 import { api } from '../services/api';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import SourceLinkInput from '../components/SourceLinkInput';
-import { saveOAuthReturnPath } from '../utils/authReturnPath';
+import ServiceAuthCard from '../components/ServiceAuthCard';
+import { useDebouncedAutosave } from '../hooks/useDebouncedAutosave';
+import { useOAuthConnect } from '../hooks/useOAuthConnect';
 
 export function initialGoogleSheetForm(defaultSpreadsheetId) {
   return { default_spreadsheet_id: defaultSpreadsheetId || '' };
@@ -17,131 +18,59 @@ function sameGoogleSheetForm(left, right) {
 
 export default function GoogleSheetSettingsPage({ sysSettings = {}, refreshSettings, authUser, refreshAuthUser }) {
   const toast = useToast();
-  const location = useLocation();
   const [formData, setFormData] = useState(() => initialGoogleSheetForm(sysSettings.default_spreadsheet_id));
-  const latestFormRef = useRef(formData);
-  const mountedRef = useRef(true);
-  const [saving, setSaving] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [msg, setMsg] = useState(null);
-  const saveTimerRef = useRef(null);
-  const saveChainRef = useRef(Promise.resolve());
-  const pendingSaveRef = useRef(null);
-  const queueSaveRef = useRef(null);
-  const editVersionRef = useRef(0);
-  const dirtyRef = useRef(false);
+
+  const {
+    connecting,
+    confirmDisconnect,
+    setConfirmDisconnect,
+    handleConnect: handleConnectSheets,
+    handleConfirmDisconnect: handleConfirmDisconnectSheets,
+  } = useOAuthConnect({
+    serviceName: 'sheets',
+    getAuthUrl: api.getSheetsAuthUrl,
+    disconnect: api.disconnectSheets,
+    onAfterDisconnect: refreshAuthUser,
+    serviceLabel: 'Google 試算表授權',
+  });
+
+  const { saving, mutate, flush, reset, dirty } = useDebouncedAutosave({
+    value: formData,
+    delay: 500,
+    compareFn: sameGoogleSheetForm,
+    onSave: async (nextData) => {
+      await api.updateSharedSettings(nextData);
+    },
+    onSuccess: async (nextData, { notify }) => {
+      await refreshSettings?.();
+      setMsg({ type: 'success', text: '目前帳號的 Google Sheet 設定已自動儲存。' });
+      if (notify) toast.success('設定已儲存');
+    },
+    onError: (error, { notify }) => {
+      setMsg({ type: 'error', text: error.message || '伺服器儲存失敗，請稍後重試。' });
+      if (notify) toast.error(`儲存失敗：${error.message || '未知錯誤'}`);
+    },
+  });
 
   useEffect(() => {
-    if (!dirtyRef.current) {
+    if (!dirty) {
       const nextData = initialGoogleSheetForm(sysSettings.default_spreadsheet_id);
-      latestFormRef.current = nextData;
       setFormData(nextData);
+      reset(nextData);
     }
-  }, [sysSettings.default_spreadsheet_id]);
-
-  const queueSave = (nextData, { notify = false } = {}) => {
-    const version = editVersionRef.current;
-    const pendingSave = { version, data: nextData, promise: null };
-    pendingSaveRef.current = pendingSave;
-    const request = saveChainRef.current.catch(() => undefined).then(async () => {
-      if (version !== editVersionRef.current) return;
-      if (mountedRef.current) {
-        setSaving(true);
-        setMsg(null);
-      }
-      try {
-        await api.updateSharedSettings(nextData);
-        if (version !== editVersionRef.current) return;
-        dirtyRef.current = false;
-        if (!mountedRef.current) return;
-        await refreshSettings?.();
-        if (version !== editVersionRef.current || !mountedRef.current) return;
-        setMsg({ type: 'success', text: '目前帳號的 Google Sheet 設定已自動儲存。' });
-        if (notify) toast.success('設定已儲存');
-      } catch (error) {
-        if (version !== editVersionRef.current || !mountedRef.current) return;
-        setMsg({ type: 'error', text: error.message || '伺服器儲存失敗，請稍後重試。' });
-        if (notify) toast.error(`儲存失敗：${error.message || '未知錯誤'}`);
-      } finally {
-        if (version === editVersionRef.current && mountedRef.current) setSaving(false);
-      }
-    });
-    pendingSave.promise = request;
-    pendingSaveRef.current = pendingSave;
-    saveChainRef.current = request;
-    request.then(
-      () => { if (pendingSaveRef.current === pendingSave) pendingSaveRef.current = null; },
-      () => { if (pendingSaveRef.current === pendingSave) pendingSaveRef.current = null; },
-    );
-    return request;
-  };
-  queueSaveRef.current = queueSave;
-
-  const scheduleSave = (nextData) => {
-    window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(() => {
-      saveTimerRef.current = null;
-      queueSave(nextData);
-    }, 500);
-  };
+  }, [sysSettings.default_spreadsheet_id, dirty, reset]);
 
   const handleChange = (value) => {
-    const nextData = { ...latestFormRef.current, default_spreadsheet_id: value };
-    editVersionRef.current += 1;
-    latestFormRef.current = nextData;
-    dirtyRef.current = true;
+    const nextData = { ...formData, default_spreadsheet_id: value };
+    setMsg(null);
     setFormData(nextData);
-    scheduleSave(nextData);
+    mutate(nextData);
   };
 
   const handleSave = async (event) => {
     event.preventDefault();
-    window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = null;
-    await queueSave(latestFormRef.current, { notify: true });
-  };
-
-  useEffect(() => () => {
-    mountedRef.current = false;
-    window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = null;
-    if (!dirtyRef.current) return;
-
-    const latestData = latestFormRef.current;
-    const pendingSave = pendingSaveRef.current;
-    const hasPendingLatestSave = pendingSave
-      && pendingSave.version === editVersionRef.current
-      && sameGoogleSheetForm(pendingSave.data, latestData);
-    if (!hasPendingLatestSave) queueSaveRef.current?.(latestData);
-  }, []);
-
-  const handleConnectSheets = async () => {
-    setConnecting(true);
-    try {
-      saveOAuthReturnPath('sheets', `${location.pathname}${location.search}`);
-      const res = await api.getSheetsAuthUrl();
-      if (res?.auth_url) {
-        window.location.href = res.auth_url;
-      } else {
-        toast.error('無法取得 Google 試算表授權網址。');
-        setConnecting(false);
-      }
-    } catch (error) {
-      toast.error(`取得 Google 試算表授權網址失敗：${error.message}`);
-      setConnecting(false);
-    }
-  };
-
-  const handleConfirmDisconnectSheets = async () => {
-    setConfirmDisconnect(false);
-    try {
-      await api.disconnectSheets();
-      await refreshAuthUser?.();
-      toast.success('已解除 Google 試算表授權');
-    } catch (error) {
-      toast.error(`解除試算表授權失敗：${error.message}`);
-    }
+    await flush({ notify: true });
   };
 
   const sheetsAuth = authUser?.authorizations?.sheets;
@@ -152,44 +81,23 @@ export default function GoogleSheetSettingsPage({ sysSettings = {}, refreshSetti
       {msg && <div className="info-banner">{msg.type === 'success' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}{msg.text}</div>}
       
       {/* Google Sheets Authorization Status Card */}
-      <div className="glass-panel card-padding settings-card card-stack">
-        <div className="card-header">
-          <div className="card-header-title">
-            <FileSpreadsheet size={20} color="var(--primary)" />
-            <h2>Google 試算表授權狀態</h2>
-          </div>
-          {isSheetsConnected ? (
-            <span className="badge badge-connected"><CheckCircle2 size={14} /> 已授權 Google 試算表</span>
-          ) : (
-            <span className="badge badge-disconnected"><XCircle size={14} /> 尚未授權 Google 試算表</span>
-          )}
-        </div>
-        {isSheetsConnected ? (
-          <div>
-            <p className="section-desc">已取得 Google 試算表唯讀權限，系統可讀取試算表工作表清單、名單與欄位對照資料。{sheetsAuth?.user?.email && `（授權帳號：${sheetsAuth.user.email}）`}</p>
-            <div className="page-actions settings-card-actions">
-              <button className="btn btn-secondary" type="button" onClick={handleConnectSheets} disabled={connecting}>
-                <RefreshCw size={16} /> 重新授權 Google 試算表
-              </button>
-              <button className="btn btn-danger" type="button" onClick={() => setConfirmDisconnect(true)}>
-                <Unlink size={16} /> 解除試算表授權
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div>
-            <div className="info-banner warning-banner">
-              <AlertCircle size={18} />
-              <span>目前尚未連結 Google 試算表。請點擊下方按鈕授權，以啟用試算表資料讀取功能。</span>
-            </div>
-            <div className="page-actions settings-card-actions">
-              <button className="btn btn-primary" type="button" onClick={handleConnectSheets} disabled={connecting}>
-                <Key size={16} /> 連結 Google 試算表
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      <ServiceAuthCard
+        icon={FileSpreadsheet}
+        title="Google 試算表授權狀態"
+        connected={isSheetsConnected}
+        connectedBadgeText="已授權 Google 試算表"
+        disconnectedBadgeText="尚未授權 Google 試算表"
+        description="已取得 Google 試算表唯讀權限，系統可讀取試算表工作表清單、名單與欄位對照資料。"
+        accountEmail={sheetsAuth?.user?.email}
+        accountEmailPrefix="授權帳號："
+        warningText="目前尚未連結 Google 試算表。請點擊下方按鈕授權，以啟用試算表資料讀取功能。"
+        connecting={connecting}
+        onConnect={handleConnectSheets}
+        onDisconnect={() => setConfirmDisconnect(true)}
+        connectText="連結 Google 試算表"
+        reconnectText="重新授權 Google 試算表"
+        disconnectText="解除試算表授權"
+      />
 
       <ConfirmDialog
         open={confirmDisconnect}

@@ -2,7 +2,7 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 from threading import RLock
-from typing import Optional
+from typing import Callable, Optional
 
 import googleapiclient.discovery
 from google.auth.transport.requests import Request
@@ -431,48 +431,54 @@ def _resolve_owner_sub(session_id: Optional[str] = None, owner_sub: Optional[str
     return str(session_user.get("sub") or "").strip() or None
 
 
-def get_sheets_credentials(session_id: Optional[str] = None, owner_sub: Optional[str] = None) -> Optional[Credentials]:
-    """Load Google Sheets credentials for an authenticated user session or subject."""
+def _get_scoped_service_credentials(
+    session_id: Optional[str],
+    owner_sub: Optional[str],
+    *,
+    credential_key: str,
+    scope_checker: Callable[[Optional[Credentials]], bool],
+    dedicated_getter: Callable[[str], Optional[Credentials]],
+) -> Optional[Credentials]:
     sub = _resolve_owner_sub(session_id=session_id, owner_sub=owner_sub)
     if not sub:
         return None
-    # 1. Dedicated sheets credentials
-    token_dict = credential_store.get_sheets_credentials(sub)
+    # 1. Dedicated service credentials
+    token_dict = dedicated_getter(sub)
     if token_dict and token_dict.get("token"):
-        creds = build_credentials_from_dict(token_dict, credential_key="sheets", owner_sub=sub)
-        if creds and creds.valid and has_sheets_scope(creds):
+        creds = build_credentials_from_dict(token_dict, credential_key=credential_key, owner_sub=sub)
+        if creds and creds.valid and scope_checker(creds):
             return creds
 
-    # 2. Fallback to legacy google login connection if it includes sheets scope
+    # 2. Fallback to legacy google login connection if it includes required scope
     legacy_dict = credential_store.get_google_credentials(sub)
     if legacy_dict and legacy_dict.get("token"):
         creds = build_credentials_from_dict(legacy_dict, credential_key="google", owner_sub=sub)
-        if creds and creds.valid and has_sheets_scope(creds):
+        if creds and creds.valid and scope_checker(creds):
             return creds
 
     return None
+
+
+def get_sheets_credentials(session_id: Optional[str] = None, owner_sub: Optional[str] = None) -> Optional[Credentials]:
+    """Load Google Sheets credentials for an authenticated user session or subject."""
+    return _get_scoped_service_credentials(
+        session_id=session_id,
+        owner_sub=owner_sub,
+        credential_key="sheets",
+        scope_checker=has_sheets_scope,
+        dedicated_getter=credential_store.get_sheets_credentials,
+    )
 
 
 def get_drive_credentials(session_id: Optional[str] = None, owner_sub: Optional[str] = None) -> Optional[Credentials]:
     """Load Google Drive credentials for an authenticated user session or subject."""
-    sub = _resolve_owner_sub(session_id=session_id, owner_sub=owner_sub)
-    if not sub:
-        return None
-    # 1. Dedicated drive credentials
-    token_dict = credential_store.get_drive_credentials(sub)
-    if token_dict and token_dict.get("token"):
-        creds = build_credentials_from_dict(token_dict, credential_key="drive", owner_sub=sub)
-        if creds and creds.valid and has_drive_read_scope(creds):
-            return creds
-
-    # 2. Fallback to legacy google login connection if it includes drive scope
-    legacy_dict = credential_store.get_google_credentials(sub)
-    if legacy_dict and legacy_dict.get("token"):
-        creds = build_credentials_from_dict(legacy_dict, credential_key="google", owner_sub=sub)
-        if creds and creds.valid and has_drive_read_scope(creds):
-            return creds
-
-    return None
+    return _get_scoped_service_credentials(
+        session_id=session_id,
+        owner_sub=owner_sub,
+        credential_key="drive",
+        scope_checker=has_drive_read_scope,
+        dedicated_getter=credential_store.get_drive_credentials,
+    )
 
 
 def get_youtube_credentials(session_id: Optional[str] = None, slot: str = "primary") -> Optional[Credentials]:

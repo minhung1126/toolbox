@@ -50,3 +50,45 @@ export function youtubeRoutingReasonLabel(reason) {
   };
   return labels[reason] || reason || '尚未取得 routing 原因';
 }
+
+export function getYoutubeAuthorizationFingerprint(youtube, activeSlotOverride = null) {
+  const slots = ['primary', 'secondary'].map((slot) => {
+    const record = youtube?.slots?.[slot] || {};
+    return [
+      slot,
+      record.configured,
+      record.authenticated,
+      record.channel_id,
+      record.client_fingerprint,
+      record.token_status,
+      record.token_expires_at,
+      record.last_refreshed_at,
+    ];
+  });
+  return JSON.stringify({
+    activeSlot: activeSlotOverride || youtube?.active_slot || 'primary',
+    routingMode: youtubeRoutingMode(youtube),
+    slots,
+  });
+}
+
+export function getYoutubeAuthContext(authUser, slotOverride = '') {
+  const youtube = authUser?.youtube || {};
+  const slot = slotOverride || youtubePreferredUiSlot(youtube);
+  const record = youtube.slots?.[slot] || {};
+  const user = record.user || {};
+  return {
+    slot,
+    channelId: record.channel_id || '',
+    channelTitle: record.channel_title || '',
+    account: user.sub || user.email || '',
+    clientFingerprint: record.client_fingerprint || '',
+    authenticated: Boolean(record.authenticated) || youtubeIsConnected(youtube),
+    tokenStatus: record.token_status || '',
+    tokenExpiresAt: record.token_expires_at || '',
+    lastRefreshedAt: record.last_refreshed_at || '',
+    routingMode: youtubeRoutingMode(youtube),
+    authorizationFingerprint: getYoutubeAuthorizationFingerprint(youtube),
+  };
+}
+

@@ -1,39 +1,41 @@
-import React, { useState } from 'react';
-import { AlertCircle, CheckCircle2, ExternalLink, FileSpreadsheet, HardDrive, Key, ListVideo, RefreshCw, Unlink, XCircle } from 'lucide-react';
+import React from 'react';
+import { CheckCircle2, ExternalLink, FileSpreadsheet, HardDrive, Key, ListVideo, RefreshCw, XCircle } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ServiceAuthCard from '../components/ServiceAuthCard';
+import { useOAuthConnect } from '../hooks/useOAuthConnect';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
 import { PATHS } from '../routes/paths';
+import { formatTokenDate, tokenStatusLabel } from '../utils/formatters';
 
 const GITHUB_DOCS = {
   google: 'https://github.com/minhung1126/toolbox/blob/main/docs/GOOGLE_API_SETUP.md',
   deployment: 'https://github.com/minhung1126/toolbox/blob/main/docs/DEPLOYMENT.md',
 };
 
-function formatTokenDate(value) {
-  if (!value) return '—';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('zh-TW');
-}
-
-function tokenStatusLabel(status) {
-  return {
-    active: '正常（會自動更新）',
-    refresh_failed: '暫時更新失敗',
-    reauthorization_required: '需要重新授權',
-    not_connected: '尚未連結',
-  }[status] || '未取得狀態';
-}
-
 export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, refreshAuthUser }) {
   const toast = useToast();
   const location = useLocation();
-  const [connectingSheets, setConnectingSheets] = useState(false);
-  const [connectingDrive, setConnectingDrive] = useState(false);
-  const [confirmDisconnectSheets, setConfirmDisconnectSheets] = useState(false);
-  const [confirmDisconnectDrive, setConfirmDisconnectDrive] = useState(false);
+
+  const sheetsOAuth = useOAuthConnect({
+    serviceName: 'sheets',
+    getAuthUrl: api.getSheetsAuthUrl,
+    disconnect: api.disconnectSheets,
+    onAfterDisconnect: refreshAuthUser,
+    serviceLabel: 'Google 試算表授權',
+    successMessage: '已解除 Google 試算表授權',
+  });
+
+  const driveOAuth = useOAuthConnect({
+    serviceName: 'drive',
+    getAuthUrl: api.getDriveAuthUrl,
+    disconnect: api.disconnectDrive,
+    onAfterDisconnect: refreshAuthUser,
+    serviceLabel: 'Google 雲端硬碟授權',
+    successMessage: '已解除 Google 雲端硬碟授權',
+  });
 
   const handleStartLoginOAuth = async () => {
     try {
@@ -42,62 +44,6 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
       if (result.auth_url) window.location.href = result.auth_url;
     } catch (error) {
       toast.error(`取得控制台登入授權網址失敗：${error.message}`);
-    }
-  };
-
-  const handleConnectSheets = async () => {
-    setConnectingSheets(true);
-    try {
-      saveOAuthReturnPath('sheets', `${location.pathname}${location.search}`);
-      const res = await api.getSheetsAuthUrl();
-      if (res?.auth_url) {
-        window.location.href = res.auth_url;
-      } else {
-        toast.error('無法取得 Google 試算表授權網址。');
-        setConnectingSheets(false);
-      }
-    } catch (error) {
-      toast.error(`取得 Google 試算表授權網址失敗：${error.message}`);
-      setConnectingSheets(false);
-    }
-  };
-
-  const handleConfirmDisconnectSheets = async () => {
-    setConfirmDisconnectSheets(false);
-    try {
-      await api.disconnectSheets();
-      await refreshAuthUser?.();
-      toast.success('已解除 Google 試算表授權');
-    } catch (error) {
-      toast.error(`解除試算表授權失敗：${error.message}`);
-    }
-  };
-
-  const handleConnectDrive = async () => {
-    setConnectingDrive(true);
-    try {
-      saveOAuthReturnPath('drive', `${location.pathname}${location.search}`);
-      const res = await api.getDriveAuthUrl();
-      if (res?.auth_url) {
-        window.location.href = res.auth_url;
-      } else {
-        toast.error('無法取得 Google 雲端硬碟授權網址。');
-        setConnectingDrive(false);
-      }
-    } catch (error) {
-      toast.error(`取得 Google 雲端硬碟授權網址失敗：${error.message}`);
-      setConnectingDrive(false);
-    }
-  };
-
-  const handleConfirmDisconnectDrive = async () => {
-    setConfirmDisconnectDrive(false);
-    try {
-      await api.disconnectDrive();
-      await refreshAuthUser?.();
-      toast.success('已解除 Google 雲端硬碟授權');
-    } catch (error) {
-      toast.error(`解除雲端硬碟授權失敗：${error.message}`);
     }
   };
 
@@ -137,66 +83,40 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
       </div>
 
       {/* 2. Google 試算表授權 */}
-      <div className="glass-panel card-padding settings-card card-stack">
-        <div className="card-header">
-          <div className="card-header-title"><FileSpreadsheet size={20} color="var(--primary)" /><h2>Google 試算表授權</h2></div>
-          {isSheetsConnected ? <span className="badge badge-connected"><CheckCircle2 size={14} /> 已授權試算表</span> : <span className="badge badge-disconnected"><XCircle size={14} /> 尚未授權試算表</span>}
-        </div>
-        <p className="section-desc">用於唯讀存取工作表資料，支援批次資訊更新、影片發布檢查與試算表結構複製等功能。{sheetsAuth?.user?.email && `（目前授權帳號：${sheetsAuth.user.email}）`}</p>
-        {isSheetsConnected ? (
-          <div className="page-actions settings-card-actions">
-            <button className="btn btn-secondary" type="button" onClick={handleConnectSheets} disabled={connectingSheets}>
-              <RefreshCw size={16} /> 重新授權 Google 試算表
-            </button>
-            <button className="btn btn-danger" type="button" onClick={() => setConfirmDisconnectSheets(true)}>
-              <Unlink size={16} /> 解除試算表授權
-            </button>
-          </div>
-        ) : (
-          <div>
-            <div className="info-banner warning-banner">
-              <AlertCircle size={18} />
-              <span>尚未連結 Google 試算表。請完成授權以啟用試算表讀取與批次工作流功能。</span>
-            </div>
-            <div className="page-actions settings-card-actions">
-              <button className="btn btn-primary" type="button" onClick={handleConnectSheets} disabled={connectingSheets}>
-                <Key size={16} /> 連結 Google 試算表
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      <ServiceAuthCard
+        icon={FileSpreadsheet}
+        title="Google 試算表授權"
+        connected={isSheetsConnected}
+        connectedBadgeText="已授權試算表"
+        disconnectedBadgeText="尚未授權試算表"
+        description="用於唯讀存取工作表資料，支援批次資訊更新、影片發布檢查與試算表結構複製等功能。"
+        accountEmail={sheetsAuth?.user?.email}
+        warningText="尚未連結 Google 試算表。請完成授權以啟用試算表讀取與批次工作流功能。"
+        connecting={sheetsOAuth.connecting}
+        onConnect={sheetsOAuth.handleConnect}
+        onDisconnect={() => sheetsOAuth.setConfirmDisconnect(true)}
+        connectText="連結 Google 試算表"
+        reconnectText="重新授權 Google 試算表"
+        disconnectText="解除試算表授權"
+      />
 
       {/* 3. Google 雲端硬碟授權 */}
-      <div className="glass-panel card-padding settings-card card-stack">
-        <div className="card-header">
-          <div className="card-header-title"><HardDrive size={20} color="var(--primary)" /><h2>Google 雲端硬碟授權</h2></div>
-          {isDriveConnected ? <span className="badge badge-connected"><CheckCircle2 size={14} /> 已授權雲端硬碟</span> : <span className="badge badge-disconnected"><XCircle size={14} /> 尚未授權雲端硬碟</span>}
-        </div>
-        <p className="section-desc">用於唯讀存取 Google Drive 影片資料夾與檔案，供 YouTube 背景上傳工作讀取來源影片。{driveAuth?.user?.email && `（目前授權帳號：${driveAuth.user.email}）`}</p>
-        {isDriveConnected ? (
-          <div className="page-actions settings-card-actions">
-            <button className="btn btn-secondary" type="button" onClick={handleConnectDrive} disabled={connectingDrive}>
-              <RefreshCw size={16} /> 重新授權 Google 雲端硬碟
-            </button>
-            <button className="btn btn-danger" type="button" onClick={() => setConfirmDisconnectDrive(true)}>
-              <Unlink size={16} /> 解除雲端硬碟授權
-            </button>
-          </div>
-        ) : (
-          <div>
-            <div className="info-banner warning-banner">
-              <AlertCircle size={18} />
-              <span>尚未連結 Google 雲端硬碟。請完成授權以啟用 Drive 來源解析與影片上傳。</span>
-            </div>
-            <div className="page-actions settings-card-actions">
-              <button className="btn btn-primary" type="button" onClick={handleConnectDrive} disabled={connectingDrive}>
-                <Key size={16} /> 連結 Google 雲端硬碟
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      <ServiceAuthCard
+        icon={HardDrive}
+        title="Google 雲端硬碟授權"
+        connected={isDriveConnected}
+        connectedBadgeText="已授權雲端硬碟"
+        disconnectedBadgeText="尚未授權雲端硬碟"
+        description="用於唯讀存取 Google Drive 影片資料夾與檔案，供 YouTube 背景上傳工作讀取來源影片。"
+        accountEmail={driveAuth?.user?.email}
+        warningText="尚未連結 Google 雲端硬碟。請完成授權以啟用 Drive 來源解析與影片上傳。"
+        connecting={driveOAuth.connecting}
+        onConnect={driveOAuth.handleConnect}
+        onDisconnect={() => driveOAuth.setConfirmDisconnect(true)}
+        connectText="連結 Google 雲端硬碟"
+        reconnectText="重新授權 Google 雲端硬碟"
+        disconnectText="解除雲端硬碟授權"
+      />
 
       {/* 4. YouTube 頻道授權 */}
       <div className="glass-panel card-padding settings-card card-stack">
@@ -212,25 +132,25 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
       </div>
 
       <ConfirmDialog
-        open={confirmDisconnectSheets}
+        open={sheetsOAuth.confirmDisconnect}
         title="解除 Google 試算表授權"
         message="確定要解除 Google 試算表授權嗎？解除後各項功能將無法讀取試算表內容，直到重新授權為止。"
         confirmText="確認解除"
         cancelText="取消"
         variant="destructive"
-        onConfirm={handleConfirmDisconnectSheets}
-        onCancel={() => setConfirmDisconnectSheets(false)}
+        onConfirm={sheetsOAuth.handleConfirmDisconnect}
+        onCancel={() => sheetsOAuth.setConfirmDisconnect(false)}
       />
 
       <ConfirmDialog
-        open={confirmDisconnectDrive}
+        open={driveOAuth.confirmDisconnect}
         title="解除 Google 雲端硬碟授權"
         message="確定要解除 Google 雲端硬碟授權嗎？解除後將無法解析 Drive 資料夾或上傳影片，直到重新授權為止。"
         confirmText="確認解除"
         cancelText="取消"
         variant="destructive"
-        onConfirm={handleConfirmDisconnectDrive}
-        onCancel={() => setConfirmDisconnectDrive(false)}
+        onConfirm={driveOAuth.handleConfirmDisconnect}
+        onCancel={() => driveOAuth.setConfirmDisconnect(false)}
       />
     </div>
   );

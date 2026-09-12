@@ -18,6 +18,7 @@ import {
 import { api } from '../services/api';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { copyToClipboard } from '../utils/clipboard';
 
 export default function SystemSettingsPage({ sysSettings = {} }) {
   const toast = useToast();
@@ -74,7 +75,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
 
   const handleCopyRedirectUri = async () => {
     try {
-      await navigator.clipboard.writeText(redirectUri);
+      await copyToClipboard(redirectUri);
       setCopied(true);
       toast.success('已複製 Redirect URI 到剪貼簿');
       setTimeout(() => setCopied(false), 2000);

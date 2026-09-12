@@ -5,12 +5,9 @@ AES-encrypted storage for Google and YouTube OAuth client credentials,
 and the one-time Setup PIN for first-run configuration.
 """
 
-import base64
 import contextlib
-import hashlib
 import json
 import logging
-import os
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +15,8 @@ from threading import RLock
 from typing import Any, Dict, Optional, Tuple
 
 from cryptography.fernet import Fernet, InvalidToken
+
+from backend.app.core.persistence import atomic_write_json, derive_fernet, read_json_file, secure_chmod
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +43,7 @@ SECRET_FIELDS = {
 
 
 def _derive_fernet(key_material: str) -> Fernet:
-    digest = hashlib.sha256(key_material.encode("utf-8")).digest()
-    return Fernet(base64.urlsafe_b64encode(digest))
+    return derive_fernet(key_material)
 
 
 def mask_secret(value: str) -> str:
@@ -62,9 +60,7 @@ def mask_secret(value: str) -> str:
 
 def _secure_file_permissions(path: Path) -> None:
     """Set restrictive file permissions on POSIX platforms."""
-    if os.name != "nt":
-        with contextlib.suppress(OSError):
-            os.chmod(path, 0o600)
+    secure_chmod(path, 0o600)
 
 
 class SystemSecretsManager:
@@ -125,21 +121,15 @@ class SystemSecretsManager:
 
             if needs_save or not self._secrets_file.is_file():
                 try:
-                    self._data_dir.mkdir(parents=True, exist_ok=True)
-                    tmp_file = self._secrets_file.with_suffix(".tmp")
-                    with tmp_file.open("w", encoding="utf-8") as handle:
-                        json.dump(
-                            {
-                                "secret_key": secret_key,
-                                "credential_encryption_key": encryption_key,
-                                "updated_at": datetime.now(timezone.utc).isoformat(),
-                            },
-                            handle,
-                            indent=2,
-                        )
-                    _secure_file_permissions(tmp_file)
-                    tmp_file.replace(self._secrets_file)
-                    _secure_file_permissions(self._secrets_file)
+                    atomic_write_json(
+                        self._secrets_file,
+                        {
+                            "secret_key": secret_key,
+                            "credential_encryption_key": encryption_key,
+                            "updated_at": datetime.now(timezone.utc).isoformat(),
+                        },
+                        indent=2,
+                    )
                     logger.info("Persisted auto-generated master keys to %s", self._secrets_file.name)
                 except OSError as exc:
                     logger.error("Failed to persist master keys: %s", type(exc).__name__)
@@ -158,17 +148,12 @@ class SystemSecretsManager:
             if self._credentials_cache is not None:
                 return dict(self._credentials_cache)
 
-            if not self._credentials_file.is_file():
+            data = read_json_file(self._credentials_file)
+            if not isinstance(data, dict):
                 self._credentials_cache = {}
                 return {}
 
             try:
-                with self._credentials_file.open("r", encoding="utf-8") as handle:
-                    data = json.load(handle)
-                if not isinstance(data, dict):
-                    self._credentials_cache = {}
-                    return {}
-
                 fernet = self._get_fernet()
                 decrypted: Dict[str, str] = {}
                 for field in OAUTH_CREDENTIAL_FIELDS:
@@ -216,13 +201,7 @@ class SystemSecretsManager:
                     payload[field] = val
 
             try:
-                self._data_dir.mkdir(parents=True, exist_ok=True)
-                tmp_file = self._credentials_file.with_suffix(".tmp")
-                with tmp_file.open("w", encoding="utf-8") as handle:
-                    json.dump(payload, handle, indent=2)
-                _secure_file_permissions(tmp_file)
-                tmp_file.replace(self._credentials_file)
-                _secure_file_permissions(self._credentials_file)
+                atomic_write_json(self._credentials_file, payload, indent=2)
                 self._credentials_cache = dict(current)
                 logger.info("Successfully updated and persisted system OAuth credentials")
             except OSError as exc:

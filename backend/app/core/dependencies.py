@@ -4,7 +4,10 @@ Shared FastAPI Dependencies
 Centralizes common dependency injection functions used across API routes.
 """
 
+from __future__ import annotations
+
 import logging
+from typing import Any
 
 from fastapi import Depends, Request
 from google.oauth2.credentials import Credentials
@@ -27,6 +30,83 @@ from backend.app.services.youtube_quota_service import get_youtube_quota_tracker
 logger = logging.getLogger(__name__)
 
 
+class AuthenticatedSession:
+    """Cached container for the authenticated user session in the current request."""
+
+    __slots__ = ("credentials", "email", "session_data", "session_id", "subject", "user")
+
+    def __init__(
+        self,
+        *,
+        session_id: str,
+        session_data: dict[str, Any],
+        user: dict[str, Any],
+        subject: str,
+        email: str,
+        credentials: Credentials,
+    ):
+        self.session_id = session_id
+        self.session_data = session_data
+        self.user = user
+        self.subject = subject
+        self.email = email
+        self.credentials = credentials
+
+
+def get_authenticated_session(request: Request) -> AuthenticatedSession:
+    """Extract and validate the control-panel session, caching on request.state."""
+    cached = getattr(request.state, "_authenticated_session", None)
+    if isinstance(cached, AuthenticatedSession):
+        return cached
+
+    session_id = request.cookies.get(settings.session_cookie_name)
+    session_data = session_store.get(session_id) if session_id else None
+    user = session_data.get("user") if isinstance(session_data, dict) else None
+    subject = str((user or {}).get("sub") or "").strip()
+    if not subject:
+        logger.warning("API access attempted with a session missing an OIDC subject")
+        raise http_error(401, "login_required", "登入資料缺少 Google OIDC subject，請重新登入。")
+    creds = get_login_credentials(session_id)
+
+    if not creds or not creds.valid:
+        logger.warning("Unauthorized control-panel API access attempt")
+        raise http_error(401, "login_required", "控制台登入已失效，請重新登入 Google 帳號。")
+
+    email = str((user or {}).get("email") or "").strip().casefold()
+    auth_session = AuthenticatedSession(
+        session_id=session_id,
+        session_data=session_data if isinstance(session_data, dict) else {},
+        user=user if isinstance(user, dict) else {},
+        subject=subject,
+        email=email,
+        credentials=creds,
+    )
+    request.state._authenticated_session = auth_session
+    return auth_session
+
+
+def create_youtube_request_context(
+    decision: Any,
+    owner_sub: str,
+    *,
+    session_id: str | None = None,
+    selection_reason: str | None = None,
+) -> YouTubeRequestContext:
+    """Standardized factory to build a YouTubeRequestContext from a routing decision."""
+    return YouTubeRequestContext(
+        slot=decision.slot,
+        credentials=decision.credentials,
+        quota_limiter=get_youtube_quota_tracker(decision.slot),
+        channel_id=decision.channel_id,
+        owner_sub=owner_sub,
+        routing_mode=decision.routing_mode,
+        selection_reason=selection_reason or decision.reason,
+        estimated_units=decision.estimated_units,
+        preferred_slot=decision.preferred_slot,
+        session_id=session_id,
+    )
+
+
 def _get_preview_slot_hint(path: str, body: object) -> str | None:
     """Only pin a slot for a write request carrying a complete preview."""
     normalized_path = path.rstrip("/")
@@ -44,22 +124,8 @@ def _get_preview_slot_hint(path: str, body: object) -> str | None:
 
 
 def require_login_credentials(request: Request) -> Credentials:
-    """
-    Extract and validate the control-panel login credentials from the
-    session cookie. Raises 401 if the page login is not authenticated.
-    """
-    session_id = request.cookies.get(settings.session_cookie_name)
-    session_data = session_store.get(session_id) if session_id else None
-    user = session_data.get("user") if isinstance(session_data, dict) else None
-    if not str((user or {}).get("sub") or "").strip():
-        logger.warning("API access attempted with a session missing an OIDC subject")
-        raise http_error(401, "login_required", "登入資料缺少 Google OIDC subject，請重新登入。")
-    creds = get_login_credentials(session_id)
-
-    if not creds or not creds.valid:
-        logger.warning("Unauthorized control-panel API access attempt")
-        raise http_error(401, "login_required", "控制台登入已失效，請重新登入 Google 帳號。")
-    return creds
+    """Extract and validate control-panel login credentials from session."""
+    return get_authenticated_session(request).credentials
 
 
 def require_account_subject(
@@ -68,12 +134,7 @@ def require_account_subject(
 ) -> str:
     """Resolve the authenticated Google account used to scope saved state."""
     del creds
-    session_id = request.cookies.get(settings.session_cookie_name)
-    session_data = session_store.get(session_id) if session_id else None
-    subject = str(((session_data or {}).get("user") or {}).get("sub") or "").strip()
-    if not subject:
-        raise http_error(401, "login_required", "登入資料缺少 Google OIDC subject，請重新登入。")
-    return subject
+    return get_authenticated_session(request).subject
 
 
 def require_account_email(
@@ -82,10 +143,7 @@ def require_account_email(
 ) -> str:
     """Resolve the authenticated Google account email."""
     del creds
-    session_id = request.cookies.get(settings.session_cookie_name)
-    session_data = session_store.get(session_id) if session_id else None
-    email = str(((session_data or {}).get("user") or {}).get("email") or "").strip().casefold()
-    return email
+    return get_authenticated_session(request).email
 
 
 def require_sheets_credentials(
@@ -132,16 +190,10 @@ def require_drive_credentials(
 
 async def require_youtube_context(request: Request) -> YouTubeRequestContext:
     """Resolve one quota-aware YouTube slot once at request start."""
-    session_id = request.cookies.get(settings.session_cookie_name)
-    login_creds = get_login_credentials(session_id)
-    if not login_creds or not login_creds.valid:
-        logger.warning("Unauthorized YouTube API access attempt without page login")
-        raise http_error(401, "login_required", "控制台登入已失效，請重新登入 Google 帳號。")
+    auth_session = get_authenticated_session(request)
+    session_id = auth_session.session_id
+    owner_sub = auth_session.subject
 
-    session_data = session_store.get(session_id) or {}
-    owner_sub = str(((session_data.get("user") or {}).get("sub") or "")).strip()
-    if not owner_sub:
-        raise http_error(401, "login_required", "登入資料缺少 Google OIDC subject，請重新登入。")
     try:
         body = await request.json()
     except Exception:
@@ -166,15 +218,21 @@ async def require_youtube_context(request: Request) -> YouTubeRequestContext:
         decision.reason,
         decision.estimated_units,
     )
-    return YouTubeRequestContext(
-        slot=decision.slot,
-        credentials=decision.credentials,
-        quota_limiter=get_youtube_quota_tracker(decision.slot),
-        channel_id=decision.channel_id,
-        owner_sub=owner_sub,
-        routing_mode=decision.routing_mode,
-        selection_reason=decision.reason,
-        estimated_units=decision.estimated_units,
-        preferred_slot=decision.preferred_slot,
+    return create_youtube_request_context(
+        decision,
+        owner_sub,
         session_id=session_id,
     )
+
+
+__all__ = [
+    "AuthenticatedSession",
+    "create_youtube_request_context",
+    "get_authenticated_session",
+    "require_account_email",
+    "require_account_subject",
+    "require_drive_credentials",
+    "require_login_credentials",
+    "require_sheets_credentials",
+    "require_youtube_context",
+]

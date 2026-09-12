@@ -4,20 +4,18 @@ Only the random session id is sent to the browser. OAuth credentials and the
 associated user profile remain encrypted in ``data/sessions.json``.
 """
 
-import base64
-import hashlib
 import json
 import logging
-import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import RLock
 from typing import Any, Optional
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import InvalidToken
 
 from backend.app.core.config import settings
+from backend.app.core.persistence import atomic_write_json, derive_fernet, read_json_file
 
 logger = logging.getLogger(__name__)
 
@@ -37,39 +35,19 @@ class SessionStore:
         # Session payloads and OAuth credentials use the dedicated encryption
         # key. Production configuration guarantees it is explicit and distinct
         # from the signing SECRET_KEY.
-        key_material = settings.CREDENTIAL_ENCRYPTION_KEY
-        digest = hashlib.sha256(key_material.encode("utf-8")).digest()
-        self._fernet = Fernet(base64.urlsafe_b64encode(digest))
+        self._fernet = derive_fernet(settings.CREDENTIAL_ENCRYPTION_KEY)
         self._data: dict[str, Any] = {"version": 1, "sessions": {}}
         self._load()
 
     def _load(self) -> None:
         with self._lock:
-            if not self._path.is_file():
-                return
-            try:
-                with self._path.open("r", encoding="utf-8") as handle:
-                    loaded = json.load(handle)
-                if isinstance(loaded, dict):
-                    sessions = loaded.get("sessions")
-                    self._data["sessions"] = sessions if isinstance(sessions, dict) else {}
-            except (OSError, json.JSONDecodeError) as exc:
-                logger.error("Failed to load server session store: %s", type(exc).__name__)
+            loaded = read_json_file(self._path)
+            if isinstance(loaded, dict):
+                sessions = loaded.get("sessions")
+                self._data["sessions"] = sessions if isinstance(sessions, dict) else {}
 
     def _save(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self._path.with_name(f".{self._path.name}.{os.getpid()}.tmp")
-        with tmp_path.open("w", encoding="utf-8") as handle:
-            json.dump(self._data, handle, ensure_ascii=False, indent=2)
-        try:
-            os.chmod(tmp_path, 0o600)
-        except OSError:
-            pass
-        os.replace(tmp_path, self._path)
-        try:
-            os.chmod(self._path, 0o600)
-        except OSError:
-            pass
+        atomic_write_json(self._path, self._data)
 
     def _purge_expired(self) -> None:
         now = _now()

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from backend.app.core.account_state import get_account_active_slot, get_account_setting
 from backend.app.core.config import normalize_youtube_slot
 from backend.app.core.dependencies import (
+    create_youtube_request_context,
     require_account_subject,
     require_login_credentials,
     require_sheets_credentials,
@@ -168,17 +169,11 @@ def _switch_youtube_context(
             continue
         if decision.slot == context.slot or decision.slot in attempted_slots:
             continue
-        return YouTubeRequestContext(
-            slot=decision.slot,
-            credentials=decision.credentials,
-            quota_limiter=get_youtube_quota_tracker(decision.slot),
-            owner_sub=context.owner_sub,
-            channel_id=decision.channel_id,
-            routing_mode=decision.routing_mode,
-            selection_reason=f"auto_{decision.slot}_quota_fallback",
-            estimated_units=decision.estimated_units,
-            preferred_slot=decision.preferred_slot,
+        return create_youtube_request_context(
+            decision,
+            context.owner_sub,
             session_id=context.session_id,
+            selection_reason=f"auto_{decision.slot}_quota_fallback",
         )
     return None
 
@@ -521,6 +516,77 @@ def _verify_playlist_preview_token(
         raise _stale_preview_exception()
 
 
+def _validate_batch_inputs(
+    payload: BatchUpdateInput,
+    owner_sub: str,
+    action_label: str = "預覽",
+) -> tuple[str, str, str, list[tuple[str, str]], list[tuple[str, str]]]:
+    """Extract and validate spreadsheet ID, title/description columns, and assignments."""
+    spreadsheet_id = (
+        payload.spreadsheet_url_or_id or get_account_setting(owner_sub, "default_spreadsheet_id", "")
+    ).strip()
+    if not spreadsheet_id:
+        raise http_error(400, "spreadsheet_required", "請提供試算表 ID 或網址。")
+    title_column = normalize_text(payload.title_column)
+    description_column = normalize_text(payload.description_column)
+    if title_column == description_column:
+        raise http_error(
+            400,
+            "columns_must_differ",
+            "標題欄位與描述欄位必須不同。",
+            field_errors={"description_column": ["不可與 title_column 相同。"]},
+        )
+    all_assignments = [(assignment.video_id, normalize_text(assignment.person)) for assignment in payload.assignments]
+    active_assignments = [(video_id, person) for video_id, person in all_assignments if person and person != "不編輯"]
+    if not active_assignments:
+        raise http_error(400, "no_active_assignments", f"目前沒有任何影片被指定人物，請先選擇人物後再{action_label}。")
+    return spreadsheet_id, title_column, description_column, all_assignments, active_assignments
+
+
+def _load_and_validate_sheet_data(
+    sheet_creds: Credentials,
+    spreadsheet_id: str,
+    worksheet_name: str,
+    title_column: str,
+    description_column: str,
+) -> tuple[list[str], list[dict]]:
+    """Load sheet headers and rows, validating required columns and presence of data."""
+    headers = get_sheet_headers(sheet_creds, spreadsheet_id, worksheet_name)
+    required_headers = ["所屬團體", "人", title_column, description_column]
+    missing_headers = [header for header in required_headers if header not in headers]
+    if missing_headers:
+        raise http_error(
+            400,
+            "sheet_columns_missing",
+            f"工作表「{worksheet_name}」缺少必要欄位，請重新整理後再試。",
+            field_errors={"worksheet_name": [f"缺少欄位：{', '.join(missing_headers)}。"]},
+        )
+    sheet_rows = get_all_rows_for_sheet(sheet_creds, spreadsheet_id, worksheet_name)
+    if not sheet_rows:
+        raise http_error(400, "sheet_rows_empty", f"工作表「{worksheet_name}」沒有可用資料列。")
+    return headers, sheet_rows
+
+
+def _resolve_person_metadata(
+    matches: list[dict],
+    normalized_team: str,
+    person: str,
+    title_column: str,
+    description_column: str,
+) -> tuple[str, str, str]:
+    """Resolve matched sheet row for a person into (skip_reason, new_title, new_description)."""
+    row, match_error = resolve_assignment_row(matches, title_column, description_column)
+    if match_error == "not_found":
+        return f"找不到團體 {normalized_team} 的選項 {person} 資料", "", ""
+    if match_error == "conflict":
+        return f"團體 {normalized_team} 的選項 {person} 有多筆且標題或描述內容不同", "", ""
+    new_title = normalize_text((row or {}).get(title_column) or "")
+    new_description = str((row or {}).get(description_column) or "")
+    if not new_title:
+        return f"工作表的 {title_column} 為空白", "", ""
+    return "", new_title, new_description
+
+
 @router.post("/batch-preview")
 def create_batch_metadata_preview(
     payload: BatchUpdateInput,
@@ -530,41 +596,16 @@ def create_batch_metadata_preview(
     """Build a signed, account-bound batch plan without performing writes."""
 
     youtube_context = creds
-    spreadsheet_id = (
-        payload.spreadsheet_url_or_id or get_account_setting(youtube_context.owner_sub, "default_spreadsheet_id", "")
-    ).strip()
+    spreadsheet_id, title_column, description_column, all_assignments, active_assignments = _validate_batch_inputs(
+        payload, youtube_context.owner_sub, action_label="預覽"
+    )
     playlist_id = _resolve_playlist_id(youtube_context, payload.playlist_id)
     normalized_team = normalize_text(payload.team)
-    title_column = normalize_text(payload.title_column)
-    description_column = normalize_text(payload.description_column)
-    all_assignments = [(assignment.video_id, normalize_text(assignment.person)) for assignment in payload.assignments]
-    active_assignments = [(video_id, person) for video_id, person in all_assignments if person and person != "不編輯"]
-    if not spreadsheet_id:
-        raise http_error(400, "spreadsheet_required", "請提供試算表 ID 或網址。")
-    if title_column == description_column:
-        raise http_error(
-            400,
-            "columns_must_differ",
-            "標題欄位與描述欄位必須不同。",
-            field_errors={"description_column": ["不可與 title_column 相同。"]},
-        )
-    if not active_assignments:
-        raise http_error(400, "no_active_assignments", "目前沒有任何影片被指定人物，請先選擇人物後再預覽。")
 
     try:
-        headers = get_sheet_headers(sheet_creds, spreadsheet_id, payload.worksheet_name)
-        required_headers = ["所屬團體", "人", title_column, description_column]
-        missing_headers = [header for header in required_headers if header not in headers]
-        if missing_headers:
-            raise http_error(
-                400,
-                "sheet_columns_missing",
-                f"工作表「{payload.worksheet_name}」缺少必要欄位，請重新整理後再試。",
-                field_errors={"worksheet_name": [f"缺少欄位：{', '.join(missing_headers)}。"]},
-            )
-        sheet_rows = get_all_rows_for_sheet(sheet_creds, spreadsheet_id, payload.worksheet_name)
-        if not sheet_rows:
-            raise http_error(400, "sheet_rows_empty", f"工作表「{payload.worksheet_name}」沒有可用資料列。")
+        headers, sheet_rows = _load_and_validate_sheet_data(
+            sheet_creds, spreadsheet_id, payload.worksheet_name, title_column, description_column
+        )
         sheet_state = sheet_snapshot(spreadsheet_id, payload.worksheet_name, headers, sheet_rows)
         if playlist_id:
             playlist_state = playlist_snapshot(fetch_playlist_items(youtube_context, playlist_id))
@@ -598,7 +639,6 @@ def create_batch_metadata_preview(
             current_title = str(snippet.get("title") or "")
             current_description = str(snippet.get("description") or "")
             matches = [row for row in sheet_rows if matches_team_person(row, normalized_team, person)]
-            row, match_error = resolve_assignment_row(matches, title_column, description_column)
             reason = ""
             new_title = ""
             new_description = ""
@@ -609,18 +649,13 @@ def create_batch_metadata_preview(
             elif not detail:
                 status = "skipped"
                 reason = "找不到指定的 YouTube 影片，或目前帳號無權存取。"
-            elif match_error == "not_found":
-                status = "skipped"
-                reason = f"找不到團體 {normalized_team} 的選項 {person} 資料"
-            elif match_error == "conflict":
-                status = "skipped"
-                reason = f"團體 {normalized_team} 的選項 {person} 有多筆且標題或描述內容不同"
             else:
-                new_title = normalize_text(row.get(title_column) or "")
-                new_description = str(row.get(description_column) or "")
-                if not new_title:
+                skip_reason, new_title, new_description = _resolve_person_metadata(
+                    matches, normalized_team, person, title_column, description_column
+                )
+                if skip_reason:
                     status = "skipped"
-                    reason = f"工作表的 {title_column} 為空白"
+                    reason = skip_reason
             plan.append(
                 {
                     "videoId": video_id,
@@ -720,44 +755,16 @@ def run_batch_metadata_update(
     attempted_slots = {active_context.slot}
     fallback_estimate = max(int(youtube_context.estimated_units or 0), 1)
 
-    spreadsheet_id = (
-        payload.spreadsheet_url_or_id or get_account_setting(youtube_context.owner_sub, "default_spreadsheet_id", "")
-    ).strip()
+    spreadsheet_id, title_column, description_column, _, active_assignments = _validate_batch_inputs(
+        payload, youtube_context.owner_sub, action_label="執行"
+    )
     playlist_id = _resolve_playlist_id(youtube_context, payload.playlist_id)
-    if not spreadsheet_id:
-        raise http_error(400, "spreadsheet_required", "請提供試算表 ID 或網址。")
     normalized_team = normalize_text(payload.team)
-    title_column = normalize_text(payload.title_column)
-    description_column = normalize_text(payload.description_column)
-    if title_column == description_column:
-        raise http_error(
-            400,
-            "columns_must_differ",
-            "標題欄位與描述欄位必須不同。",
-            field_errors={"description_column": ["不可與 title_column 相同。"]},
-        )
 
-    active_assignments = [
-        (assignment.video_id, normalize_text(assignment.person))
-        for assignment in payload.assignments
-        if normalize_text(assignment.person) and normalize_text(assignment.person) != "不編輯"
-    ]
-    if not active_assignments:
-        raise http_error(400, "no_active_assignments", "目前沒有任何影片被指定人物，請先選擇人物後再執行。")
     try:
-        headers = get_sheet_headers(sheet_creds, spreadsheet_id, payload.worksheet_name)
-        required_headers = ["所屬團體", "人", title_column, description_column]
-        missing_headers = [header for header in required_headers if header not in headers]
-        if missing_headers:
-            raise http_error(
-                400,
-                "sheet_columns_missing",
-                f"工作表「{payload.worksheet_name}」缺少必要欄位，請重新整理後再試。",
-                field_errors={"worksheet_name": [f"缺少欄位：{', '.join(missing_headers)}。"]},
-            )
-        sheet_rows = get_all_rows_for_sheet(sheet_creds, spreadsheet_id, payload.worksheet_name)
-        if not sheet_rows:
-            raise http_error(400, "sheet_rows_empty", f"工作表「{payload.worksheet_name}」沒有可用資料列。")
+        headers, sheet_rows = _load_and_validate_sheet_data(
+            sheet_creds, spreadsheet_id, payload.worksheet_name, title_column, description_column
+        )
 
         sheet_state = sheet_snapshot(spreadsheet_id, payload.worksheet_name, headers, sheet_rows)
         if playlist_id:
@@ -779,47 +786,28 @@ def run_batch_metadata_update(
         prepared: list[dict] = []
         for video_id, person in active_assignments:
             matches = [row for row in sheet_rows if matches_team_person(row, normalized_team, person)]
-            row, match_error = resolve_assignment_row(matches, title_column, description_column)
-            if match_error == "not_found":
+            skip_reason, new_title, new_description = _resolve_person_metadata(
+                matches, normalized_team, person, title_column, description_column
+            )
+            if skip_reason:
                 prepared.append(
                     {
                         "video_id": video_id,
                         "person": person,
                         "status": "skipped",
-                        "reason": f"找不到團體 {normalized_team} 的選項 {person} 資料",
-                    }
-                )
-            elif match_error == "conflict":
-                prepared.append(
-                    {
-                        "video_id": video_id,
-                        "person": person,
-                        "status": "skipped",
-                        "reason": f"團體 {normalized_team} 的選項 {person} 有多筆且標題或描述內容不同",
+                        "reason": skip_reason,
                     }
                 )
             else:
-                new_title = normalize_text(row.get(title_column) or "")
-                new_description = str(row.get(description_column) or "")
-                if not new_title:
-                    prepared.append(
-                        {
-                            "video_id": video_id,
-                            "person": person,
-                            "status": "skipped",
-                            "reason": f"工作表的 {title_column} 為空白",
-                        }
-                    )
-                else:
-                    prepared.append(
-                        {
-                            "video_id": video_id,
-                            "person": person,
-                            "status": "pending",
-                            "new_title": new_title,
-                            "new_description": new_description,
-                        }
-                    )
+                prepared.append(
+                    {
+                        "video_id": video_id,
+                        "person": person,
+                        "status": "pending",
+                        "new_title": new_title,
+                        "new_description": new_description,
+                    }
+                )
 
         active_context, video_details = _run_youtube_operation_with_quota_fallback(
             active_context,

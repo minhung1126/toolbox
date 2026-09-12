@@ -8,7 +8,7 @@ import YouTubeVideoEditDialog from '../components/YouTubeVideoEditDialog';
 import ResultStatus from '../components/ResultStatus';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { sortVideosByUploadTime } from '../utils/videoOrder';
-import { youtubeIsConnected, youtubePreferredUiSlot, youtubeRoutingMode, youtubeRoutingReasonLabel } from '../utils/youtubeRouting';
+import { getYoutubeAuthContext, youtubeIsConnected, youtubePreferredUiSlot, youtubeRoutingMode, youtubeRoutingReasonLabel } from '../utils/youtubeRouting';
 import {
   YOUTUBE_COPY,
   formatQuotaUnits,
@@ -39,51 +39,10 @@ function normalizePlaylistId(value) {
   return normalizeYoutubePlaylistInput(value);
 }
 
-function youtubeAuthorizationFingerprint(youtube) {
-  const slots = ['primary', 'secondary'].map((slot) => {
-    const record = youtube?.slots?.[slot] || {};
-    return [
-      slot,
-      record.configured,
-      record.authenticated,
-      record.channel_id,
-      record.client_fingerprint,
-      record.token_status,
-      record.token_expires_at,
-      record.last_refreshed_at,
-    ];
-  });
-  return JSON.stringify({
-    activeSlot: youtube?.active_slot || 'primary',
-    routingMode: youtubeRoutingMode(youtube),
-    slots,
-  });
-}
-
 function normalizeVersion(value) {
   if (value === undefined || value === null || value === '') return null;
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
-}
-
-function getYoutubeAuthContext(authUser, slotOverride = '') {
-  const youtube = authUser?.youtube || {};
-  const slot = slotOverride || youtubePreferredUiSlot(youtube);
-  const record = youtube.slots?.[slot] || {};
-  const user = record.user || {};
-  return {
-    slot,
-    channelId: record.channel_id || '',
-    channelTitle: record.channel_title || '',
-    account: user.sub || user.email || '',
-    clientFingerprint: record.client_fingerprint || '',
-    authenticated: Boolean(record.authenticated) || youtubeIsConnected(youtube),
-    tokenStatus: record.token_status || '',
-    tokenExpiresAt: record.token_expires_at || '',
-    lastRefreshedAt: record.last_refreshed_at || '',
-    routingMode: youtubeRoutingMode(youtube),
-    authorizationFingerprint: youtubeAuthorizationFingerprint(youtube),
-  };
 }
 
 function authContextKey(context) {

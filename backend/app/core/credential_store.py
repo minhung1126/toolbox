@@ -1,18 +1,17 @@
 """Encrypted persistent storage for user-scoped Google OAuth credentials."""
 
-import base64
 import hashlib
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
 from typing import Any, Dict, Optional
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import InvalidToken
 
 from backend.app.core.config import normalize_youtube_slot, settings
+from backend.app.core.persistence import atomic_write_json, derive_fernet, read_json_file
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +63,7 @@ class CredentialStore:
     def __init__(self, path: Path = _DEFAULT_PATH):
         self._path = path
         self._lock = RLock()
-        key_material = settings.CREDENTIAL_ENCRYPTION_KEY
-        digest = hashlib.sha256(key_material.encode("utf-8")).digest()
-        self._fernet = Fernet(base64.urlsafe_b64encode(digest))
+        self._fernet = derive_fernet(settings.CREDENTIAL_ENCRYPTION_KEY)
         self._data: Dict[str, Any] = {
             "version": _STORE_VERSION,
             "users": {},
@@ -75,44 +72,23 @@ class CredentialStore:
 
     def _load(self) -> None:
         with self._lock:
-            if not self._path.is_file():
+            loaded = read_json_file(self._path)
+            if not isinstance(loaded, dict):
                 return
-            try:
-                with self._path.open("r", encoding="utf-8") as handle:
-                    loaded = json.load(handle)
-                if not isinstance(loaded, dict):
-                    return
-
-                users = loaded.get("users")
-                if isinstance(users, dict):
-                    users = {
-                        str(subject): records
-                        for subject, records in users.items()
-                        if isinstance(records, dict) and _normalise_subject(subject)
-                    }
-                    self._data = {
-                        "version": _STORE_VERSION,
-                        "users": users,
-                    }
-            except (OSError, json.JSONDecodeError) as exc:
-                logger.error("Failed to load credential store: %s", type(exc).__name__)
+            users = loaded.get("users")
+            if isinstance(users, dict):
+                users = {
+                    str(subject): records
+                    for subject, records in users.items()
+                    if isinstance(records, dict) and _normalise_subject(subject)
+                }
+                self._data = {
+                    "version": _STORE_VERSION,
+                    "users": users,
+                }
 
     def _save(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        # Keep the replace atomic and avoid a shared ``.tmp`` name when more
-        # than one process writes the store during a deployment.
-        tmp_path = self._path.with_name(f".{self._path.name}.{os.getpid()}.tmp")
-        with tmp_path.open("w", encoding="utf-8") as handle:
-            json.dump(self._data, handle, ensure_ascii=False, indent=2)
-        try:
-            os.chmod(tmp_path, 0o600)
-        except OSError:
-            pass
-        os.replace(tmp_path, self._path)
-        try:
-            os.chmod(self._path, 0o600)
-        except OSError:
-            pass
+        atomic_write_json(self._path, self._data)
 
     def _encrypt(self, value: str) -> str:
         return self._fernet.encrypt(value.encode("utf-8")).decode("ascii")

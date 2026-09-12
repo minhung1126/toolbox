@@ -8,17 +8,10 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
 import { PATHS } from '../routes/paths';
+import { formatBytes } from '../utils/formatters';
 
 const ACTIVE_JOB_STATUSES = new Set(['queued', 'running', 'cancel_requested', 'paused']);
 export const YOUTUBE_UPLOAD_POLL_INTERVAL_MS = 2000;
-
-function formatBytes(value) {
-  const bytes = Number(value || 0);
-  if (!bytes) return '—';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  return `${(bytes / (1024 ** index)).toFixed(index ? 1 : 0)} ${units[index]}`;
-}
 
 function jobStatusLabel(status) {
   return {

@@ -5,11 +5,12 @@ Manages user-modifiable, non-secret settings that persist across server restarts
 Sensitive values are stored separately by credential_store.py.
 """
 
-import json
 import logging
 from pathlib import Path
 from threading import Lock
 from typing import Any, Dict
+
+from backend.app.core.persistence import atomic_write_json, read_json_file
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +30,10 @@ _PERSISTABLE_FIELDS = {
     # Access Control
     "allowed_google_emails",
     "allow_new_users",
-    # YouTube Slot Metadata & Routing
+    # YouTube Slots
     "youtube_oauth_primary_label",
-    "youtube_oauth_secondary_enabled",
     "youtube_oauth_secondary_label",
+    "youtube_oauth_secondary_enabled",
     "youtube_oauth_default_slot",
     # Setup State
     "setup_completed",
@@ -40,7 +41,7 @@ _PERSISTABLE_FIELDS = {
 
 
 class RuntimeConfig:
-    """Thread-safe persistent configuration store backed by a JSON file."""
+    """Thread-safe persistent key-value store for non-secret operational settings."""
 
     def __init__(self, config_path: Path = _CONFIG_FILE):
         self._path = config_path
@@ -49,27 +50,16 @@ class RuntimeConfig:
         self._load()
 
     def _load(self):
-        if not self._path.is_file():
-            self._data = {}
-            return
-        try:
-            with self._path.open("r", encoding="utf-8") as handle:
-                saved = json.load(handle)
-            if not isinstance(saved, dict):
-                raise ValueError("runtime config root must be an object")
+        saved = read_json_file(self._path)
+        if isinstance(saved, dict):
             self._data = {key: value for key, value in saved.items() if key in _PERSISTABLE_FIELDS}
             logger.info("Loaded runtime config from %s", self._path)
-        except (json.JSONDecodeError, OSError, TypeError, ValueError) as exc:
-            logger.warning("Failed to load runtime config: %s", type(exc).__name__)
+        else:
             self._data = {}
 
     def _save(self):
         try:
-            self._path.parent.mkdir(parents=True, exist_ok=True)
-            tmp_path = self._path.with_suffix(".tmp")
-            with tmp_path.open("w", encoding="utf-8") as handle:
-                json.dump(self._data, handle, ensure_ascii=False, indent=2)
-            tmp_path.replace(self._path)
+            atomic_write_json(self._path, self._data)
             logger.info("Saved runtime config to %s", self._path)
         except OSError as exc:
             logger.error("Failed to save runtime config: %s", type(exc).__name__)

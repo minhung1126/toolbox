@@ -23,6 +23,7 @@ from typing import Any, Mapping
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from backend.app.core.persistence import atomic_write_json
 from backend.app.core.runtime_config import runtime_config
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable, is_youtube_quota_exceeded, parse_youtube_error
 
@@ -326,19 +327,9 @@ class YouTubeQuotaLimiter:
         return data, changed
 
     def _save_unlocked(self, data: Mapping[str, Any]) -> None:
-        temp_path = self.path.with_name(f".{self.path.name}.{os.getpid()}.{uuid4().hex}.tmp")
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with temp_path.open("w", encoding="utf-8") as handle:
-                json.dump(data, handle, ensure_ascii=False, indent=2)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temp_path, self.path)
+            atomic_write_json(self.path, dict(data), fsync=True, replace_fn=os.replace)
         except (OSError, TypeError, ValueError) as exc:
-            try:
-                temp_path.unlink(missing_ok=True)
-            except OSError:
-                pass
             raise _QuotaStorageError(f"unable to persist quota JSON: {type(exc).__name__}") from exc
 
     def _load_current_unlocked(self, now: datetime) -> dict[str, Any]:

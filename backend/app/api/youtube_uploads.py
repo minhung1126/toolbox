@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, model_validator
 from backend.app.core.account_state import get_account_setting
 from backend.app.core.config import settings
 from backend.app.core.dependencies import (
+    create_youtube_request_context,
     require_account_subject,
     require_drive_credentials,
     require_login_credentials,
@@ -101,18 +102,7 @@ def _session_id(request: Request) -> str:
 
 
 def _context(decision, owner_sub: str, *, session_id: str | None = None) -> YouTubeRequestContext:
-    return YouTubeRequestContext(
-        slot=decision.slot,
-        credentials=decision.credentials,
-        quota_limiter=get_youtube_quota_tracker(decision.slot),
-        owner_sub=owner_sub,
-        channel_id=decision.channel_id,
-        routing_mode=decision.routing_mode,
-        selection_reason=decision.reason,
-        estimated_units=decision.estimated_units,
-        preferred_slot=decision.preferred_slot,
-        session_id=session_id,
-    )
+    return create_youtube_request_context(decision, owner_sub, session_id=session_id)
 
 
 def _clean_name(value: Any) -> str:

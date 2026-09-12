@@ -10,10 +10,11 @@ from __future__ import annotations
 import copy
 import json
 import logging
-import os
 from pathlib import Path
 from threading import RLock
 from typing import Any
+
+from backend.app.core.persistence import atomic_write_json, read_json_file
 
 logger = logging.getLogger(__name__)
 
@@ -71,13 +72,10 @@ class AccountStateStore:
         self._load()
 
     def _load(self) -> None:
-        if not self._path.is_file():
-            return
-        try:
-            with self._path.open("r", encoding="utf-8") as handle:
-                loaded = json.load(handle)
+        with self._lock:
+            loaded = read_json_file(self._path)
             if not isinstance(loaded, dict):
-                raise ValueError("account state root must be an object")
+                return
 
             accounts = loaded.get("accounts")
             normalized_accounts: dict[str, dict[str, Any]] = {}
@@ -100,23 +98,9 @@ class AccountStateStore:
                 "accounts": normalized_accounts,
             }
             logger.info("Loaded account state from %s", self._path)
-        except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
-            logger.warning("Failed to load account state: %s", type(exc).__name__)
 
     def _save(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self._path.with_name(f".{self._path.name}.{os.getpid()}.tmp")
-        with tmp_path.open("w", encoding="utf-8") as handle:
-            json.dump(self._data, handle, ensure_ascii=False, indent=2)
-        try:
-            os.chmod(tmp_path, 0o600)
-        except OSError:
-            pass
-        os.replace(tmp_path, self._path)
-        try:
-            os.chmod(self._path, 0o600)
-        except OSError:
-            pass
+        atomic_write_json(self._path, self._data)
 
     def _ensure_account_unlocked(self, subject: str) -> tuple[dict[str, Any], bool]:
         account = self._data["accounts"].get(subject)

@@ -12,7 +12,7 @@ import useTeamPersonFilter from '../hooks/useTeamPersonFilter';
 import useSharedTeamPersonFilterPersistence from '../hooks/useSharedTeamPersonFilterPersistence';
 import { normalizeTeamPersonFilter, readSharedTeamPersonFilter } from '../utils/teamPersonFilterStorage';
 import { sortVideosByUploadTime } from '../utils/videoOrder';
-import { youtubeIsConnected, youtubePreferredUiSlot, youtubeRoutingReasonLabel } from '../utils/youtubeRouting';
+import { getYoutubeAuthorizationFingerprint, youtubeIsConnected, youtubePreferredUiSlot, youtubeRoutingReasonLabel } from '../utils/youtubeRouting';
 import {
   YOUTUBE_COPY,
   formatQuotaUnits,
@@ -305,25 +305,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
   const activeSlot = youtubePreferredUiSlot(authUser?.youtube);
   const youtubeConnected = youtubeIsConnected(authUser?.youtube);
   const authorizationKey = useMemo(() => {
-    const youtube = authUser?.youtube || {};
-    const slots = ['primary', 'secondary'].map((slot) => {
-      const record = youtube.slots?.[slot] || {};
-      return [
-        slot,
-        record.configured,
-        record.authenticated,
-        record.channel_id,
-        record.client_fingerprint,
-        record.token_status,
-        record.token_expires_at,
-        record.last_refreshed_at,
-      ];
-    });
-    return JSON.stringify({
-      activeSlot,
-      routingMode: youtube.routing_mode || 'auto_primary',
-      slots,
-    });
+    return getYoutubeAuthorizationFingerprint(authUser?.youtube, activeSlot);
   }, [activeSlot, authUser?.youtube]);
   const defaults = DEFAULT_COLUMNS[videoType];
   const draftStateKey = videoType === 'Shorts' ? 'youtube_draft_shorts' : 'youtube_draft_video';

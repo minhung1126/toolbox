@@ -7,18 +7,7 @@ import useTeamPersonFilter from '../hooks/useTeamPersonFilter';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import useSharedTeamPersonFilterPersistence from '../hooks/useSharedTeamPersonFilterPersistence';
 import { readSharedTeamPersonFilter } from '../utils/teamPersonFilterStorage';
-
-async function copyText(text) {
-  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
-  const textarea = document.createElement('textarea');
-  textarea.value = text;
-  textarea.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
-  document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand('copy');
-  textarea.remove();
-  if (!copied) throw new Error('瀏覽器拒絕存取剪貼簿');
-}
+import { copyToClipboard } from '../utils/clipboard';
 
 export default function SheetCopyPage({ sysSettings }) {
   const { value: savedState, error: workStateError, saving: workStateSaving, saved: workStateSaved, save: saveWorkState } = useAccountWorkState('sheet_copy', {});
@@ -192,7 +181,7 @@ export default function SheetCopyPage({ sysSettings }) {
 
   const handleCopy = async (row, column) => {
     try {
-      await copyText(String(row.cells[column.index] ?? ''));
+      await copyToClipboard(String(row.cells[column.index] ?? ''));
       setCopiedCell(`${row.row_number}:${column.key}`);
       setCopyStatus(`已複製第 ${row.row_number} 列「${column.label}」`);
     } catch (err) {

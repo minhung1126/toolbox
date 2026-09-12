@@ -17,6 +17,7 @@ from uuid import uuid4
 
 from backend.app.core.config import normalize_youtube_slot, settings
 from backend.app.core.credential_store import credential_store
+from backend.app.core.persistence import atomic_write_json
 from backend.app.core.youtube_context import YouTubeRequestContext
 from backend.app.services.drive_service import download_drive_file, get_drive_metadata
 from backend.app.services.google_auth import build_credentials_from_dict, has_drive_read_scope
@@ -136,28 +137,7 @@ class UploadJobStore:
             logger.error("Failed to load YouTube upload jobs: %s", type(exc).__name__)
 
     def _save_unlocked(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self.path.with_name(f".{self.path.name}.{os.getpid()}.{uuid4().hex}.tmp")
-        try:
-            with tmp_path.open("w", encoding="utf-8") as handle:
-                json.dump(self._data, handle, ensure_ascii=False, indent=2)
-                handle.flush()
-                os.fsync(handle.fileno())
-            try:
-                os.chmod(tmp_path, 0o600)
-            except OSError:
-                pass
-            os.replace(tmp_path, self.path)
-            try:
-                os.chmod(self.path, 0o600)
-            except OSError:
-                pass
-        except (OSError, TypeError, ValueError):
-            try:
-                tmp_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-            raise
+        atomic_write_json(self.path, self._data, fsync=True)
 
     def create(self, owner_sub: str, job: dict[str, Any]) -> dict[str, Any]:
         subject = str(owner_sub or "").strip()
