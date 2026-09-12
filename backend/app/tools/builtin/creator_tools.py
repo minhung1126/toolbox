@@ -11,7 +11,6 @@ from fastapi import APIRouter, FastAPI
 from backend.app.api.sheets import router as sheets_router
 from backend.app.api.youtube import router as youtube_router
 from backend.app.api.youtube_uploads import router as youtube_uploads_router
-from backend.app.services.youtube_upload_jobs import start_upload_worker, stop_upload_worker
 from backend.app.tools.base import ToolMetadata, ToolPlugin, ToolRoute
 
 
@@ -23,18 +22,13 @@ class CreatorToolsPlugin(ToolPlugin):
             id="creator-tools",
             name="Creator Tools",
             title="創作者工作流控制台",
-            description="Google Sheets 整合、YouTube 影片/Shorts 草稿維護、Drive 斷點續傳背景上傳與配額自動分流。",
+            description="Google Sheets 整合、YouTube 影片/Shorts 草稿維護與發布配額自動分流。",
             category="媒體與影音",
             icon="Youtube",
             version="1.1.0",
             status="active",
             entry_url="/dashboard",
             routes=[
-                ToolRoute(
-                    path="/youtube/uploads/new",
-                    label="Drive 上傳 YouTube",
-                    description="從 Drive 批次上傳影片至 YouTube",
-                ),
                 ToolRoute(
                     path="/youtube/drafts/videos",
                     label="Video 草稿管理",
@@ -54,6 +48,11 @@ class CreatorToolsPlugin(ToolPlugin):
                     path="/sheets/copy", label="Sheet 內容複製", description="在工作表或試算表間批次複製結構與內容"
                 ),
                 ToolRoute(
+                    path="/sheets/settings",
+                    label="Sheet 設定",
+                    description="管理 Google 試算表存取授權與預設試算表來源",
+                ),
+                ToolRoute(
                     path="/youtube/settings/connections",
                     label="YouTube 授權設定",
                     description="管理主要與次要 YouTube 頻道連線",
@@ -64,8 +63,8 @@ class CreatorToolsPlugin(ToolPlugin):
                     description="監控 YouTube API Quota 消耗與自動分流",
                 ),
             ],
-            required_scopes=["sheets_readonly", "drive_readonly", "youtube"],
-            tags=["youtube", "google-sheets", "google-drive", "automation", "creator"],
+            required_scopes=["sheets_readonly", "youtube"],
+            tags=["youtube", "google-sheets", "automation", "creator"],
         )
         self._router: Optional[APIRouter] = None
 
@@ -84,9 +83,9 @@ class CreatorToolsPlugin(ToolPlugin):
         return self._router
 
     async def on_startup(self, app: FastAPI) -> None:
-        """Start the background YouTube Drive upload worker."""
-        start_upload_worker()
+        """No background upload worker needed when upload is disabled."""
+        pass
 
     async def on_shutdown(self, app: FastAPI) -> None:
-        """Stop the background YouTube Drive upload worker."""
-        stop_upload_worker()
+        """No background upload worker needed when upload is disabled."""
+        pass

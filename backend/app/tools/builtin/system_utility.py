@@ -26,6 +26,11 @@ class SystemUtilityPlugin(ToolPlugin):
                 ToolRoute(
                     path="/system/info", label="系統與部署資訊", description="檢視執行環境參數、快取與 Commit SHA"
                 ),
+                ToolRoute(
+                    path="/system/settings",
+                    label="系統安全與憑證設定",
+                    description="管理系統密鑰、Google OAuth 憑證與登入白名單",
+                ),
             ],
             required_scopes=[],
             tags=["system", "health", "diagnostics", "deployment"],

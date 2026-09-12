@@ -28,7 +28,7 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
         <div className="badge badge-info dashboard-eyebrow"><Sparkles size={14} /> Toolbox 工具箱平台</div>
         <h1>Toolbox 控制台</h1>
         <p className="section-desc dashboard-hero-description">
-          Toolbox 多功能模組化平台。Creator Tools 模組提供 Video 與 Shorts 草稿管理、試算表欄位對照、Drive 上傳與 YouTube 發布自動化。
+          Toolbox 多功能模組化平台。Creator Tools 模組提供 Video 與 Shorts 草稿管理、試算表欄位對照與 YouTube 發布自動化。
         </p>
       </header>
 
@@ -91,10 +91,10 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
         <div className="glass-panel glass-panel-interactive feature-card">
           <div className="icon-box icon-box-accent"><Settings size={28} /></div>
           <div className="feature-card-copy">
-            <h3>帳號與 Google 設定</h3>
-            <p>管理控制台登入、試算表與雲端硬碟個別授權；YouTube 頻道授權請至 YouTube 設定。</p>
+            <h3>系統設定</h3>
+            <p>管理系統安全密鑰、Google OAuth 憑證配置與控制台登入白名單。</p>
           </div>
-          <Link className="btn btn-secondary feature-card-action" to={PATHS.googleSettings}>
+          <Link className="btn btn-secondary feature-card-action" to={PATHS.systemSettings}>
             進入系統設定 <ArrowRight size={16} />
           </Link>
         </div>

@@ -193,6 +193,13 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
 
   return (
     <div className="section-gap system-settings-page">
+      <header className="page-header">
+        <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', margin: '0 0 0.5rem 0' }}>
+          <Shield size={26} color="#10b981" /> 系統設定
+        </h1>
+        <p className="section-desc">管理系統安全密鑰、Google OAuth 憑證配置與控制台存取控制白名單。</p>
+      </header>
+
       {/* 1. Security & System Status Banner */}
       <div className="glass-panel" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>

@@ -14,8 +14,8 @@ import {
   Info,
   Send,
   Settings,
+  Shield,
   Smartphone,
-  Upload,
   Youtube,
 } from 'lucide-react';
 import { PATHS } from '../routes/paths';
@@ -25,7 +25,7 @@ export const TOOL_MODULES = Object.freeze([
     id: 'creator-tools',
     name: 'Creator Tools',
     title: '創作者工作流控制台',
-    description: 'Google Sheets 整合、YouTube 影片與 Shorts 草稿維護、Drive 斷點續傳上傳與配額防護。',
+    description: 'Google Sheets 整合、YouTube 影片與 Shorts 草稿維護及發布配額防護。',
     category: '媒體與影音',
     icon: Youtube,
     badge: '核心套件',
@@ -37,7 +37,6 @@ export const TOOL_MODULES = Object.freeze([
         label: 'YouTube',
         icon: Youtube,
         items: [
-          { id: 'youtube_upload', to: PATHS.youtubeUploadNew, label: '上傳至 YouTube', icon: Upload },
           { id: 'youtube_video_drafts', to: PATHS.youtubeVideoDrafts, label: 'Video 草稿', icon: Clapperboard },
           { id: 'youtube_shorts_drafts', to: PATHS.youtubeShortsDrafts, label: 'Shorts 草稿', icon: Smartphone },
           { id: 'publish_clean', to: PATHS.youtubePublishCleanup, label: '發布草稿', icon: Send },
@@ -50,6 +49,7 @@ export const TOOL_MODULES = Object.freeze([
         icon: FileSpreadsheet,
         items: [
           { id: 'sheet_copy', to: PATHS.sheetCopy, label: '內容複製', icon: Copy },
+          { id: 'sheet_settings', to: PATHS.sheetSettings, label: 'Sheet 設定', icon: Settings, activePrefix: PATHS.sheetSettings },
         ],
       },
     ],
@@ -82,12 +82,12 @@ export const TOOL_MODULES = Object.freeze([
         colorTheme: 'secondary',
       },
       {
-        id: 'upload_drive',
-        title: 'Drive 上傳 YouTube',
-        description: '從 Google Drive 資料夾依檔名排序逐部上傳至 YouTube，支援斷點續傳。',
-        to: PATHS.youtubeUploadNew,
-        actionLabel: '建立上傳工作',
-        icon: Upload,
+        id: 'sheet_copy',
+        title: 'Sheet 內容複製',
+        description: '在工作表或試算表間依團體與人物篩選，快速複製儲存格內容。',
+        to: PATHS.sheetCopy,
+        actionLabel: '進入內容複製',
+        icon: Copy,
         colorTheme: 'secondary',
       },
     ],
@@ -105,6 +105,7 @@ export const TOOL_MODULES = Object.freeze([
     navItems: [
       { id: 'api_health', to: PATHS.systemHealth, label: 'API 健康度', icon: Activity },
       { id: 'system_info', to: PATHS.systemInfo, label: '系統／部署資訊', icon: Info },
+      { id: 'system_settings', to: PATHS.systemSettings, label: '系統設定', icon: Shield, activePrefix: PATHS.systemSettings },
     ],
   },
 ]);

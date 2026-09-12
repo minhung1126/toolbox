@@ -77,7 +77,13 @@ export default function GoogleSheetSettingsPage({ sysSettings = {}, refreshSetti
   const isSheetsConnected = Boolean(sheetsAuth?.connected || authUser?.google_scopes?.sheets_readonly);
 
   return (
-    <div className="settings-page-section">
+    <div className="section-gap settings-page-section">
+      <header className="page-header">
+        <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', margin: '0 0 0.5rem 0' }}>
+          <FileSpreadsheet size={26} color="var(--primary)" /> Google 試算表設定
+        </h1>
+        <p className="section-desc">管理 Google 試算表存取授權與目前帳號預設試算表來源。</p>
+      </header>
       {msg && <div className="info-banner">{msg.type === 'success' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}{msg.text}</div>}
       
       {/* Google Sheets Authorization Status Card */}

@@ -35,11 +35,22 @@ describe('Navbar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'YouTube' }));
     const submenu = document.getElementById('youtube-submenu');
     expect(within(submenu).getAllByRole('link').map((link) => link.textContent.trim())).toEqual([
-      '上傳至 YouTube',
       'Video 草稿',
       'Shorts 草稿',
       '發布草稿',
       'YouTube 設定',
+    ]);
+  });
+
+  it('lists Sheet workflow pages and settings', () => {
+    window.localStorage.clear();
+    render(<NavbarHarness />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sheet' }));
+    const submenu = document.getElementById('sheet-submenu');
+    expect(within(submenu).getAllByRole('link').map((link) => link.textContent.trim())).toEqual([
+      '內容複製',
+      'Sheet 設定',
     ]);
   });
 

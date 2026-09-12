@@ -44,7 +44,7 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Video 草稿')).toBeInTheDocument();
     expect(screen.getByText('Shorts 草稿')).toBeInTheDocument();
     expect(screen.getByText('發布草稿')).toBeInTheDocument();
-    expect(screen.getByText('Drive 上傳 YouTube')).toBeInTheDocument();
+    expect(screen.getByText('Sheet 內容複製')).toBeInTheDocument();
 
     // Links
     expect(screen.getByRole('link', { name: /進入 Video 草稿/ })).toHaveAttribute(
@@ -59,9 +59,9 @@ describe('DashboardPage', () => {
       'href',
       PATHS.youtubePublishCleanup
     );
-    expect(screen.getByRole('link', { name: /建立上傳工作/ })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /進入內容複製/ })).toHaveAttribute(
       'href',
-      PATHS.youtubeUploadNew
+      PATHS.sheetCopy
     );
   });
 });

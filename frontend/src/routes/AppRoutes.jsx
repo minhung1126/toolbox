@@ -95,10 +95,12 @@ export default function AppRoutes({
           <Route path="dashboard" element={<DashboardPage authUser={authUser} sysSettings={sysSettings} />} />
           <Route path="system/health" element={<ApiHealthPage authUser={authUser} />} />
           <Route path="system/info" element={<SystemInfoPage sysSettings={sysSettings} />} />
+          <Route path="system/settings" element={<SystemSettingsPage {...pageProps} />} />
           <Route path="youtube/drafts/videos" element={<BatchUpdatePage key="video-drafts" sysSettings={sysSettings} authUser={authUser} videoType="Video" />} />
           <Route path="youtube/drafts/shorts" element={<BatchUpdatePage key="shorts-drafts" sysSettings={sysSettings} authUser={authUser} videoType="Shorts" />} />
           <Route path="youtube/publish-cleanup" element={<PublishCleanerPage sysSettings={sysSettings} authUser={authUser} />} />
           <Route path="sheets/copy" element={<SheetCopyPage sysSettings={sysSettings} />} />
+          <Route path="sheets/settings" element={<GoogleSheetSettingsPage {...pageProps} />} />
 
           <Route path="youtube/uploads" element={<Navigate replace to={PATHS.youtubeUploadNew} />} />
           <Route path="youtube/uploads/new" element={<YoutubeUploadCreatePage {...pageProps} />} />
@@ -118,8 +120,8 @@ export default function AppRoutes({
           <Route path="settings/*" element={<AccountSettingsLayout />}>
             <Route index element={<Navigate replace to="google" />} />
             <Route path="google" element={<GoogleAccountSettingsPage {...pageProps} />} />
-            <Route path="sheets" element={<GoogleSheetSettingsPage {...pageProps} />} />
-            <Route path="system" element={<SystemSettingsPage {...pageProps} />} />
+            <Route path="sheets" element={<Navigate replace to={PATHS.sheetSettings} />} />
+            <Route path="system" element={<Navigate replace to={PATHS.systemSettings} />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} />

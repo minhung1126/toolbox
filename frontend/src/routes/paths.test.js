@@ -9,7 +9,8 @@ describe('route paths', () => {
   it('encodes upload job identifiers and exposes canonical paths', () => {
     expect(PATHS.youtubeUploadJob('job/id?one')).toBe('/youtube/uploads/job%2Fid%3Fone');
     expect(PATHS.youtubeConnections).toBe('/youtube/settings/connections');
-    expect(PATHS.sheetSettings).toBe('/settings/sheets');
+    expect(PATHS.sheetSettings).toBe('/sheets/settings');
+    expect(PATHS.systemSettings).toBe('/system/settings');
   });
 
   it('accepts known protected internal paths without hashes', () => {
@@ -23,6 +24,8 @@ describe('route paths', () => {
     [PATHS.youtubeSettings, PATHS.youtubeConnections],
     [PATHS.settings, PATHS.googleSettings],
     [PATHS.youtubeUploads, PATHS.youtubeUploadNew],
+    ['/settings/sheets', PATHS.sheetSettings],
+    ['/settings/system', PATHS.systemSettings],
   ])('canonicalizes protected alias %s to %s for auth return paths', (alias, canonicalPath) => {
     expect(getSafeReturnPath(alias)).toBe(canonicalPath);
   });

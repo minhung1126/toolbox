@@ -19,10 +19,10 @@ export const PATHS = Object.freeze({
   youtubePlaylist: '/youtube/settings/playlist',
 
   sheetCopy: '/sheets/copy',
+  sheetSettings: '/sheets/settings',
+  systemSettings: '/system/settings',
   settings: '/settings',
   googleSettings: '/settings/google',
-  sheetSettings: '/settings/sheets',
-  systemSettings: '/settings/system',
   setup: '/setup',
 });
 
@@ -30,6 +30,8 @@ const RETURN_PATH_ALIASES = Object.freeze({
   [PATHS.youtubeSettings]: PATHS.youtubeConnections,
   [PATHS.settings]: PATHS.googleSettings,
   [PATHS.youtubeUploads]: PATHS.youtubeUploadNew,
+  '/settings/sheets': PATHS.sheetSettings,
+  '/settings/system': PATHS.systemSettings,
 });
 
 const STATIC_RETURN_PATHS = new Set([

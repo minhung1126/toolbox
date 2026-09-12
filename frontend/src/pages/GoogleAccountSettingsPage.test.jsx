@@ -10,8 +10,6 @@ vi.mock('../services/api', () => ({
     getAuthUrl: vi.fn(),
     getSheetsAuthUrl: vi.fn(),
     disconnectSheets: vi.fn(),
-    getDriveAuthUrl: vi.fn(),
-    disconnectDrive: vi.fn(),
   },
 }));
 
@@ -24,7 +22,7 @@ describe('GoogleAccountSettingsPage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders all 4 decoupled authorization sections', () => {
+  it('renders decoupled authorization and modular settings sections', () => {
     render(
       <MemoryRouter>
         <GoogleAccountSettingsPage
@@ -35,7 +33,6 @@ describe('GoogleAccountSettingsPage', () => {
             token_expires_at: '2026-09-12T01:00:00Z',
             authorizations: {
               sheets: { connected: true, user: { email: 'sheets@example.com' } },
-              drive: { connected: true, user: { email: 'drive@example.com' } },
             },
           }}
           sysSettings={{ google_client_configured: true, redirect_uri: 'http://localhost:8000/auth/callback' }}
@@ -45,17 +42,19 @@ describe('GoogleAccountSettingsPage', () => {
 
     expect(screen.getByText('控制台登入帳號')).toBeInTheDocument();
     expect(screen.getByText('Google 試算表授權')).toBeInTheDocument();
-    expect(screen.getByText('Google 雲端硬碟授權')).toBeInTheDocument();
     expect(screen.getByText('YouTube 頻道授權')).toBeInTheDocument();
+    expect(screen.getByText('系統設定與安全')).toBeInTheDocument();
+    expect(screen.queryByText('Google 雲端硬碟授權')).not.toBeInTheDocument();
 
     expect(screen.getByText('已登入：admin@example.com')).toBeInTheDocument();
     expect(screen.getByText('已授權試算表')).toBeInTheDocument();
-    expect(screen.getByText('已授權雲端硬碟')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /前往 Sheet 模組設定/ })).toHaveAttribute('href', '/sheets/settings');
+    expect(screen.getByRole('link', { name: /前往 YouTube 頻道授權設定/ })).toHaveAttribute('href', '/youtube/settings/connections');
+    expect(screen.getByRole('link', { name: /前往系統設定/ })).toHaveAttribute('href', '/system/settings');
   });
 
-  it('allows connecting Sheets and Drive when not connected', async () => {
+  it('allows connecting Sheets when not connected', async () => {
     api.getSheetsAuthUrl.mockResolvedValue({ auth_url: 'https://accounts.google.com/o/oauth2/auth?sheets=1' });
-    api.getDriveAuthUrl.mockResolvedValue({ auth_url: 'https://accounts.google.com/o/oauth2/auth?drive=1' });
 
     render(
       <MemoryRouter>
@@ -65,7 +64,6 @@ describe('GoogleAccountSettingsPage', () => {
             token_status: 'active',
             authorizations: {
               sheets: { connected: false },
-              drive: { connected: false },
             },
           }}
         />
@@ -73,20 +71,14 @@ describe('GoogleAccountSettingsPage', () => {
     );
 
     expect(screen.getByText('尚未授權試算表')).toBeInTheDocument();
-    expect(screen.getByText('尚未授權雲端硬碟')).toBeInTheDocument();
 
     const connectSheetsBtn = screen.getByRole('button', { name: '連結 Google 試算表' });
     fireEvent.click(connectSheetsBtn);
     await waitFor(() => expect(api.getSheetsAuthUrl).toHaveBeenCalledTimes(1));
-
-    const connectDriveBtn = screen.getByRole('button', { name: '連結 Google 雲端硬碟' });
-    fireEvent.click(connectDriveBtn);
-    await waitFor(() => expect(api.getDriveAuthUrl).toHaveBeenCalledTimes(1));
   });
 
-  it('allows disconnecting Sheets and Drive via confirmation dialog', async () => {
+  it('allows disconnecting Sheets via confirmation dialog', async () => {
     api.disconnectSheets.mockResolvedValue({});
-    api.disconnectDrive.mockResolvedValue({});
     const refreshAuthUser = vi.fn().mockResolvedValue({});
 
     render(
@@ -96,7 +88,6 @@ describe('GoogleAccountSettingsPage', () => {
             email: 'admin@example.com',
             authorizations: {
               sheets: { connected: true, user: { email: 'sheets@example.com' } },
-              drive: { connected: true, user: { email: 'drive@example.com' } },
             },
           }}
           refreshAuthUser={refreshAuthUser}
@@ -112,13 +103,5 @@ describe('GoogleAccountSettingsPage', () => {
     fireEvent.click(confirmBtn);
     await waitFor(() => expect(api.disconnectSheets).toHaveBeenCalledTimes(1));
     expect(refreshAuthUser).toHaveBeenCalled();
-
-    // Disconnect Drive
-    const disconnectDriveBtn = screen.getByRole('button', { name: '解除雲端硬碟授權' });
-    fireEvent.click(disconnectDriveBtn);
-    expect(screen.getByText('解除 Google 雲端硬碟授權')).toBeInTheDocument();
-    const confirmDriveBtn = screen.getByRole('button', { name: '確認解除' });
-    fireEvent.click(confirmDriveBtn);
-    await waitFor(() => expect(api.disconnectDrive).toHaveBeenCalledTimes(1));
   });
 });

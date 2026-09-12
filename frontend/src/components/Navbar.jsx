@@ -125,7 +125,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
         {systemNavItems.map((sysItem) => item(sysItem))}
         {group('youtube', 'YouTube', youtubeGroup.icon, youtubeOpen, setYoutubeOpen, youtubeItems, youtubeActive)}
         {group('sheet', 'Sheet', sheetGroup.icon, sheetOpen, setSheetOpen, sheetItems, sheetActive)}
-        {item({ id: 'settings', to: PATHS.googleSettings, label: '帳號與 Google 設定', icon: Settings, activePrefix: '/settings' })}
+        {item({ id: 'settings', to: PATHS.googleSettings, label: '控制台帳號', icon: Settings, activePrefix: '/settings' })}
       </nav>
       <div className="sidebar-footer"><div className="glass-panel account-card"><strong className="account-title">帳號資訊</strong><span className="badge badge-connected account-status"><CheckCircle2 size={12} />控制台已登入</span><p className="account-email">{authUser?.email}</p><span className={`badge account-youtube-status ${youtubeAuthorized ? 'badge-connected' : 'badge-disconnected'}`}>{youtubeAuthorized ? 'YouTube 已授權' : 'YouTube 未連結'}</span><button type="button" className="logout-button" onClick={onLogout}>登出控制台</button></div></div>
     </aside>
