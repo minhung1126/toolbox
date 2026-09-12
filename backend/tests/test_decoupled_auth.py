@@ -106,7 +106,7 @@ def test_require_drive_credentials_rejects_login_only_and_accepts_drive(tmp_path
         {
             "type": "http",
             "method": "POST",
-            "path": "/youtube/uploads/preview",
+            "path": "/drive/access/check",
             "headers": [(b"cookie", f"creator_session={session_id}".encode())],
             "query_string": b"",
             "server": ("testserver", 80),

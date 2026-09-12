@@ -38,11 +38,8 @@ JSON_SCHEMA_VERSION = 2
 PACIFIC = ZoneInfo("America/Los_Angeles")
 RESET_TIMEZONE = "America/Los_Angeles"
 GENERAL_BUCKET = "general"
-VIDEO_UPLOADS_BUCKET = "video_uploads"
 OFFICIAL_DEFAULT_LIMIT = 10_000
 DEFAULT_SAFETY_BUFFER_UNITS = 1_000
-VIDEO_UPLOADS_DEFAULT_LIMIT = 100
-VIDEO_UPLOADS_SAFETY_BUFFER_UNITS = 0
 QUOTA_SOURCE_URL = "https://developers.google.com/youtube/v3/determine_quota_cost"
 QUOTA_RULES_LAST_UPDATED_AT = "2026-06-01"
 QUOTA_RULES_VERIFIED_AT = "2026-08-02"
@@ -65,14 +62,9 @@ YOUTUBE_AUXILIARY_QUOTA_METHODS: dict[str, dict[str, Any]] = {
     "playlists.list": {"bucket": GENERAL_BUCKET, "cost": 1},
 }
 
-YOUTUBE_UPLOAD_QUOTA_METHODS: dict[str, dict[str, Any]] = {
-    "videos.insert": {"bucket": VIDEO_UPLOADS_BUCKET, "cost": 1},
-}
-
 QUOTA_COSTS = {
     **{method: int(meta["cost"]) for method, meta in YOUTUBE_QUOTA_METHODS.items()},
     **{method: int(meta["cost"]) for method, meta in YOUTUBE_AUXILIARY_QUOTA_METHODS.items()},
-    **{method: int(meta["cost"]) for method, meta in YOUTUBE_UPLOAD_QUOTA_METHODS.items()},
 }
 
 _PATH_LOCKS: dict[str, RLock] = {}
@@ -155,8 +147,6 @@ class YouTubeQuotaLimiter:
         if self.slot not in {"primary", "secondary"}:
             raise ValueError("YouTube quota slot must be primary or secondary")
         self.bucket = str(bucket or GENERAL_BUCKET).strip().casefold()
-        if self.bucket not in {GENERAL_BUCKET, VIDEO_UPLOADS_BUCKET}:
-            raise ValueError("YouTube quota bucket must be general or video_uploads")
         if Path(path).resolve() == QUOTA_FILE.resolve() and self.slot == "secondary":
             path = QUOTA_FILE_SECONDARY
         self.path = Path(path)
@@ -166,10 +156,7 @@ class YouTubeQuotaLimiter:
 
     def configured_values(self) -> tuple[int, int]:
         if self._configured_limit_override is None or self._safety_buffer_override is None:
-            if self.bucket == VIDEO_UPLOADS_BUCKET:
-                default_limit, default_buffer = runtime_config.get_youtube_upload_quota_settings(self.slot)
-            else:
-                default_limit, default_buffer = runtime_config.get_youtube_quota_settings(self.slot)
+            default_limit, default_buffer = runtime_config.get_youtube_quota_settings(self.slot)
         else:
             default_limit, default_buffer = OFFICIAL_DEFAULT_LIMIT, DEFAULT_SAFETY_BUFFER_UNITS
         limit = self._configured_limit_override if self._configured_limit_override is not None else default_limit
@@ -181,12 +168,8 @@ class YouTubeQuotaLimiter:
 
     def _method_meta(self, method: str) -> dict[str, Any] | None:
         registries = (
-            (YOUTUBE_UPLOAD_QUOTA_METHODS,)
-            if self.bucket == VIDEO_UPLOADS_BUCKET
-            else (
-                YOUTUBE_QUOTA_METHODS,
-                YOUTUBE_AUXILIARY_QUOTA_METHODS,
-            )
+            YOUTUBE_QUOTA_METHODS,
+            YOUTUBE_AUXILIARY_QUOTA_METHODS,
         )
         for registry in registries:
             meta = registry.get(method)
@@ -687,10 +670,6 @@ __all__ = [
     "QUOTA_RULES_LAST_UPDATED_AT",
     "QUOTA_RULES_VERIFIED_AT",
     "QUOTA_SOURCE_URL",
-    "VIDEO_UPLOADS_BUCKET",
-    "VIDEO_UPLOADS_DEFAULT_LIMIT",
-    "VIDEO_UPLOADS_SAFETY_BUFFER_UNITS",
-    "YOUTUBE_UPLOAD_QUOTA_METHODS",
     "RESET_TIMEZONE",
     "YOUTUBE_QUOTA_METHODS",
     "YOUTUBE_AUXILIARY_QUOTA_METHODS",

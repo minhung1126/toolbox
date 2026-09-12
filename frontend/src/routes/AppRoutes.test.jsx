@@ -1,5 +1,5 @@
 import React from 'react';
-import { MemoryRouter, Outlet, useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import AppRoutes from './AppRoutes';
@@ -27,8 +27,6 @@ vi.mock('../pages/YoutubeConnectionsPage', () => ({ default: () => <div>connecti
 vi.mock('../pages/YoutubeRoutingPage', () => ({ default: () => <div>routing route</div> }));
 vi.mock('../pages/YoutubeQuotaPage', () => ({ default: () => <div>quota route</div> }));
 vi.mock('../pages/YoutubePlaylistSettingsPage', () => ({ default: () => <div>playlist route</div> }));
-vi.mock('../pages/YoutubeUploadCreatePage', () => ({ default: () => <div>upload create route</div> }));
-vi.mock('../pages/YoutubeUploadJobPage', () => ({ default: () => <div>upload job route</div> }));
 vi.mock('../pages/GoogleAccountSettingsPage', () => ({ default: () => <div>google settings route</div> }));
 vi.mock('../pages/GoogleSheetSettingsPage', () => ({ default: () => <div>sheet settings route</div> }));
 vi.mock('../pages/LoginPage', () => ({ default: ({ returnTo }) => <div>login route {returnTo || 'none'}</div> }));
@@ -75,8 +73,6 @@ describe('AppRoutes', () => {
     [PATHS.youtubeRouting, 'routing route'],
     [PATHS.youtubeQuota, 'quota route'],
     [PATHS.youtubePlaylist, 'playlist route'],
-    [PATHS.youtubeUploadNew, 'upload create route'],
-    [PATHS.youtubeUploadJob('example-job-id'), 'upload job route'],
     [PATHS.sheetCopy, 'sheet route'],
     [PATHS.googleSettings, 'google settings route'],
     [PATHS.sheetSettings, 'sheet settings route'],
@@ -89,7 +85,6 @@ describe('AppRoutes', () => {
     ['/', PATHS.dashboard, 'dashboard route'],
     [PATHS.youtubeSettings, PATHS.youtubeConnections, 'connections route'],
     [PATHS.settings, PATHS.googleSettings, 'google settings route'],
-    [PATHS.youtubeUploads, PATHS.youtubeUploadNew, 'upload create route'],
   ])('replaces parent path %s with %s', (from, to, expected) => {
     renderRoutes(from);
     expect(screen.getByText(expected)).toBeInTheDocument();
@@ -99,7 +94,6 @@ describe('AppRoutes', () => {
   it.each([
     [PATHS.youtubeSettings, PATHS.youtubeConnections],
     [PATHS.settings, PATHS.googleSettings],
-    [PATHS.youtubeUploads, PATHS.youtubeUploadNew],
   ])('preserves canonical destination for unauthenticated alias %s', (alias, canonicalPath) => {
     renderRoutes(alias, { authStatus: 'unauthenticated', authUser: null });
     expect(screen.getByText(`login route ${canonicalPath}`)).toBeInTheDocument();

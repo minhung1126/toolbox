@@ -1,7 +1,7 @@
 """Creator Tools Plugin for the Toolbox Platform.
 
 Provides integration with Google Sheets, YouTube Video/Shorts drafts, and
-Google Drive upload pipelines with automatic quota management.
+automated quota management.
 """
 
 from typing import Optional
@@ -10,12 +10,11 @@ from fastapi import APIRouter, FastAPI
 
 from backend.app.api.sheets import router as sheets_router
 from backend.app.api.youtube import router as youtube_router
-from backend.app.api.youtube_uploads import router as youtube_uploads_router
 from backend.app.tools.base import ToolMetadata, ToolPlugin, ToolRoute
 
 
 class CreatorToolsPlugin(ToolPlugin):
-    """Toolbox plugin encapsulating YouTube, Google Sheets, and Drive video workflows."""
+    """Toolbox plugin encapsulating YouTube and Google Sheets workflows."""
 
     def __init__(self) -> None:
         self._metadata = ToolMetadata(
@@ -78,14 +77,13 @@ class CreatorToolsPlugin(ToolPlugin):
             combined = APIRouter()
             combined.include_router(sheets_router)
             combined.include_router(youtube_router)
-            combined.include_router(youtube_uploads_router)
             self._router = combined
         return self._router
 
     async def on_startup(self, app: FastAPI) -> None:
-        """No background upload worker needed when upload is disabled."""
+        """Creator tools plugin startup hook."""
         pass
 
     async def on_shutdown(self, app: FastAPI) -> None:
-        """No background upload worker needed when upload is disabled."""
+        """Creator tools plugin shutdown hook."""
         pass

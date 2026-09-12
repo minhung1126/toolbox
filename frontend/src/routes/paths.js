@@ -6,9 +6,6 @@ export const PATHS = Object.freeze({
   systemInfo: '/system/info',
   notes: '/notes',
 
-  youtubeUploadNew: '/youtube/uploads/new',
-  youtubeUploads: '/youtube/uploads',
-  youtubeUploadJob: (jobId) => `/youtube/uploads/${encodeURIComponent(jobId)}`,
   youtubeVideoDrafts: '/youtube/drafts/videos',
   youtubeShortsDrafts: '/youtube/drafts/shorts',
   youtubePublishCleanup: '/youtube/publish-cleanup',
@@ -30,7 +27,6 @@ export const PATHS = Object.freeze({
 const RETURN_PATH_ALIASES = Object.freeze({
   [PATHS.youtubeSettings]: PATHS.youtubeConnections,
   [PATHS.settings]: PATHS.googleSettings,
-  [PATHS.youtubeUploads]: PATHS.youtubeUploadNew,
   '/settings/sheets': PATHS.sheetSettings,
   '/settings/system': PATHS.systemSettings,
 });
@@ -40,7 +36,6 @@ const STATIC_RETURN_PATHS = new Set([
   PATHS.notes,
   PATHS.systemHealth,
   PATHS.systemInfo,
-  PATHS.youtubeUploadNew,
   PATHS.youtubeVideoDrafts,
   PATHS.youtubeShortsDrafts,
   PATHS.youtubePublishCleanup,
@@ -56,8 +51,7 @@ const STATIC_RETURN_PATHS = new Set([
 ]);
 
 export function isKnownProtectedPath(pathname) {
-  if (STATIC_RETURN_PATHS.has(pathname)) return true;
-  return /^\/youtube\/uploads\/[^/]+$/.test(pathname);
+  return STATIC_RETURN_PATHS.has(pathname);
 }
 
 export function getCurrentPath(location = window.location) {

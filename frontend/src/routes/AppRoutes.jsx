@@ -14,8 +14,6 @@ import YoutubeConnectionsPage from '../pages/YoutubeConnectionsPage';
 import YoutubeRoutingPage from '../pages/YoutubeRoutingPage';
 import YoutubeQuotaPage from '../pages/YoutubeQuotaPage';
 import YoutubePlaylistSettingsPage from '../pages/YoutubePlaylistSettingsPage';
-import YoutubeUploadCreatePage from '../pages/YoutubeUploadCreatePage';
-import YoutubeUploadJobPage from '../pages/YoutubeUploadJobPage';
 import GoogleAccountSettingsPage from '../pages/GoogleAccountSettingsPage';
 import GoogleSheetSettingsPage from '../pages/GoogleSheetSettingsPage';
 import SystemSettingsPage from '../pages/SystemSettingsPage';
@@ -103,10 +101,6 @@ export default function AppRoutes({
           <Route path="youtube/publish-cleanup" element={<PublishCleanerPage sysSettings={sysSettings} authUser={authUser} />} />
           <Route path="sheets/copy" element={<SheetCopyPage sysSettings={sysSettings} />} />
           <Route path="sheets/settings" element={<GoogleSheetSettingsPage {...pageProps} />} />
-
-          <Route path="youtube/uploads" element={<Navigate replace to={PATHS.youtubeUploadNew} />} />
-          <Route path="youtube/uploads/new" element={<YoutubeUploadCreatePage {...pageProps} />} />
-          <Route path="youtube/uploads/:jobId" element={<YoutubeUploadJobPage {...pageProps} />} />
 
           <Route path="youtube/settings" element={<Navigate replace to={PATHS.youtubeConnections} />} />
           <Route path="youtube/settings/*" element={<YouTubeSettingsLayout />}>

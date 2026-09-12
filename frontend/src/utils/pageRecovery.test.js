@@ -3,8 +3,8 @@ import { buildPageRecoveryUrl, clearPageRecoveryParam, recoverPage } from './pag
 
 describe('page recovery', () => {
   it('preserves the current route while adding a one-time cache-busting parameter', () => {
-    expect(buildPageRecoveryUrl('https://example.test/youtube/uploads/42?tab=log#details', 123)).toBe(
-      'https://example.test/youtube/uploads/42?tab=log&__ct_resume=123#details',
+    expect(buildPageRecoveryUrl('https://example.test/youtube/batch/tasks/42?tab=log#details', 123)).toBe(
+      'https://example.test/youtube/batch/tasks/42?tab=log&__ct_resume=123#details',
     );
   });
 

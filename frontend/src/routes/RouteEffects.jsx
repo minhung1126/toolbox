@@ -7,8 +7,6 @@ const TITLES = [
   [/^\/dashboard$/, '儀表板｜Toolbox'],
   [/^\/system\/health$/, 'API 健康度｜Toolbox'],
   [/^\/system\/info$/, '系統／部署資訊｜Toolbox'],
-  [/^\/youtube\/uploads\/new$/, '建立 YouTube 上傳｜Toolbox'],
-  [/^\/youtube\/uploads\//, 'YouTube 上傳工作｜Toolbox'],
   [/^\/youtube\/drafts\/videos$/, 'Video 草稿｜Toolbox'],
   [/^\/youtube\/drafts\/shorts$/, 'Shorts 草稿｜Toolbox'],
   [/^\/youtube\/publish-cleanup$/, '發布草稿｜Toolbox'],
