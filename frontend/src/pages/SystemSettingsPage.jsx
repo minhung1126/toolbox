@@ -50,7 +50,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
       ]);
       if (credsRes) {
         setCredentials(credsRes);
-        setEditClientId(credsRes.credentials?.google?.client_id || '');
+        setEditClientId(credsRes.credentials?.google?.client_id || credsRes.google?.client_id || '');
       }
       if (allowlistRes) {
         setAllowlist(allowlistRes.allowed_emails || []);
@@ -99,7 +99,11 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
         payload.google_client_secret = editClientSecret.trim();
       }
       const res = await api.updateSystemCredentials(payload);
-      setCredentials(res.credentials);
+      setCredentials((prev) => ({
+        ...prev,
+        ...res,
+        credentials: res.credentials || prev?.credentials,
+      }));
       setEditingCreds(false);
       setEditClientSecret('');
       toast.success('Google OAuth 憑證已更新並加密保存！');
@@ -181,7 +185,10 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
     );
   }
 
-  const googleCreds = credentials?.google || {};
+  const googleCreds = credentials?.credentials?.google || credentials?.google || {};
+  const isCredentialsDirty = editingCreds && (
+    editClientId.trim() !== (googleCreds.client_id || '') || Boolean(editClientSecret.trim())
+  );
 
   return (
     <div className="section-gap system-settings-page">
@@ -338,6 +345,26 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
                 </button>
               </div>
             </div>
+
+            {isCredentialsDirty && (
+              <div
+                className="info-banner warning-banner"
+                style={{
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  color: '#fbbf24',
+                  padding: '0.6rem 0.8rem',
+                  borderRadius: '6px',
+                  fontSize: '0.82rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                }}
+              >
+                <AlertCircle size={16} />
+                <span>Google OAuth 憑證已修改（尚未保存至保險庫）。為保護金鑰安全並避免頻繁寫入，修改後請記得點擊「儲存憑證」按鈕以套用！</span>
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
               <button

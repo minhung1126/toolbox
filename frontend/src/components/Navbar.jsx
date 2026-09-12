@@ -114,12 +114,12 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
 
   return <>
     <header className="mobile-app-bar">
-      <div className="mobile-app-brand"><span className="brand-mark"><Video size={22} aria-hidden="true" /></span><strong>Creator Tools</strong></div>
+      <div className="mobile-app-brand"><span className="brand-mark"><Video size={22} aria-hidden="true" /></span><strong>Toolbox</strong></div>
       <button ref={menuButtonRef} type="button" className="app-bar-menu" onClick={() => setDrawerOpen(true)} aria-label="開啟導覽選單" aria-expanded={drawerOpen} aria-controls="primary-navigation"><Menu size={24} aria-hidden="true" /></button>
     </header>
     {drawerOpen && <button type="button" className="drawer-backdrop" aria-label="關閉導覽選單" onClick={closeDrawer} />}
     <aside ref={drawerRef} id="primary-navigation" className={`sidebar${drawerOpen ? ' is-open' : ''}${sidebarCollapsed ? ' is-collapsed' : ''}`} aria-label="主要導覽">
-      <div className="sidebar-brand"><div className="brand-mark"><Video size={24} aria-hidden="true" /></div><div className="sidebar-brand-copy"><h2>Creator Tools</h2><p>創作者自動化控制台</p></div><button type="button" className="sidebar-toggle" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} aria-label={sidebarToggleLabel} title={sidebarToggleLabel} aria-expanded={!sidebarCollapsed} aria-controls="primary-navigation"><SidebarToggleIcon size={20} aria-hidden="true" /></button><button ref={closeButtonRef} type="button" className="drawer-close" onClick={closeDrawer} aria-label="關閉導覽選單"><X size={22} aria-hidden="true" /></button></div>
+      <div className="sidebar-brand"><div className="brand-mark"><Video size={24} aria-hidden="true" /></div><div className="sidebar-brand-copy"><h2>Toolbox</h2><p>多功能模組化工具箱</p></div><button type="button" className="sidebar-toggle" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} aria-label={sidebarToggleLabel} title={sidebarToggleLabel} aria-expanded={!sidebarCollapsed} aria-controls="primary-navigation"><SidebarToggleIcon size={20} aria-hidden="true" /></button><button ref={closeButtonRef} type="button" className="drawer-close" onClick={closeDrawer} aria-label="關閉導覽選單"><X size={22} aria-hidden="true" /></button></div>
       <nav className="sidebar-nav">
         {item({ id: 'dashboard', to: PATHS.dashboard, label: '儀表板總覽', icon: LayoutDashboard })}
         {systemNavItems.map((sysItem) => item(sysItem))}

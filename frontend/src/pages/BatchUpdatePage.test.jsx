@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   api: {
     getYoutubeDraftSettings: vi.fn(),
     updateYoutubeDraftSettings: vi.fn(),
+    updateYoutubePlaylist: vi.fn(),
     getSpreadsheetMetadata: vi.fn(),
     getRandomMemberPreview: vi.fn(),
     getPlaylistVideos: vi.fn(),
@@ -28,7 +29,10 @@ const mocks = vi.hoisted(() => ({
   setSelectedPeople: vi.fn(),
 }));
 
-vi.mock('../services/api', () => ({ api: mocks.api }));
+vi.mock('../services/api', () => ({
+  api: mocks.api,
+  normalizeYoutubePlaylistInput: (val) => String(val || '').trim(),
+}));
 vi.mock('../components/Toast', () => ({ useToast: () => mocks.toast }));
 vi.mock('../hooks/useAccountWorkState', () => ({
   default: () => ({ value: {}, error: '', save: mocks.saveWorkState }),
@@ -100,6 +104,8 @@ describe('BatchUpdatePage preview and confirmation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.api.getYoutubeDraftSettings.mockResolvedValue({});
+    mocks.api.updateYoutubeDraftSettings.mockResolvedValue({});
+    mocks.api.updateYoutubePlaylist.mockResolvedValue({});
     mocks.api.getSpreadsheetMetadata.mockResolvedValue({
       worksheets: [{ title: 'Youtube Video', columns: ['Youtube Title', 'Youtube Description'] }],
     });
@@ -198,5 +204,20 @@ describe('BatchUpdatePage preview and confirmation', () => {
         { video_id: 'video-2', person: '不編輯' },
       ],
     }));
+  });
+
+  it('allows editing the playlist ID and auto-saves draft settings', async () => {
+    renderPage();
+    const playlistInput = screen.getByPlaceholderText('YouTube Playlist ID 或網址');
+    expect(playlistInput).toBeInTheDocument();
+
+    fireEvent.change(playlistInput, { target: { value: 'PL_new_playlist' } });
+    await waitFor(() => expect(mocks.api.updateYoutubePlaylist).toHaveBeenCalledWith({ playlistId: 'PL_new_playlist' }));
+
+    const saveButton = screen.getByRole('button', { name: '立即儲存草稿設定' });
+    fireEvent.click(saveButton);
+    await waitFor(() => expect(mocks.api.updateYoutubeDraftSettings).toHaveBeenCalledWith('Video', expect.objectContaining({
+      spreadsheet_id: 'sheet-a',
+    })));
   });
 });

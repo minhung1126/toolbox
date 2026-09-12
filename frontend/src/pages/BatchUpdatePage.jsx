@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../services/api';
+import { api, normalizeYoutubePlaylistInput } from '../services/api';
 import { useToast } from '../components/Toast';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -30,6 +30,7 @@ import {
   Send,
   Shuffle,
   Video as VideoIcon,
+  XCircle,
 } from 'lucide-react';
 
 const DEFAULT_COLUMNS = {
@@ -392,6 +393,10 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
   const sheetRequestRef = useRef(0);
   const randomPreviewRequestRef = useRef(0);
   const previousAuthorizationKeyRef = useRef(authorizationKey);
+  const draftSaveTimerRef = useRef(null);
+  const playlistSaveTimerRef = useRef(null);
+  const [draftAutosaveStatus, setDraftAutosaveStatus] = useState(null);
+  const [playlistAutosaveStatus, setPlaylistAutosaveStatus] = useState(null);
 
   const sourceStale = spreadsheetId.trim() !== appliedSpreadsheetId.trim();
   const teamPersonFilter = useTeamPersonFilter({
@@ -467,9 +472,60 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     setConfigSaveError('');
   }, []);
 
+  const scheduleDraftSave = useCallback((overrides = {}) => {
+    if (!authUser) return;
+    setDraftAutosaveStatus('saving');
+    window.clearTimeout(draftSaveTimerRef.current);
+    draftSaveTimerRef.current = window.setTimeout(async () => {
+      try {
+        const nextSpreadsheetId = overrides.spreadsheetId !== undefined ? overrides.spreadsheetId : spreadsheetId;
+        const nextWorksheetName = overrides.worksheetName !== undefined ? overrides.worksheetName : worksheetName;
+        const nextTitleColumn = overrides.titleColumn !== undefined ? overrides.titleColumn : titleColumn;
+        const nextDescriptionColumn = overrides.descriptionColumn !== undefined ? overrides.descriptionColumn : descriptionColumn;
+        const nextPlaylistId = overrides.playlistId !== undefined ? overrides.playlistId : playlistId;
+
+        await api.updateYoutubeDraftSettings(videoType, {
+          spreadsheet_id: nextSpreadsheetId.trim(),
+          worksheet_name: nextWorksheetName,
+          title_column: nextTitleColumn,
+          description_column: nextDescriptionColumn,
+          playlist_id: nextPlaylistId.trim(),
+        });
+        setConfigDirty(false);
+        setConfigSaved(true);
+        setDraftAutosaveStatus('saved');
+      } catch (error) {
+        setDraftAutosaveStatus('error');
+        setConfigSaveError(`草稿設定未能自動儲存：${error.message}`);
+      }
+    }, 800);
+  }, [authUser, descriptionColumn, playlistId, spreadsheetId, titleColumn, videoType, worksheetName]);
+
+  const schedulePlaylistSave = useCallback((value) => {
+    if (!authUser) return;
+    setPlaylistAutosaveStatus('saving');
+    window.clearTimeout(playlistSaveTimerRef.current);
+    playlistSaveTimerRef.current = window.setTimeout(async () => {
+      try {
+        const normalized = normalizeYoutubePlaylistInput(value);
+        if (value.trim() && !normalized) {
+          setPlaylistAutosaveStatus('invalid');
+          return;
+        }
+        await api.updateYoutubePlaylist({ playlistId: normalized || '' });
+        setPlaylistAutosaveStatus('saved');
+        scheduleDraftSave({ playlistId: value });
+      } catch {
+        setPlaylistAutosaveStatus('error');
+      }
+    }, 800);
+  }, [authUser, scheduleDraftSave]);
+
   const saveDraftConfig = useCallback(async () => {
     if (!authUser) return;
+    window.clearTimeout(draftSaveTimerRef.current);
     setConfigSaving(true);
+    setDraftAutosaveStatus('saving');
     setConfigSaveError('');
     try {
       await api.updateYoutubeDraftSettings(videoType, {
@@ -477,16 +533,24 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
         worksheet_name: worksheetName,
         title_column: titleColumn,
         description_column: descriptionColumn,
+        playlist_id: playlistId.trim(),
       });
       setConfigDirty(false);
       setConfigSaved(true);
+      setDraftAutosaveStatus('saved');
       toast.success('YouTube 草稿設定已儲存');
     } catch (error) {
+      setDraftAutosaveStatus('error');
       setConfigSaveError(`設定未能同步至伺服器：${error.message}`);
     } finally {
       setConfigSaving(false);
     }
-  }, [authUser, descriptionColumn, spreadsheetId, titleColumn, toast, videoType, worksheetName]);
+  }, [authUser, descriptionColumn, playlistId, spreadsheetId, titleColumn, toast, videoType, worksheetName]);
+
+  useEffect(() => () => {
+    window.clearTimeout(draftSaveTimerRef.current);
+    window.clearTimeout(playlistSaveTimerRef.current);
+  }, []);
 
   const applyConfig = useCallback((config) => {
     setSpreadsheetId(config.spreadsheetId);
@@ -686,6 +750,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     markConfigDirty();
     if (nextValue.trim() !== appliedSpreadsheetId.trim()) invalidateLoadedVideos();
     setSourceError('');
+    scheduleDraftSave({ spreadsheetId: nextValue });
   };
 
   const handleWorksheetChange = (nextWorksheet) => {
@@ -697,6 +762,14 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     setRandomPreview(null);
     setPreviewError('');
     invalidateLoadedVideos();
+    scheduleDraftSave({ worksheetName: nextWorksheet });
+  };
+
+  const handlePlaylistChange = (nextPlaylist) => {
+    setPlaylistId(nextPlaylist);
+    markConfigDirty();
+    invalidateLoadedVideos();
+    schedulePlaylistSave(nextPlaylist);
   };
 
   useEffect(() => {
@@ -952,16 +1025,36 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
         sourceReady={sourceReady}
         stale={sourceStale}
         error={sourceError}
+        autosaveStatus={draftAutosaveStatus}
       >
-        <div className="form-group"><label className="form-label" htmlFor="batch-title-column">標題套用欄位</label><select id="batch-title-column" className="form-select" value={titleColumn} onChange={(e) => setTitleColumn(e.target.value)}>{columns.map((column) => <option key={column} value={column}>{column}</option>)}</select></div>
-        <div className="form-group"><label className="form-label" htmlFor="batch-description-column">描述套用欄位</label><select id="batch-description-column" className="form-select" value={descriptionColumn} onChange={(e) => setDescriptionColumn(e.target.value)}>{columns.map((column) => <option key={column} value={column}>{column}</option>)}</select></div>
+        <div className="form-group"><label className="form-label" htmlFor="batch-title-column">標題套用欄位</label><select id="batch-title-column" className="form-select" value={titleColumn} onChange={(e) => { setTitleColumn(e.target.value); markConfigDirty(); scheduleDraftSave({ titleColumn: e.target.value }); }}>{columns.map((column) => <option key={column} value={column}>{column}</option>)}</select></div>
+        <div className="form-group"><label className="form-label" htmlFor="batch-description-column">描述套用欄位</label><select id="batch-description-column" className="form-select" value={descriptionColumn} onChange={(e) => { setDescriptionColumn(e.target.value); markConfigDirty(); scheduleDraftSave({ descriptionColumn: e.target.value }); }}>{columns.map((column) => <option key={column} value={column}>{column}</option>)}</select></div>
         <div className="info-banner filter-panel-full-width"><Info size={14} color="var(--primary)" /><span>Video / Shorts 各自保存工作表、欄位與工作流資源；Sheet 內容複製、Video、Shorts 共用目前帳號的團體與人物篩選。未指定的資源會使用目前帳號的預設 Google Sheet 或 YouTube 播放清單。</span></div>
+        <div className="page-actions settings-card-actions" style={{ marginTop: '0.75rem' }}>
+          <button type="button" className="btn btn-secondary" onClick={saveDraftConfig} disabled={configSaving}>
+            <Save size={16} /> {configSaving ? '儲存中...' : '立即儲存草稿設定'}
+          </button>
+        </div>
       </SheetDataSourcePanel>
 
       <div className="glass-panel card-padding playlist-input-panel">
-        <label className="form-label" htmlFor="batch-playlist-id"><PlaySquare size={14} /> 共用 To-Post 播放清單</label>
-        <SourceLinkInput id="batch-playlist-id" value={playlistId} sourceType="youtube-playlist" readOnly disabled={executing || loadingVideos} />
-        <p className="section-desc">此播放清單由 YouTube 設定統一管理。</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <label className="form-label" htmlFor="batch-playlist-id" style={{ marginBottom: 0 }}><PlaySquare size={14} /> 共用 To-Post 播放清單</label>
+          {playlistAutosaveStatus === 'saving' && (
+            <span className="badge badge-info"><RefreshCw size={12} className="spin" /> 自動儲存中...</span>
+          )}
+          {playlistAutosaveStatus === 'saved' && (
+            <span className="badge badge-connected"><CheckCircle2 size={12} /> 已自動儲存</span>
+          )}
+          {playlistAutosaveStatus === 'invalid' && (
+            <span className="badge badge-warning">播放清單網址格式不完整</span>
+          )}
+          {playlistAutosaveStatus === 'error' && (
+            <span className="badge badge-disconnected"><XCircle size={12} /> 自動儲存失敗</span>
+          )}
+        </div>
+        <SourceLinkInput id="batch-playlist-id" value={playlistId} onChange={(event) => handlePlaylistChange(event.target.value)} sourceType="youtube-playlist" placeholder="YouTube Playlist ID 或網址" disabled={executing || loadingVideos} />
+        <p className="section-desc">修改後會自動儲存至目前登入的 Google 帳號；所有 YouTube 流程共用這個設定。</p>
       </div>
 
       <TeamPersonFilterPanel

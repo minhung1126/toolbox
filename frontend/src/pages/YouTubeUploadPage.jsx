@@ -234,8 +234,33 @@ export default function YouTubeUploadPage({ sysSettings = {}, authUser, mode = '
   );
   const jobStorageKey = useMemo(() => {
     const accountKey = authUser?.sub || authUser?.email || '';
-    return accountKey ? `creator-tools:youtube-upload-job:${accountKey}` : '';
+    return accountKey ? `toolbox:youtube-upload-job:${accountKey}` : '';
   }, [authUser?.email, authUser?.sub]);
+  const driveSourceStorageKey = useMemo(() => {
+    const accountKey = authUser?.sub || authUser?.email || '';
+    return accountKey ? `toolbox:youtube-upload-drive-source:${accountKey}` : '';
+  }, [authUser?.email, authUser?.sub]);
+
+  useEffect(() => {
+    if (!driveSourceStorageKey || typeof window === 'undefined') return;
+    try {
+      const saved = window.localStorage.getItem(driveSourceStorageKey);
+      if (saved) setDriveSource((current) => current || saved);
+    } catch {
+      // Ignore storage failures
+    }
+  }, [driveSourceStorageKey]);
+
+  const handleDriveSourceChange = (value) => {
+    setDriveSource(value);
+    if (driveSourceStorageKey && typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(driveSourceStorageKey, value);
+      } catch {
+        // Ignore storage failures
+      }
+    }
+  };
   const playlistId = preview?.playlist?.id || sysSettings.default_playlist_id || '';
   const quotaDecision = useMemo(() => getYoutubeUploadQuotaDecision(preview), [preview]);
   const canStart = Boolean(preview?.preview_token && preview?.preview_snapshot && quotaDecision.canStart && quotaDecision.previewCanExecute && !needsPreview);
@@ -479,7 +504,8 @@ export default function YouTubeUploadPage({ sysSettings = {}, authUser, mode = '
         </div>
         <div className="form-group">
           <label className="form-label" htmlFor="youtube-drive-source">Google Drive ID／網址</label>
-          <SourceLinkInput id="youtube-drive-source" value={driveSource} onChange={(event) => setDriveSource(event.target.value)} sourceType="drive-item" placeholder="貼上 Drive 資料夾或影片 ID／網址" disabled={loading || jobActive} />
+          <SourceLinkInput id="youtube-drive-source" value={driveSource} onChange={(event) => handleDriveSourceChange(event.target.value)} sourceType="drive-item" placeholder="貼上 Drive 資料夾或影片 ID／網址" disabled={loading || jobActive} />
+          <p className="section-desc">修改後會自動儲存至本機；換頁或重新整理仍會保留此來源。</p>
         </div>
         <div className="page-actions">
           <button className="btn btn-primary" type="submit" disabled={!driveSource.trim() || loading || jobActive || !driveScopeReady}>
@@ -497,7 +523,7 @@ export default function YouTubeUploadPage({ sysSettings = {}, authUser, mode = '
           {playlistId && <a className="youtube-video-link" href={`https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}`} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} />開啟播放清單</a>}
         </div>
         <div className="upload-playlist-display">{playlistId || '尚未設定；請先到 YouTube 設定儲存共用 To-Post 播放清單。'}</div>
-        {!playlistId && <Link className="btn btn-secondary settings-inline-button" to={PATHS.youtubeConnections}>前往 YouTube 設定</Link>}
+        <div className="page-actions settings-card-actions"><Link className="btn btn-secondary" to={PATHS.youtubePlaylist}>前往 YouTube 播放清單設定</Link></div>
       </section>
       }
 

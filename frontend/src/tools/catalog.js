@@ -103,7 +103,7 @@ export const TOOL_MODULES = Object.freeze([
     status: 'active',
     entryUrl: PATHS.systemHealth,
     navItems: [
-      { id: 'api_health', to: PATHS.systemHealth, label: 'API健康度', icon: Activity },
+      { id: 'api_health', to: PATHS.systemHealth, label: 'API 健康度', icon: Activity },
       { id: 'system_info', to: PATHS.systemInfo, label: '系統／部署資訊', icon: Info },
     ],
   },

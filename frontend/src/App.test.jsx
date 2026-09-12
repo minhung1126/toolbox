@@ -126,7 +126,7 @@ describe('App recovery state', () => {
 
     await firePersistedPageShow();
 
-    expect(await screen.findByText('Creator Tools 已更新，請重新載入。')).toBeInTheDocument();
+    expect(await screen.findByText('Toolbox 已更新，請重新載入。')).toBeInTheDocument();
     expect(screen.getByTestId('dashboard-page')).toBeInTheDocument();
   });
 

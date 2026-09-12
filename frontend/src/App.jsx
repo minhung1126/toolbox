@@ -35,7 +35,7 @@ export function hasVersionMismatch(frontendSha, backendSha) {
 
 function publicRequestError(error, fallback = '操作失敗，請重試。') {
   if (isConnectionFailure(error)) {
-    return '目前無法連線到 Creator Tools，請確認服務與網路後重試。';
+    return '目前無法連線到 Toolbox，請確認服務與網路後重試。';
   }
   if (error?.status === 401 || error?.code === 'session_expired') {
     return '登入已逾時，請重新登入後再試。';

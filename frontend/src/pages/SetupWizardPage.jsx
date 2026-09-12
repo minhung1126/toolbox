@@ -40,15 +40,15 @@ export default function SetupWizardPage() {
     try {
       const res = await api.getSetupStatus();
       setSetupStatus(res);
-      if (res.development_pin && !pin) {
-        setPin(res.development_pin);
+      if (res.development_pin) {
+        setPin((prev) => prev || res.development_pin);
       }
     } catch (err) {
       setErrorMessage(err.message || '無法取得系統初始設定狀態。');
     } finally {
       setLoadingStatus(false);
     }
-  }, [pin]);
+  }, []);
 
   useEffect(() => {
     fetchStatus();
@@ -143,7 +143,7 @@ export default function SetupWizardPage() {
           <div className="login-logo-box">
             <Video size={36} color="var(--text-main)" />
           </div>
-          <h1 className="login-title">Toolbox 初始安裝嚮導</h1>
+          <h1 className="login-title">Toolbox 初始安裝精靈</h1>
           <p className="login-subtitle">歡迎使用創作者工具箱！請完成初次系統憑證配置</p>
         </div>
 

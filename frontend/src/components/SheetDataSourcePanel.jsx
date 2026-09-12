@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileSpreadsheet, Key, RefreshCw } from 'lucide-react';
+import { CheckCircle2, FileSpreadsheet, Key, RefreshCw, XCircle } from 'lucide-react';
 import SourceLinkInput from './SourceLinkInput';
 import { EmptyState, StatusMessage } from './StatusMessage';
 import { api } from '../services/api';
@@ -7,7 +7,8 @@ import { saveOAuthReturnPath } from '../utils/authReturnPath';
 
 export default function SheetDataSourcePanel({
   spreadsheetId, onSpreadsheetIdChange, worksheets = [], worksheetName = '', onWorksheetChange,
-  onRefresh, loading = false, disabled = false, sourceReady = true, stale = false, error = '', children,
+  onRefresh, loading = false, disabled = false, sourceReady = true, stale = false, error = '',
+  autosaveStatus = null, children,
 }) {
   const sourceDisabled = disabled || loading;
   const dependentDisabled = disabled || loading || stale || !sourceReady;
@@ -27,9 +28,20 @@ export default function SheetDataSourcePanel({
   return (
     <section className={`filter-panel${dependentDisabled ? ' filter-panel-disabled' : ''}`}>
       <div className="filter-panel-header">
-        <div>
-          <strong><FileSpreadsheet size={17} aria-hidden="true" />資料來源設定</strong>
-          <p>先確認主要試算表並刷新工作表與欄位；修改來源後請再次按刷新套用。</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div>
+            <strong><FileSpreadsheet size={17} aria-hidden="true" />資料來源設定</strong>
+            <p>先確認主要試算表並刷新工作表與欄位；修改來源後請再次按刷新套用。</p>
+          </div>
+          {autosaveStatus === 'saving' && (
+            <span className="badge badge-info"><RefreshCw size={12} className="spin" /> 自動儲存中...</span>
+          )}
+          {autosaveStatus === 'saved' && (
+            <span className="badge badge-connected"><CheckCircle2 size={12} /> 已自動儲存</span>
+          )}
+          {autosaveStatus === 'error' && (
+            <span className="badge badge-disconnected"><XCircle size={12} /> 自動儲存失敗</span>
+          )}
         </div>
         <button type="button" className="btn btn-primary" onClick={onRefresh} disabled={disabled || loading || !String(spreadsheetId || '').trim()}>
           <RefreshCw size={16} className={loading ? 'spin' : ''} aria-hidden="true" />

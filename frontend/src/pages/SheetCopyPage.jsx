@@ -21,8 +21,9 @@ async function copyText(text) {
 }
 
 export default function SheetCopyPage({ sysSettings }) {
-  const { value: savedState, error: workStateError, save: saveWorkState } = useAccountWorkState('sheet_copy', {});
+  const { value: savedState, error: workStateError, saving: workStateSaving, saved: workStateSaved, save: saveWorkState } = useAccountWorkState('sheet_copy', {});
   const saved = savedState && typeof savedState === 'object' ? savedState : {};
+  const sheetCopyAutosaveStatus = workStateSaving ? 'saving' : workStateSaved ? 'saved' : workStateError ? 'error' : null;
   const sharedFilter = useMemo(
     () => readSharedTeamPersonFilter(sysSettings.shared_team_person_filter),
     [sysSettings.shared_team_person_filter],
@@ -222,7 +223,7 @@ export default function SheetCopyPage({ sysSettings }) {
         </div>
       </header>
 
-      <SheetDataSourcePanel spreadsheetId={spreadsheetId} onSpreadsheetIdChange={handleSpreadsheetChange} worksheets={worksheets} worksheetName={worksheetName} onWorksheetChange={handleWorksheetChange} onRefresh={refresh} loading={loading} sourceReady={sourceReady} stale={sourceStale} error={sourceError} />
+      <SheetDataSourcePanel spreadsheetId={spreadsheetId} onSpreadsheetIdChange={handleSpreadsheetChange} worksheets={worksheets} worksheetName={worksheetName} onWorksheetChange={handleWorksheetChange} onRefresh={refresh} loading={loading} sourceReady={sourceReady} stale={sourceStale} error={sourceError} autosaveStatus={sheetCopyAutosaveStatus} />
 
       <TeamPersonFilterPanel teams={sourceStale ? [] : teams} selectedTeam={sourceStale ? '' : selectedTeam} onTeamChange={setSelectedTeam} people={sourceStale ? [] : people} selectedPeople={sourceStale ? [] : selectedPeople} onSelectedPeopleChange={setSelectedPeople} loadingTeams={loadingTeams} loadingPeople={loadingPeople} error={teamPersonError} disabled={sourceStale || !sourceReady} teamEmptyLabel="全部團體" peopleDisabledMessage="未選定團體時顯示全部團體；請選擇團體後再篩選人物。" description="未選定團體時顯示全部團體；選定團體後只顯示已勾選的人物。" />
       {workStateError && <div className="filter-panel-status filter-panel-status-error" role="alert">工作狀態同步失敗：{workStateError}</div>}

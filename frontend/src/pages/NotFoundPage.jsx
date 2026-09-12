@@ -8,7 +8,7 @@ export default function NotFoundPage() {
       <div className="glass-panel card-padding card-stack">
         <h1>找不到頁面</h1>
         <p className="section-desc">這個網址不存在，或頁面已經移動。</p>
-        <Link className="btn btn-primary" to={PATHS.dashboard}>返回 Dashboard</Link>
+        <Link className="btn btn-primary" to={PATHS.dashboard}>返回儀表板</Link>
       </div>
     </div>
   );

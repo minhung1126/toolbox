@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import { api } from '../services/api';
 import LoginPage from './LoginPage';
 
@@ -11,6 +12,14 @@ vi.mock('../services/api', () => ({
   },
 }));
 
+function renderLoginPage(props = {}) {
+  return render(
+    <MemoryRouter>
+      <LoginPage {...props} />
+    </MemoryRouter>
+  );
+}
+
 describe('LoginPage readiness', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -18,7 +27,7 @@ describe('LoginPage readiness', () => {
     api.getAuthConfig
       .mockResolvedValueOnce({ has_client_id: false, has_client_secret: false })
       .mockResolvedValueOnce({ has_client_id: true, has_client_secret: true });
-    render(<LoginPage />);
+    renderLoginPage();
 
     const loginButton = await screen.findByRole('button', { name: '使用 Google 帳號登入' });
     await waitFor(() => expect(loginButton).toBeDisabled());
@@ -32,7 +41,7 @@ describe('LoginPage readiness', () => {
 
   it('keeps an OAuth callback error visible when readiness later succeeds', async () => {
     api.getAuthConfig.mockResolvedValue({ has_client_id: true, has_client_secret: true });
-    render(<LoginPage initialError="Google 登入 callback 失敗，請重新嘗試。" />);
+    renderLoginPage({ initialError: 'Google 登入 callback 失敗，請重新嘗試。' });
 
     await waitFor(() => expect(api.getAuthConfig).toHaveBeenCalledOnce());
     expect(screen.getByText('Google 登入 callback 失敗，請重新嘗試。')).toBeInTheDocument();
@@ -43,7 +52,7 @@ describe('LoginPage readiness', () => {
     api.getAuthConfig
       .mockResolvedValueOnce({ has_client_id: false, has_client_secret: false })
       .mockResolvedValueOnce({ has_client_id: true, has_client_secret: true });
-    render(<LoginPage initialError="Google OAuth callback 失敗。" />);
+    renderLoginPage({ initialError: 'Google OAuth callback 失敗。' });
 
     await screen.findByText(/OAuth 憑證/);
     expect(screen.getByText('Google OAuth callback 失敗。')).toBeInTheDocument();
@@ -55,7 +64,7 @@ describe('LoginPage readiness', () => {
 
   it('describes the modular decoupled authorizations', async () => {
     api.getAuthConfig.mockResolvedValue({ has_client_id: true, has_client_secret: true });
-    render(<LoginPage />);
+    renderLoginPage();
 
     await waitFor(() => expect(screen.getByText(/模組化權限拆分/)).toBeInTheDocument());
     expect(screen.getByText(/Google 試算表、雲端硬碟、YouTube 頻道分別獨立授權/)).toBeInTheDocument();

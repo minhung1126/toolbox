@@ -4,8 +4,8 @@ import { PATHS } from '../routes/paths';
 
 const items = [
   [PATHS.youtubeConnections, '授權組合'],
-  [PATHS.youtubeRouting, 'Routing'],
-  [PATHS.youtubeQuota, 'Quota'],
+  [PATHS.youtubeRouting, '路由模式'],
+  [PATHS.youtubeQuota, '配額設定'],
   [PATHS.youtubePlaylist, '預設播放清單'],
 ];
 

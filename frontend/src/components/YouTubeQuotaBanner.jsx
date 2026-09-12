@@ -159,7 +159,7 @@ export default function YouTubeQuotaBanner({ refreshKey = 0, compact = false, ac
             </div>
             <div className="quota-usage-value">
               {units(used)} / {units(limit)}
-              <span>單位（Creator Tools 估算）</span>
+              <span>單位（Toolbox 估算）</span>
             </div>
           </div>
         </div>
@@ -178,11 +178,11 @@ export default function YouTubeQuotaBanner({ refreshKey = 0, compact = false, ac
       </div>
 
       {confirmed && <div className="quota-alert quota-alert-error"><AlertTriangle size={16} aria-hidden="true" /><span>Google 已確認配額耗盡；系統已停止新的 YouTube 請求，直到官方重設。</span></div>}
-      {!confirmed && stateKey === 'safety_blocked' && <div className="quota-alert quota-alert-warning">Creator Tools 已達自訂安全上限，等待官方重設後自動恢復。</div>}
+      {!confirmed && stateKey === 'safety_blocked' && <div className="quota-alert quota-alert-warning">Toolbox 已達自訂安全上限，等待官方重設後自動恢復。</div>}
       {!confirmed && currentUsage?.reason && <div className="quota-alert quota-alert-warning"><AlertTriangle size={16} aria-hidden="true" /><span>{currentUsage.reason}</span></div>}
 
       {!compact && currentUsage?.methods?.length > 0 && <div className="quota-methods">{currentUsage.methods.map((item) => <span key={`${item.method}-${item.cost_per_call}`} className="badge badge-info">{item.method}: {item.calls} 次 × {item.cost_per_call} = {units(item.units)} 單位</span>)}</div>}
-      {!compact && <p className="quota-note">{currentUsage?.note || '本數字只統計 Creator Tools，屬於估算，不是 Google Cloud 專案的即時總用量。'}{currentUsage?.quota_rules_verified_at ? ` 官方規則核對日期：${currentUsage.quota_rules_verified_at}。` : ''}</p>}
+      {!compact && <p className="quota-note">{currentUsage?.note || '本數字只統計 Toolbox，屬於估算，不是 Google Cloud 專案的即時總用量。'}{currentUsage?.quota_rules_verified_at ? ` 官方規則核對日期：${currentUsage.quota_rules_verified_at}。` : ''}</p>}
     </section>
   );
 }

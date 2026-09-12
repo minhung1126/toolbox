@@ -188,7 +188,7 @@ async function request(endpoint, options = {}) {
     if (error?.name === 'AbortError') {
       throw new ApiError('連線逾時，請確認網路後按「重試」。', { code: 'timeout' });
     }
-    throw new ApiError('目前無法連線到 Creator Tools，請確認服務與網路後重試。', { code: 'network_error' });
+    throw new ApiError('目前無法連線到 Toolbox，請確認服務與網路後重試。', { code: 'network_error' });
   } finally {
     window.clearTimeout(timeout);
   }

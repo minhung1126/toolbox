@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import GoogleSheetSettingsPage from './GoogleSheetSettingsPage';
 import { api } from '../services/api';
 
@@ -19,10 +20,14 @@ vi.mock('../components/SourceLinkInput', () => ({
 }));
 
 function renderPage(refreshSettings = vi.fn().mockResolvedValue({})) {
-  return render(<GoogleSheetSettingsPage
-    sysSettings={{ default_spreadsheet_id: 'old-sheet' }}
-    refreshSettings={refreshSettings}
-  />);
+  return render(
+    <MemoryRouter>
+      <GoogleSheetSettingsPage
+        sysSettings={{ default_spreadsheet_id: 'old-sheet' }}
+        refreshSettings={refreshSettings}
+      />
+    </MemoryRouter>
+  );
 }
 
 describe('GoogleSheetSettingsPage autosave lifecycle', () => {

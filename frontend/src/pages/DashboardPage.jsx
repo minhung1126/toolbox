@@ -26,7 +26,7 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
     <div className="section-gap">
       <header className="glass-panel dashboard-hero page-header">
         <div className="badge badge-info dashboard-eyebrow"><Sparkles size={14} /> Toolbox 工具箱平台</div>
-        <h1>Creator Tools 控制台</h1>
+        <h1>Toolbox 控制台</h1>
         <p className="section-desc dashboard-hero-description">
           Toolbox 多功能模組化平台。Creator Tools 模組提供 Video 與 Shorts 草稿管理、試算表欄位對照、Drive 上傳與 YouTube 發布自動化。
         </p>

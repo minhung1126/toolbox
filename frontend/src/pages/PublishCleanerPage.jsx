@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, normalizeYoutubePlaylistInput } from '../services/api';
+import { PATHS } from '../routes/paths';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ThumbnailDialog from '../components/ThumbnailDialog';
@@ -28,6 +29,7 @@ import {
   RefreshCw,
   Send,
   Trash2,
+  XCircle,
 } from 'lucide-react';
 
 function youtubeVideoUrl(videoId) {
@@ -596,6 +598,7 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
             readOnly
             disabled={executing}
           />
+          <p className="section-desc">此播放清單由 YouTube 設定統一管理。如需修改，請至 <a href={PATHS.youtubePlaylist}>YouTube 播放清單設定</a>（修改後會自動儲存）。</p>
         </div>
         <button className="btn btn-primary publish-action-button" onClick={handleLoadPlaylist} disabled={loading || executing || estimateLoading}>
           <RefreshCw size={16} className={loading ? 'spin' : ''} />

@@ -35,7 +35,7 @@ export default function AppShell({
               title="版本已更新"
               action={<button type="button" className="btn btn-secondary status-message-action" onClick={() => recoverPage()}>重新開啟本頁</button>}
             >
-              <span>Creator Tools 已更新，請重新載入。</span>
+              <span>Toolbox 已更新，請重新載入。</span>
             </StatusMessage>
           )}
           {authStatus === 'reconnecting' && (

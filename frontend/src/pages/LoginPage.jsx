@@ -68,8 +68,8 @@ export default function LoginPage({ initialError, returnTo }) {
           <div className="login-logo-box">
             <Video size={36} color="var(--text-main)" />
           </div>
-          <h1 className="login-title">Creator Tools</h1>
-          <p className="login-subtitle">創作者自動化控制台系統</p>
+          <h1 className="login-title">Toolbox</h1>
+          <p className="login-subtitle">多功能模組化工具箱控制台</p>
         </div>
 
         {/* Security Badge */}

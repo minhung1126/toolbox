@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -64,7 +64,7 @@ describe('SetupWizardPage', () => {
 
     renderPage();
 
-    await screen.findByText('Toolbox 初始安裝嚮導');
+    await screen.findByText('Toolbox 初始安裝精靈');
     expect(screen.getByText('http://localhost:8000/api/v1/auth/callback')).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/123456789-abc.apps.googleusercontent.com/)).toBeInTheDocument();
   });
@@ -83,7 +83,7 @@ describe('SetupWizardPage', () => {
 
     renderPage();
 
-    await screen.findByText('Toolbox 初始安裝嚮導');
+    await screen.findByText('Toolbox 初始安裝精靈');
 
     fireEvent.change(screen.getByPlaceholderText(/123456789-abc.apps.googleusercontent.com/), {
       target: { value: 'client-id-test.apps.googleusercontent.com' },
@@ -125,7 +125,7 @@ describe('SetupWizardPage', () => {
 
     renderPage();
 
-    await screen.findByText('Toolbox 初始安裝嚮導');
+    await screen.findByText('Toolbox 初始安裝精靈');
 
     fireEvent.change(screen.getByPlaceholderText(/123456789-abc.apps.googleusercontent.com/), {
       target: { value: 'client-id' },

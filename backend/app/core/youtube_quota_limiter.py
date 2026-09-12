@@ -414,7 +414,7 @@ class YouTubeQuotaLimiter:
                         reset_at=reset,
                         reason=str(data.get("blocked_reason") or "safety_cap_reached"),
                         confirmed=False,
-                        message="Creator Tools 已達 YouTube API 安全上限，新的請求將等待官方配額重設。",
+                        message="Toolbox 已達 YouTube API 安全上限，新的請求將等待官方配額重設。",
                     )
                 if used + cost > policy_cap:
                     data.update(
@@ -433,7 +433,7 @@ class YouTubeQuotaLimiter:
                         reset_at=reset,
                         reason="safety_cap_reached",
                         confirmed=False,
-                        message="Creator Tools 已達 YouTube API 安全上限，新的請求將等待官方配額重設。",
+                        message="Toolbox 已達 YouTube API 安全上限，新的請求將等待官方配額重設。",
                     )
 
                 next_used = used + cost
@@ -639,7 +639,7 @@ class YouTubeQuotaLimiter:
             "quota_rules_last_updated_at": QUOTA_RULES_LAST_UPDATED_AT,
             "quota_rules_verified_at": QUOTA_RULES_VERIFIED_AT,
             "note": (
-                "本數字只統計 Creator Tools 送出的 YouTube request，屬於本地估算；"
+                "本數字只統計 Toolbox 送出的 YouTube request，屬於本地估算；"
                 "同一 Google Cloud project 的其他應用程式可能也會消耗官方額度。"
             ),
         }
@@ -679,7 +679,7 @@ class YouTubeQuotaLimiter:
                 message=(
                     "Google 已回報今日 YouTube API 配額用完。"
                     if usage["confirmed_by_google"]
-                    else "Creator Tools 今日安全可用額度不足。"
+                    else "Toolbox 今日安全可用額度不足。"
                 ),
             )
         return usage

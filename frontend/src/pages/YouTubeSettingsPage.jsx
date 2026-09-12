@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, CheckCircle2, Clapperboard, ExternalLink, Eye, EyeOff, Key, PlaySquare, Save, Settings2, Smartphone, XCircle, Youtube } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, ArrowRight, CheckCircle2, Clapperboard, ExternalLink, Eye, EyeOff, Key, PlaySquare, RefreshCw, Save, Settings2, Smartphone, XCircle, Youtube } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { api, normalizeYoutubePlaylistInput } from '../services/api';
 import { useToast } from '../components/Toast';
@@ -96,6 +96,8 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
   const [slotEnabled, setSlotEnabled] = useState(false);
   const [savingSlotCreds, setSavingSlotCreds] = useState(false);
   const [showSlotSecret, setShowSlotSecret] = useState(false);
+  const playlistSaveTimerRef = useRef(null);
+  const [playlistAutosaveStatus, setPlaylistAutosaveStatus] = useState(null);
 
   const handleOpenEditSlot = (slot) => {
     setEditingSlot(slot);
@@ -213,7 +215,8 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
   };
 
   const saveResources = async (event) => {
-    event.preventDefault();
+    if (event) event.preventDefault();
+    window.clearTimeout(playlistSaveTimerRef.current);
     const normalizedPlaylistId = normalizeYoutubePlaylistInput(playlistId);
     if (playlistId.trim() && !normalizedPlaylistId) {
       const message = '請輸入合法的 YouTube 播放清單網址或 ID。';
@@ -229,14 +232,59 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
       });
       await refreshSettings();
       setPlaylistId(normalizedPlaylistId);
+      setPlaylistAutosaveStatus('saved');
       setMsg({ type: 'success', text: '預設播放清單已儲存。' });
       toast.success('預設播放清單已儲存');
     } catch (error) {
+      setPlaylistAutosaveStatus('error');
       setMsg({ type: 'error', text: error.message || '儲存失敗。' });
       toast.error(`儲存失敗：${error.message || '未知錯誤'}`);
     } finally {
       setBusyAction(null);
     }
+  };
+
+  const handlePlaylistChange = (value) => {
+    setPlaylistId(value);
+    window.clearTimeout(playlistSaveTimerRef.current);
+    const normalized = normalizeYoutubePlaylistInput(value);
+    if (value.trim() && !normalized) {
+      setPlaylistAutosaveStatus('invalid');
+      return;
+    }
+    setPlaylistAutosaveStatus('saving');
+    playlistSaveTimerRef.current = window.setTimeout(async () => {
+      try {
+        await api.updateYoutubePlaylist({ playlistId: normalized });
+        await refreshSettings?.();
+        setPlaylistAutosaveStatus('saved');
+      } catch {
+        setPlaylistAutosaveStatus('error');
+      }
+    }, 800);
+  };
+
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(playlistSaveTimerRef.current);
+    };
+  }, []);
+
+  const isQuotaDirty = (slot) => {
+    const d = slotDrafts[slot];
+    const rec = slotRecords[slot];
+    if (!d || !rec) return false;
+    return Number(d.quotaLimit) !== Number(rec.quota_limit) || Number(d.quotaBuffer) !== Number(rec.safety_buffer_units);
+  };
+
+  const isRoutingDirty = routingModeDraft !== routingMode;
+
+  const isSlotCredsDirty = (slot) => {
+    if (editingSlot !== slot) return false;
+    return slotLabel.trim() !== slotRecords[slot].label
+      || (slot === 'secondary' && slotEnabled !== slotRecords[slot].enabled)
+      || Boolean(slotClientId.trim())
+      || Boolean(slotClientSecret.trim());
   };
 
   const updateDraft = (slot, field, value) => {
@@ -320,7 +368,7 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
         </div>
         <div className="settings-grid">
           <div className="form-group">
-            <label className="form-label" htmlFor="youtube-routing-mode">Routing mode</label>
+            <label className="form-label" htmlFor="youtube-routing-mode">路由模式 (Routing Mode)</label>
             <select id="youtube-routing-mode" className="form-select" value={routingModeDraft} onChange={(event) => setRoutingModeDraft(event.target.value)}>
               <option value={YOUTUBE_ROUTING_MODES.AUTO_PRIMARY}>Auto：Primary 優先，配額不足時 Secondary</option>
               <option value={YOUTUBE_ROUTING_MODES.MANUAL}>手動：只使用目前作用中 slot</option>
@@ -331,8 +379,28 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
             <p>{routingModeDraft === YOUTUBE_ROUTING_MODES.AUTO_PRIMARY ? '每個新的 request／preview 會先選擇可用 slot；執行途中若 quota 不足，會自動切換另一個 slot 並重試目前操作。' : '只使用下方標示的目前作用中 slot，不會自動 fallback。'}</p>
           </div>
         </div>
+        {isRoutingDirty && (
+          <div
+            className="info-banner warning-banner"
+            style={{
+              background: 'rgba(245, 158, 11, 0.12)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              color: '#fbbf24',
+              padding: '0.6rem 0.8rem',
+              borderRadius: '6px',
+              fontSize: '0.82rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginTop: '0.75rem',
+            }}
+          >
+            <AlertCircle size={16} />
+            <span>您已將路由模式切換為「{youtubeRoutingLabel(routingModeDraft)}」（尚未儲存）。請記得點擊下方「儲存使用模式」按鈕完成保存！</span>
+          </div>
+        )}
         <div className="page-actions settings-card-actions">
-          <button className="btn btn-success" type="button" onClick={saveRoutingMode} disabled={pageBusy || routingModeDraft === routingMode}>
+          <button className="btn btn-success" type="submit" onClick={saveRoutingMode} disabled={pageBusy || !isRoutingDirty}>
             <Save size={18} />{busyAction?.kind === 'routing' ? '儲存中...' : '儲存使用模式'}
           </button>
         </div>
@@ -463,6 +531,27 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
                       </div>
                     </div>
 
+                    {isSlotCredsDirty(slot) && (
+                      <div
+                        className="info-banner warning-banner"
+                        style={{
+                          background: 'rgba(245, 158, 11, 0.12)',
+                          border: '1px solid rgba(245, 158, 11, 0.3)',
+                          color: '#fbbf24',
+                          padding: '0.5rem 0.75rem',
+                          borderRadius: '6px',
+                          fontSize: '0.8rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          marginTop: '0.5rem',
+                        }}
+                      >
+                        <AlertCircle size={15} />
+                        <span>槽位憑證設定已修改（尚未保存）。請記得點擊右下方的「儲存設定」按鈕！</span>
+                      </div>
+                    )}
+
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.25rem' }}>
                       <button
                         type="button"
@@ -509,6 +598,26 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
                     <input id={`${slot}-quota-buffer`} className="form-input" type="number" min="0" step="1" value={draft.quotaBuffer} onChange={(event) => updateDraft(slot, 'quotaBuffer', event.target.value)} />
                   </div>
                 </div>
+                {isQuotaDirty(slot) && (
+                  <div
+                    className="info-banner warning-banner"
+                    style={{
+                      background: 'rgba(245, 158, 11, 0.12)',
+                      border: '1px solid rgba(245, 158, 11, 0.3)',
+                      color: '#fbbf24',
+                      padding: '0.6rem 0.8rem',
+                      borderRadius: '6px',
+                      fontSize: '0.82rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      margin: '0.75rem 0',
+                    }}
+                  >
+                    <AlertCircle size={16} />
+                    <span>您已修改 {record.label} 的配額設定（尚未儲存）。為避免過度消耗寫入資源，修改後請記得點擊右下方的「儲存 slot 設定」按鈕！</span>
+                  </div>
+                )}
                 <p className="section-desc">此記錄只記錄 {record.label}；配額已達上限或安全上限時，只影響這個 slot。Auto 模式會在下一個 workflow 開始時依配額選擇可用 slot。</p>
               </>}
 
@@ -528,13 +637,28 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
       </div>}
 
       {showPlaylist && <form className="glass-panel card-padding settings-card card-stack" onSubmit={saveResources}>
-        <div>
-          <h2 className="settings-heading"><PlaySquare size={20} color="var(--secondary)" /> 共用 To-Post 播放清單</h2>
-          <p className="section-desc">這是目前帳號所有 YouTube 子頁面共用的 To-Post 播放清單；新上傳、Video、Shorts 與發布草稿流程都會以這個設定為準。</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div>
+            <h2 className="settings-heading"><PlaySquare size={20} color="var(--secondary)" /> 共用 To-Post 播放清單</h2>
+            <p className="section-desc">這是目前帳號所有 YouTube 子頁面共用的 To-Post 播放清單；新上傳、Video、Shorts 與發布草稿流程都會以這個設定為準。</p>
+          </div>
+          {playlistAutosaveStatus === 'saving' && (
+            <span className="badge badge-info"><RefreshCw size={12} className="spin" /> 自動儲存中...</span>
+          )}
+          {playlistAutosaveStatus === 'saved' && (
+            <span className="badge badge-connected"><CheckCircle2 size={12} /> 已自動儲存</span>
+          )}
+          {playlistAutosaveStatus === 'invalid' && (
+            <span className="badge badge-warning">播放清單網址格式不完整</span>
+          )}
+          {playlistAutosaveStatus === 'error' && (
+            <span className="badge badge-disconnected">自動儲存失敗，請手動儲存</span>
+          )}
         </div>
         <div className="form-group">
           <label className="form-label"><PlaySquare size={14} /> 共用 To-Post 播放清單</label>
-          <SourceLinkInput value={playlistId} onChange={(event) => setPlaylistId(event.target.value)} sourceType="youtube-playlist" placeholder="YouTube Playlist ID 或網址" />
+          <SourceLinkInput value={playlistId} onChange={(event) => handlePlaylistChange(event.target.value)} sourceType="youtube-playlist" placeholder="YouTube Playlist ID 或網址" />
+          <p className="section-desc">修改後會自動儲存至目前登入的 Google 帳號；換瀏覽器或重新登入仍可取回。</p>
         </div>
         <div className="page-actions settings-card-actions"><button className="btn btn-success" type="submit" disabled={pageBusy}><Save size={18} />{busyAction?.kind === 'playlist' ? '儲存中...' : '儲存預設播放清單'}</button></div>
       </form>}

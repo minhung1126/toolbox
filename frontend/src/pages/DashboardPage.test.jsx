@@ -31,7 +31,7 @@ describe('DashboardPage', () => {
     );
 
     // Hero title & descriptions
-    expect(screen.getByText('Creator Tools 控制台')).toBeInTheDocument();
+    expect(screen.getByText('Toolbox 控制台')).toBeInTheDocument();
     expect(screen.getByText(/Toolbox 工具箱平台/)).toBeInTheDocument();
 
     // Status cards
