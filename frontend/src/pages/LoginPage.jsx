@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
+import { PATHS } from '../routes/paths';
 import { 
   Video, 
   LogIn, 
@@ -111,9 +113,14 @@ export default function LoginPage({ initialError, returnTo }) {
             <div className="login-error-content">
               <span>{readinessError}</span>
               {!loginReady && !checkingConfig && (
-                <button type="button" className="btn btn-secondary" onClick={checkLoginReadiness}>
-                  <RefreshCw size={15} />重新檢查
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem' }}>
+                  <Link to={PATHS.setup} className="btn btn-primary btn-sm">
+                    前往初次安裝精靈
+                  </Link>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={checkLoginReadiness}>
+                    <RefreshCw size={14} />重新檢查
+                  </button>
+                </div>
               )}
             </div>
           </div>

@@ -76,6 +76,18 @@ def require_account_subject(
     return subject
 
 
+def require_account_email(
+    request: Request,
+    creds: Credentials = Depends(require_login_credentials),
+) -> str:
+    """Resolve the authenticated Google account email."""
+    del creds
+    session_id = request.cookies.get(settings.session_cookie_name)
+    session_data = session_store.get(session_id) if session_id else None
+    email = str(((session_data or {}).get("user") or {}).get("email") or "").strip().casefold()
+    return email
+
+
 def require_sheets_credentials(
     request: Request,
     owner_sub: str = Depends(require_account_subject),

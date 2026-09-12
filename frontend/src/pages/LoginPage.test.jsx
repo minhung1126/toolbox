@@ -53,11 +53,11 @@ describe('LoginPage readiness', () => {
     expect(screen.getByText('Google OAuth callback 失敗。')).toBeInTheDocument();
   });
 
-  it('describes the login and YouTube authorizations as separate scopes', async () => {
+  it('describes the modular decoupled authorizations', async () => {
     api.getAuthConfig.mockResolvedValue({ has_client_id: true, has_client_secret: true });
     render(<LoginPage />);
 
-    await waitFor(() => expect(screen.getByText(/YouTube 頻道授權會在登入後的 YouTube 設定頁另外管理/)).toBeInTheDocument());
-    expect(screen.getByText(/唯讀方式讀取工作流程需要的 Google Sheet/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/模組化權限拆分/)).toBeInTheDocument());
+    expect(screen.getByText(/Google 試算表、雲端硬碟、YouTube 頻道分別獨立授權/)).toBeInTheDocument();
   });
 });

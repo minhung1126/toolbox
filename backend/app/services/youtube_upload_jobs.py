@@ -369,11 +369,10 @@ class YouTubeUploadWorker:
                         self._run_job(str(job.get("job_id") or ""))
                     except Exception as exc:  # the next job must not be starved by one corrupt job
                         logger.error("YouTube upload worker failed for job: %s", type(exc).__name__)
+                        err_detail = _error_detail(exc, stage="worker")
                         self.store.update_internal(
                             str(job.get("job_id") or ""),
-                            lambda current, error=_error_detail(exc, stage="worker"): current.update(
-                                {"status": "failed", "error": error}
-                            ),
+                            lambda current, err=err_detail: current.update({"status": "failed", "error": err}),
                         )
                 continue
             with self._condition:
@@ -429,7 +428,7 @@ class YouTubeUploadWorker:
                 context = fallback_context
                 self._persist_context(job_id, context)
                 self._reconcile_playlist_if_needed(context, owner_sub, job_id)
-            for index, item in enumerate(job.get("items", [])):
+            for index, _item in enumerate(job.get("items", [])):
                 current = self.store.get(owner_sub, job_id)
                 if not current:
                     return

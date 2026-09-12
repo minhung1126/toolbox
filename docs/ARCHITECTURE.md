@@ -34,10 +34,13 @@ Toolbox 採用 **「平台核心 (Platform Core) + 工具外掛 (Tool Plugins)�
 
 ### 1.1 平台核心 (Platform Core - `backend/app/core/`)
 - **身分驗證與會話 (`session_store.py`)**: 管理登入使用者的短期 Session Cookie，不存放未加密敏感憑證。
-- **憑證保險庫 (`credential_store.py`)**: 採用 AES-256 加密保存 OAuth Refresh Token，持久化於 `/data/credentials.json`。
-- **非 Secret 執行期配置 (`runtime_config.py`)**: 保存於 `/data/runtime_config.json`，支援動態變更且優先於 `.env`。
+- **系統金鑰與加密憑證保險庫 (`system_secrets.py`)**: 支援零設定自動生成持久化系統主密鑰 (`SECRET_KEY`、`CREDENTIAL_ENCRYPTION_KEY`) 保存於 `/data/.secrets.json`；採用 AES (Fernet) 加密保存系統級 Google OAuth 與 YouTube Client 憑證於 `/data/system_credentials.json`；管理首次設置時的一性安全 Setup PIN 碼。
+- **動態配置與熱同步 (`config.py`)**: `sync_dynamic_config()` 即時合併靜態 `.env`、`system_credentials.json` 與 `runtime_config.json`，無須重啟容器即可動態切換憑證與設定。
+- **OAuth Refresh Token 保險庫 (`credential_store.py`)**: 採用 AES-256 加密保存使用者的第三方 OAuth Refresh Token，持久化於 `/data/credentials.json`。
+- **非 Secret 執行期配置 (`runtime_config.py`)**: 保存於 `/data/runtime_config.json`，支援動態變更（包含 Google 登入白名單、YouTube 槽位開關/標籤、配額限制）且優先於 `.env`。
 - **請求保護 (`request_protection.py`)**: 內建 Origin / Referer 檢查與防刷 Rate Limiter。
 - **錯誤契約 (`error_contract.py`)**: 統一標準化 `{ code, message, retryable, field_errors }` 錯誤回應格式。
+
 
 ### 1.2 外掛與註冊中心 (Tool Plugins - `backend/app/tools/`)
 - **`base.py`**:
@@ -152,6 +155,7 @@ Toolbox 將過去綁定在一起的授權模型徹底解耦為 4 個完全獨立
 1. **控制台身分登入 (Identity)**:
    - 僅請求 `openid`、`email`、`profile`。
    - 用於確認使用者是否在 `ALLOWED_GOOGLE_EMAILS` 白名單內。
+   - 支援於頂級系統設定頁 (`/settings/system`) 動態切換「是否允許新增使用者帳號」，並具備管理員防自鎖保護。
 2. **Google 試算表授權 (Google Sheets)**:
    - 請求 `spreadsheets.readonly`。
    - 僅在用戶進入試算表相關功能時於設定頁或面板中獨立授權。
@@ -176,9 +180,12 @@ volumes:
 ```
 
 `/data` 目錄存放以下關鍵狀態（嚴格禁止放入 Git 版本庫）：
+- `.secrets.json`: 自動生成的持久化系統金鑰（`SECRET_KEY`、`CREDENTIAL_ENCRYPTION_KEY`）。
+- `system_credentials.json`: AES 加密保存的系統 Google OAuth 與 YouTube 槽位 Client 憑證。
 - `credentials.json`: AES-256 加密保存的第三方 OAuth Refresh Token。
 - `sessions.json`: 伺服器端 Session 紀錄。
-- `runtime_config.json`: 非敏感動態執行期設定。
+- `runtime_config.json`: 非敏感動態執行期設定（含 Google 白名單、YouTube 槽位開關/標籤/配額）。
 - `account_state.json`: 用戶 UI 偏好、導覽列摺疊與表格欄位設定。
 - `youtube_quota.json`: YouTube API 當日呼叫量雙桶計帳紀錄。
 - `youtube_jobs.json`: 背景影片上傳工作的斷點續傳進度狀態。
+

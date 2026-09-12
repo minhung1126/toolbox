@@ -50,7 +50,8 @@ toolbox/
 
 ## 本機開發
 
-先複製環境範例並填入本機值。`ALLOWED_GOOGLE_EMAILS` 必須改成實際允許登入的 Google 帳號；空值只適合本機開發，不適合正式環境。
+**極簡啟動（零設定即可運行）**：
+Toolbox 支援**網頁內建初始化精靈與系統設定**，`.env` 最少僅需指定 `PUBLIC_BASE_URL`（本機開發甚至完全不需要設定任何金鑰與憑證即可自動啟動）：
 
 ```powershell
 copy .env.example .env
@@ -69,15 +70,19 @@ npm ci
 npm run dev
 ```
 
-開啟 <http://localhost:3000>。後端健康檢查為 <http://localhost:8000/api/v1/health>；除 HTTP 200 外，也請確認 JSON 的 `ready` 是否為 `true`。
+開啟 <http://localhost:3000>。初次啟動時系統會自動導引至 **初始化精靈 (`/setup`)**，或直接在登入頁點選「立即進行初始化設定」，即可在網頁端完成 Google OAuth 與管理員白名單設定，無需手動填寫複雜的 `.env`。
+
+後端健康檢查為 <http://localhost:8000/api/v1/health>；除 HTTP 200 外，也請確認 JSON 的 `ready` 是否為 `true`。
 
 ## 前端主要網址
 
 前端使用 React Router；每個功能都有可直接開啟、重新整理與分享的網址：
 
+- `/setup`：系統初始化設定精靈（首次啟動時設定 Google OAuth 與管理員信箱）
 - `/login`：Google 控制台登入
 - `/dashboard`：儀表板
 - `/system/health`、`/system/info`：API 健康度與部署資訊
+- `/settings/system`：系統安全、Google OAuth 憑證與登入白名單管理
 - `/youtube/uploads/new`、`/youtube/uploads/:jobId`：建立上傳與背景工作狀態
 - `/youtube/drafts/videos`、`/youtube/drafts/shorts`：Video／Shorts 草稿
 - `/youtube/publish-cleanup`：發布並清理清單
@@ -127,5 +132,7 @@ Compose 預設把容器的 8000 port 綁到主機 `127.0.0.1:${HOST_PORT}`，並
 - [Google API 與 OAuth 設定](docs/GOOGLE_API_SETUP.md)
 - [YouTube 配額說明](docs/YOUTUBE_QUOTA.md)
 - [Docker 與 production 部署](docs/DEPLOYMENT.md)
+- [系統架構設計與模組化開發指南](docs/ARCHITECTURE.md)
 
-正式環境請固定保存 `SECRET_KEY` 與 `CREDENTIAL_ENCRYPTION_KEY`，設定 `PUBLIC_BASE_URL`、`FRONTEND_URL`、`ALLOWED_GOOGLE_EMAILS` 及 Google／YouTube OAuth 憑證。Google callback 由 `PUBLIC_BASE_URL` 組成：`/api/v1/auth/callback`。
+正式環境僅需在 `.env` 設定 `PUBLIC_BASE_URL`（例如 `https://toolbox.example.com`），`SECRET_KEY` 與 `CREDENTIAL_ENCRYPTION_KEY` 於首次啟動時自動生成並安全保存於 `data/.secrets.json`。Google OAuth 憑證、管理員白名單及 YouTube 槽位皆可在網頁端設定並即時熱更新生效。Google callback 由 `PUBLIC_BASE_URL` 組成：`/api/v1/auth/callback`。
+

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, CheckCircle2, Clapperboard, ExternalLink, PlaySquare, Save, Smartphone, XCircle, Youtube } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clapperboard, ExternalLink, Eye, EyeOff, Key, PlaySquare, Save, Settings2, Smartphone, XCircle, Youtube } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { api, normalizeYoutubePlaylistInput } from '../services/api';
 import { useToast } from '../components/Toast';
@@ -89,6 +89,64 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
   const [busyAction, setBusyAction] = useState(null);
   const [disconnectTarget, setDisconnectTarget] = useState(null);
   const [msg, setMsg] = useState(null);
+  const [editingSlot, setEditingSlot] = useState(null);
+  const [slotClientId, setSlotClientId] = useState('');
+  const [slotClientSecret, setSlotClientSecret] = useState('');
+  const [slotLabel, setSlotLabel] = useState('');
+  const [slotEnabled, setSlotEnabled] = useState(false);
+  const [savingSlotCreds, setSavingSlotCreds] = useState(false);
+  const [showSlotSecret, setShowSlotSecret] = useState(false);
+
+  const handleOpenEditSlot = (slot) => {
+    setEditingSlot(slot);
+    setSlotLabel(slotRecords[slot].label);
+    setSlotEnabled(slotRecords[slot].enabled);
+    setSlotClientId('');
+    setSlotClientSecret('');
+    setShowSlotSecret(false);
+  };
+
+  const handleSaveSlotCreds = async (slot) => {
+    setSavingSlotCreds(true);
+    try {
+      const payload = {
+        label: slotLabel.trim() || undefined,
+        enabled: slot === 'secondary' ? slotEnabled : undefined,
+      };
+      if (slotClientId.trim()) {
+        payload.client_id = slotClientId.trim();
+      }
+      if (slotClientSecret.trim()) {
+        payload.client_secret = slotClientSecret.trim();
+      }
+      await api.updateYoutubeSlotConfig(slot, payload);
+      if (refreshSettings) await refreshSettings();
+      if (refreshAuthUser) await refreshAuthUser();
+      setEditingSlot(null);
+      toast.success(`${slotRecords[slot].label} 設定已儲存`);
+    } catch (err) {
+      toast.error(`儲存失敗：${err.message}`);
+    } finally {
+      setSavingSlotCreds(false);
+    }
+  };
+
+  const handleUseSystemOAuthForPrimary = async () => {
+    setSavingSlotCreds(true);
+    try {
+      await api.updateYoutubeSlotConfig('primary', {
+        use_system_google_oauth: true,
+      });
+      if (refreshSettings) await refreshSettings();
+      if (refreshAuthUser) await refreshAuthUser();
+      setEditingSlot(null);
+      toast.success('已成功將系統 Google OAuth 憑證同步至 YouTube Primary 槽位！');
+    } catch (err) {
+      toast.error(`同步失敗：${err.message}`);
+    } finally {
+      setSavingSlotCreds(false);
+    }
+  };
 
   useEffect(() => {
     setPlaylistId(initial.playlistId);
@@ -296,7 +354,136 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
                 {record.authenticated
                   ? <span className="badge badge-connected"><CheckCircle2 size={14} /> 已授權</span>
                   : <span className="badge badge-disconnected"><XCircle size={14} /> {record.configured ? '尚未授權' : '未配置'}</span>}
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handleOpenEditSlot(slot)}
+                  style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem' }}
+                >
+                  <Key size={13} /> {record.configured ? '修改憑證' : '配置憑證'}
+                </button>
               </div>
+
+              {editingSlot === slot && (
+                <div style={{ background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', padding: '1rem', marginTop: '0.75rem' }}>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Key size={16} color="#60a5fa" /> 設定 {record.label} OAuth 憑證
+                  </h4>
+
+                  {slot === 'primary' && (
+                    <div style={{ marginBottom: '0.85rem' }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={handleUseSystemOAuthForPrimary}
+                        disabled={savingSlotCreds}
+                        style={{ width: '100%', marginBottom: '0.5rem', background: 'rgba(59, 130, 246, 0.15)', borderColor: '#3b82f6', color: '#93c5fd' }}
+                      >
+                        ✓ 一鍵共用控制台 Google OAuth 憑證
+                      </button>
+                      <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>— 或填寫自訂獨立憑證 —</div>
+                    </div>
+                  )}
+
+                  {slot === 'secondary' && (
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={slotEnabled}
+                          onChange={(e) => setSlotEnabled(e.target.checked)}
+                          disabled={savingSlotCreds}
+                        />
+                        啟用此 Secondary 備用槽位
+                      </label>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                        槽位顯示名稱 (Label)
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control form-input"
+                        value={slotLabel}
+                        onChange={(e) => setSlotLabel(e.target.value)}
+                        placeholder="例如：Primary 或 Secondary"
+                        disabled={savingSlotCreds}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                        OAuth Client ID
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control form-input"
+                        value={slotClientId}
+                        onChange={(e) => setSlotClientId(e.target.value)}
+                        placeholder="請填寫 Google Cloud Console OAuth Client ID"
+                        disabled={savingSlotCreds}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                        OAuth Client Secret
+                      </label>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          type={showSlotSecret ? 'text' : 'password'}
+                          className="form-control form-input"
+                          value={slotClientSecret}
+                          onChange={(e) => setSlotClientSecret(e.target.value)}
+                          placeholder="••••••••••••••••（輸入可覆蓋更新）"
+                          disabled={savingSlotCreds}
+                          style={{ width: '100%', paddingRight: '2.5rem' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSlotSecret(!showSlotSecret)}
+                          style={{
+                            position: 'absolute',
+                            right: '0.5rem',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {showSlotSecret ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.25rem' }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setEditingSlot(null)}
+                        disabled={savingSlotCreds}
+                      >
+                        取消
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={() => handleSaveSlotCreds(slot)}
+                        disabled={savingSlotCreds}
+                      >
+                        {savingSlotCreds ? '儲存中...' : '儲存設定'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {!record.configured && <div className="info-banner"><XCircle size={16} /><span>此 slot 尚未由伺服器配置 OAuth Client；前端不會接觸 client secret。</span></div>}
               {record.channel_mismatch && <div className="info-banner"><XCircle size={16} /><span>此 slot 的 Channel ID 與另一個 slot 不一致，因此不能設為作用中；請重新授權同一頻道。</span></div>}

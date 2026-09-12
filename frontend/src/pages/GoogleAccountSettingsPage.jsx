@@ -8,8 +8,8 @@ import { saveOAuthReturnPath } from '../utils/authReturnPath';
 import { PATHS } from '../routes/paths';
 
 const GITHUB_DOCS = {
-  google: 'https://github.com/minhung1126/creator-tools/blob/main/docs/GOOGLE_API_SETUP.md',
-  deployment: 'https://github.com/minhung1126/creator-tools/blob/main/docs/DEPLOYMENT.md',
+  google: 'https://github.com/minhung1126/toolbox/blob/main/docs/GOOGLE_API_SETUP.md',
+  deployment: 'https://github.com/minhung1126/toolbox/blob/main/docs/DEPLOYMENT.md',
 };
 
 function formatTokenDate(value) {

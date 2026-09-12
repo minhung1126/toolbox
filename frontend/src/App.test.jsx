@@ -23,7 +23,6 @@ vi.mock('./pages/DashboardPage', () => ({ default: () => <div data-testid="dashb
 vi.mock('./pages/BatchUpdatePage', () => ({ default: () => <div>batch</div> }));
 vi.mock('./pages/PublishCleanerPage', () => ({ default: () => <div>publish</div> }));
 vi.mock('./pages/SheetCopyPage', () => ({ default: () => <div>sheet copy</div> }));
-vi.mock('./pages/SettingsPage', () => ({ default: () => <div>settings</div> }));
 vi.mock('./pages/YouTubeSettingsPage', () => ({ default: () => <div>youtube settings</div> }));
 vi.mock('./pages/ApiHealthPage', () => ({ default: () => <div>api health</div> }));
 vi.mock('./pages/LoginPage', () => ({

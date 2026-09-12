@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     # same .env works with pydantic-settings and Docker. This must stay in the
     # server environment because it is needed before the user can open the UI.
     ALLOWED_GOOGLE_EMAILS: str = ""
+    ALLOW_NEW_USERS: bool = True
 
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
@@ -157,6 +158,28 @@ class Settings(BaseSettings):
             else:
                 self.FRONTEND_URL = self.PUBLIC_BASE_URL
 
+        # Explicitly validate if caller passed empty keys in production
+        if "SECRET_KEY" in self.model_fields_set and not self.SECRET_KEY and self.is_production:
+            raise ValueError("SECRET_KEY must be explicitly configured in production")
+        if (
+            "CREDENTIAL_ENCRYPTION_KEY" in self.model_fields_set
+            and not self.CREDENTIAL_ENCRYPTION_KEY
+            and self.is_production
+        ):
+            raise ValueError("CREDENTIAL_ENCRYPTION_KEY must be explicitly configured in production")
+
+        if not self.SECRET_KEY or not self.CREDENTIAL_ENCRYPTION_KEY:
+            from backend.app.core.system_secrets import system_secrets
+
+            sec, enc = system_secrets.get_or_create_master_keys(
+                env_secret_key=self.SECRET_KEY,
+                env_encryption_key=self.CREDENTIAL_ENCRYPTION_KEY,
+            )
+            if not self.SECRET_KEY:
+                self.SECRET_KEY = sec
+            if not self.CREDENTIAL_ENCRYPTION_KEY:
+                self.CREDENTIAL_ENCRYPTION_KEY = enc
+
         if not self.SECRET_KEY:
             if self.is_production:
                 raise ValueError("SECRET_KEY must be explicitly configured in production")
@@ -166,9 +189,6 @@ class Settings(BaseSettings):
         if not self.CREDENTIAL_ENCRYPTION_KEY:
             if self.is_production:
                 raise ValueError("CREDENTIAL_ENCRYPTION_KEY must be explicitly configured in production")
-            # Keep local development usable without silently reusing the
-            # signing key. This value remains stable for the lifetime of the
-            # process; production must provide a dedicated persistent key.
             self.CREDENTIAL_ENCRYPTION_KEY = hashlib.sha256(
                 f"{self.SECRET_KEY}:credential-encryption".encode("utf-8")
             ).hexdigest()
@@ -191,12 +211,16 @@ class Settings(BaseSettings):
         if self.is_production:
             self._require_https("PUBLIC_BASE_URL", self.PUBLIC_BASE_URL)
             self._require_https("FRONTEND_URL", self.FRONTEND_URL)
+
             if len(self.SECRET_KEY) < 32:
                 raise ValueError("SECRET_KEY must contain at least 32 characters in production")
             if len(self.CREDENTIAL_ENCRYPTION_KEY) < 32:
                 raise ValueError("CREDENTIAL_ENCRYPTION_KEY must contain at least 32 characters in production")
             if not self.allowed_google_emails:
-                raise ValueError("ALLOWED_GOOGLE_EMAILS must contain at least one account in production")
+                from backend.app.core.runtime_config import runtime_config
+
+                if runtime_config.is_setup_completed():
+                    raise ValueError("ALLOWED_GOOGLE_EMAILS must contain at least one account in production")
 
     @staticmethod
     def _require_https(name: str, value: str) -> None:
@@ -252,7 +276,21 @@ class Settings(BaseSettings):
 
     @property
     def allowed_google_emails(self) -> frozenset[str]:
+        from backend.app.core.runtime_config import runtime_config
+
+        persisted = runtime_config.get_allowed_emails()
+        if persisted:
+            return frozenset(email.strip().casefold() for email in persisted if email.strip())
         return frozenset(email.strip().casefold() for email in self.ALLOWED_GOOGLE_EMAILS.split(",") if email.strip())
+
+    @property
+    def allow_new_users(self) -> bool:
+        from backend.app.core.runtime_config import runtime_config
+
+        val = runtime_config.get("allow_new_users", None)
+        if val is not None:
+            return bool(val)
+        return bool(self.ALLOW_NEW_USERS)
 
     @staticmethod
     def _validate_oauth_pair(first_name: str, first_value: str, second_name: str, second_value: str) -> None:
@@ -306,5 +344,45 @@ class Settings(BaseSettings):
     def get_redirect_uri(self) -> str:
         return f"{self.base_url}/api/v1/auth/callback"
 
+    def sync_dynamic_config(self) -> None:
+        """Sync in-memory settings with persistent system secrets and runtime config."""
+        from backend.app.core.runtime_config import runtime_config
+        from backend.app.core.system_secrets import system_secrets
+
+        creds = system_secrets.get_credentials()
+
+        if creds.get("google_client_id"):
+            self.GOOGLE_CLIENT_ID = creds["google_client_id"]
+        if creds.get("google_client_secret"):
+            self.GOOGLE_CLIENT_SECRET = creds["google_client_secret"]
+        if creds.get("youtube_primary_client_id"):
+            self.YOUTUBE_OAUTH_PRIMARY_CLIENT_ID = creds["youtube_primary_client_id"]
+        if creds.get("youtube_primary_client_secret"):
+            self.YOUTUBE_OAUTH_PRIMARY_CLIENT_SECRET = creds["youtube_primary_client_secret"]
+        if creds.get("youtube_secondary_client_id"):
+            self.YOUTUBE_OAUTH_SECONDARY_CLIENT_ID = creds["youtube_secondary_client_id"]
+        if creds.get("youtube_secondary_client_secret"):
+            self.YOUTUBE_OAUTH_SECONDARY_CLIENT_SECRET = creds["youtube_secondary_client_secret"]
+
+        sec_enabled = runtime_config.get("youtube_oauth_secondary_enabled", None)
+        if sec_enabled is not None:
+            self.YOUTUBE_OAUTH_SECONDARY_ENABLED = bool(sec_enabled)
+        pri_label = runtime_config.get("youtube_oauth_primary_label", None)
+        if pri_label:
+            self.YOUTUBE_OAUTH_PRIMARY_LABEL = str(pri_label)
+        sec_label = runtime_config.get("youtube_oauth_secondary_label", None)
+        if sec_label:
+            self.YOUTUBE_OAUTH_SECONDARY_LABEL = str(sec_label)
+        def_slot = runtime_config.get("youtube_oauth_default_slot", None)
+        if def_slot:
+            try:
+                self.YOUTUBE_OAUTH_DEFAULT_SLOT = normalize_youtube_slot(def_slot)
+            except ValueError:
+                pass
+        allow_users = runtime_config.get("allow_new_users", None)
+        if allow_users is not None:
+            self.ALLOW_NEW_USERS = bool(allow_users)
+
 
 settings = Settings()
+settings.sync_dynamic_config()

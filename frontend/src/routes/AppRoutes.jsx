@@ -18,6 +18,8 @@ import YoutubeUploadCreatePage from '../pages/YoutubeUploadCreatePage';
 import YoutubeUploadJobPage from '../pages/YoutubeUploadJobPage';
 import GoogleAccountSettingsPage from '../pages/GoogleAccountSettingsPage';
 import GoogleSheetSettingsPage from '../pages/GoogleSheetSettingsPage';
+import SystemSettingsPage from '../pages/SystemSettingsPage';
+import SetupWizardPage from '../pages/SetupWizardPage';
 import SystemInfoPage from '../pages/SystemInfoPage';
 import RequireAuth from './RequireAuth';
 import RouteEffects from './RouteEffects';
@@ -87,6 +89,7 @@ export default function AppRoutes({
       <OAuthReturnEffect returnPath={oauthReturnPath} clearReturnPath={clearOAuthReturnPath} />
       <Routes>
         <Route path={PATHS.login} element={authUser ? <AuthenticatedLoginRedirect /> : <LoginRoute initialError={authError} />} />
+        <Route path={PATHS.setup} element={<SetupWizardPage />} />
         <Route element={<RequireAuth authStatus={authStatus} authUser={authUser}><AppShell {...appShellProps} /></RequireAuth>}>
           <Route index element={<Navigate replace to={PATHS.dashboard} />} />
           <Route path="dashboard" element={<DashboardPage authUser={authUser} sysSettings={sysSettings} />} />
@@ -116,6 +119,7 @@ export default function AppRoutes({
             <Route index element={<Navigate replace to="google" />} />
             <Route path="google" element={<GoogleAccountSettingsPage {...pageProps} />} />
             <Route path="sheets" element={<GoogleSheetSettingsPage {...pageProps} />} />
+            <Route path="system" element={<SystemSettingsPage {...pageProps} />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} />

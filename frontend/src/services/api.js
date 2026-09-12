@@ -270,4 +270,39 @@ export const api = {
   getYoutubeDriveUploadJob: (jobId) => request(`/youtube/uploads/jobs/${encodeURIComponent(jobId)}`, { cache: 'no-store' }),
   cancelYoutubeDriveUploadJob: (jobId) => request(`/youtube/uploads/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
   retryYoutubeDriveUploadJob: (jobId) => request(`/youtube/uploads/jobs/${encodeURIComponent(jobId)}/retry`, { method: 'POST' }),
+
+  // System Setup, Credentials & Allowlist
+  getSetupStatus: () => request('/system/setup-status', { cache: 'no-store' }),
+  performSetup: ({ googleClientId, googleClientSecret, adminEmail, pin, publicBaseUrl } = {}) => request('/system/setup', {
+    method: 'POST',
+    body: JSON.stringify({
+      google_client_id: googleClientId,
+      google_client_secret: googleClientSecret,
+      admin_email: adminEmail,
+      pin: pin || '',
+      public_base_url: publicBaseUrl || '',
+    }),
+  }),
+  getSystemCredentials: () => request('/system/credentials', { cache: 'no-store' }),
+  updateSystemCredentials: (payload) => request('/system/credentials', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  }),
+  getAllowlist: () => request('/system/allowlist', { cache: 'no-store' }),
+  addAllowlistEmail: (email) => request('/system/allowlist/add', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  }),
+  removeAllowlistEmail: (email) => request('/system/allowlist/remove', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  }),
+  updateAllowNewUsers: (allowNewUsers) => request('/system/allow-new-users', {
+    method: 'PUT',
+    body: JSON.stringify({ allow_new_users: Boolean(allowNewUsers) }),
+  }),
+  updateYoutubeSlotConfig: (slot, payload) => request(`/settings/youtube-slots/${encodeURIComponent(slot)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  }),
 };

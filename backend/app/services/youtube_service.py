@@ -350,11 +350,11 @@ def set_video_public(
         try:
             confirmed_status = get_video_status(context, video_id)
         except Exception:
-            raise update_error
+            raise update_error from None
         if confirmed_status.get("privacyStatus") == "public":
             logger.warning("YouTube publish response was ambiguous; video %s is public", video_id)
             return {"id": video_id, "status": confirmed_status, "reconciled": True}
-        raise update_error
+        raise update_error from None
 
 
 def remove_playlist_item(context: YouTubeRequestContext, playlist_item_id: Optional[str]) -> Dict[str, Any]:

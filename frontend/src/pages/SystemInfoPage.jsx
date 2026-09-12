@@ -1,7 +1,7 @@
 import React from 'react';
 import { ExternalLink, Globe } from 'lucide-react';
 
-const DEPLOYMENT_DOCS = 'https://github.com/minhung1126/creator-tools/blob/main/docs/DEPLOYMENT.md';
+const DEPLOYMENT_DOCS = 'https://github.com/minhung1126/toolbox/blob/main/docs/DEPLOYMENT.md';
 
 export default function SystemInfoPage({ sysSettings = {} }) {
   return (

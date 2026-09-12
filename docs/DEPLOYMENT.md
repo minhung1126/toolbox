@@ -11,7 +11,43 @@
 copy .env.example .env
 ```
 
-3. 至少設定下列正式環境值：
+3. **極簡配置（推薦）**：正式環境最少僅需設定 `PUBLIC_BASE_URL`，其餘皆可在網頁介面動態設定：
+
+```env
+PUBLIC_BASE_URL=https://your-domain.example
+```
+
+> **自動金鑰生成與安全保存**：若未在 `.env` 指定 `SECRET_KEY` 與 `CREDENTIAL_ENCRYPTION_KEY`，Toolbox 首次啟動時會自動以密碼學安全方式生成兩把獨立金鑰，並安全保存於 `data/.secrets.json`（檔案權限僅限伺服器端讀寫）。
+
+### 首次啟動與初始化精靈 (Setup Wizard)
+
+1. 啟動容器服務：
+   ```powershell
+   docker compose up -d
+   ```
+2. 當系統尚未設定 Google OAuth 憑證時，存取首頁會自動導向至 **/setup（初始化設定精靈）**。
+3. **安全防護 PIN 碼 (Setup PIN)**：
+   - 若透過反向代理或外部域名存取初始化精靈，後端會在容器日誌中印出**一次性 6 位數 Setup PIN**：
+     ```powershell
+     docker compose logs toolbox | Select-String "SETUP PIN"
+     ```
+   - 若直接於本機 (`localhost` / `127.0.0.1`) 存取，則自動豁免 PIN 碼驗證。
+4. 在初始化精靈網頁中：
+   - 複製畫面上提示的 Google Authorized Redirect URI（格式為 `https://your-domain.example/api/v1/auth/callback`）。
+   - 貼入 Google Cloud Console 建立的 **Client ID** 與 **Client Secret**。
+   - 輸入首位管理者 Google 信箱。
+   - 點擊「儲存並啟用系統」，系統立即熱更新（Hot-reload）生效，隨即可使用該 Google 信箱登入控制台。
+
+### 網頁後續維護與管理
+
+- **系統憑證與白名單維護 (`/settings/system`)**：
+  登入後可隨時至「帳號與系統設定 -> 系統安全與白名單」新增/刪除授權 Google 登入信箱（內建自我鎖定防護，禁止刪除當前登入者唯一帳號），或隨時更換 Google OAuth 憑證。
+- **YouTube 槽位憑證設定 (`/youtube/settings/connections`)**：
+  Primary 槽位可直接勾選「沿用系統 Google OAuth 憑證」，或自行輸入專用 Client ID/Secret；Secondary 槽位亦可隨時於網頁介面啟用、自訂標籤與設定專用憑證。
+
+### 傳統環境變數覆寫（完全向下相容）
+
+若偏好傳統以靜態 `.env` 管理所有設定，仍完全支援下列環境變數；若環境變數已設定，將優先採用：
 
 ```env
 ENVIRONMENT=production
@@ -21,20 +57,18 @@ HOST_PORT=8000
 PUBLIC_BASE_URL=https://your-domain.example
 FRONTEND_URL=https://your-domain.example
 TRUSTED_HOSTS=your-domain.example
-SECRET_KEY=請替換成至少32字元且持久保存的隨機值
-CREDENTIAL_ENCRYPTION_KEY=請替換成不同且持久保存的加密金鑰
-ALLOWED_GOOGLE_EMAILS=請替換成實際允許登入的 Google 帳號
-GOOGLE_CLIENT_ID=請填入控制台登入 OAuth client ID
-GOOGLE_CLIENT_SECRET=請填入控制台登入 OAuth client secret
-YOUTUBE_OAUTH_PRIMARY_CLIENT_ID=請填入 YouTube primary OAuth client ID
-YOUTUBE_OAUTH_PRIMARY_CLIENT_SECRET=請填入 YouTube primary OAuth client secret
+SECRET_KEY=可選，留空則自動生成並保存於data/.secrets.json
+CREDENTIAL_ENCRYPTION_KEY=可選，留空則自動生成並保存於data/.secrets.json
+ALLOWED_GOOGLE_EMAILS=user1@gmail.com,user2@gmail.com
+GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=xxx
+YOUTUBE_OAUTH_PRIMARY_CLIENT_ID=
+YOUTUBE_OAUTH_PRIMARY_CLIENT_SECRET=
 YOUTUBE_OAUTH_SECONDARY_ENABLED=false
 YOUTUBE_OAUTH_SECONDARY_CLIENT_ID=
 YOUTUBE_OAUTH_SECONDARY_CLIENT_SECRET=
 YOUTUBE_OAUTH_DEFAULT_SLOT=primary
 ```
-
-上方含有「請替換」的值不能直接拿來啟動正式服務；請用實際值取代。若啟用 secondary，client ID 與 client secret 必須成對存在。
 
 `PUBLIC_BASE_URL` 是 OAuth callback 與 health response 的公開來源。Google Authorized redirect URI 必須逐字設定為：
 
@@ -43,6 +77,7 @@ https://your-domain.example/api/v1/auth/callback
 ```
 
 `BIND_HOST`、`PORT` 控制應用程式在容器內的監聽位址；Compose 的 `HOST_PORT` 控制主機端 port。Compose 預設只將主機 `127.0.0.1:${HOST_PORT}` 映射到容器 8000，反向代理若位於另一台主機，請將 bind address 改為明確的私有 LAN 位址並以防火牆限制來源。
+
 
 ### 推薦方式：使用 GitHub Container Registry (ghcr.io) 預先建置映像
 
@@ -74,7 +109,7 @@ docker compose logs -f toolbox
 
 > **注意**：若要在 GitHub Actions 中自動回寫 Git Tag，請確認 GitHub 倉庫設定 `Settings -> Actions -> General -> Workflow permissions` 設定為 **Read and write permissions**。
 
-`docker compose config` 需要先存在 `.env`，也可用來確認 interpolation 與 volume 路徑。Compose 使用 `./data:/app/data` 保存執行期資料。若伺服器已運行 Watchtower，可配置自動偵測 ghcr.io 更新並無縫重啟。
+`docker compose config` 需要先存在 `.env`，也可用來確認 interpolation 與 volume 路徑。Compose 使用 `./data:/app/data` 保存執行期資料。
 
 ## 前端快取與版本驗證
 

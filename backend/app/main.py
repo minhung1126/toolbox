@@ -53,8 +53,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Toolbox Dashboard API",
-    description="FastAPI backend for Google OAuth, Google Sheets, and direct YouTube workflows.",
+    title="Toolbox API",
+    description="FastAPI backend for the Toolbox platform, Google OAuth, Google Sheets, and YouTube workflows.",
     version="1.1.0",
     lifespan=lifespan,
 )
@@ -167,7 +167,7 @@ def health_check():
     return {
         "status": "healthy",
         "ready": google_oauth_ready and youtube_primary_ready and access_allowlist_ready,
-        "service": "Creator Tools Backend",
+        "service": "Toolbox Backend",
         "host": settings.base_url,
         "redirect_uri": settings.get_redirect_uri(),
         "configuration": {

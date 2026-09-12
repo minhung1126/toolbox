@@ -22,6 +22,8 @@ export const PATHS = Object.freeze({
   settings: '/settings',
   googleSettings: '/settings/google',
   sheetSettings: '/settings/sheets',
+  systemSettings: '/settings/system',
+  setup: '/setup',
 });
 
 const RETURN_PATH_ALIASES = Object.freeze({
@@ -45,6 +47,7 @@ const STATIC_RETURN_PATHS = new Set([
   PATHS.sheetCopy,
   PATHS.googleSettings,
   PATHS.sheetSettings,
+  PATHS.systemSettings,
   ...Object.keys(RETURN_PATH_ALIASES),
 ]);
 
