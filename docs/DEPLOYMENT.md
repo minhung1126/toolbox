@@ -81,7 +81,7 @@ https://your-domain.example/api/v1/auth/callback
 
 ### 推薦方式：使用 GitHub Container Registry (ghcr.io) 預先建置映像
 
-當代碼推送至 GitHub `main` 分支時，GitHub Actions (`.github/workflows/publish-container.yml`) 會自動建置多架構映像並推送到 `ghcr.io/minhung1126/toolbox`。
+當代碼推送至 GitHub `main` 分支時，GitHub Actions (`.github/workflows/publish-container.yml`) 會自動建置映像 (`linux/amd64`) 並推送到 `ghcr.io/minhung1126/toolbox`。
 
 伺服器上無須安裝 Node.js 或 Python，直接拉取並啟動：
 
