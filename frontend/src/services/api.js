@@ -305,4 +305,19 @@ export const api = {
     method: 'PUT',
     body: JSON.stringify(payload),
   }),
+
+  // Sticky Notes API
+  getNotes: (query) => request(`/notes${query ? `?q=${encodeURIComponent(query)}` : ''}`),
+  createNote: ({ content = '', remark = '', pinned = false } = {}) => request('/notes', {
+    method: 'POST',
+    body: JSON.stringify({ content, remark, pinned }),
+  }),
+  getNote: (noteId) => request(`/notes/${encodeURIComponent(noteId)}`),
+  updateNote: (noteId, { content, remark, pinned } = {}) => request(`/notes/${encodeURIComponent(noteId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ content, remark, pinned }),
+  }),
+  deleteNote: (noteId) => request(`/notes/${encodeURIComponent(noteId)}`, {
+    method: 'DELETE',
+  }),
 };

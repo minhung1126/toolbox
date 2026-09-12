@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from backend.app.api.auth import router as auth_router
+from backend.app.api.notes import router as notes_router
 from backend.app.api.settings import router as settings_router
 from backend.app.api.sheets import router as sheets_router
 from backend.app.api.system import router as system_router
@@ -20,3 +21,4 @@ api_router.include_router(sheets_router)
 api_router.include_router(youtube_router)
 api_router.include_router(youtube_uploads_router)
 api_router.include_router(catalog_router)
+api_router.include_router(notes_router)

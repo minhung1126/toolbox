@@ -14,6 +14,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     const ids = tools.map((t) => t.id);
     expect(ids).toContain('creator-tools');
     expect(ids).toContain('system-utility');
+    expect(ids).toContain('sticky-notes');
   });
 
   it('finds tool by id', () => {
@@ -21,6 +22,10 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(tool).not.toBeNull();
     expect(tool.name).toBe('Creator Tools');
     expect(tool.navGroups.length).toBeGreaterThan(0);
+
+    const notesTool = getToolById('sticky-notes');
+    expect(notesTool).not.toBeNull();
+    expect(notesTool.name).toBe('Sticky Notes');
   });
 
   it('aggregates navigation groups and system items', () => {
@@ -29,6 +34,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(groupIds).toContain('youtube');
     expect(groupIds).toContain('sheet');
     expect(groupIds).toContain('system');
+    expect(groupIds).toContain('notes');
 
     const systemItems = getSystemNavItems();
     const itemIds = systemItems.map((i) => i.id);
@@ -45,6 +51,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(cardIds).toContain('shorts_drafts');
     expect(cardIds).toContain('publish_clean');
     expect(cardIds).toContain('system_settings_card');
+    expect(cardIds).toContain('sticky_notes_card');
   });
 });
 
