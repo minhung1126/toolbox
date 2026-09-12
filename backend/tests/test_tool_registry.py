@@ -14,12 +14,23 @@ def test_builtin_tools_are_registered():
     tool_ids = {m.id for m in metadata}
 
     assert "creator-tools" in tool_ids
+    assert "sheets-tools" in tool_ids
+    assert "sticky-notes" in tool_ids
+    assert "youtube-integrations" in tool_ids
     assert "system-utility" in tool_ids
 
     creator_tool = tool_registry.get("creator-tools")
     assert creator_tool is not None
     assert creator_tool.metadata.name == "Creator Tools"
     assert len(creator_tool.metadata.routes) > 0
+
+    sheets_tool = tool_registry.get("sheets-tools")
+    assert sheets_tool is not None
+    assert len(sheets_tool.metadata.routes) > 0
+
+    integrations_tool = tool_registry.get("youtube-integrations")
+    assert integrations_tool is not None
+    assert len(integrations_tool.metadata.routes) > 0
 
 
 def test_custom_tool_registration_and_lifecycle():

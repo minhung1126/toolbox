@@ -15,6 +15,9 @@ def test_tool_catalog_lists_registered_tools():
     assert data["total_tools"] >= 1
     tool_ids = [t["id"] for t in data["tools"]]
     assert "creator-tools" in tool_ids
+    assert "sheets-tools" in tool_ids
+    assert "sticky-notes" in tool_ids
+    assert "youtube-integrations" in tool_ids
     assert "system-utility" in tool_ids
 
 

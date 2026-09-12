@@ -14,17 +14,17 @@ from backend.app.tools.base import ToolMetadata, ToolPlugin, ToolRoute
 
 
 class CreatorToolsPlugin(ToolPlugin):
-    """Toolbox plugin encapsulating YouTube and Google Sheets workflows."""
+    """Toolbox plugin encapsulating YouTube Creator Studio workflows."""
 
     def __init__(self) -> None:
         self._metadata = ToolMetadata(
             id="creator-tools",
             name="Creator Tools",
-            title="創作者工作流控制台",
-            description="Google Sheets 整合、YouTube 影片/Shorts 草稿維護與發布配額自動分流。",
-            category="媒體與影音",
+            title="影音創作工作流",
+            description="YouTube 影片與 Shorts 專屬草稿批次維護、標題說明套用與排程發布自動化。",
+            category="影音創作",
             icon="Youtube",
-            version="1.1.0",
+            version="1.2.0",
             status="active",
             entry_url="/dashboard",
             routes=[
@@ -43,27 +43,9 @@ class CreatorToolsPlugin(ToolPlugin):
                     label="發布並清理清單",
                     description="批次公開已排程影片並從工作清單移出",
                 ),
-                ToolRoute(
-                    path="/sheets/copy", label="Sheet 內容複製", description="在工作表或試算表間批次複製結構與內容"
-                ),
-                ToolRoute(
-                    path="/sheets/settings",
-                    label="Sheet 設定",
-                    description="管理 Google 試算表存取授權與預設試算表來源",
-                ),
-                ToolRoute(
-                    path="/youtube/settings/connections",
-                    label="YouTube 授權設定",
-                    description="管理主要與次要 YouTube 頻道連線",
-                ),
-                ToolRoute(
-                    path="/youtube/settings/quota",
-                    label="YouTube 配額與計帳",
-                    description="監控 YouTube API Quota 消耗與自動分流",
-                ),
             ],
-            required_scopes=["sheets_readonly", "youtube"],
-            tags=["youtube", "google-sheets", "automation", "creator"],
+            required_scopes=["youtube", "sheets_readonly"],
+            tags=["youtube", "video", "shorts", "automation", "creator"],
         )
         self._router: Optional[APIRouter] = None
 

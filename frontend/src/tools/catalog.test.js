@@ -10,11 +10,13 @@ import {
 describe('Toolbox Frontend Tool Catalog', () => {
   it('returns registered tools with metadata', () => {
     const tools = getAllTools();
-    expect(tools.length).toBeGreaterThanOrEqual(2);
+    expect(tools.length).toBe(5);
     const ids = tools.map((t) => t.id);
     expect(ids).toContain('creator-tools');
-    expect(ids).toContain('system-utility');
+    expect(ids).toContain('sheets-tools');
     expect(ids).toContain('sticky-notes');
+    expect(ids).toContain('integrations-quota');
+    expect(ids).toContain('system-utility');
   });
 
   it('finds tool by id', () => {
@@ -22,6 +24,14 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(tool).not.toBeNull();
     expect(tool.name).toBe('Creator Tools');
     expect(tool.navGroups.length).toBeGreaterThan(0);
+
+    const sheetsTool = getToolById('sheets-tools');
+    expect(sheetsTool).not.toBeNull();
+    expect(sheetsTool.name).toBe('Sheets & Data');
+
+    const integrationsTool = getToolById('integrations-quota');
+    expect(integrationsTool).not.toBeNull();
+    expect(integrationsTool.name).toBe('Integrations & Quota');
 
     const notesTool = getToolById('sticky-notes');
     expect(notesTool).not.toBeNull();
@@ -35,6 +45,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(groupIds).toContain('sheet');
     expect(groupIds).toContain('system');
     expect(groupIds).toContain('notes');
+    expect(groupIds).toContain('integrations');
 
     const systemItems = getSystemNavItems();
     const itemIds = systemItems.map((i) => i.id);
@@ -45,11 +56,13 @@ describe('Toolbox Frontend Tool Catalog', () => {
 
   it('provides dashboard feature cards', () => {
     const cards = getDashboardFeatureCards();
-    expect(cards.length).toBeGreaterThanOrEqual(4);
+    expect(cards.length).toBeGreaterThanOrEqual(5);
     const cardIds = cards.map((c) => c.id);
     expect(cardIds).toContain('video_drafts');
     expect(cardIds).toContain('shorts_drafts');
     expect(cardIds).toContain('publish_clean');
+    expect(cardIds).toContain('sheet_copy');
+    expect(cardIds).toContain('youtube_connections_card');
     expect(cardIds).toContain('system_settings_card');
     expect(cardIds).toContain('sticky_notes_card');
   });
