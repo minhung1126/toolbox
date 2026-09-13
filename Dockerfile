@@ -42,30 +42,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     BIND_HOST=0.0.0.0 \
     PORT=8000
 
-# 3.2 安裝最低限度系統執行期工具（curl 用於健康檢查）並清除 apt 暫存
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# 3.3 複製已編譯之 Python 虛擬環境（變動頻率低）
+# 3.2 複製已編譯之 Python 虛擬環境（變動頻率低）
 COPY --from=backend-builder /opt/venv /opt/venv
 
-# 3.4 建立執行期持久化資料目錄
+# 3.3 建立執行期持久化資料目錄
 RUN mkdir -p /app/data
 
-# 3.5 複製前端打包產物
+# 3.4 複製前端打包產物
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# 3.6 複製後端應用程式代碼（變動頻率高）
+# 3.5 複製後端應用程式代碼（變動頻率高）
 COPY backend/ ./backend/
 
-# 3.7 版本識別資訊
+# 3.6 版本識別資訊
 ARG APP_COMMIT_SHA=development
 ENV APP_COMMIT_SHA=${APP_COMMIT_SHA}
-
-# 3.8 容器健康檢查宣告
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -fsS http://localhost:${PORT}/api/v1/health || exit 1
 
 EXPOSE 8000
 
