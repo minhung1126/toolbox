@@ -28,51 +28,19 @@ import Dialog from '../components/Dialog';
 import { api } from '../services/api';
 import { copyToClipboard } from '../utils/clipboard';
 
-const DEFAULT_PRESET = {
-  id: 'theme-perspective',
-  name: '主題視角型',
-  buckets: [
-    { id: 'post-1', title: '空間大景 (Space & Vibe)', default_theme: '空間大景' },
-    { id: 'post-2', title: '人物穿搭 (Portrait & Outfit)', default_theme: '人物穿搭' },
-    { id: 'post-3', title: '細節美食 (Details & Taste)', default_theme: '細節美食' },
-  ],
-};
-
-const CHRONOLOGICAL_PRESET = {
-  id: 'chronological',
-  name: '時序敘事型',
-  buckets: [
-    { id: 'post-1', title: '啟程破題 (Start & First Look)', default_theme: '啟程破題' },
-    { id: 'post-2', title: '核心體驗 (Peak & Highlight)', default_theme: '核心體驗' },
-    { id: 'post-3', title: '尾聲收尾 (Night & Wrap-up)', default_theme: '尾聲收尾' },
-  ],
-};
-
-const THREE_DAYS_PRESET = {
-  id: 'three-days',
-  name: '三日行程型',
-  buckets: [
-    { id: 'post-1', title: 'Day 1', default_theme: 'Day 1' },
-    { id: 'post-2', title: 'Day 2', default_theme: 'Day 2' },
-    { id: 'post-3', title: 'Day 3', default_theme: 'Day 3' },
-  ],
-};
-
-const FALLBACK_PRESETS = [DEFAULT_PRESET, CHRONOLOGICAL_PRESET, THREE_DAYS_PRESET];
+const INITIAL_POSTS = [
+  { id: 'post-1', title: '空間大景 (Space & Vibe)', photoIds: [] },
+  { id: 'post-2', title: '人物穿搭 (Portrait & Outfit)', photoIds: [] },
+  { id: 'post-3', title: '細節美食 (Details & Taste)', photoIds: [] },
+];
 
 export default function PhotoCuratorPage() {
   const toast = useToast();
   const fileInputRef = useRef(null);
 
-  const [presets, setPresets] = useState(FALLBACK_PRESETS);
-  const [selectedPresetId, setSelectedPresetId] = useState('theme-perspective');
   const [photos, setPhotos] = useState([]); // Array of { id, name, file, previewUrl, size, lastModified }
   const [unassignedIds, setUnassignedIds] = useState([]);
-  const [posts, setPosts] = useState([
-    { id: 'post-1', title: '空間大景 (Space & Vibe)', photoIds: [] },
-    { id: 'post-2', title: '人物穿搭 (Portrait & Outfit)', photoIds: [] },
-    { id: 'post-3', title: '細節美食 (Details & Taste)', photoIds: [] },
-  ]);
+  const [posts, setPosts] = useState(INITIAL_POSTS);
 
   const [draggedPhotoId, setDraggedPhotoId] = useState(null);
   const [dragOverZone, setDragOverZone] = useState(null); // 'unassigned' | 'post-1' | 'post-2' | 'post-3'
@@ -92,47 +60,12 @@ export default function PhotoCuratorPage() {
     };
   }, []);
 
-  // Fetch presets from backend API on mount
-  useEffect(() => {
-    let mounted = true;
-    api.getPhotoCuratorPresets()
-      .then((data) => {
-        if (mounted && Array.isArray(data) && data.length > 0) {
-          setPresets(data);
-        }
-      })
-      .catch((err) => {
-        console.warn('Using fallback presets:', err);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
   // Map of photo id -> photo object for quick access
   const photoMap = useMemo(() => {
     const map = new Map();
     photos.forEach((p) => map.set(p.id, p));
     return map;
   }, [photos]);
-
-  // Handle Preset Change
-  const handlePresetChange = (presetId) => {
-    setSelectedPresetId(presetId);
-    const chosen = presets.find((p) => p.id === presetId);
-    if (!chosen) return;
-
-    setPosts((prevPosts) =>
-      prevPosts.map((post, idx) => {
-        const bucketDef = chosen.buckets[idx];
-        return {
-          ...post,
-          title: bucketDef ? bucketDef.title : post.title,
-        };
-      })
-    );
-    toast.info(`已切換預設模式為「${chosen.name}」`);
-  };
 
   // Upload/Import Photos
   const handleFilesSelected = (files) => {
@@ -278,15 +211,7 @@ export default function PhotoCuratorPage() {
     });
     setPhotos([]);
     setUnassignedIds([]);
-    setSelectedPresetId('theme-perspective');
-    const defaultTemplate = presets.find((p) => p.id === 'theme-perspective') || DEFAULT_PRESET;
-    setPosts(
-      defaultTemplate.buckets.map((b, idx) => ({
-        id: b.id || `post-${idx + 1}`,
-        title: b.title || b.default_theme,
-        photoIds: [],
-      }))
-    );
+    setPosts(INITIAL_POSTS);
     setResetConfirmOpen(false);
     toast.info('策展工作台已重設。');
   };
@@ -481,21 +406,6 @@ export default function PhotoCuratorPage() {
       {/* Toolbar & Action Bar */}
       <div className="photo-curator-toolbar glass-panel">
         <div className="toolbar-left">
-          <label className="toolbar-preset-label">
-            <span>策展模型：</span>
-            <select
-              className="form-select preset-select"
-              value={selectedPresetId}
-              onChange={(e) => handlePresetChange(e.target.value)}
-            >
-              {presets.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
           <button
             type="button"
             className="btn btn-secondary btn-sm"

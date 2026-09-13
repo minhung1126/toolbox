@@ -95,21 +95,20 @@ describe('PhotoCuratorPage', () => {
     });
   });
 
-  it('switches preset and updates column titles', async () => {
+  it('does not display 策展模型 dropdown and allows customizing column titles directly', async () => {
     render(<PhotoCuratorPage />);
+
+    expect(screen.queryByText('策展模型：')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByDisplayValue('空間大景 (Space & Vibe)')).toBeInTheDocument();
     });
 
-    const select = screen.getByRole('combobox');
-    fireEvent.change(select, { target: { value: 'chronological' } });
+    const p1Input = screen.getByDisplayValue('空間大景 (Space & Vibe)');
+    fireEvent.change(p1Input, { target: { value: '我的自訂空間主題' } });
 
-    await waitFor(() => {
-      expect(screen.getByDisplayValue('啟程破題')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('核心體驗')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('尾聲收尾')).toBeInTheDocument();
-    });
+    expect(screen.getByDisplayValue('我的自訂空間主題')).toBeInTheDocument();
   });
 
   it('allows resetting workbench through ConfirmDialog', async () => {
