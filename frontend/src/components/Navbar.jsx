@@ -18,7 +18,7 @@ const photoCuratorGroup = toolNavGroups.find((g) => g.id === 'photo_curator_nav'
 const photoCuratorItem = photoCuratorGroup.items?.[0] || {
   id: 'photo_curator_workbench',
   to: PATHS.photoCurator,
-  label: 'Instagram 策展',
+  label: 'Instagram 排版',
   icon: Instagram,
 };
 const youtubeItems = youtubeGroup.items;
@@ -141,7 +141,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
         {item({
           id: photoCuratorItem.id,
           to: photoCuratorItem.to || PATHS.photoCurator,
-          label: photoCuratorGroup.label || photoCuratorItem.label || 'Instagram 策展',
+          label: photoCuratorGroup.label || photoCuratorItem.label || 'Instagram 排版',
           icon: photoCuratorGroup.icon || photoCuratorItem.icon || Instagram,
         })}
         {group('youtube', 'YouTube', youtubeGroup.icon, youtubeOpen, setYoutubeOpen, youtubeItems, youtubeActive)}

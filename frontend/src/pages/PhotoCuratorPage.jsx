@@ -29,9 +29,9 @@ import { api } from '../services/api';
 import { copyToClipboard } from '../utils/clipboard';
 
 const INITIAL_POSTS = [
-  { id: 'post-1', title: '空間大景 (Space & Vibe)', photoIds: [] },
-  { id: 'post-2', title: '人物穿搭 (Portrait & Outfit)', photoIds: [] },
-  { id: 'post-3', title: '細節美食 (Details & Taste)', photoIds: [] },
+  { id: 'post-1', title: 'Post 1', photoIds: [] },
+  { id: 'post-2', title: 'Post 2', photoIds: [] },
+  { id: 'post-3', title: 'Post 3', photoIds: [] },
 ];
 
 function CuratorThumbnail({ photo, onZoom }) {
@@ -249,7 +249,7 @@ export default function PhotoCuratorPage() {
         photoIds: post.photoIds.filter((id) => id !== photoId),
       }))
     );
-    toast.info('已自策展工作台移除該照片。');
+    toast.info('已自工作台移除該照片。');
   }, [toast]);
 
   // Move photo inside post (set as cover or move up/down)
@@ -317,7 +317,7 @@ export default function PhotoCuratorPage() {
     setUnassignedIds([]);
     setPosts(INITIAL_POSTS);
     setResetConfirmOpen(false);
-    toast.info('策展工作台已重設。');
+    toast.info('工作台已重設。');
   };
 
   // Generate posting checklist text
@@ -470,20 +470,20 @@ export default function PhotoCuratorPage() {
       {/* Header */}
       <header className="glass-panel page-header card-padding">
         <div className="badge badge-info dashboard-eyebrow">
-          <Sparkles size={14} aria-hidden="true" /> 創作策展工具
+          <Sparkles size={14} aria-hidden="true" /> Instagram 創作工具
         </div>
         <div className="photo-curator-header-row">
           <div>
-            <h1>貼文三部曲策展工作台</h1>
+            <h1>貼文三部曲排版工作台</h1>
             <p className="section-desc">
-              專為 Instagram 打造的批次分組工作台。解決「分組分到忘記」與「順序常常搞混」，支援主題視角分流、首圖橫排預覽與一鍵結構化打包。
+              專為 Instagram 打造的批次分組工作台。解決「分組分到忘記」與「順序常常搞混」，支援照片批次分流、首圖橫排預覽與一鍵結構化打包。
             </p>
           </div>
           <button
             type="button"
             className="btn btn-secondary btn-icon"
             onClick={() => setShowHelp(!showHelp)}
-            title="策展思維與使用說明"
+            title="貼文排版與使用說明"
             aria-label="說明"
           >
             <HelpCircle size={18} aria-hidden="true" />
@@ -493,15 +493,14 @@ export default function PhotoCuratorPage() {
         {showHelp && (
           <div className="photo-curator-help-panel">
             <div className="help-panel-header">
-              <strong>💡 為什麼要分「主題視角三部曲」？</strong>
+              <strong>💡 貼文三部曲排版建議</strong>
               <button type="button" className="btn btn-icon" onClick={() => setShowHelp(false)}>
                 <X size={14} />
               </button>
             </div>
             <p>
-              將一次出遊或活動的幾十張照片拆成 3 篇 IG 貼文時，若每篇都是自拍或大景容易造成視覺疲勞。
-              建議採用 <strong>空間大景 (環境氛圍)</strong> ➔ <strong>人物穿搭 (視覺焦點)</strong> ➔ <strong>細節美食 (質感特寫)</strong>，
-              每篇各放 6~10 張，並確保首圖風格和諧，在個人首頁並列時呈現高質感的雜誌排版感！
+              將一次出遊或活動的照片拆成 3 篇 IG 貼文時，建議每篇各放數張照片並依序排列。
+              確保三篇貼文的首圖風格相互呼應，在個人首頁並列時呈現具整體感的三聯排視覺效果！
             </p>
           </div>
         )}
@@ -926,7 +925,7 @@ export default function PhotoCuratorPage() {
       {/* Confirm Reset Dialog */}
       <ConfirmDialog
         open={resetConfirmOpen}
-        title="清空策展工作台"
+        title="清空工作台"
         message="確定要清空所有已匯入的照片與貼文分組嗎？此操作無法復原。"
         confirmText="確認清空"
         cancelText="取消"

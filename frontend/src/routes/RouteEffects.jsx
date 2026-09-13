@@ -6,7 +6,7 @@ const TITLES = [
   [/^\/setup$/, '初次安裝精靈｜Toolbox'],
   [/^\/(?:dashboard)?$/, '儀表板｜Toolbox'],
   [/^\/notes$/, '便利貼備忘錄｜Toolbox'],
-  [/^\/photo-curator$/, 'Instagram 貼文策展｜Toolbox'],
+  [/^\/photo-curator$/, 'Instagram 貼文排版｜Toolbox'],
   [/^\/system\/health$/, 'API 健康度｜Toolbox'],
   [/^\/system\/info$/, '系統／部署資訊｜Toolbox'],
   [/^\/(?:system\/settings|settings\/system)$/, '系統安全與白名單｜Toolbox'],

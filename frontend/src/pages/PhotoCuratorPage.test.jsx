@@ -36,9 +36,9 @@ describe('PhotoCuratorPage', () => {
         id: 'theme-perspective',
         name: '主題視角型',
         buckets: [
-          { id: 'post-1', title: '空間大景 (Space & Vibe)', default_theme: '空間大景' },
-          { id: 'post-2', title: '人物穿搭 (Portrait & Outfit)', default_theme: '人物穿搭' },
-          { id: 'post-3', title: '細節美食 (Details & Taste)', default_theme: '細節美食' },
+          { id: 'post-1', title: 'Post 1', default_theme: 'Post 1' },
+          { id: 'post-2', title: 'Post 2', default_theme: 'Post 2' },
+          { id: 'post-3', title: 'Post 3', default_theme: 'Post 3' },
         ],
       },
       {
@@ -56,14 +56,14 @@ describe('PhotoCuratorPage', () => {
   it('renders workbench with 3 post columns and unassigned pool', async () => {
     render(<PhotoCuratorPage />);
 
-    expect(screen.getByText('貼文三部曲策展工作台')).toBeInTheDocument();
+    expect(screen.getByText('貼文三部曲排版工作台')).toBeInTheDocument();
     expect(screen.getByText('Instagram 主頁三聯排效果預覽')).toBeInTheDocument();
     expect(screen.getByText('待分配防漏池')).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue('空間大景 (Space & Vibe)')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('人物穿搭 (Portrait & Outfit)')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('細節美食 (Details & Taste)')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Post 1')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Post 2')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Post 3')).toBeInTheDocument();
     });
   });
 
@@ -95,17 +95,17 @@ describe('PhotoCuratorPage', () => {
     });
   });
 
-  it('does not display 策展模型 dropdown and allows customizing column titles directly', async () => {
+  it('allows customizing column titles directly without preset model', async () => {
     render(<PhotoCuratorPage />);
 
     expect(screen.queryByText('策展模型：')).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue('空間大景 (Space & Vibe)')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Post 1')).toBeInTheDocument();
     });
 
-    const p1Input = screen.getByDisplayValue('空間大景 (Space & Vibe)');
+    const p1Input = screen.getByDisplayValue('Post 1');
     fireEvent.change(p1Input, { target: { value: '我的自訂空間主題' } });
 
     expect(screen.getByDisplayValue('我的自訂空間主題')).toBeInTheDocument();
@@ -127,7 +127,7 @@ describe('PhotoCuratorPage', () => {
 
     // ConfirmDialog should now be open
     await waitFor(() => {
-      expect(screen.getByText('清空策展工作台')).toBeInTheDocument();
+      expect(screen.getByText('清空工作台')).toBeInTheDocument();
       expect(screen.getByText('確定要清空所有已匯入的照片與貼文分組嗎？此操作無法復原。')).toBeInTheDocument();
     });
 
@@ -136,7 +136,7 @@ describe('PhotoCuratorPage', () => {
 
     await waitFor(() => {
       expect(screen.queryByText('test_pic.jpg')).not.toBeInTheDocument();
-      expect(mockToast.info).toHaveBeenCalledWith('策展工作台已重設。');
+      expect(mockToast.info).toHaveBeenCalledWith('工作台已重設。');
     });
   });
 
@@ -195,7 +195,7 @@ describe('PhotoCuratorPage', () => {
 
     await waitFor(() => {
       expect(screen.queryByText('item.jpg')).not.toBeInTheDocument();
-      expect(mockToast.info).toHaveBeenCalledWith('已自策展工作台移除該照片。');
+      expect(mockToast.info).toHaveBeenCalledWith('已自工作台移除該照片。');
     });
   });
 

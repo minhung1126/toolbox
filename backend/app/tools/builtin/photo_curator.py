@@ -20,8 +20,8 @@ class PhotoCuratorPlugin(ToolPlugin):
         self._metadata = ToolMetadata(
             id="photo-curator",
             name="Photo Curator",
-            title="Instagram 貼文策展",
-            description="照片批次分組與 Instagram 貼文三部曲策展工作台，支援主題視角分流、防漏分配池、首圖橫排預覽與打包匯出。",
+            title="Instagram 貼文排版",
+            description="照片批次分組與 Instagram 貼文三部曲排版工作台，支援照片分流、防漏分配池、首圖橫排預覽與打包匯出。",
             category="日常生產力",
             icon="Instagram",
             version="1.0.0",
@@ -29,11 +29,11 @@ class PhotoCuratorPlugin(ToolPlugin):
             entry_url="/photo-curator",
             routes=[
                 ToolRoute(
-                    path="/photo-curator", label="Instagram 貼文策展", description="照片分組與 IG 三連排排版工作台"
+                    path="/photo-curator", label="Instagram 貼文排版", description="照片分組與 IG 三連排排版工作台"
                 ),
             ],
             required_scopes=[],
-            tags=["photo", "instagram", "curation", "carousel", "triptych", "productivity"],
+            tags=["photo", "instagram", "layout", "carousel", "triptych", "productivity"],
         )
         self._router = photo_curator_router
 

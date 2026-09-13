@@ -13,7 +13,7 @@ describe('RouteEffects and titleForPath', () => {
       [PATHS.login, '登入｜Toolbox'],
       [PATHS.setup, '初次安裝精靈｜Toolbox'],
       [PATHS.notes, '便利貼備忘錄｜Toolbox'],
-      [PATHS.photoCurator, 'Instagram 貼文策展｜Toolbox'],
+      [PATHS.photoCurator, 'Instagram 貼文排版｜Toolbox'],
       [PATHS.systemHealth, 'API 健康度｜Toolbox'],
       [PATHS.systemInfo, '系統／部署資訊｜Toolbox'],
       [PATHS.systemSettings, '系統安全與白名單｜Toolbox'],
@@ -51,6 +51,6 @@ describe('RouteEffects and titleForPath', () => {
         <RouteEffects />
       </MemoryRouter>
     );
-    expect(document.title).toBe('Instagram 貼文策展｜Toolbox');
+    expect(document.title).toBe('Instagram 貼文排版｜Toolbox');
   });
 });

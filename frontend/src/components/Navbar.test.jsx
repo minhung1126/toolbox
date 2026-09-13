@@ -81,7 +81,7 @@ describe('Navbar', () => {
     window.localStorage.clear();
     render(<NavbarHarness initialEntry={PATHS.photoCurator} />);
 
-    const igLink = screen.getByRole('link', { name: 'Instagram 策展' });
+    const igLink = screen.getByRole('link', { name: 'Instagram 排版' });
     expect(igLink).toBeVisible();
     expect(igLink).toHaveAttribute('href', PATHS.photoCurator);
     expect(igLink).toHaveAttribute('aria-current', 'page');
