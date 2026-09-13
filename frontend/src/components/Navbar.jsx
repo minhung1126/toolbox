@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, ChevronDown, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, StickyNote, Video, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Instagram, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, StickyNote, Video, X } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { youtubeIsConnected } from '../utils/youtubeRouting';
@@ -13,6 +13,13 @@ const sheetGroup = toolNavGroups.find((g) => g.id === 'sheet') || { items: [] };
 const systemGroup = toolNavGroups.find((g) => g.id === 'system') || {
   items: systemNavItems,
   icon: Shield,
+};
+const photoCuratorGroup = toolNavGroups.find((g) => g.id === 'photo_curator_nav') || { items: [] };
+const photoCuratorItem = photoCuratorGroup.items?.[0] || {
+  id: 'photo_curator_workbench',
+  to: PATHS.photoCurator,
+  label: 'Instagram 策展',
+  icon: Instagram,
 };
 const youtubeItems = youtubeGroup.items;
 const sheetItems = sheetGroup.items;
@@ -131,6 +138,12 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
       <nav className="sidebar-nav">
         {item({ id: 'dashboard', to: PATHS.dashboard, label: '儀表板總覽', icon: LayoutDashboard })}
         {item({ id: 'notes', to: PATHS.notes, label: '便利貼', icon: StickyNote })}
+        {item({
+          id: photoCuratorItem.id,
+          to: photoCuratorItem.to || PATHS.photoCurator,
+          label: photoCuratorGroup.label || photoCuratorItem.label || 'Instagram 策展',
+          icon: photoCuratorGroup.icon || photoCuratorItem.icon || Instagram,
+        })}
         {group('youtube', 'YouTube', youtubeGroup.icon, youtubeOpen, setYoutubeOpen, youtubeItems, youtubeActive)}
         {group('sheet', 'Sheet', sheetGroup.icon, sheetOpen, setSheetOpen, sheetItems, sheetActive)}
         {group('system', '系統管理', systemGroup.icon, systemOpen, setSystemOpen, systemItems, systemActive)}

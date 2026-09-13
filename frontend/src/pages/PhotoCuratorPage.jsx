@@ -439,7 +439,7 @@ export default function PhotoCuratorPage() {
   return (
     <div className="section-gap photo-curator-page">
       {/* Header */}
-      <header className="glass-panel page-header">
+      <header className="glass-panel page-header card-padding">
         <div className="badge badge-info dashboard-eyebrow">
           <Sparkles size={14} aria-hidden="true" /> 創作策展工具
         </div>

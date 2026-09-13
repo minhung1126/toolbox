@@ -163,6 +163,10 @@ h3 {
   box-shadow: var(--shadow-md);
 }
 
+.page-header.glass-panel {
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+}
+
 .glass-panel-interactive {
   transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }

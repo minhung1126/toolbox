@@ -1571,6 +1571,10 @@ h1, h2, h3, h4, h5, h6 {
   gap: 0.5rem;
 }
 
+.page-header.glass-panel {
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+}
+
 .page-header-row {
   display: flex;
   align-items: flex-start;

@@ -29,6 +29,9 @@ vi.mock('../pages/YoutubeQuotaPage', () => ({ default: () => <div>quota route</d
 vi.mock('../pages/YoutubePlaylistSettingsPage', () => ({ default: () => <div>playlist route</div> }));
 vi.mock('../pages/GoogleAccountSettingsPage', () => ({ default: () => <div>google settings route</div> }));
 vi.mock('../pages/GoogleSheetSettingsPage', () => ({ default: () => <div>sheet settings route</div> }));
+vi.mock('../pages/SystemSettingsPage', () => ({ default: () => <div>system settings route</div> }));
+vi.mock('../pages/StickyNotesPage', () => ({ default: () => <div>notes route</div> }));
+vi.mock('../pages/PhotoCuratorPage', () => ({ default: () => <div>photo curator route</div> }));
 vi.mock('../pages/LoginPage', () => ({ default: ({ returnTo }) => <div>login route {returnTo || 'none'}</div> }));
 
 function LocationProbe() {
@@ -76,6 +79,9 @@ describe('AppRoutes', () => {
     [PATHS.sheetCopy, 'sheet route'],
     [PATHS.googleSettings, 'google settings route'],
     [PATHS.sheetSettings, 'sheet settings route'],
+    [PATHS.systemSettings, 'system settings route'],
+    [PATHS.notes, 'notes route'],
+    [PATHS.photoCurator, 'photo curator route'],
   ])('renders %s', (path, expected) => {
     renderRoutes(path);
     expect(screen.getByText(expected)).toBeInTheDocument();

@@ -65,7 +65,7 @@ export default function StickyNotesPage() {
 
   return (
     <div className="section-gap sticky-notes-page">
-      <header className="glass-panel page-header">
+      <header className="glass-panel page-header card-padding">
         <div className="badge badge-info dashboard-eyebrow">
           <Sparkles size={14} aria-hidden="true" /> 生產力工具
         </div>

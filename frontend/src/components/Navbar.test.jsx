@@ -76,5 +76,16 @@ describe('Navbar', () => {
       'API 健康度',
     ]);
   });
+
+  it('exposes Instagram curation tool in navigation with active state', () => {
+    window.localStorage.clear();
+    render(<NavbarHarness initialEntry={PATHS.photoCurator} />);
+
+    const igLink = screen.getByRole('link', { name: 'Instagram 策展' });
+    expect(igLink).toBeVisible();
+    expect(igLink).toHaveAttribute('href', PATHS.photoCurator);
+    expect(igLink).toHaveAttribute('aria-current', 'page');
+    expect(igLink).toHaveClass('active');
+  });
 });
 
