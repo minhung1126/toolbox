@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+from collections.abc import Iterable
 from pathlib import Path
 from threading import RLock
 from typing import Any
@@ -23,7 +24,7 @@ _DEFAULT_PATH = _PROJECT_ROOT / "data" / "account_state.json"
 _MAX_SUBJECT_LENGTH = 256
 _MAX_WORK_STATE_BYTES = 128 * 1024
 
-ACCOUNT_SETTING_KEYS = frozenset(
+DEFAULT_ACCOUNT_SETTING_KEYS = frozenset(
     {
         "default_spreadsheet_id",
         "default_playlist_id",
@@ -35,7 +36,7 @@ ACCOUNT_SETTING_KEYS = frozenset(
     }
 )
 
-WORK_STATE_KEYS = frozenset(
+DEFAULT_WORK_STATE_KEYS = frozenset(
     {
         "navigation",
         "sheet_copy",
@@ -44,6 +45,39 @@ WORK_STATE_KEYS = frozenset(
         "youtube_draft_shorts",
     }
 )
+
+
+class _DynamicKeysProxy:
+    """Read-only proxy that checks membership against an AccountStateStore's dynamic key set."""
+
+    def __init__(self, key_type: str, store_getter):
+        self._key_type = key_type
+        self._store_getter = store_getter
+
+    def __contains__(self, item: object) -> bool:
+        store = self._store_getter()
+        if self._key_type == "setting":
+            return store.is_valid_setting_key(str(item))
+        return store.is_valid_work_state_key(str(item))
+
+    def __iter__(self):
+        store = self._store_getter()
+        keys = store.setting_keys if self._key_type == "setting" else store.work_state_keys
+        return iter(keys)
+
+    def __len__(self) -> int:
+        store = self._store_getter()
+        keys = store.setting_keys if self._key_type == "setting" else store.work_state_keys
+        return len(keys)
+
+    def __repr__(self) -> str:
+        store = self._store_getter()
+        keys = store.setting_keys if self._key_type == "setting" else store.work_state_keys
+        return f"DynamicKeysProxy({set(keys)})"
+
+
+ACCOUNT_SETTING_KEYS = _DynamicKeysProxy("setting", lambda: account_state_store)
+WORK_STATE_KEYS = _DynamicKeysProxy("work_state", lambda: account_state_store)
 
 MISSING = object()
 
@@ -65,11 +99,41 @@ class AccountStateStore:
     def __init__(self, path: Path = _DEFAULT_PATH):
         self._path = Path(path)
         self._lock = RLock()
+        self._setting_keys: set[str] = set(DEFAULT_ACCOUNT_SETTING_KEYS)
+        self._work_state_keys: set[str] = set(DEFAULT_WORK_STATE_KEYS)
         self._data: dict[str, Any] = {
             "version": 1,
             "accounts": {},
         }
         self._load()
+
+    def register_setting_keys(self, keys: Iterable[str]) -> None:
+        """Dynamically register allowed setting keys for tools and plugins."""
+        with self._lock:
+            self._setting_keys.update(str(k).strip() for k in keys if str(k).strip())
+
+    def register_work_state_keys(self, keys: Iterable[str]) -> None:
+        """Dynamically register allowed work state keys for tools and plugins."""
+        with self._lock:
+            self._work_state_keys.update(str(k).strip() for k in keys if str(k).strip())
+
+    def is_valid_setting_key(self, key: str) -> bool:
+        with self._lock:
+            return key in self._setting_keys
+
+    def is_valid_work_state_key(self, key: str) -> bool:
+        with self._lock:
+            return key in self._work_state_keys
+
+    @property
+    def setting_keys(self) -> frozenset[str]:
+        with self._lock:
+            return frozenset(self._setting_keys)
+
+    @property
+    def work_state_keys(self) -> frozenset[str]:
+        with self._lock:
+            return frozenset(self._work_state_keys)
 
     def _load(self) -> None:
         with self._lock:
@@ -125,7 +189,7 @@ class AccountStateStore:
                 self._save()
 
     def get_setting(self, owner_sub: str, key: str, default: Any = MISSING) -> Any:
-        if key not in ACCOUNT_SETTING_KEYS:
+        if not self.is_valid_setting_key(key):
             raise ValueError(f"Unsupported account setting: {key}")
         subject = _subject(owner_sub)
         with self._lock:
@@ -136,7 +200,7 @@ class AccountStateStore:
         return default
 
     def set_setting(self, owner_sub: str, key: str, value: Any) -> None:
-        if key not in ACCOUNT_SETTING_KEYS:
+        if not self.is_valid_setting_key(key):
             raise ValueError(f"Unsupported account setting: {key}")
         subject = _subject(owner_sub)
         with self._lock:
@@ -159,7 +223,7 @@ class AccountStateStore:
             return _copy(work_state) if isinstance(work_state, dict) else {}
 
     def set_work_state(self, owner_sub: str, key: str, value: dict[str, Any]) -> dict[str, Any]:
-        if key not in WORK_STATE_KEYS:
+        if not self.is_valid_work_state_key(key):
             raise ValueError(f"Unsupported work state: {key}")
         if not isinstance(value, dict):
             raise ValueError("work state value must be an object")
@@ -189,6 +253,8 @@ account_state_store = AccountStateStore()
 __all__ = [
     "ACCOUNT_SETTING_KEYS",
     "AccountStateStore",
+    "DEFAULT_ACCOUNT_SETTING_KEYS",
+    "DEFAULT_WORK_STATE_KEYS",
     "MISSING",
     "WORK_STATE_KEYS",
     "account_state_store",

@@ -52,10 +52,16 @@ class ToolRegistry:
 
     def mount_routers(self, target_router: APIRouter) -> None:
         """Mount all tool routers onto the specified target router."""
+        mounted_routers = getattr(target_router, "_mounted_tool_routers", None)
+        if mounted_routers is None:
+            mounted_routers = set()
+            setattr(target_router, "_mounted_tool_routers", mounted_routers)
+
         for tool_id, plugin in self._plugins.items():
             router = plugin.router
-            if router:
+            if router and id(router) not in mounted_routers:
                 target_router.include_router(router)
+                mounted_routers.add(id(router))
                 logger.debug("Mounted router for tool: %s", tool_id)
 
     async def run_startup(self, app: FastAPI) -> None:

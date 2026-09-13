@@ -387,5 +387,5 @@ export default function App() {
   const content = <ErrorBoundary><ToastProvider><AppContent /></ToastProvider></ErrorBoundary>;
   // main.jsx owns the production BrowserRouter. Keeping this fallback makes
   // direct App renders in unit tests safe without creating nested routers.
-  return useInRouterContext() ? content : <BrowserRouter>{content}</BrowserRouter>;
+  return useInRouterContext() ? content : <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>{content}</BrowserRouter>;
 }

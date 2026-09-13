@@ -50,7 +50,7 @@ function renderPage(overrides = {}) {
     refreshAuthUser: vi.fn().mockResolvedValue({}),
     ...overrides,
   };
-  return render(<MemoryRouter initialEntries={['/youtube/settings/connections']}><ToastProvider><YouTubeSettingsPage {...props} /></ToastProvider></MemoryRouter>);
+  return render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }} initialEntries={['/youtube/settings/connections']}><ToastProvider><YouTubeSettingsPage {...props} /></ToastProvider></MemoryRouter>);
 }
 
 describe('YouTubeSettingsPage', () => {

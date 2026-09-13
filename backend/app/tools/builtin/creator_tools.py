@@ -8,7 +8,6 @@ from typing import Optional
 
 from fastapi import APIRouter, FastAPI
 
-from backend.app.api.sheets import router as sheets_router
 from backend.app.api.youtube import router as youtube_router
 from backend.app.tools.base import ToolMetadata, ToolPlugin, ToolRoute
 
@@ -55,12 +54,7 @@ class CreatorToolsPlugin(ToolPlugin):
 
     @property
     def router(self) -> APIRouter:
-        if self._router is None:
-            combined = APIRouter()
-            combined.include_router(sheets_router)
-            combined.include_router(youtube_router)
-            self._router = combined
-        return self._router
+        return youtube_router
 
     async def on_startup(self, app: FastAPI) -> None:
         """Creator tools plugin startup hook."""

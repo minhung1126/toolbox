@@ -1,11 +1,31 @@
 import logging
 import math
-from typing import Any, List, Literal, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from google.oauth2.credentials import Credentials
-from pydantic import BaseModel, Field
 
+from backend.app.api.youtube_helpers import (
+    _direct_workflow_response,
+    _preview_slot,
+    _resolve_person_metadata,
+    _safe_workflow_error,
+    _stale_preview_exception,
+    _workflow_error_detail,
+    _youtube_context_metadata,
+    _youtube_thumbnail,
+    resolve_assignment_row,
+    upload_time_sort_key,
+    video_snapshot_digest,
+)
+from backend.app.api.youtube_models import (
+    BatchUpdateInput,
+    PlaylistItemsInput,
+    PublishCleanupInput,
+    QuotaEstimateInput,
+    VideoAssignment,
+    VideoMetadataUpdateInput,
+)
 from backend.app.core.account_state import get_account_active_slot, get_account_setting
 from backend.app.core.config import normalize_youtube_slot
 from backend.app.core.dependencies import (
@@ -50,48 +70,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/youtube", tags=["YouTube Operations"])
 
 
-class PlaylistItemsInput(BaseModel):
-    playlist_id: Optional[str] = Field(default="", max_length=256)
-
-
-class VideoMetadataUpdateInput(BaseModel):
-    video_id: str = Field(min_length=1, max_length=128)
-    title: str = Field(min_length=1, max_length=100)
-    description: str = Field(default="", max_length=5000)
-
-
-class VideoAssignment(BaseModel):
-    video_id: str = Field(min_length=1, max_length=128)
-    person: str = Field(max_length=200)
-
-
-class BatchUpdateInput(BaseModel):
-    spreadsheet_url_or_id: Optional[str] = Field(default="", max_length=512)
-    playlist_id: Optional[str] = Field(default="", max_length=256)
-    youtube_slot: Optional[Literal["primary", "secondary"]] = None
-    preview_token: Optional[str] = Field(default=None, max_length=16_384)
-    preview_snapshot: Optional[dict[str, Any]] = None
-    video_type: str = Field(default="Video", max_length=32)
-    worksheet_name: str = Field(min_length=1, max_length=200)
-    title_column: str = Field(min_length=1, max_length=200)
-    description_column: str = Field(min_length=1, max_length=200)
-    team: str = Field(min_length=1, max_length=200)
-    assignments: List[VideoAssignment] = Field(min_length=1, max_length=500)
-
-
-class PublishCleanupInput(BaseModel):
-    playlist_id: Optional[str] = Field(default="", max_length=256)
-    youtube_slot: Optional[Literal["primary", "secondary"]] = None
-    preview_token: Optional[str] = Field(default=None, max_length=16_384)
-    preview_snapshot: Optional[dict[str, Any]] = None
-
-
-class QuotaEstimateInput(BaseModel):
-    operation: Literal["youtube.metadata_update", "youtube.publish_cleanup"]
-    item_count: int = Field(ge=0, le=500)
-    slot: Optional[str] = Field(default=None, max_length=32)
-
-
 def _resolve_playlist_id(context: YouTubeRequestContext, requested: Optional[str]) -> str:
     # The account-level playlist is authoritative.  The request field remains
     # accepted only as a migration fallback for old clients/accounts that have
@@ -116,26 +94,6 @@ def _quota_http_exception(exc: YouTubeQuotaUnavailable) -> HTTPException:
         reset_at=detail.get("reset_at"),
         youtube_slot=detail.get("youtube_slot"),
     )
-
-
-def _youtube_context_metadata(context: YouTubeRequestContext) -> dict[str, Any]:
-    return {
-        "youtube_slot": context.slot,
-        "youtube_routing_mode": context.routing_mode,
-        "youtube_slot_reason": context.selection_reason,
-        "youtube_preferred_slot": context.preferred_slot,
-        "youtube_estimated_units": context.estimated_units,
-    }
-
-
-def _preview_slot(snapshot: object, fallback: str) -> str:
-    """Read the slot that signed the preview, with a safe legacy fallback."""
-
-    if isinstance(snapshot, dict):
-        candidate = str(snapshot.get("youtube_slot") or "").strip()
-        if candidate in {"primary", "secondary"}:
-            return candidate
-    return fallback
 
 
 def _switch_youtube_context(
@@ -261,53 +219,6 @@ def _quota_estimate(operation: str, item_count: int, *, slot: Optional[str] = No
     }
 
 
-def resolve_assignment_row(matches, title_column: str, description_column: str):
-    """Accept duplicate matching rows when the selected output values are identical."""
-    if not matches:
-        return None, "not_found"
-
-    distinct_values = {}
-    for row in matches:
-        title = normalize_text(row.get(title_column) or "")
-        description = str(row.get(description_column) or "")
-        distinct_values.setdefault((title, description), row)
-
-    if len(distinct_values) > 1:
-        return None, "conflict"
-    return next(iter(distinct_values.values())), None
-
-
-def video_snapshot_digest(details_map: dict[str, dict], video_ids: list[str]) -> str:
-    """Digest the mutable YouTube fields used by a metadata update."""
-
-    values = []
-    for video_id in video_ids:
-        detail = details_map.get(video_id) or {}
-        snippet = detail.get("snippet") or {}
-        status = detail.get("status") or {}
-        values.append(
-            {
-                "video_id": video_id,
-                "title": str(snippet.get("title") or ""),
-                "description": str(snippet.get("description") or ""),
-                "category_id": str(snippet.get("categoryId") or ""),
-                "privacy_status": str(status.get("privacyStatus") or ""),
-            }
-        )
-    return input_digest(values)
-
-
-def upload_time_sort_key(video_id: str, details_map, original_positions):
-    """Sort valid YouTube publishedAt values oldest-first with stable fallbacks."""
-    detail = details_map.get(video_id) or {}
-    published_at = (detail.get("snippet") or {}).get("publishedAt") or ""
-    return (
-        not bool(published_at),
-        published_at,
-        original_positions.get(video_id, 0),
-    )
-
-
 @router.get("/quota-usage")
 def get_quota_usage(
     slot: Optional[str] = Query(default=None, max_length=32),
@@ -388,18 +299,6 @@ def get_playlist_videos(
         ).to_http_exception() from exc
 
 
-def _youtube_thumbnail(detail: dict, video_id: str) -> str:
-    thumbnails = (detail.get("snippet") or {}).get("thumbnails") or {}
-    return (
-        (thumbnails.get("maxres") or {}).get("url")
-        or (thumbnails.get("standard") or {}).get("url")
-        or (thumbnails.get("high") or {}).get("url")
-        or (thumbnails.get("medium") or {}).get("url")
-        or (thumbnails.get("default") or {}).get("url")
-        or (f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else "")
-    )
-
-
 @router.post("/video-metadata")
 def update_video_metadata(
     payload: VideoMetadataUpdateInput,
@@ -464,26 +363,6 @@ def update_video_metadata(
         raise map_youtube_error(
             exc, method="videos.update", youtube_slot=active_context.slot
         ).to_http_exception() from exc
-
-
-def _safe_workflow_error(exc: Exception) -> str:
-    if isinstance(exc, YouTubeQuotaUnavailable):
-        return exc.user_message
-    return map_youtube_error(exc).message
-
-
-def _workflow_error_detail(exc: Exception, *, slot: str) -> dict[str, Any]:
-    if isinstance(exc, YouTubeQuotaUnavailable):
-        return exc.to_dict()
-    return map_youtube_error(exc, youtube_slot=slot).detail
-
-
-def _stale_preview_exception() -> HTTPException:
-    return http_error(
-        409,
-        "stale_preview",
-        "預覽已過期或來源已變更，尚未寫入任何資料。請重新讀取後再執行。",
-    )
 
 
 def _playlist_preview_token(context: YouTubeRequestContext, playlist_id: str, videos: list[dict]) -> str:
@@ -565,26 +444,6 @@ def _load_and_validate_sheet_data(
     if not sheet_rows:
         raise http_error(400, "sheet_rows_empty", f"工作表「{worksheet_name}」沒有可用資料列。")
     return headers, sheet_rows
-
-
-def _resolve_person_metadata(
-    matches: list[dict],
-    normalized_team: str,
-    person: str,
-    title_column: str,
-    description_column: str,
-) -> tuple[str, str, str]:
-    """Resolve matched sheet row for a person into (skip_reason, new_title, new_description)."""
-    row, match_error = resolve_assignment_row(matches, title_column, description_column)
-    if match_error == "not_found":
-        return f"找不到團體 {normalized_team} 的選項 {person} 資料", "", ""
-    if match_error == "conflict":
-        return f"團體 {normalized_team} 的選項 {person} 有多筆且標題或描述內容不同", "", ""
-    new_title = normalize_text((row or {}).get(title_column) or "")
-    new_description = str((row or {}).get(description_column) or "")
-    if not new_title:
-        return f"工作表的 {title_column} 為空白", "", ""
-    return "", new_title, new_description
 
 
 @router.post("/batch-preview")
@@ -710,36 +569,6 @@ def create_batch_metadata_preview(
         raise map_youtube_error(
             exc, method="videos.list", youtube_slot=youtube_context.slot
         ).to_http_exception() from exc
-
-
-def _direct_workflow_response(
-    operation: str,
-    results: list[dict],
-    *,
-    quota_error: Optional[YouTubeQuotaUnavailable] = None,
-    slot: str = "primary",
-    context: YouTubeRequestContext | None = None,
-) -> dict:
-    statuses = [str(item.get("status") or "") for item in results]
-    response = {
-        "operation": operation,
-        "youtube_slot": slot,
-        "completed": quota_error is None and "not_attempted" not in statuses,
-        "total_count": len(results),
-        "succeeded_count": statuses.count("succeeded"),
-        "warning_count": statuses.count("succeeded_with_warnings"),
-        "skipped_count": statuses.count("skipped"),
-        "failed_count": statuses.count("failed"),
-        "not_attempted_count": statuses.count("not_attempted"),
-        "quota_blocked": quota_error is not None,
-        "reset_at": quota_error.reset_at if quota_error else None,
-        "results": results,
-    }
-    if context is not None:
-        response.update(_youtube_context_metadata(context))
-    if quota_error:
-        response["quota_error"] = quota_error.to_dict()
-    return response
 
 
 @router.post("/batch-update")
@@ -1223,3 +1052,42 @@ def run_publish_and_cleanup(
         raise map_youtube_error(
             exc, method="playlistItems.delete", youtube_slot=active_context.slot
         ).to_http_exception() from exc
+
+
+__all__ = [
+    "BatchUpdateInput",
+    "PlaylistItemsInput",
+    "PublishCleanupInput",
+    "QuotaEstimateInput",
+    "VideoAssignment",
+    "VideoMetadataUpdateInput",
+    "_direct_workflow_response",
+    "_load_and_validate_sheet_data",
+    "_playlist_preview_token",
+    "_preview_slot",
+    "_quota_estimate",
+    "_quota_http_exception",
+    "_resolve_person_metadata",
+    "_resolve_playlist_id",
+    "_run_youtube_operation_with_quota_fallback",
+    "_safe_workflow_error",
+    "_stale_preview_exception",
+    "_switch_youtube_context",
+    "_validate_batch_inputs",
+    "_verify_playlist_preview_token",
+    "_workflow_error_detail",
+    "_youtube_context_metadata",
+    "_youtube_thumbnail",
+    "create_batch_metadata_preview",
+    "estimate_quota",
+    "get_playlist_videos",
+    "get_quota_usage",
+    "get_youtube_quota_tracker",
+    "resolve_assignment_row",
+    "router",
+    "run_batch_metadata_update",
+    "run_publish_and_cleanup",
+    "update_video_metadata",
+    "upload_time_sort_key",
+    "video_snapshot_digest",
+]
