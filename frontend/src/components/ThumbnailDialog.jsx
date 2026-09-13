@@ -13,19 +13,26 @@ export default function ThumbnailDialog({ image, onClose }) {
   useEffect(() => {
     if (!image) return undefined;
     setZoom(1);
-    const previewSrc = image.previewSrc || image.src;
+    const previewSrc = image.previewSrc || image.src || '';
     setDisplaySrc(previewSrc);
     if (!image.src || image.src === previewSrc) return undefined;
 
     let cancelled = false;
     const highResolutionImage = new window.Image();
+    highResolutionImage.referrerPolicy = 'no-referrer';
     highResolutionImage.onload = () => {
       if (!cancelled) setDisplaySrc(image.src);
+    };
+    highResolutionImage.onerror = () => {
+      if (!cancelled && image.videoId) {
+        setDisplaySrc(`https://i.ytimg.com/vi/${image.videoId}/hqdefault.jpg`);
+      }
     };
     highResolutionImage.src = image.src;
     return () => {
       cancelled = true;
       highResolutionImage.onload = null;
+      highResolutionImage.onerror = null;
     };
   }, [image]);
 
@@ -40,7 +47,11 @@ export default function ThumbnailDialog({ image, onClose }) {
 
   const handleImageError = () => {
     const fallbackSrc = image.previewSrc || image.fallbackSrc;
-    if (fallbackSrc && displaySrc !== fallbackSrc) setDisplaySrc(fallbackSrc);
+    if (fallbackSrc && displaySrc !== fallbackSrc) {
+      setDisplaySrc(fallbackSrc);
+    } else if (image.videoId && displaySrc !== `https://i.ytimg.com/vi/${image.videoId}/mqdefault.jpg`) {
+      setDisplaySrc(`https://i.ytimg.com/vi/${image.videoId}/mqdefault.jpg`);
+    }
   };
 
   return (
@@ -58,6 +69,7 @@ export default function ThumbnailDialog({ image, onClose }) {
           className="thumbnail-dialog-image"
           src={displaySrc}
           alt={image.alt || '影片縮圖'}
+          referrerPolicy="no-referrer"
           onError={handleImageError}
           style={{ transform: `scale(${zoom})` }}
         />

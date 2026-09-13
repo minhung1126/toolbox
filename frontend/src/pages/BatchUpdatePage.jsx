@@ -5,6 +5,7 @@ import useAccountWorkState from '../hooks/useAccountWorkState';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ResultStatus from '../components/ResultStatus';
 import ThumbnailDialog from '../components/ThumbnailDialog';
+import VideoThumbnail from '../components/VideoThumbnail';
 import SheetDataSourcePanel from '../components/SheetDataSourcePanel';
 import SourceLinkInput from '../components/SourceLinkInput';
 import TeamPersonFilterPanel from '../components/TeamPersonFilterPanel';
@@ -833,7 +834,14 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
         </div>
         <div className="video-card-grid">{videos.map((video) => <div key={video.video_id} className={`glass-panel video-card ${assignments[video.video_id] && assignments[video.video_id] !== '不編輯' ? 'video-card-assigned' : 'video-card-skipped'}${selectedVideoIds.includes(video.video_id) ? ' video-card-selected' : ''}`} role="button" tabIndex={0} aria-pressed={selectedVideoIds.includes(video.video_id)} aria-label={`${selectedVideoIds.includes(video.video_id) ? '取消選取' : '選取'}${video.title || '影片'}加入批次編輯`} onClick={(event) => handleVideoCardClick(event, video.video_id)} onKeyDown={(event) => handleVideoCardKeyDown(event, video.video_id)}>
           <label className="video-select-label"><input type="checkbox" checked={selectedVideoIds.includes(video.video_id)} onChange={() => toggleVideoSelection(video.video_id)} /> 加入批次編輯</label>
-          <div className="video-thumbnail-wrapper">{video.thumbnail_url ? <button type="button" className="video-thumbnail-button" aria-label={`放大檢視${video.title || '影片'}縮圖`} onClick={() => setPreviewImage({ src: video.thumbnail_url, alt: video.title })}><img className="video-thumbnail" src={video.thumbnail_url} alt="" /></button> : <div>無縮圖</div>}</div>
+          <div className="video-thumbnail-wrapper">
+            <VideoThumbnail
+              src={video.thumbnail_url}
+              videoId={video.video_id}
+              alt={video.title || '影片'}
+              onPreview={(imgInfo) => setPreviewImage(imgInfo)}
+            />
+          </div>
           <div className="video-card-copy"><h4>{video.title || '無標題影片'}</h4><p>{formatVideoId(video.video_id)}</p></div>
           <div className="form-group video-card-assignment"><label className="form-label">指定套用人物</label><select className="form-select" value={assignments[video.video_id] || '不編輯'} onChange={(e) => setAssignments((current) => ({ ...current, [video.video_id]: e.target.value }))}><option value="不編輯">不編輯（略過）</option>{availablePeople.map((person) => <option key={person} value={person}>{person}</option>)}</select></div>
         </div>)}</div>

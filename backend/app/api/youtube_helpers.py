@@ -79,7 +79,7 @@ def upload_time_sort_key(video_id: str, details_map: Dict[str, dict], original_p
 
 def _youtube_thumbnail(detail: dict, video_id: str) -> str:
     thumbnails = (detail.get("snippet") or {}).get("thumbnails") or {}
-    return (
+    url = (
         (thumbnails.get("maxres") or {}).get("url")
         or (thumbnails.get("standard") or {}).get("url")
         or (thumbnails.get("high") or {}).get("url")
@@ -87,6 +87,9 @@ def _youtube_thumbnail(detail: dict, video_id: str) -> str:
         or (thumbnails.get("default") or {}).get("url")
         or (f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else "")
     )
+    if url and url.startswith("http://"):
+        return "https://" + url[7:]
+    return url
 
 
 def _safe_workflow_error(exc: Exception) -> str:

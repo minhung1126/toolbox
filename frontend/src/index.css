@@ -701,6 +701,20 @@ h1, h2, h3, h4, h5, h6 {
   outline-offset: -3px;
 }
 
+.video-thumbnail-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  background: rgba(15, 23, 42, 0.6);
+  user-select: none;
+}
+
 .publish-cleaner-thumbnail {
   width: 120px;
   aspect-ratio: 16 / 9;
@@ -724,6 +738,23 @@ h1, h2, h3, h4, h5, h6 {
 .publish-cleaner-thumbnail-button:focus-visible {
   outline: 3px solid var(--primary);
   outline-offset: 3px;
+}
+
+.publish-cleaner-thumbnail-empty {
+  width: 120px;
+  aspect-ratio: 16 / 9;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
+  user-select: none;
 }
 
 .thumbnail-dialog-overlay {
@@ -798,6 +829,17 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 0.78rem;
   pointer-events: none;
   white-space: nowrap;
+}
+
+.thumbnail-dialog-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: var(--text-muted);
+  padding: 2rem;
+  text-align: center;
 }
 
 .video-badge-seq {
@@ -3706,21 +3748,26 @@ h1, h2, h3, h4, h5, h6 {
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(10, 15, 29, 0.9) 100%);
 }
 
+.photo-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
 .photo-order-badge {
-  position: absolute;
-  top: 6px;
-  left: 6px;
+  position: static;
   background: rgba(0, 0, 0, 0.75);
   color: var(--text-main);
   font-size: 0.68rem;
   font-weight: 700;
   padding: 2px 6px;
   border-radius: var(--radius-xs);
-  z-index: 2;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 3px;
   border: 1px solid rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
 }
 
 .photo-order-badge.cover-badge {
@@ -3740,7 +3787,8 @@ h1, h2, h3, h4, h5, h6 {
   overflow: hidden;
   position: relative;
   flex-shrink: 0;
-  background: #000;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
 }
 
 .photo-card-thumb {
@@ -3748,6 +3796,20 @@ h1, h2, h3, h4, h5, h6 {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.photo-card-thumb-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--text-dim);
+  font-size: 0.62rem;
+  background: rgba(15, 23, 42, 0.7);
+  user-select: none;
 }
 
 .photo-zoom-btn {

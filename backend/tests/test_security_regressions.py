@@ -161,6 +161,7 @@ def test_security_headers_are_present():
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.headers["X-Frame-Options"] == "DENY"
     assert response.headers["Content-Security-Policy"].startswith("default-src 'self'")
+    assert "img-src 'self' data: https: blob:;" in response.headers["Content-Security-Policy"]
 
 
 def test_batch_input_has_a_bounded_assignment_count():

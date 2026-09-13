@@ -4,6 +4,7 @@ import { PATHS } from '../routes/paths';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ThumbnailDialog from '../components/ThumbnailDialog';
+import VideoThumbnail from '../components/VideoThumbnail';
 import YouTubeVideoEditDialog from '../components/YouTubeVideoEditDialog';
 import ResultStatus from '../components/ResultStatus';
 import useAccountWorkState from '../hooks/useAccountWorkState';
@@ -604,7 +605,17 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
               {videos.map((video, index) => (
               <li key={video.video_id} className="glass-panel publish-item" value={index + 1}>
                 <span className="publish-item-index" aria-hidden="true">#{index + 1}</span>
-                {video.thumbnail_url && <button type="button" className="publish-cleaner-thumbnail-button" aria-label={`放大檢視${video.title || '影片'}縮圖`} onClick={() => setPreviewImage({ src: video.thumbnail_url, alt: video.title })}><img className="publish-cleaner-thumbnail" src={video.thumbnail_url} alt="" /></button>}
+                {(video.thumbnail_url || video.video_id) && (
+                  <VideoThumbnail
+                    src={video.thumbnail_url}
+                    videoId={video.video_id}
+                    alt={video.title || '影片'}
+                    className="publish-cleaner-thumbnail"
+                    buttonClassName="publish-cleaner-thumbnail-button"
+                    emptyClassName="publish-cleaner-thumbnail-empty"
+                    onPreview={(imgInfo) => setPreviewImage(imgInfo)}
+                  />
+                )}
                 <div className="publish-item-content">
                   {metadataBlock(video.title, video.description)}
                   <YouTubeVideoLink videoId={video.video_id} />

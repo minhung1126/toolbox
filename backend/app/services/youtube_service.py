@@ -50,7 +50,7 @@ def _deduplicate_video_ids(video_ids: List[str]) -> List[str]:
 
 def _snippet_thumbnail(snippet: Dict[str, Any], video_id: str) -> str:
     thumbnails = snippet.get("thumbnails") or {}
-    return (
+    url = (
         thumbnails.get("maxres", {}).get("url")
         or thumbnails.get("standard", {}).get("url")
         or thumbnails.get("high", {}).get("url")
@@ -58,6 +58,9 @@ def _snippet_thumbnail(snippet: Dict[str, Any], video_id: str) -> str:
         or thumbnails.get("default", {}).get("url")
         or (f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else "")
     )
+    if url and url.startswith("http://"):
+        return "https://" + url[7:]
+    return url
 
 
 def fetch_playlist_items(context: YouTubeRequestContext, playlist_id: str) -> List[Dict[str, Any]]:

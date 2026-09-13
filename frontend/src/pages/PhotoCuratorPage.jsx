@@ -34,6 +34,94 @@ const INITIAL_POSTS = [
   { id: 'post-3', title: '細節美食 (Details & Taste)', photoIds: [] },
 ];
 
+function CuratorThumbnail({ photo, onZoom }) {
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    setLoadError(false);
+  }, [photo?.previewUrl]);
+
+  return (
+    <div className="photo-card-thumb-wrap">
+      {loadError ? (
+        <div className="photo-card-thumb-fallback" title="無法載入縮圖">
+          <ImageIcon size={18} className="text-dim" aria-hidden="true" />
+          <span>無法顯示</span>
+        </div>
+      ) : (
+        <img
+          src={photo.previewUrl}
+          alt={photo.name}
+          className="photo-card-thumb"
+          draggable={false}
+          referrerPolicy="no-referrer"
+          onError={() => setLoadError(true)}
+        />
+      )}
+      {!loadError && onZoom && (
+        <button
+          type="button"
+          className="photo-zoom-btn"
+          onClick={() => onZoom(photo)}
+          title="查看大圖"
+          aria-label={`查看 ${photo.name} 大圖`}
+        >
+          <Eye size={13} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function IgSlotImage({ cover, onZoom, idx }) {
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    setLoadError(false);
+  }, [cover?.previewUrl]);
+
+  if (!cover) {
+    return (
+      <div className="ig-slot-empty">
+        <ImageIcon size={28} className="text-dim" aria-hidden="true" />
+        <span>尚未設定首圖</span>
+        <small>從下方貼文點選「設為封面」</small>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="ig-slot-empty ig-slot-error">
+        <ImageIcon size={28} className="text-danger" aria-hidden="true" />
+        <span>縮圖載入失敗</span>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <img
+        src={cover.previewUrl}
+        alt={`Post ${idx + 1} 封面`}
+        className="ig-slot-img"
+        draggable={false}
+        referrerPolicy="no-referrer"
+        onError={() => setLoadError(true)}
+      />
+      <button
+        type="button"
+        className="ig-preview-zoom-btn"
+        onClick={() => onZoom(cover)}
+        title="查看大圖"
+        aria-label={`查看 Post ${idx + 1} 封面大圖`}
+      >
+        <Eye size={14} />
+      </button>
+    </>
+  );
+}
+
 export default function PhotoCuratorPage() {
   const toast = useToast();
   const fileInputRef = useRef(null);
@@ -74,10 +162,26 @@ export default function PhotoCuratorPage() {
     }
     if (!files || files.length === 0) return;
 
-    const fileList = Array.from(files).filter((file) => file.type.startsWith('image/'));
+    const isImageFile = (file) => {
+      if (file.type && file.type.startsWith('image/')) return true;
+      return /\.(jpe?g|png|webp|gif|svg|avif|bmp|ico|heic|heif)$/i.test(file.name || '');
+    };
+    const fileList = Array.from(files).filter(isImageFile);
     if (fileList.length === 0) {
       toast.warning('所選檔案中沒有支援的圖片格式。若為 iPhone HEIC 格式請先轉為 JPG。');
       return;
+    }
+
+    const heicCount = fileList.filter(
+      (file) =>
+        /\.(heic|heif)$/i.test(file.name || '') ||
+        file.type === 'image/heic' ||
+        file.type === 'image/heif'
+    ).length;
+    if (heicCount > 0) {
+      toast.warning(
+        `偵測到 ${heicCount} 張 iPhone HEIC 照片；多數瀏覽器無法直接顯示 HEIC 縮圖，建議先轉為 JPG/PNG 格式。`
+      );
     }
 
     const newPhotos = fileList.map((file, idx) => {
@@ -481,25 +585,7 @@ export default function PhotoCuratorPage() {
                   <span className="ig-slot-title">{post.title.split(' ')[0]}</span>
                 </div>
                 <div className="ig-slot-image-box">
-                  {cover ? (
-                    <>
-                      <img src={cover.previewUrl} alt={`Post ${idx + 1} 封面`} className="ig-slot-img" />
-                      <button
-                        type="button"
-                        className="ig-preview-zoom-btn"
-                        onClick={() => setPreviewPhoto(cover)}
-                        title="查看大圖"
-                      >
-                        <Eye size={14} />
-                      </button>
-                    </>
-                  ) : (
-                    <div className="ig-slot-empty">
-                      <ImageIcon size={28} className="text-dim" />
-                      <span>尚未設定首圖</span>
-                      <small>從下方貼文點選「設為封面」</small>
-                    </div>
-                  )}
+                  <IgSlotImage cover={cover} onZoom={setPreviewPhoto} idx={idx} />
                 </div>
               </div>
             );
@@ -605,17 +691,7 @@ export default function PhotoCuratorPage() {
                     onDragStart={(e) => handleDragStart(e, photo.id)}
                     onDragEnd={handleDragEnd}
                   >
-                    <div className="photo-card-thumb-wrap">
-                      <img src={photo.previewUrl} alt={photo.name} className="photo-card-thumb" />
-                      <button
-                        type="button"
-                        className="photo-zoom-btn"
-                        onClick={() => setPreviewPhoto(photo)}
-                        title="查看大圖"
-                      >
-                        <Eye size={13} />
-                      </button>
-                    </div>
+                    <CuratorThumbnail photo={photo} onZoom={setPreviewPhoto} />
                     <div className="photo-card-info">
                       <div className="photo-card-name" title={photo.name}>
                         {photo.name}
@@ -727,32 +803,22 @@ export default function PhotoCuratorPage() {
                           onDragStart={(e) => handleDragStart(e, photo.id)}
                           onDragEnd={handleDragEnd}
                         >
-                          {/* Order Badge */}
-                          <div className={`photo-order-badge ${isCover ? 'cover-badge' : ''}`}>
-                            {isCover ? (
-                              <>
-                                <Star size={11} className="star-icon" /> #01 封面
-                              </>
-                            ) : (
-                              `#${String(index + 1).padStart(2, '0')}`
-                            )}
-                          </div>
-
-                          <div className="photo-card-thumb-wrap">
-                            <img src={photo.previewUrl} alt={photo.name} className="photo-card-thumb" />
-                            <button
-                              type="button"
-                              className="photo-zoom-btn"
-                              onClick={() => setPreviewPhoto(photo)}
-                              title="查看大圖"
-                            >
-                              <Eye size={13} />
-                            </button>
-                          </div>
+                          <CuratorThumbnail photo={photo} onZoom={setPreviewPhoto} />
 
                           <div className="photo-card-info">
-                            <div className="photo-card-name" title={photo.name}>
-                              {photo.name}
+                            <div className="photo-card-header">
+                              <div className={`photo-order-badge ${isCover ? 'cover-badge' : ''}`}>
+                                {isCover ? (
+                                  <>
+                                    <Star size={11} className="star-icon" /> #01 封面
+                                  </>
+                                ) : (
+                                  `#${String(index + 1).padStart(2, '0')}`
+                                )}
+                              </div>
+                              <div className="photo-card-name" title={photo.name}>
+                                {photo.name}
+                              </div>
                             </div>
                             <div className="photo-card-controls">
                               {!isCover && (
@@ -846,7 +912,12 @@ export default function PhotoCuratorPage() {
               </button>
             </div>
             <div className="modal-body photo-preview-body">
-              <img src={previewPhoto.previewUrl} alt={previewPhoto.name} className="large-preview-image" />
+              <img
+                src={previewPhoto.previewUrl}
+                alt={previewPhoto.name}
+                className="large-preview-image"
+                referrerPolicy="no-referrer"
+              />
             </div>
           </>
         )}
