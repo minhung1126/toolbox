@@ -39,10 +39,10 @@
   --info: #38bdf8;
 
   --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
   --radius-full: 9999px;
 }
 
@@ -146,7 +146,7 @@ h1, h2, h3, h4, h5, h6 {
   gap: 6px;
 }
 
-.form-input, .form-select {
+.form-input, .form-select, .form-control {
   background: rgba(10, 13, 20, 0.6);
   border: 1px solid var(--border-color);
   color: var(--text-main);
@@ -157,7 +157,7 @@ h1, h2, h3, h4, h5, h6 {
   outline: none;
 }
 
-.form-input:focus, .form-select:focus {
+.form-input:focus, .form-select:focus, .form-control:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-glow);
   background: rgba(15, 20, 32, 0.8);
@@ -374,7 +374,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .card-padding {
-  padding: 24px;
+  padding: 20px;
 }
 
 .card-header {

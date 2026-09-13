@@ -471,7 +471,7 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
                       </label>
                       <input
                         type="text"
-                        className="form-control form-input"
+                        className="form-input"
                         value={slotLabel}
                         onChange={(e) => setSlotLabel(e.target.value)}
                         placeholder="例如：Primary 或 Secondary"
@@ -486,7 +486,7 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
                       </label>
                       <input
                         type="text"
-                        className="form-control form-input"
+                        className="form-input"
                         value={slotClientId}
                         onChange={(e) => setSlotClientId(e.target.value)}
                         placeholder="請填寫 Google Cloud Console OAuth Client ID"
@@ -502,7 +502,7 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
                       <div style={{ position: 'relative' }}>
                         <input
                           type={showSlotSecret ? 'text' : 'password'}
-                          className="form-control form-input"
+                          className="form-input"
                           value={slotClientSecret}
                           onChange={(e) => setSlotClientSecret(e.target.value)}
                           placeholder="••••••••••••••••（輸入可覆蓋更新）"

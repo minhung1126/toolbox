@@ -212,7 +212,7 @@ export default function SetupWizardPage() {
             </label>
             <input
               type="text"
-              className="form-control"
+              className="form-input"
               placeholder="例如：123456789-abc.apps.googleusercontent.com"
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
@@ -229,7 +229,7 @@ export default function SetupWizardPage() {
             <div style={{ position: 'relative' }}>
               <input
                 type={showSecret ? 'text' : 'password'}
-                className="form-control"
+                className="form-input"
                 placeholder="例如：GOCSPX-xxxxxxxxxxxxxxxx"
                 value={clientSecret}
                 onChange={(e) => setClientSecret(e.target.value)}
@@ -263,7 +263,7 @@ export default function SetupWizardPage() {
             </label>
             <input
               type="email"
-              className="form-control"
+              className="form-input"
               placeholder="admin@yourcompany.com"
               value={adminEmail}
               onChange={(e) => setAdminEmail(e.target.value)}
@@ -288,7 +288,7 @@ export default function SetupWizardPage() {
               </label>
               <input
                 type="text"
-                className="form-control"
+                className="form-input"
                 placeholder="請輸入 6 位數安全碼"
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
