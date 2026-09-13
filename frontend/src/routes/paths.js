@@ -5,6 +5,7 @@ export const PATHS = Object.freeze({
   systemHealth: '/system/health',
   systemInfo: '/system/info',
   notes: '/notes',
+  photoCurator: '/photo-curator',
 
   youtubeVideoDrafts: '/youtube/drafts/videos',
   youtubeShortsDrafts: '/youtube/drafts/shorts',
@@ -34,6 +35,7 @@ const RETURN_PATH_ALIASES = Object.freeze({
 const STATIC_RETURN_PATHS = new Set([
   PATHS.dashboard,
   PATHS.notes,
+  PATHS.photoCurator,
   PATHS.systemHealth,
   PATHS.systemInfo,
   PATHS.youtubeVideoDrafts,

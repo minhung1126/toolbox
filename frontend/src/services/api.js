@@ -307,4 +307,11 @@ export const api = {
   deleteNote: (noteId) => request(`/notes/${encodeURIComponent(noteId)}`, {
     method: 'DELETE',
   }),
+
+  // Photo Curator API
+  getPhotoCuratorPresets: () => request('/photo-curator/presets'),
+  generatePhotoCuratorChecklist: ({ posts = [], notes = '' } = {}) => request('/photo-curator/checklist', {
+    method: 'POST',
+    body: JSON.stringify({ posts, notes }),
+  }),
 };

@@ -10,11 +10,12 @@ import {
 describe('Toolbox Frontend Tool Catalog', () => {
   it('returns registered tools with metadata', () => {
     const tools = getAllTools();
-    expect(tools.length).toBe(5);
+    expect(tools.length).toBe(6);
     const ids = tools.map((t) => t.id);
     expect(ids).toContain('creator-tools');
     expect(ids).toContain('sheets-tools');
     expect(ids).toContain('sticky-notes');
+    expect(ids).toContain('photo-curator');
     expect(ids).toContain('integrations-quota');
     expect(ids).toContain('system-utility');
   });
@@ -36,6 +37,10 @@ describe('Toolbox Frontend Tool Catalog', () => {
     const notesTool = getToolById('sticky-notes');
     expect(notesTool).not.toBeNull();
     expect(notesTool.name).toBe('Sticky Notes');
+
+    const photoCuratorTool = getToolById('photo-curator');
+    expect(photoCuratorTool).not.toBeNull();
+    expect(photoCuratorTool.name).toBe('Photo Curator');
   });
 
   it('aggregates navigation groups and system items', () => {
@@ -45,6 +50,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(groupIds).toContain('sheet');
     expect(groupIds).toContain('system');
     expect(groupIds).toContain('notes');
+    expect(groupIds).toContain('photo_curator_nav');
     expect(groupIds).toContain('integrations');
 
     const systemItems = getSystemNavItems();
@@ -56,7 +62,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
 
   it('provides dashboard feature cards', () => {
     const cards = getDashboardFeatureCards();
-    expect(cards.length).toBeGreaterThanOrEqual(5);
+    expect(cards.length).toBeGreaterThanOrEqual(6);
     const cardIds = cards.map((c) => c.id);
     expect(cardIds).toContain('video_drafts');
     expect(cardIds).toContain('shorts_drafts');
@@ -65,6 +71,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(cardIds).toContain('youtube_connections_card');
     expect(cardIds).toContain('system_settings_card');
     expect(cardIds).toContain('sticky_notes_card');
+    expect(cardIds).toContain('photo_curator_card');
   });
 });
 

@@ -3267,3 +3267,661 @@ h1, h2, h3, h4, h5, h6 {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   Photo Curator Workbench Styles
+   ========================================================================== */
+
+.photo-curator-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.photo-curator-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.photo-curator-help-panel {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-main);
+}
+
+.help-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  color: var(--accent);
+}
+
+.photo-curator-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.25rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.toolbar-preset-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.preset-select {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  min-width: 180px;
+}
+
+/* Instagram 3-Grid Live Preview */
+.ig-preview-section {
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border-color: rgba(99, 102, 241, 0.3);
+  background: linear-gradient(180deg, rgba(23, 34, 54, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%);
+}
+
+.ig-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.ig-preview-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ig-preview-title h3 {
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.ig-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.ig-grid-slot {
+  background: rgba(10, 15, 29, 0.6);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ig-slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+}
+
+.ig-slot-badge {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ig-slot-title {
+  color: var(--text-muted);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ig-slot-image-box {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  position: relative;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.ig-slot-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.ig-slot-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  text-align: center;
+  padding: 0.5rem;
+}
+
+.ig-slot-empty small {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.ig-preview-zoom-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-xs);
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.ig-preview-zoom-btn:hover {
+  background: var(--accent);
+}
+
+/* Dropzone */
+.photo-dropzone {
+  border: 2px dashed var(--border-color);
+  padding: 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  transition: all 0.2s ease;
+}
+
+.photo-dropzone:hover,
+.photo-dropzone.is-drag-over {
+  border-color: var(--accent);
+  background: rgba(14, 165, 233, 0.05);
+}
+
+.dropzone-content {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  text-align: left;
+}
+
+.dropzone-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-full);
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dropzone-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
+/* Main Curator Workbench Grid */
+.curator-workbench-grid {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+/* Unassigned Pool */
+.unassigned-pool-panel {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: rgba(15, 23, 42, 0.6);
+  min-height: 480px;
+}
+
+.unassigned-pool-panel.is-drag-over {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(14, 165, 233, 0.3);
+}
+
+.pool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.pool-header-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.pool-header-title h4 {
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.pool-desc {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.pool-photo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  max-height: 650px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.pool-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  text-align: center;
+  gap: 0.75rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+/* Post Columns Grid */
+.posts-columns-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+}
+
+.post-column-card {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 480px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.post-column-card.is-drag-over {
+  border-color: var(--accent);
+  box-shadow: 0 0 15px rgba(14, 165, 233, 0.3);
+}
+
+.post-column-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.post-column-tag {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.post-index-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-xs);
+  background: var(--primary);
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.post-title-input {
+  flex: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  color: var(--text-main);
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.2rem 0.4rem;
+  transition: border-color 0.2s;
+}
+
+.post-title-input:hover,
+.post-title-input:focus {
+  background: rgba(10, 15, 29, 0.7);
+  border-color: var(--border-color);
+}
+
+.post-capacity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.post-limit-warning {
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  color: var(--danger);
+  border-radius: var(--radius-xs);
+  padding: 0.4rem 0.6rem;
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.post-photo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 650px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.post-empty-drop-target {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3.5rem 1rem;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  gap: 0.5rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.post-empty-drop-target small {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+/* Photo Cards */
+.curator-photo-card {
+  position: relative;
+  display: flex;
+  gap: 0.75rem;
+  background: rgba(10, 15, 29, 0.85);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.6rem;
+  cursor: grab;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.curator-photo-card:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+.curator-photo-card.is-dragging {
+  opacity: 0.4;
+}
+
+.post-item-card.is-cover-item {
+  border-color: rgba(99, 102, 241, 0.6);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(10, 15, 29, 0.9) 100%);
+}
+
+.photo-order-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: rgba(0, 0, 0, 0.75);
+  color: var(--text-main);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.photo-order-badge.cover-badge {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary-glow);
+}
+
+.star-icon {
+  color: #facc15;
+}
+
+.photo-card-thumb-wrap {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  background: #000;
+}
+
+.photo-card-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.photo-zoom-btn {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-xs);
+  padding: 2px;
+  cursor: pointer;
+  display: flex;
+}
+
+.photo-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.photo-card-name {
+  font-size: 0.8rem;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photo-card-quick-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.btn-quick-assign {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  padding: 0.2rem 0.45rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-quick-assign:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.photo-card-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.btn-order-action {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  color: var(--text-muted);
+  padding: 0.25rem 0.4rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  transition: all 0.15s;
+}
+
+.btn-order-action:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-main);
+}
+
+.btn-order-action:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.set-cover-btn {
+  color: #facc15;
+  border-color: rgba(250, 204, 21, 0.3);
+}
+
+.set-cover-btn:hover {
+  background: rgba(250, 204, 21, 0.2) !important;
+  color: #fef08a !important;
+}
+
+.reorder-btn-group {
+  display: flex;
+  gap: 2px;
+}
+
+.btn-remove-photo,
+.btn-delete-photo {
+  color: var(--danger);
+  margin-left: auto;
+}
+
+.btn-remove-photo:hover,
+.btn-delete-photo:hover {
+  background: rgba(244, 63, 94, 0.2) !important;
+  color: #fda4af !important;
+}
+
+.btn-return-photo {
+  color: var(--accent);
+  margin-left: auto;
+}
+
+.btn-return-photo:hover {
+  background: rgba(14, 165, 233, 0.2) !important;
+  color: #7dd3fc !important;
+}
+
+/* Modal for Image Preview */
+.photo-preview-modal {
+  max-width: 800px;
+  width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.photo-preview-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  overflow: hidden;
+}
+
+.large-preview-image {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+  .curator-workbench-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .posts-columns-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ig-preview-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .ig-preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .photo-dropzone {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .dropzone-content {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .dropzone-stats {
+    align-items: center;
+  }
+}

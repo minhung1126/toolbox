@@ -10,6 +10,7 @@ describe('route paths', () => {
     expect(PATHS.youtubeConnections).toBe('/youtube/settings/connections');
     expect(PATHS.sheetSettings).toBe('/sheets/settings');
     expect(PATHS.systemSettings).toBe('/system/settings');
+    expect(PATHS.photoCurator).toBe('/photo-curator');
   });
 
   it('accepts known protected internal paths without hashes', () => {
