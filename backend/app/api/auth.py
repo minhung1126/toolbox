@@ -590,7 +590,9 @@ def activate_youtube_slot(slot: str, request: Request):
 def logout(request: Request):
     """Clear the control-panel login session without removing YouTube access."""
     res = Response(content='{"status":"logged_out"}', media_type="application/json")
-    session_store.delete(request.cookies.get(SESSION_COOKIE, ""))
+    session_id = request.cookies.get(SESSION_COOKIE)
+    if session_id:
+        session_store.delete(session_id)
     res.delete_cookie(SESSION_COOKIE, path="/", secure=settings.cookie_secure, httponly=True, samesite="lax")
     res.delete_cookie(OAUTH_FLOW_COOKIE, path="/", secure=settings.cookie_secure, httponly=True, samesite="lax")
     return res
