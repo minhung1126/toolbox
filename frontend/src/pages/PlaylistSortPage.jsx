@@ -12,14 +12,18 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Settings,
   Sparkles,
   X,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { StatusMessage } from '../components/StatusMessage';
 import { useOAuthConnect } from '../hooks/useOAuthConnect';
+import useAccountWorkState from '../hooks/useAccountWorkState';
+import { PATHS } from '../routes/paths';
 
 const SORT_PRESETS = [
   { id: 'title-asc', label: '歌名 A → Z', keys: [{ field: 'title', direction: 'asc' }] },
@@ -229,8 +233,15 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
   });
 
   // Sort configuration
-  const [presetMode, setPresetMode] = useState('title-asc');
+  const { value: preferences } = useAccountWorkState('ytmusic_preferences', { defaultPreset: 'title-asc' });
+  const [presetMode, setPresetMode] = useState(preferences?.defaultPreset || 'title-asc');
   const [customKeys, setCustomKeys] = useState([{ field: 'title', direction: 'asc' }]);
+
+  useEffect(() => {
+    if (preferences?.defaultPreset) {
+      setPresetMode((current) => (current === 'title-asc' ? preferences.defaultPreset : current));
+    }
+  }, [preferences?.defaultPreset]);
 
   // Preview
   const [previewData, setPreviewData] = useState(null);
@@ -396,7 +407,14 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
               </p>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Link
+              to={PATHS.ytmusicSettings}
+              className="btn btn-secondary btn-sm"
+              title="前往 YouTube Music 設定"
+            >
+              <Settings size={14} /> 設定
+            </Link>
             {isYtmusicConnected ? (
               <>
                 <button

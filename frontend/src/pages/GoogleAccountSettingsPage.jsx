@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Disc3, ExternalLink, FileSpreadsheet, Key, ListVideo, RefreshCw, Shield, XCircle } from 'lucide-react';
+import { CheckCircle2, Disc3, ExternalLink, FileSpreadsheet, Key, ListVideo, RefreshCw, Settings, Shield, XCircle } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import { useToast } from '../components/Toast';
@@ -119,7 +119,10 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
         reconnectText="重新授權 YouTube Music"
         disconnectText="解除 YouTube Music 授權"
       />
-      <div style={{ margin: '-0.75rem 0 1rem 0', display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ margin: '-0.75rem 0 1rem 0', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <Link className="btn btn-secondary btn-sm" to={PATHS.ytmusicSettings}>
+          <Settings size={14} /> YouTube Music 專屬設定
+        </Link>
         <Link className="btn btn-secondary btn-sm" to={PATHS.ytmusicPlaylistSort}>
           <Disc3 size={14} /> 前往 YouTube Music 播放清單排序
         </Link>

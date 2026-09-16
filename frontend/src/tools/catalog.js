@@ -101,6 +101,7 @@ export const TOOL_MODULES = Object.freeze([
         icon: Disc3,
         items: [
           { id: 'ytmusic_playlist_sort', to: PATHS.ytmusicPlaylistSort, label: '播放清單排序', icon: ArrowUpDown },
+          { id: 'ytmusic_settings', to: PATHS.ytmusicSettings, label: 'YouTube Music 設定', icon: Settings, activePrefix: PATHS.ytmusicSettings },
         ],
       },
     ],
@@ -113,6 +114,15 @@ export const TOOL_MODULES = Object.freeze([
         actionLabel: '進入音樂排序工具',
         icon: Disc3,
         colorTheme: 'primary',
+      },
+      {
+        id: 'ytmusic_settings_card',
+        title: 'YouTube Music 設定',
+        description: '管理專屬 YouTube Music 帳號授權、個人音樂庫連線狀態與排序預設偏好。',
+        to: PATHS.ytmusicSettings,
+        actionLabel: '進入音樂設定',
+        icon: Settings,
+        colorTheme: 'secondary',
       },
     ],
   },

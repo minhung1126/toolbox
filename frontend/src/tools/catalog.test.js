@@ -31,6 +31,9 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(ytmusicTool).not.toBeNull();
     expect(ytmusicTool.name).toBe('YouTube Music');
     expect(ytmusicTool.navGroups.length).toBeGreaterThan(0);
+    const ytmusicItemIds = ytmusicTool.navGroups[0].items.map((i) => i.id);
+    expect(ytmusicItemIds).toContain('ytmusic_playlist_sort');
+    expect(ytmusicItemIds).toContain('ytmusic_settings');
 
     const sheetsTool = getToolById('sheets-tools');
     expect(sheetsTool).not.toBeNull();
@@ -75,6 +78,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(cardIds).toContain('shorts_drafts');
     expect(cardIds).toContain('publish_clean');
     expect(cardIds).toContain('ytmusic_playlist_sort_card');
+    expect(cardIds).toContain('ytmusic_settings_card');
     expect(cardIds).toContain('sheet_copy');
     expect(cardIds).toContain('youtube_connections_card');
     expect(cardIds).toContain('system_settings_card');

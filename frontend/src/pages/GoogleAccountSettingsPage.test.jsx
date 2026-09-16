@@ -42,6 +42,7 @@ describe('GoogleAccountSettingsPage', () => {
 
     expect(screen.getByText('控制台登入帳號')).toBeInTheDocument();
     expect(screen.getByText('Google 試算表授權')).toBeInTheDocument();
+    expect(screen.getByText('YouTube Music 帳號授權')).toBeInTheDocument();
     expect(screen.getByText('YouTube 頻道授權')).toBeInTheDocument();
     expect(screen.getByText('系統設定與安全')).toBeInTheDocument();
     expect(screen.queryByText('Google 雲端硬碟授權')).not.toBeInTheDocument();
@@ -49,6 +50,8 @@ describe('GoogleAccountSettingsPage', () => {
     expect(screen.getByText('已登入：admin@example.com')).toBeInTheDocument();
     expect(screen.getByText('已授權試算表')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /前往 Sheet 模組設定/ })).toHaveAttribute('href', '/sheets/settings');
+    expect(screen.getByRole('link', { name: /YouTube Music 專屬設定/ })).toHaveAttribute('href', '/ytmusic/settings');
+    expect(screen.getByRole('link', { name: /前往 YouTube Music 播放清單排序/ })).toHaveAttribute('href', '/ytmusic/playlist-sort');
     expect(screen.getByRole('link', { name: /前往 YouTube 頻道授權設定/ })).toHaveAttribute('href', '/youtube/settings/connections');
     expect(screen.getByRole('link', { name: /前往系統設定/ })).toHaveAttribute('href', '/system/settings');
   });

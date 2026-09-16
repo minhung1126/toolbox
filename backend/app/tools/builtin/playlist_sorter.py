@@ -21,6 +21,11 @@ class YouTubeMusicPlugin(ToolPlugin):
                     label="播放清單排序",
                     description="讀取 YouTube Music 播放清單並以多種欄位自訂排序",
                 ),
+                ToolRoute(
+                    path="/ytmusic/settings",
+                    label="YouTube Music 設定",
+                    description="管理 YouTube Music 專屬帳號授權與偏好設定",
+                ),
             ],
             required_scopes=["youtube"],
             tags=["ytmusic", "youtube-music", "playlist", "sort", "music"],

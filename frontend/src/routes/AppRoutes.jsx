@@ -26,6 +26,7 @@ import RouteEffects from './RouteEffects';
 import { getSafeReturnPath, PATHS } from './paths';
 
 const PlaylistSortPage = React.lazy(() => import('../pages/PlaylistSortPage'));
+const YtmusicSettingsPage = React.lazy(() => import('../pages/YtmusicSettingsPage'));
 
 function LoginRoute({ initialError }) {
   const location = useLocation();
@@ -105,6 +106,7 @@ export default function AppRoutes({
           <Route path="youtube/publish-cleanup" element={<PublishCleanerPage sysSettings={sysSettings} authUser={authUser} />} />
           <Route path="youtube/playlist-sort" element={<Navigate replace to={PATHS.ytmusicPlaylistSort} />} />
           <Route path="ytmusic/playlist-sort" element={<React.Suspense fallback={<div className="loading-center">載入中…</div>}><PlaylistSortPage {...pageProps} /></React.Suspense>} />
+          <Route path="ytmusic/settings" element={<React.Suspense fallback={<div className="loading-center">載入中…</div>}><YtmusicSettingsPage {...pageProps} /></React.Suspense>} />
           <Route path="sheets/copy" element={<SheetCopyPage sysSettings={sysSettings} />} />
           <Route path="sheets/settings" element={<GoogleSheetSettingsPage {...pageProps} />} />
 
