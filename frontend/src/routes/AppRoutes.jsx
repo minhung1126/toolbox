@@ -25,6 +25,8 @@ import RequireAuth from './RequireAuth';
 import RouteEffects from './RouteEffects';
 import { getSafeReturnPath, PATHS } from './paths';
 
+const PlaylistSortPage = React.lazy(() => import('../pages/PlaylistSortPage'));
+
 function LoginRoute({ initialError }) {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
@@ -101,6 +103,7 @@ export default function AppRoutes({
           <Route path="youtube/drafts/videos" element={<BatchUpdatePage key="video-drafts" sysSettings={sysSettings} authUser={authUser} videoType="Video" />} />
           <Route path="youtube/drafts/shorts" element={<BatchUpdatePage key="shorts-drafts" sysSettings={sysSettings} authUser={authUser} videoType="Shorts" />} />
           <Route path="youtube/publish-cleanup" element={<PublishCleanerPage sysSettings={sysSettings} authUser={authUser} />} />
+          <Route path="youtube/playlist-sort" element={<React.Suspense fallback={<div className="loading-center">載入中…</div>}><PlaylistSortPage {...pageProps} /></React.Suspense>} />
           <Route path="sheets/copy" element={<SheetCopyPage sysSettings={sysSettings} />} />
           <Route path="sheets/settings" element={<GoogleSheetSettingsPage {...pageProps} />} />
 

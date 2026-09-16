@@ -1,6 +1,6 @@
 # Toolbox 開發規範
 
-Toolbox 是一個高擴充性的多功能模組化工具箱平台，使用 FastAPI (Python 3.11+)、React/Vite 與 Docker，內建首要核心套件為 Creator Tools（整合 Google Sheets、Google Drive 與 YouTube 創作者自動化工作流）。
+Toolbox 是一個高擴充性的多功能模組化工具箱平台，使用 FastAPI (Python 3.11+)、React/Vite 與 Docker，內建模組包含 Creator Tools（整合 Google Sheets、Google Drive 與 YouTube 創作者自動化工作流）、YouTube 播放清單排序工具（Playlist Sorter，支援多欄位排序、左右預覽比對與 Quota 控管）、試算表工具、便利貼備忘錄、Instagram 排版工具與系統維運工具。
 
 ## 架構與安全
 
@@ -15,7 +15,7 @@ Toolbox 是一個高擴充性的多功能模組化工具箱平台，使用 FastA
     - `require_login_credentials`：控制台身分驗證。
     - `require_sheets_credentials`：試算表讀取權限（具 legacy 憑證自動 fallback 相容）。
     - `require_drive_credentials`：雲端硬碟讀取權限（具 legacy 憑證自動 fallback 相容）。
-    - `require_youtube_context`：YouTube 頻道操作與配額槽位選擇。
+    - `require_youtube_context`：YouTube 頻道操作與配額槽位選擇（創作者工作流與播放清單排序共用相同 YouTube OAuth 憑證與 Quota 限流器）。
 - 正式程式一律使用 `logging`，嚴格禁止使用 `print()`。
 
 ## 模組化擴充規範 (Toolbox Plugins)

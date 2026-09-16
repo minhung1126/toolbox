@@ -16,6 +16,7 @@ export const PATHS = Object.freeze({
   youtubeRouting: '/youtube/settings/routing',
   youtubeQuota: '/youtube/settings/quota',
   youtubePlaylist: '/youtube/settings/playlist',
+  youtubePlaylistSort: '/youtube/playlist-sort',
 
   sheetCopy: '/sheets/copy',
   sheetSettings: '/sheets/settings',
@@ -45,6 +46,7 @@ const STATIC_RETURN_PATHS = new Set([
   PATHS.youtubeRouting,
   PATHS.youtubeQuota,
   PATHS.youtubePlaylist,
+  PATHS.youtubePlaylistSort,
   PATHS.sheetCopy,
   PATHS.googleSettings,
   PATHS.sheetSettings,

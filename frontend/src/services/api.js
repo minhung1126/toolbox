@@ -314,4 +314,17 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ posts, notes }),
   }),
+
+  // Playlist Sort API
+  getPlaylistSortPlaylists: () => request('/playlist-sort/playlists'),
+  previewPlaylistSort: ({ playlistId, sortKeys }) => request('/playlist-sort/preview', {
+    method: 'POST',
+    timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+    body: JSON.stringify({ playlist_id: playlistId, sort_keys: sortKeys }),
+  }),
+  applyPlaylistSort: ({ playlistId, sortKeys, previewToken }) => request('/playlist-sort/apply', {
+    method: 'POST',
+    timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+    body: JSON.stringify({ playlist_id: playlistId, sort_keys: sortKeys, preview_token: previewToken }),
+  }),
 };

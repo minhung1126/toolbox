@@ -8,6 +8,7 @@
 
 import {
   Activity,
+  ArrowUpDown,
   BarChart3,
   Clapperboard,
   Copy,
@@ -17,6 +18,7 @@ import {
   Instagram,
   Key,
   LayoutGrid,
+  ListMusic,
   Send,
   Settings,
   Shield,
@@ -78,6 +80,38 @@ export const TOOL_MODULES = Object.freeze([
         actionLabel: '進入發布模組',
         icon: Send,
         colorTheme: 'secondary',
+      },
+    ],
+  },
+  {
+    id: 'playlist-sorter',
+    name: 'Playlist Sorter',
+    title: 'YouTube 播放清單排序',
+    description: 'YouTube 播放清單智慧排序，支援多欄位自訂排序規則、即時模擬預覽與一鍵套用。',
+    category: '播放清單管理',
+    icon: ArrowUpDown,
+    badge: '排序工具',
+    status: 'active',
+    entryUrl: PATHS.youtubePlaylistSort,
+    navGroups: [
+      {
+        id: 'playlist_sort',
+        label: '播放清單排序',
+        icon: ListMusic,
+        items: [
+          { id: 'playlist_sort_main', to: PATHS.youtubePlaylistSort, label: '播放清單排序', icon: ArrowUpDown },
+        ],
+      },
+    ],
+    featureCards: [
+      {
+        id: 'playlist_sort_card',
+        title: '播放清單排序',
+        description: '讀取 YouTube 播放清單，以歌名、頻道、日期、長度等欄位自訂排序，並即時預覽變更。',
+        to: PATHS.youtubePlaylistSort,
+        actionLabel: '進入排序工具',
+        icon: ArrowUpDown,
+        colorTheme: 'primary',
       },
     ],
   },

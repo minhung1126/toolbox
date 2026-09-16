@@ -50,6 +50,11 @@ Toolbox 採用 **「平台核心 (Platform Core) + 工具外掛 (Tool Plugins)�
   - `ToolRegistry`: 集中管理所有已安裝工具，負責自動掛載路由、統一執行生命週期勾子（如背景上傳 Worker）與健康度彙整。
 - **`builtin/`**:
   - `creator_tools.py`: 創作者工具模組（封裝 YouTube、Google Sheets、Google Drive 批次上傳）。
+  - `playlist_sorter.py`: YouTube 播放清單智慧排序模組（支援多欄位自訂排序、即時模擬預覽、左右對照與一鍵套用）。
+  - `photo_curator.py`: Instagram 貼文排版工具模組。
+  - `sheets_tools.py`: 試算表內容複製與跨表設定模組。
+  - `sticky_notes.py`: 個人便利貼文字備忘錄模組。
+  - `youtube_integrations.py`: YouTube 雙槽位頻道連線、路由分流與配額管理模組。
   - `system_utility.py`: 系統診斷與版本資訊模組。
   - `example_tool.py`: 擴充新工具之開發者參考範本。
 

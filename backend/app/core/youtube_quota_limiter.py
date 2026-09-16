@@ -59,6 +59,7 @@ YOUTUBE_AUXILIARY_QUOTA_METHODS: dict[str, dict[str, Any]] = {
     # Kept separate from the legacy registry so existing callers that inspect
     # the general workflow methods retain their stable shape.
     "playlistItems.insert": {"bucket": GENERAL_BUCKET, "cost": 50},
+    "playlistItems.update": {"bucket": GENERAL_BUCKET, "cost": 50},
     "playlists.list": {"bucket": GENERAL_BUCKET, "cost": 1},
 }
 
