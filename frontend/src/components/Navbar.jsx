@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, ChevronDown, Instagram, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, StickyNote, Video, X } from 'lucide-react';
+import { ArrowUpDown, CheckCircle2, ChevronDown, Instagram, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, StickyNote, Video, X } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { youtubeIsConnected } from '../utils/youtubeRouting';
@@ -20,6 +20,13 @@ const photoCuratorItem = photoCuratorGroup.items?.[0] || {
   to: PATHS.photoCurator,
   label: 'Instagram 排版',
   icon: Instagram,
+};
+const playlistSortGroup = toolNavGroups.find((g) => g.id === 'playlist_sort') || { items: [] };
+const playlistSortItem = playlistSortGroup.items?.[0] || {
+  id: 'playlist_sort_main',
+  to: PATHS.youtubePlaylistSort,
+  label: '播放清單排序',
+  icon: ArrowUpDown,
 };
 const youtubeItems = youtubeGroup.items;
 const sheetItems = sheetGroup.items;
@@ -143,6 +150,12 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
           to: photoCuratorItem.to || PATHS.photoCurator,
           label: photoCuratorGroup.label || photoCuratorItem.label || 'Instagram 排版',
           icon: photoCuratorGroup.icon || photoCuratorItem.icon || Instagram,
+        })}
+        {item({
+          id: playlistSortItem.id,
+          to: playlistSortItem.to || PATHS.youtubePlaylistSort,
+          label: playlistSortGroup.label || playlistSortItem.label || '播放清單排序',
+          icon: playlistSortItem.icon || ArrowUpDown,
         })}
         {group('youtube', 'YouTube', youtubeGroup.icon, youtubeOpen, setYoutubeOpen, youtubeItems, youtubeActive)}
         {group('sheet', 'Sheet', sheetGroup.icon, sheetOpen, setSheetOpen, sheetItems, sheetActive)}

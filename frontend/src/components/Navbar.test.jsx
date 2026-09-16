@@ -87,5 +87,16 @@ describe('Navbar', () => {
     expect(igLink).toHaveAttribute('aria-current', 'page');
     expect(igLink).toHaveClass('active');
   });
+
+  it('exposes Playlist Sorter tool in navigation with active state', () => {
+    window.localStorage.clear();
+    render(<NavbarHarness initialEntry={PATHS.youtubePlaylistSort} />);
+
+    const sortLink = screen.getByRole('link', { name: '播放清單排序' });
+    expect(sortLink).toBeVisible();
+    expect(sortLink).toHaveAttribute('href', PATHS.youtubePlaylistSort);
+    expect(sortLink).toHaveAttribute('aria-current', 'page');
+    expect(sortLink).toHaveClass('active');
+  });
 });
 
