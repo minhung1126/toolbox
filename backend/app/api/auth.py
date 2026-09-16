@@ -5,6 +5,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 
 from backend.app.core.account_state import (
     get_account_active_slot,
@@ -191,7 +192,8 @@ def _build_service_authorization_status(
     has_scope_fn,
     fallback_user: Optional[dict] = None,
 ) -> dict:
-    connected = bool(creds and creds.valid and has_scope_fn(creds))
+    has_custom = bool(public_record.get("has_custom_token"))
+    connected = bool((creds and creds.valid and has_scope_fn(creds)) or has_custom)
     return {
         "connected": connected,
         "user": public_record.get("user") or (fallback_user if connected and not public_record else None),
@@ -200,6 +202,8 @@ def _build_service_authorization_status(
         "token_expires_at": public_record.get("token_expires_at"),
         "last_refreshed_at": public_record.get("last_refreshed_at"),
         "last_refresh_error": public_record.get("last_refresh_error"),
+        "has_custom_token": has_custom,
+        "engine": public_record.get("engine", "google_oauth"),
     }
 
 
@@ -299,6 +303,39 @@ def get_ytmusic_auth_url(request: Request, response: Response):
 def disconnect_ytmusic(request: Request):
     """Disconnect the dedicated YouTube Music authorization."""
     return _disconnect_service(request, credential_store.clear_ytmusic, "ytmusic")
+
+
+class YtmusicCustomTokenInput(BaseModel):
+    token: str
+
+
+@router.post("/ytmusic/custom-token")
+def save_ytmusic_custom_token(payload: YtmusicCustomTokenInput, request: Request):
+    """Save custom YouTube Music browser cookie/headers token."""
+    from backend.app.services.ytmusic_service import parse_custom_token_input
+
+    token_str = payload.token.strip()
+    if not token_str:
+        raise http_error(400, "empty_token", "Token 內容不可為空。")
+
+    try:
+        parse_custom_token_input(token_str)
+    except Exception as exc:
+        raise http_error(400, "invalid_token", f"Token 格式錯誤或解析失敗：{exc}") from exc
+
+    auth_session = get_authenticated_session(request)
+    credential_store.save_ytmusic_custom_token(token_str, owner_sub=auth_session.subject)
+    logger.info("Custom YouTube Music token updated for subject %s", auth_session.subject)
+    return {"status": "success", "message": "YouTube Music 自訂 Token 已成功設定。"}
+
+
+@router.delete("/ytmusic/custom-token")
+def clear_ytmusic_custom_token(request: Request):
+    """Clear custom YouTube Music browser token."""
+    auth_session = get_authenticated_session(request)
+    credential_store.clear_ytmusic_custom_token(auth_session.subject)
+    logger.info("Custom YouTube Music token cleared for subject %s", auth_session.subject)
+    return {"status": "success", "message": "YouTube Music 自訂 Token 已清除。"}
 
 
 @router.get("/youtube/{slot}/url")

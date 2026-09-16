@@ -319,14 +319,42 @@ export const api = {
 
   // Playlist Sort API
   getPlaylistSortPlaylists: () => request('/playlist-sort/playlists'),
-  previewPlaylistSort: ({ playlistId, sortKeys }) => request('/playlist-sort/preview', {
+  previewPlaylistSort: ({ playlistId, sortKeys, fetchAlbumDetails = true, useYoutubeApi = false }) => request('/playlist-sort/preview', {
     method: 'POST',
     timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
-    body: JSON.stringify({ playlist_id: playlistId, sort_keys: sortKeys }),
+    body: JSON.stringify({
+      playlist_id: playlistId,
+      sort_keys: sortKeys,
+      fetch_album_details: fetchAlbumDetails,
+      use_youtube_api: useYoutubeApi,
+    }),
   }),
-  applyPlaylistSort: ({ playlistId, sortKeys, previewToken }) => request('/playlist-sort/apply', {
+  applyPlaylistSort: ({
+    playlistId,
+    sortKeys,
+    previewToken,
+    mode = 'in_place',
+    newPlaylistTitle = null,
+    useYoutubeApi = false,
+    sortedItemIds = null,
+  }) => request('/playlist-sort/apply', {
     method: 'POST',
     timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
-    body: JSON.stringify({ playlist_id: playlistId, sort_keys: sortKeys, preview_token: previewToken }),
+    body: JSON.stringify({
+      playlist_id: playlistId,
+      sort_keys: sortKeys,
+      preview_token: previewToken,
+      mode,
+      new_playlist_title: newPlaylistTitle,
+      use_youtube_api: useYoutubeApi,
+      sorted_item_ids: sortedItemIds,
+    }),
+  }),
+  saveYtmusicCustomToken: (token) => request('/auth/ytmusic/custom-token', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  }),
+  clearYtmusicCustomToken: () => request('/auth/ytmusic/custom-token', {
+    method: 'DELETE',
   }),
 };

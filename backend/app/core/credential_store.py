@@ -258,7 +258,21 @@ class CredentialStore:
         return self._get_credentials(f"youtube_{slot_name}", owner_sub)
 
     def get_ytmusic_public(self, owner_sub: str) -> Optional[Dict[str, Any]]:
-        return self._get_public("ytmusic", owner_sub)
+        public = self._get_public("ytmusic", owner_sub)
+        has_custom = bool(self.get_ytmusic_custom_token(owner_sub))
+        if public is None:
+            if has_custom:
+                return {
+                    "connected": True,
+                    "has_custom_token": True,
+                    "engine": "ytmusic_innertube",
+                    "status": "active",
+                    "token_status": "active",
+                }
+            return None
+        public["has_custom_token"] = has_custom
+        public["engine"] = "ytmusic_innertube"
+        return public
 
     def _get_public(self, key: str, owner_sub: str) -> Optional[Dict[str, Any]]:
         with self._lock:
@@ -371,8 +385,40 @@ class CredentialStore:
     def clear_drive(self, owner_sub: str) -> None:
         self._clear("drive", owner_sub)
 
+    def save_ytmusic_custom_token(self, token_data: str, owner_sub: str) -> None:
+        """Persist encrypted custom YouTube Music browser token / headers."""
+        with self._lock:
+            subject = _require_subject(owner_sub)
+            user_records = self._data.setdefault("users", {}).setdefault(subject, {})
+            encrypted = self._encrypt(str(token_data).strip())
+            record = {
+                "owner_sub": subject,
+                "token_encrypted": encrypted,
+                "updated_at": to_iso(utc_now()),
+            }
+            user_records["ytmusic_custom_token"] = record
+            self._save()
+
+    def get_ytmusic_custom_token(self, owner_sub: str) -> Optional[str]:
+        """Retrieve and decrypt custom YouTube Music token if present."""
+        with self._lock:
+            record = self._find_record("ytmusic_custom_token", owner_sub)
+            if not isinstance(record, dict) or not record.get("token_encrypted"):
+                return None
+            encrypted = record.get("token_encrypted")
+        try:
+            return self._decrypt(encrypted)
+        except Exception:
+            logger.warning("Failed to decrypt ytmusic_custom_token for user %s", owner_sub)
+            return None
+
+    def clear_ytmusic_custom_token(self, owner_sub: str) -> None:
+        """Remove custom YouTube Music token."""
+        self._clear("ytmusic_custom_token", owner_sub)
+
     def clear_ytmusic(self, owner_sub: str) -> None:
         self._clear("ytmusic", owner_sub)
+        self.clear_ytmusic_custom_token(owner_sub)
 
     def clear_youtube(self, owner_sub: str, slot: str = "primary") -> None:
         self._clear(f"youtube_{normalize_youtube_slot(slot)}", owner_sub)

@@ -7,10 +7,13 @@ import {
   Check,
   CheckCircle2,
   Disc3,
+  ExternalLink,
+  GripVertical,
   ListMusic,
   Loader2,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   Settings,
   Sparkles,
@@ -26,6 +29,25 @@ import useAccountWorkState from '../hooks/useAccountWorkState';
 import { PATHS } from '../routes/paths';
 
 const SORT_PRESETS = [
+  {
+    id: 'album-order',
+    label: '經典完整專輯（藝人 → 年份 → 專輯 → 曲目 #）',
+    keys: [
+      { field: 'artist', direction: 'asc' },
+      { field: 'year', direction: 'asc' },
+      { field: 'album', direction: 'asc' },
+      { field: 'track_number', direction: 'asc' },
+    ],
+  },
+  {
+    id: 'artist-album-track',
+    label: '藝人專輯曲目（藝人 → 專輯 → 曲目 #）',
+    keys: [
+      { field: 'artist', direction: 'asc' },
+      { field: 'album', direction: 'asc' },
+      { field: 'track_number', direction: 'asc' },
+    ],
+  },
   { id: 'title-asc', label: '歌名 A → Z', keys: [{ field: 'title', direction: 'asc' }] },
   { id: 'title-desc', label: '歌名 Z → A', keys: [{ field: 'title', direction: 'desc' }] },
   { id: 'artist-asc', label: '頻道／藝人 A → Z', keys: [{ field: 'artist', direction: 'asc' }] },
@@ -37,17 +59,106 @@ const SORT_PRESETS = [
   { id: 'duration-shortest', label: '長度（短 → 長）', keys: [{ field: 'duration', direction: 'asc' }] },
   { id: 'duration-longest', label: '長度（長 → 短）', keys: [{ field: 'duration', direction: 'desc' }] },
   { id: 'random', label: '隨機排序', keys: [{ field: 'random', direction: 'asc' }] },
-  { id: 'custom', label: '自訂排序…', keys: [] },
+  { id: 'custom', label: '自訂多重排序…', keys: [] },
 ];
 
 const SORT_FIELDS = [
+  { value: 'artist', label: '歌手／藝人' },
+  { value: 'album', label: '專輯名稱' },
+  { value: 'track_number', label: '曲目順序（第幾首）' },
   { value: 'title', label: '歌名' },
-  { value: 'artist', label: '頻道／藝人' },
+  { value: 'year', label: '發行年份' },
+  { value: 'duration', label: '長度' },
   { value: 'added_at', label: '新增日期' },
   { value: 'published_at', label: '發布日期' },
-  { value: 'duration', label: '長度' },
   { value: 'random', label: '隨機' },
 ];
+
+export function sortTracksLocally(items, sortKeys) {
+  if (!items || items.length === 0 || !sortKeys || sortKeys.length === 0) {
+    return items.map((it, i) => ({ ...it, new_position: i }));
+  }
+
+  const sorted = [...items];
+
+  for (let k = sortKeys.length - 1; k >= 0; k--) {
+    const { field, direction } = sortKeys[k];
+    const rev = direction === 'desc';
+
+    sorted.sort((a, b) => {
+      if (field === 'artist') {
+        const aVal = (a.artist || a.channel_title || '').normalize('NFKC').toLowerCase();
+        const bVal = (b.artist || b.channel_title || '').normalize('NFKC').toLowerCase();
+        return rev ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+      }
+      if (field === 'album') {
+        const aVal = (a.album || '').normalize('NFKC').toLowerCase();
+        const bVal = (b.album || '').normalize('NFKC').toLowerCase();
+        return rev ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+      }
+      if (field === 'track_number') {
+        const aVal = a.track_number != null && a.track_number !== '' ? Number(a.track_number) : (rev ? -Infinity : Infinity);
+        const bVal = b.track_number != null && b.track_number !== '' ? Number(b.track_number) : (rev ? -Infinity : Infinity);
+        return rev ? bVal - aVal : aVal - bVal;
+      }
+      if (field === 'year') {
+        const aVal = a.year != null && a.year !== '' ? Number(a.year) : (rev ? -Infinity : Infinity);
+        const bVal = b.year != null && b.year !== '' ? Number(b.year) : (rev ? -Infinity : Infinity);
+        return rev ? bVal - aVal : aVal - bVal;
+      }
+      if (field === 'title') {
+        const aVal = (a.title || '').normalize('NFKC').toLowerCase();
+        const bVal = (b.title || '').normalize('NFKC').toLowerCase();
+        return rev ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+      }
+      if (field === 'duration') {
+        const aSec = a.duration_seconds || 0;
+        const bSec = b.duration_seconds || 0;
+        return rev ? bSec - aSec : aSec - bSec;
+      }
+      if (field === 'added_at' || field === 'published_at') {
+        const aVal = a[field] || '';
+        const bVal = b[field] || '';
+        return rev ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+      }
+      if (field === 'random') {
+        return Math.random() - 0.5;
+      }
+      return 0;
+    });
+  }
+
+  return sorted.map((it, i) => ({ ...it, new_position: i }));
+}
+
+export function buildPreviewFromSorted(originalItems, sortedItems) {
+  const origPositions = {};
+  originalItems.forEach((it, idx) => {
+    origPositions[it.playlist_item_id] = it.original_position ?? idx;
+  });
+
+  let unchanged = 0;
+  let moved = 0;
+  const items = sortedItems.map((it, idx) => {
+    const origPos = origPositions[it.playlist_item_id] ?? (it.original_position ?? idx);
+    const isUnchanged = origPos === idx;
+    if (isUnchanged) unchanged++;
+    else moved++;
+    return {
+      ...it,
+      status: isUnchanged ? 'unchanged' : 'moved',
+      original_position: origPos,
+      new_position: idx,
+    };
+  });
+
+  return {
+    total: originalItems.length,
+    unchanged_count: unchanged,
+    moved_count: moved,
+    items,
+  };
+}
 
 function formatDuration(seconds) {
   if (seconds == null || Number.isNaN(seconds) || seconds < 0) return '--:--';
@@ -78,9 +189,52 @@ function StatusDot({ status }) {
   );
 }
 
-function SortKeyRow({ sortKey, index, onChange, onRemove, canRemove }) {
+function SortKeyRow({
+  sortKey,
+  index,
+  onChange,
+  onRemove,
+  canRemove,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+  isDragTarget,
+}) {
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, index)}
+      onDragOver={(e) => onDragOver(e, index)}
+      onDrop={(e) => onDrop(e, index)}
+      onDragEnd={onDragEnd}
+      style={{
+        display: 'flex',
+        gap: 8,
+        alignItems: 'center',
+        marginBottom: 6,
+        padding: '4px 6px',
+        borderRadius: 6,
+        background: isDragTarget ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+        border: isDragTarget ? '1px dashed var(--primary)' : '1px solid rgba(255, 255, 255, 0.05)',
+        transition: 'all 0.15s ease',
+      }}
+    >
+      <div
+        style={{
+          cursor: 'grab',
+          display: 'flex',
+          alignItems: 'center',
+          color: 'rgba(255, 255, 255, 0.45)',
+          padding: '0 2px',
+        }}
+        title="按住拖曳調整此規則的優先順序"
+      >
+        <GripVertical size={16} />
+      </div>
+      <span style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.4)', minWidth: 20 }}>
+        #{index + 1}
+      </span>
       <select
         className="form-select"
         value={sortKey.field}
@@ -116,19 +270,23 @@ function SortKeyRow({ sortKey, index, onChange, onRemove, canRemove }) {
   );
 }
 
-function PreviewTable({ title, items, icon: Icon }) {
+function PreviewTable({ title, items, icon: Icon, extraHeader }) {
   return (
-    <div style={{ flex: 1, minWidth: 280 }}>
-      <h4 style={{ margin: '0 0 8px 0', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-        {Icon && <Icon size={14} />}
-        {title}
-      </h4>
+    <div style={{ flex: 1, minWidth: 320 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <h4 style={{ margin: 0, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+          {Icon && <Icon size={14} />}
+          {title}
+        </h4>
+        {extraHeader}
+      </div>
       <div
         style={{
-          maxHeight: 480,
+          maxHeight: 520,
           overflowY: 'auto',
           borderRadius: 8,
           border: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgba(0,0,0,0.2)',
         }}
       >
         {items.map((item, idx) => (
@@ -138,7 +296,7 @@ function PreviewTable({ title, items, icon: Icon }) {
               display: 'flex',
               alignItems: 'center',
               gap: 8,
-              padding: '6px 10px',
+              padding: '8px 10px',
               borderBottom: '1px solid rgba(255,255,255,0.05)',
               fontSize: 13,
             }}
@@ -151,7 +309,7 @@ function PreviewTable({ title, items, icon: Icon }) {
               <img
                 src={item.thumbnail_url}
                 alt=""
-                style={{ width: 40, height: 30, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }}
+                style={{ width: 44, height: 32, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }}
                 loading="lazy"
               />
             )}
@@ -159,8 +317,25 @@ function PreviewTable({ title, items, icon: Icon }) {
               <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.title}>
                 {item.title || '（無標題）'}
               </div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {item.channel_title || ''}
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>
+                  {item.artist || item.channel_title || ''}
+                </span>
+                {item.album && (
+                  <span style={{ color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>
+                    · 💿 {item.album}
+                  </span>
+                )}
+                {item.track_number != null && (
+                  <span className="badge badge-info" style={{ fontSize: 10, padding: '1px 5px', height: 'auto', lineHeight: '12px' }}>
+                    #{item.track_number}
+                  </span>
+                )}
+                {item.year && (
+                  <span style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    ({item.year})
+                  </span>
+                )}
               </div>
             </div>
             <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, flexShrink: 0 }}>
@@ -168,6 +343,168 @@ function PreviewTable({ title, items, icon: Icon }) {
             </span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function InteractivePreviewTable({
+  title,
+  items,
+  icon: Icon,
+  onReorder,
+  isManuallyAdjusted,
+  onResetOrder,
+}) {
+  const [draggedIdx, setDraggedIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
+
+  const handleDragStart = (e, index) => {
+    setDraggedIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', String(index));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIdx !== index) {
+      setDragOverIdx(index);
+    }
+  };
+
+  const handleDrop = (e, targetIdx) => {
+    e.preventDefault();
+    if (draggedIdx !== null && draggedIdx !== targetIdx) {
+      onReorder(draggedIdx, targetIdx);
+    }
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
+
+  return (
+    <div style={{ flex: 1, minWidth: 320 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+        <h4 style={{ margin: 0, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+          {Icon && <Icon size={14} />}
+          {title}
+        </h4>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {isManuallyAdjusted && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={onResetOrder}
+              style={{ fontSize: 11, padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 4 }}
+              title="撤銷手動拖曳，重設為目前規則排序"
+            >
+              <RotateCcw size={12} /> 重設為規則排序
+            </button>
+          )}
+          <span style={{ fontSize: 11, color: 'var(--primary)' }}>
+            可手動拖曳歌曲
+          </span>
+        </div>
+      </div>
+      <div
+        style={{
+          maxHeight: 520,
+          overflowY: 'auto',
+          borderRadius: 8,
+          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgba(0,0,0,0.2)',
+        }}
+      >
+        {items.map((item, idx) => {
+          const isDragging = draggedIdx === idx;
+          const isTarget = dragOverIdx === idx;
+
+          return (
+            <div
+              key={item.playlist_item_id || idx}
+              draggable
+              onDragStart={(e) => handleDragStart(e, idx)}
+              onDragOver={(e) => handleDragOver(e, idx)}
+              onDrop={(e) => handleDrop(e, idx)}
+              onDragEnd={handleDragEnd}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 10px',
+                borderBottom: '1px solid rgba(255,255,255,0.05)',
+                fontSize: 13,
+                cursor: 'grab',
+                opacity: isDragging ? 0.35 : 1,
+                borderTop: isTarget ? '2px solid var(--primary)' : undefined,
+                background: isTarget ? 'rgba(59, 130, 246, 0.08)' : undefined,
+                transition: 'background 0.1s ease',
+              }}
+            >
+              <div
+                style={{
+                  cursor: 'grab',
+                  color: 'rgba(255, 255, 255, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  flexShrink: 0,
+                }}
+                title="按住拖曳以調整順序"
+              >
+                <GripVertical size={14} />
+              </div>
+              <StatusDot status={item.status} />
+              <span style={{ color: 'rgba(255,255,255,0.4)', minWidth: 28, textAlign: 'right', fontSize: 12 }}>
+                {idx + 1}
+              </span>
+              {item.thumbnail_url && (
+                <img
+                  src={item.thumbnail_url}
+                  alt=""
+                  style={{ width: 44, height: 32, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }}
+                  loading="lazy"
+                />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.title}>
+                  {item.title || '（無標題）'}
+                </div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>
+                    {item.artist || item.channel_title || ''}
+                  </span>
+                  {item.album && (
+                    <span style={{ color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>
+                      · 💿 {item.album}
+                    </span>
+                  )}
+                  {item.track_number != null && (
+                    <span className="badge badge-info" style={{ fontSize: 10, padding: '1px 5px', height: 'auto', lineHeight: '12px' }}>
+                      #{item.track_number}
+                    </span>
+                  )}
+                  {item.year && (
+                    <span style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      ({item.year})
+                    </span>
+                  )}
+                </div>
+              </div>
+              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, flexShrink: 0 }}>
+                {formatDuration(item.duration_seconds)}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -243,13 +580,21 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     }
   }, [preferences?.defaultPreset]);
 
-  // Preview
+  // Preview & Cached Simulation
   const [previewData, setPreviewData] = useState(null);
   const [previewToken, setPreviewToken] = useState('');
   const [previewing, setPreviewing] = useState(false);
   const [quotaEstimate, setQuotaEstimate] = useState(null);
+  const [cachedOriginalTracks, setCachedOriginalTracks] = useState(null);
+  const [isManuallyAdjusted, setIsManuallyAdjusted] = useState(false);
 
-  // Apply
+  // Drag state for sort rules
+  const [draggedRuleIdx, setDraggedRuleIdx] = useState(null);
+  const [dragOverRuleIdx, setDragOverRuleIdx] = useState(null);
+
+  // Apply options
+  const [applyMode, setApplyMode] = useState('in_place'); // 'in_place' | 'new_playlist'
+  const [newPlaylistTitle, setNewPlaylistTitle] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applyResult, setApplyResult] = useState(null);
@@ -265,13 +610,34 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reset preview when sort or playlist changes
+  // Reset preview when selected playlist changes
   useEffect(() => {
     setPreviewData(null);
     setPreviewToken('');
     setQuotaEstimate(null);
+    setCachedOriginalTracks(null);
+    setIsManuallyAdjusted(false);
     setApplyResult(null);
-  }, [selectedPlaylistId, presetMode, customKeys]);
+  }, [selectedPlaylistId]);
+
+  const selectedPlaylist = playlists.find((p) => p.id === selectedPlaylistId);
+
+  // Auto initialize new playlist title when selected playlist changes
+  useEffect(() => {
+    if (selectedPlaylist?.title) {
+      setNewPlaylistTitle(`[已排序] ${selectedPlaylist.title}`);
+    }
+  }, [selectedPlaylist]);
+
+  // Instant local simulation when cached tracks are present and sort rules change
+  useEffect(() => {
+    if (!cachedOriginalTracks || cachedOriginalTracks.length === 0) return;
+
+    const locallySorted = sortTracksLocally(cachedOriginalTracks, activeSortKeys);
+    const simulatedPreview = buildPreviewFromSorted(cachedOriginalTracks, locallySorted);
+    setPreviewData(simulatedPreview);
+    setIsManuallyAdjusted(false);
+  }, [cachedOriginalTracks, activeSortKeys]);
 
   const handlePreview = useCallback(async () => {
     if (!selectedPlaylistId) {
@@ -293,12 +659,22 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
       setPreviewData(res.preview || null);
       setPreviewToken(res.preview_token || '');
       setQuotaEstimate(res.quota_estimate || null);
+      setIsManuallyAdjusted(false);
+
+      // Cache original items for instant zero-latency client simulation
+      if (res.preview?.items) {
+        const sortedOriginal = [...res.preview.items].sort(
+          (a, b) => (a.original_position ?? 0) - (b.original_position ?? 0)
+        );
+        setCachedOriginalTracks(sortedOriginal);
+      }
+
       const moved = res.preview?.moved_count ?? 0;
       const total = res.preview?.total ?? 0;
       if (moved === 0) {
         toast.success(`清單已是正確順序，無需排序（共 ${total} 首）`);
       } else {
-        toast.success(`預覽完成：${moved} 首需移動 / 共 ${total} 首`);
+        toast.success(`預覽完成：${moved} 首需移動 / 共 ${total} 首（已啟用即時動態模擬）`);
       }
     } catch (err) {
       toast.error(`預覽失敗：${err.message || '未知錯誤'}`);
@@ -307,40 +683,107 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     }
   }, [selectedPlaylistId, activeSortKeys, toast]);
 
+  // Handle reordering tracks manually via drag-and-drop in the right preview list
+  const handleReorderTracks = useCallback((sourceIdx, targetIdx) => {
+    if (!previewData?.items || !cachedOriginalTracks) return;
+
+    const currentSorted = [...previewData.items];
+    const [dragged] = currentSorted.splice(sourceIdx, 1);
+    currentSorted.splice(targetIdx, 0, dragged);
+
+    const updatedPreview = buildPreviewFromSorted(cachedOriginalTracks, currentSorted);
+    setPreviewData(updatedPreview);
+    setIsManuallyAdjusted(true);
+  }, [previewData, cachedOriginalTracks]);
+
+  // Reset to automated rule order
+  const handleResetToRuleOrder = useCallback(() => {
+    if (!cachedOriginalTracks) return;
+    const locallySorted = sortTracksLocally(cachedOriginalTracks, activeSortKeys);
+    const simulatedPreview = buildPreviewFromSorted(cachedOriginalTracks, locallySorted);
+    setPreviewData(simulatedPreview);
+    setIsManuallyAdjusted(false);
+    toast.info('已重設為目前規則排序');
+  }, [cachedOriginalTracks, activeSortKeys, toast]);
+
   const handleApplyClick = useCallback(() => {
-    if (!previewData || previewData.moved_count === 0) {
+    if (!previewData || (applyMode === 'in_place' && previewData.moved_count === 0)) {
       toast.info('清單順序無需變更');
       return;
     }
     setShowConfirm(true);
-  }, [previewData, toast]);
+  }, [previewData, applyMode, toast]);
 
   const handleApplyConfirm = useCallback(async () => {
     setShowConfirm(false);
     setApplying(true);
     try {
-      const res = await api.applyPlaylistSort({
+      const payload = {
         playlistId: selectedPlaylistId,
         sortKeys: activeSortKeys,
         previewToken,
-      });
+      };
+      if (applyMode === 'new_playlist') {
+        payload.mode = 'new_playlist';
+        payload.newPlaylistTitle = newPlaylistTitle;
+      }
+      if (isManuallyAdjusted && previewData?.items) {
+        payload.sortedItemIds = previewData.items.map((it) => it.playlist_item_id);
+      }
+      const res = await api.applyPlaylistSort(payload);
       setApplyResult(res);
       const succeeded = res.succeeded ?? 0;
       const failed = res.failed ?? 0;
       if (failed > 0) {
         toast.warning(`排序完成：成功 ${succeeded} / 失敗 ${failed}`);
+      } else if (res.mode === 'new_playlist') {
+        toast.success(`全新已排序清單「${newPlaylistTitle}」已成功建立！`);
       } else {
         toast.success(`排序成功套用！已移動 ${succeeded} 首歌曲`);
       }
       setPreviewData(null);
       setPreviewToken('');
       setQuotaEstimate(null);
+      setCachedOriginalTracks(null);
+      setIsManuallyAdjusted(false);
     } catch (err) {
       toast.error(`套用排序失敗：${err.message || '未知錯誤'}`);
     } finally {
       setApplying(false);
     }
-  }, [selectedPlaylistId, activeSortKeys, previewToken, toast]);
+  }, [selectedPlaylistId, activeSortKeys, previewToken, applyMode, newPlaylistTitle, isManuallyAdjusted, previewData, toast]);
+
+  // Drag & drop handlers for sort rule keys
+  const handleRuleDragStart = (e, index) => {
+    setDraggedRuleIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleRuleDragOver = (e, index) => {
+    e.preventDefault();
+    if (dragOverRuleIdx !== index) {
+      setDragOverRuleIdx(index);
+    }
+  };
+
+  const handleRuleDrop = (e, targetIdx) => {
+    e.preventDefault();
+    if (draggedRuleIdx !== null && draggedRuleIdx !== targetIdx) {
+      setCustomKeys((prev) => {
+        const next = [...prev];
+        const [moved] = next.splice(draggedRuleIdx, 1);
+        next.splice(targetIdx, 0, moved);
+        return next;
+      });
+    }
+    setDraggedRuleIdx(null);
+    setDragOverRuleIdx(null);
+  };
+
+  const handleRuleDragEnd = () => {
+    setDraggedRuleIdx(null);
+    setDragOverRuleIdx(null);
+  };
 
   const handleCustomKeyChange = useCallback((index, newKey) => {
     setCustomKeys((prev) => prev.map((k, i) => (i === index ? newKey : k)));
@@ -352,20 +795,19 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
 
   const handleAddCustomKey = useCallback(() => {
     setCustomKeys((prev) => {
-      if (prev.length >= 3) return prev;
+      if (prev.length >= 5) return prev;
       return [...prev, { field: 'title', direction: 'asc' }];
     });
   }, []);
 
-  const selectedPlaylist = playlists.find((p) => p.id === selectedPlaylistId);
-
-  // Build original/sorted item lists for preview
-  const originalItems = previewData?.items
+  // Build original items for preview table
+  const originalItems = cachedOriginalTracks
+    ? cachedOriginalTracks
+    : previewData?.items
     ? [...previewData.items].sort((a, b) => (a.original_position ?? 0) - (b.original_position ?? 0))
     : [];
-  const sortedItems = previewData?.items
-    ? [...previewData.items].sort((a, b) => (a.new_position ?? 0) - (b.new_position ?? 0))
-    : [];
+
+  const sortedItems = previewData?.items || [];
 
   return (
     <div className="section-gap">
@@ -376,7 +818,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         </div>
         <h1>YouTube Music 播放清單排序</h1>
         <p className="section-desc">
-          讀取個人 YouTube Music 播放清單，以歌名、藝人/頻道、新增時間、發布日期、長度等欄位自訂多重排序，即時雙欄預覽並一鍵套用。
+          讀取個人 YouTube Music 播放清單，以歌手／藝人、專輯名稱、歌曲曲目順序、歌名等多重規則自訂排序。支援拖曳順序與即時快取動態模擬比對，零配額消耗（0 API Credit）。
         </p>
       </header>
 
@@ -389,9 +831,9 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <strong style={{ fontSize: '1rem' }}>YouTube Music 帳號授權</strong>
+                <strong style={{ fontSize: '1rem' }}>YouTube Music 連線模式</strong>
                 {isYtmusicConnected ? (
-                  <span className="badge badge-connected"><CheckCircle2 size={12} /> 專屬帳號已授權</span>
+                  <span className="badge badge-connected"><CheckCircle2 size={12} /> 專屬帳號 / Token 已連線</span>
                 ) : activeYoutubeConnected ? (
                   <span className="badge badge-info">共用 YouTube 頻道授權</span>
                 ) : (
@@ -400,9 +842,9 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
               </div>
               <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)' }}>
                 {isYtmusicConnected
-                  ? `已連結專屬音樂帳號：${ytmusicAuth?.user?.email || '已授權'}。個人音樂播放清單與 YouTube 創作者工作流獨立管理。`
+                  ? `已連結 YouTube Music：${ytmusicAuth?.user?.email || (ytmusicAuth?.has_custom_token ? '自訂瀏覽器 Token' : '已授權')}。排序作業採用 YouTube Music 協定，不消耗 Google API 配額。`
                   : activeYoutubeConnected
-                  ? `目前暫時沿用主要 YouTube 頻道（${authUser?.youtube?.slots?.primary?.channel_title || '品牌頻道'}）授權。若要使用個人日常音樂帳號，建議連結 YouTube Music 專屬帳號。`
+                  ? `目前沿用主要 YouTube 頻道（${authUser?.youtube?.slots?.primary?.channel_title || '品牌頻道'}）授權。若要使用個人日常音樂帳號，建議至設定頁連結 YouTube Music 專屬帳號。`
                   : '尚未連結 YouTube 或 YouTube Music 帳號，請先完成授權以載入個人播放清單。'}
               </p>
             </div>
@@ -549,15 +991,23 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
 
       {/* Step 2: Sort Rules */}
       <section className="glass-panel card-padding">
-        <h3 style={{ margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <ArrowUpDown size={18} /> 排序規則
-        </h3>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ArrowUpDown size={18} /> 排序規則
+          </h3>
+          {cachedOriginalTracks && (
+            <span className="badge badge-connected" style={{ fontSize: 11, padding: '2px 8px' }}>
+              ⚡ 即時快取動態模擬中
+            </span>
+          )}
+        </div>
+
         <div style={{ marginBottom: 12 }}>
           <select
             className="form-select"
             value={presetMode}
             onChange={(e) => setPresetMode(e.target.value)}
-            style={{ maxWidth: 300 }}
+            style={{ maxWidth: 460 }}
           >
             {SORT_PRESETS.map((p) => (
               <option key={p.id} value={p.id}>{p.label}</option>
@@ -567,6 +1017,9 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
 
         {presetMode === 'custom' && (
           <div style={{ marginBottom: 12 }}>
+            <p style={{ margin: '0 0 8px', fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+              可按住左側圖示拖曳以調整順位優先層級（靠上層者優先排序）：
+            </p>
             {customKeys.map((k, i) => (
               <SortKeyRow
                 key={i}
@@ -575,9 +1028,14 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                 onChange={handleCustomKeyChange}
                 onRemove={handleCustomKeyRemove}
                 canRemove={customKeys.length > 1}
+                onDragStart={handleRuleDragStart}
+                onDragOver={handleRuleDragOver}
+                onDrop={handleRuleDrop}
+                onDragEnd={handleRuleDragEnd}
+                isDragTarget={dragOverRuleIdx === i}
               />
             ))}
-            {customKeys.length < 3 && (
+            {customKeys.length < 5 && (
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -590,56 +1048,149 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
           </div>
         )}
 
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={handlePreview}
-          disabled={previewing || !selectedPlaylistId || applying}
-          style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-        >
-          {previewing ? <Loader2 size={15} className="spin" /> : <ArrowUpDown size={15} />}
-          {previewing ? '預覽中…' : '模擬預覽'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handlePreview}
+            disabled={previewing || !selectedPlaylistId || applying}
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            {previewing ? <Loader2 size={15} className="spin" /> : <ArrowUpDown size={15} />}
+            {previewing ? '預覽中…' : '模擬預覽'}
+          </button>
+          {cachedOriginalTracks && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handlePreview}
+              disabled={previewing}
+              style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}
+              title="重新向伺服器拉取最新歌曲資料並更新快取"
+            >
+              <RefreshCw size={14} className={previewing ? 'spin' : ''} /> 重新讀取歌曲快取
+            </button>
+          )}
+        </div>
       </section>
 
-      {/* Step 3: Preview Results */}
+      {/* Step 3: Side-by-Side Live Preview Results */}
       {previewData && (
         <section className="glass-panel card-padding">
-          <h3 style={{ margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-            預覽結果
-          </h3>
-          <div style={{ display: 'flex', gap: 16, marginBottom: 12, fontSize: 14, flexWrap: 'wrap' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <StatusDot status="unchanged" /> 不變 {previewData.unchanged_count} 首
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <StatusDot status="moved" /> 移動 {previewData.moved_count} 首
-            </span>
-            <span style={{ color: 'rgba(255,255,255,0.5)' }}>
-              共 {previewData.total} 首
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              左右比對預覽結果
+            </h3>
+            <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <StatusDot status="unchanged" /> 不變 {previewData.unchanged_count} 首
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <StatusDot status="moved" /> 移動 {previewData.moved_count} 首
+              </span>
+              <span style={{ color: 'rgba(255,255,255,0.5)' }}>
+                共 {previewData.total} 首
+              </span>
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <PreviewTable title="目前順序" items={originalItems} />
-            <PreviewTable title="排序後順序" items={sortedItems} icon={ArrowUpDown} />
+            <PreviewTable
+              title="目前原始順序"
+              items={originalItems}
+            />
+            <InteractivePreviewTable
+              title="即時排序結果"
+              items={sortedItems}
+              icon={ArrowUpDown}
+              onReorder={handleReorderTracks}
+              isManuallyAdjusted={isManuallyAdjusted}
+              onResetOrder={handleResetToRuleOrder}
+            />
           </div>
         </section>
       )}
 
-      {/* Step 4: Apply */}
-      {previewData && previewData.moved_count > 0 && !applyResult && (
+      {/* Step 4: Apply Configuration */}
+      {previewData && (previewData.moved_count > 0 || applyMode === 'new_playlist') && !applyResult && (
         <section className="glass-panel card-padding">
+          <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem' }}>
+            套用模式與配額資訊
+          </h3>
+
           {quotaEstimate && (
-            <StatusMessage tone="warning" title="API 配額消耗預估">
-              <span>
-                本次排序將移動 <strong>{quotaEstimate.moved_count}</strong> 首歌曲，
-                預估消耗 <strong>{quotaEstimate.total_units?.toLocaleString()}</strong> API 配額點數
-                （每次移動 {quotaEstimate.units_per_move} 點）。
-              </span>
-            </StatusMessage>
+            <div style={{ marginBottom: 16 }}>
+              {quotaEstimate.total_units === 0 ? (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                  border: '1px solid rgba(34, 197, 94, 0.25)',
+                  color: '#4ade80',
+                  fontSize: 13,
+                }}>
+                  <CheckCircle2 size={18} />
+                  <span>
+                    <strong>YouTube Music Token 協定運作中</strong>：本次操作預計移動 {previewData.moved_count} 首歌曲，
+                    <strong>消耗 0 Google API 配額點數</strong>。
+                  </span>
+                </div>
+              ) : (
+                <StatusMessage tone="warning" title="API 配額消耗預估">
+                  <span>
+                    本次排序將移動 <strong>{previewData.moved_count}</strong> 首歌曲，
+                    預估消耗 <strong>{quotaEstimate.total_units?.toLocaleString()}</strong> API 配額點數
+                    （每次移動 {quotaEstimate.units_per_move} 點）。
+                  </span>
+                </StatusMessage>
+              )}
+            </div>
           )}
-          <div style={{ marginTop: 12 }}>
+
+          {/* Sort Mode Selection */}
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
+              <input
+                type="radio"
+                name="apply_mode"
+                value="in_place"
+                checked={applyMode === 'in_place'}
+                onChange={() => setApplyMode('in_place')}
+              />
+              <span>就地重新排序原播放清單</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
+              <input
+                type="radio"
+                name="apply_mode"
+                value="new_playlist"
+                checked={applyMode === 'new_playlist'}
+                onChange={() => setApplyMode('new_playlist')}
+              />
+              <span>另存為新排序歌單（保留原歌單備份）</span>
+            </label>
+          </div>
+
+          {applyMode === 'new_playlist' && (
+            <div style={{ marginBottom: 14, maxWidth: 400 }}>
+              <label className="form-label" htmlFor="new-playlist-title" style={{ fontSize: 13 }}>
+                新播放清單名稱
+              </label>
+              <input
+                id="new-playlist-title"
+                type="text"
+                className="form-input"
+                value={newPlaylistTitle}
+                onChange={(e) => setNewPlaylistTitle(e.target.value)}
+                placeholder="輸入新播放清單名稱…"
+              />
+            </div>
+          )}
+
+          <div>
             <button
               type="button"
               className="btn btn-primary"
@@ -648,7 +1199,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}
             >
               {applying ? <Loader2 size={15} className="spin" /> : <Check size={15} />}
-              {applying ? '套用中…' : '套用排序'}
+              {applying ? '套用中…' : applyMode === 'new_playlist' ? '建立新排序歌單' : '套用排序'}
             </button>
           </div>
         </section>
@@ -661,11 +1212,26 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             tone={applyResult.failed > 0 ? 'warning' : 'success'}
             title={applyResult.failed > 0 ? '排序完成（有部分失敗）' : '排序成功套用'}
           >
-            <span>
-              成功移動 <strong>{applyResult.succeeded}</strong> 首，
-              {applyResult.failed > 0 && (<>失敗 <strong>{applyResult.failed}</strong> 首，</>)}
-              消耗 <strong>{applyResult.quota_used?.toLocaleString()}</strong> API 配額點數。
-            </span>
+            <div>
+              <span>
+                成功移動 <strong>{applyResult.succeeded}</strong> 首，
+                {applyResult.failed > 0 && (<>失敗 <strong>{applyResult.failed}</strong> 首，</>)}
+                消耗 <strong>{applyResult.quota_used?.toLocaleString() ?? 0}</strong> API 配額點數。
+              </span>
+              {applyResult.new_playlist_url && (
+                <div style={{ marginTop: 8 }}>
+                  <a
+                    href={applyResult.new_playlist_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-secondary btn-sm"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <ExternalLink size={14} /> 前往 YouTube Music 查看新歌單
+                  </a>
+                </div>
+              )}
+            </div>
           </StatusMessage>
         </section>
       )}
@@ -685,7 +1251,15 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             即將對播放清單「<strong>{selectedPlaylist?.title || selectedPlaylistId}</strong>」套用排序，
             將移動 <strong>{previewData?.moved_count || 0}</strong> 首歌曲。
           </p>
-          {quotaEstimate && (
+          {applyMode === 'new_playlist' ? (
+            <p style={{ color: 'var(--color-success, #22c55e)' }}>
+              ✓ 將保留原始播放清單，並為您建立全新的已排序播放清單「<strong>{newPlaylistTitle}</strong>」。
+            </p>
+          ) : quotaEstimate?.total_units === 0 ? (
+            <p style={{ color: 'var(--color-success, #22c55e)' }}>
+              ✓ 使用 YouTube Music Token 更新，<strong>消耗 0 API 配額點數</strong>。
+            </p>
+          ) : quotaEstimate && (
             <p style={{ color: 'var(--color-warning, #eab308)' }}>
               ⚠ 預估消耗 <strong>{quotaEstimate.total_units?.toLocaleString()}</strong> API 配額點數。
               此操作不可自動撤銷。

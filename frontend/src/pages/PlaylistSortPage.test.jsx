@@ -218,4 +218,125 @@ describe('PlaylistSortPage', () => {
     expect(screen.getByText('我的最愛音樂 (3 首)')).toBeInTheDocument();
     expect(screen.getByText('健身歌單 (5 首)')).toBeInTheDocument();
   });
+
+  it('renders album and track number metadata and displays zero quota message', async () => {
+    api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: mockPlaylists });
+    api.previewPlaylistSort.mockResolvedValueOnce({
+      preview: {
+        total: 2,
+        unchanged_count: 0,
+        moved_count: 2,
+        items: [
+          {
+            playlist_item_id: 'item-1',
+            video_id: 'v1',
+            title: 'Track A',
+            channel_title: 'Artist One',
+            album: 'Super Album',
+            track_number: 1,
+            year: 2024,
+            duration_seconds: 200,
+            status: 'moved',
+            original_position: 1,
+            new_position: 0,
+          },
+          {
+            playlist_item_id: 'item-2',
+            video_id: 'v2',
+            title: 'Track B',
+            channel_title: 'Artist One',
+            album: 'Super Album',
+            track_number: 2,
+            year: 2024,
+            duration_seconds: 210,
+            status: 'moved',
+            original_position: 0,
+            new_position: 1,
+          },
+        ],
+      },
+      preview_token: 'token-ytm-0',
+      quota_estimate: {
+        moved_count: 2,
+        units_per_move: 0,
+        total_units: 0,
+        engine: 'ytmusic_innertube',
+      },
+    });
+
+    renderWithRouter(<PlaylistSortPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('我的最愛音樂 (3 首)')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /模擬預覽/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/YouTube Music Token 協定運作中/)).toBeInTheDocument();
+      expect(screen.getByText(/消耗 0 Google API 配額點數/)).toBeInTheDocument();
+      expect(screen.getAllByText(/Super Album/)[0]).toBeInTheDocument();
+      expect(screen.getAllByText(/#1/)[0]).toBeInTheDocument();
+      expect(screen.getAllByText(/#2/)[0]).toBeInTheDocument();
+    });
+  });
+
+  it('allows applying sort by creating a new sorted playlist', async () => {
+    api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: mockPlaylists });
+    api.previewPlaylistSort.mockResolvedValueOnce({
+      preview: mockPreview,
+      preview_token: 'token-abc',
+      quota_estimate: {
+        moved_count: 2,
+        units_per_move: 0,
+        total_units: 0,
+      },
+    });
+    api.applyPlaylistSort.mockResolvedValueOnce({
+      operation: 'playlist_sort',
+      mode: 'new_playlist',
+      new_playlist_id: 'pl-new-sorted',
+      new_playlist_url: 'https://music.youtube.com/playlist?list=pl-new-sorted',
+      total: 3,
+      moved: 3,
+      succeeded: 3,
+      failed: 0,
+      quota_used: 0,
+    });
+
+    renderWithRouter(<PlaylistSortPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('我的最愛音樂 (3 首)')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /模擬預覽/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText('另存為新排序歌單（保留原歌單備份）')).toBeInTheDocument();
+    });
+
+    // Select "另存為新排序歌單" radio
+    fireEvent.click(screen.getByLabelText('另存為新排序歌單（保留原歌單備份）'));
+
+    const applyButton = screen.getByRole('button', { name: '建立新排序歌單' });
+    fireEvent.click(applyButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('確認套用排序')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '確認套用' }));
+
+    await waitFor(() => {
+      expect(api.applyPlaylistSort).toHaveBeenCalledWith({
+        playlistId: 'pl-1',
+        sortKeys: [{ field: 'title', direction: 'asc' }],
+        previewToken: 'token-abc',
+        mode: 'new_playlist',
+        newPlaylistTitle: '[已排序] 我的最愛音樂',
+      });
+      expect(screen.getByText(/前往 YouTube Music 查看新歌單/)).toBeInTheDocument();
+    });
+  });
 });

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -48,12 +49,18 @@ class SortKeyInput(BaseModel):
 class SortPreviewInput(BaseModel):
     playlist_id: str
     sort_keys: list[SortKeyInput]
+    fetch_album_details: bool = True
+    use_youtube_api: bool = False
 
 
 class SortApplyInput(BaseModel):
     playlist_id: str
     sort_keys: list[SortKeyInput]
     preview_token: str
+    mode: str = "in_place"
+    new_playlist_title: Optional[str] = None
+    use_youtube_api: bool = False
+    sorted_item_ids: Optional[list[str]] = None
 
 
 @router.get("/playlists")
@@ -78,7 +85,11 @@ async def preview_sort(
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
 ):
     try:
-        original_items = fetch_playlist_items_for_sort(context, input_data.playlist_id)
+        original_items = fetch_playlist_items_for_sort(
+            context,
+            input_data.playlist_id,
+            fetch_album_details=input_data.fetch_album_details,
+        )
 
         sort_keys_dict = [{"field": k.field, "direction": k.direction} for k in input_data.sort_keys]
         sorted_items = sort_items(original_items, sort_keys_dict)
@@ -94,14 +105,24 @@ async def preview_sort(
             playlist=snapshot,
         )
 
+        is_ytm = not input_data.use_youtube_api
+        units_per_move = 0 if is_ytm else 50
+        total_units = 0 if is_ytm else preview["moved_count"] * 50
+
         return {
             "preview": preview,
             "preview_token": preview_token,
             "playlist_snapshot": snapshot,
             "quota_estimate": {
                 "moved_count": preview["moved_count"],
-                "units_per_move": 50,
-                "total_units": preview["moved_count"] * 50,
+                "units_per_move": units_per_move,
+                "total_units": total_units,
+                "engine": "ytmusic_innertube" if is_ytm else "youtube_data_api_v3",
+                "message": (
+                    "使用 YouTube Music Token 模式更新，消耗 0 Google API 配額。"
+                    if is_ytm
+                    else "使用 Google YouTube Data API 更新。"
+                ),
             },
         }
     except YouTubeQuotaUnavailable as exc:
@@ -120,7 +141,11 @@ async def apply_sort(
     rate_limit=Depends(enforce_workflow_rate_limit),
 ):
     try:
-        original_items = fetch_playlist_items_for_sort(context, input_data.playlist_id)
+        original_items = fetch_playlist_items_for_sort(
+            context,
+            input_data.playlist_id,
+            fetch_album_details=False,
+        )
         snapshot = playlist_snapshot_from_preview(original_items)
 
         if not input_data.preview_token or not verify_preview_token(
@@ -137,12 +162,27 @@ async def apply_sort(
                 "預覽已過期或播放清單內容已變更，尚未寫入任何資料。請重新讀取預覽後再執行。",
             )
 
-        sort_keys_dict = [{"field": k.field, "direction": k.direction} for k in input_data.sort_keys]
-        sorted_items = sort_items(original_items, sort_keys_dict)
+        if input_data.sorted_item_ids and len(input_data.sorted_item_ids) == len(original_items):
+            items_by_id = {item["playlist_item_id"]: item for item in original_items}
+            sorted_items = [items_by_id[item_id] for item_id in input_data.sorted_item_ids if item_id in items_by_id]
+            if len(sorted_items) != len(original_items):
+                sort_keys_dict = [{"field": k.field, "direction": k.direction} for k in input_data.sort_keys]
+                sorted_items = sort_items(original_items, sort_keys_dict)
+        else:
+            sort_keys_dict = [{"field": k.field, "direction": k.direction} for k in input_data.sort_keys]
+            sorted_items = sort_items(original_items, sort_keys_dict)
 
         preview = build_sort_preview(original_items, sorted_items)
 
-        result = apply_sort_to_playlist(context, input_data.playlist_id, preview["items"])
+        result = apply_sort_to_playlist(
+            context,
+            input_data.playlist_id,
+            preview["items"],
+            original_items=original_items,
+            mode=input_data.mode,
+            new_playlist_title=input_data.new_playlist_title,
+            use_youtube_api=input_data.use_youtube_api,
+        )
         return result
     except YouTubeQuotaUnavailable as exc:
         raise _quota_http_exception(exc) from exc

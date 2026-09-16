@@ -125,3 +125,80 @@ def test_locale_aware_sort():
     # English first, then CJK based on unicode
     assert titles[0] == "apple"
     assert titles[1] == "Banana"
+
+
+def test_sort_by_album():
+    items = [
+        {"title": "Song 1", "album": "Midnights"},
+        {"title": "Song 2", "album": "1989"},
+        {"title": "Song 3", "album": "folklore"},
+    ]
+    sorted_asc = sort_items(items, [{"field": "album", "direction": "asc"}])
+    assert [i["album"] for i in sorted_asc] == ["1989", "folklore", "Midnights"]
+
+    sorted_desc = sort_items(items, [{"field": "album", "direction": "desc"}])
+    assert [i["album"] for i in sorted_desc] == ["Midnights", "folklore", "1989"]
+
+
+def test_sort_by_track_number():
+    items = [
+        {"title": "Track 3", "track_number": 3},
+        {"title": "Track 1", "track_number": 1},
+        {"title": "Track 10", "track_number": "10"},
+        {"title": "Track 2", "track_number": 2},
+    ]
+    sorted_asc = sort_items(items, [{"field": "track_number", "direction": "asc"}])
+    assert [i["title"] for i in sorted_asc] == ["Track 1", "Track 2", "Track 3", "Track 10"]
+
+    sorted_desc = sort_items(items, [{"field": "track_number", "direction": "desc"}])
+    assert [i["title"] for i in sorted_desc] == ["Track 10", "Track 3", "Track 2", "Track 1"]
+
+
+def test_sort_track_number_missing_at_end():
+    items = [
+        {"title": "Track 2", "track_number": 2},
+        {"title": "No Track", "track_number": None},
+        {"title": "Track 1", "track_number": 1},
+    ]
+    sorted_asc = sort_items(items, [{"field": "track_number", "direction": "asc"}])
+    assert [i["title"] for i in sorted_asc] == ["Track 1", "Track 2", "No Track"]
+
+    sorted_desc = sort_items(items, [{"field": "track_number", "direction": "desc"}])
+    assert [i["title"] for i in sorted_desc] == ["Track 2", "Track 1", "No Track"]
+
+
+def test_sort_by_year():
+    items = [
+        {"title": "Album 2022", "year": 2022},
+        {"title": "Album 1989", "year": 1989},
+        {"title": "Album 2014", "year": "2014"},
+        {"title": "No Year", "year": None},
+    ]
+    sorted_asc = sort_items(items, [{"field": "year", "direction": "asc"}])
+    assert [i["title"] for i in sorted_asc] == ["Album 1989", "Album 2014", "Album 2022", "No Year"]
+
+    sorted_desc = sort_items(items, [{"field": "year", "direction": "desc"}])
+    assert [i["title"] for i in sorted_desc] == ["Album 2022", "Album 2014", "Album 1989", "No Year"]
+
+
+def test_sort_artist_album_track_multi_key():
+    items = [
+        {"artist": "Taylor Swift", "album": "Red", "track_number": 2, "title": "Red (Track 2)"},
+        {"artist": "Adele", "album": "30", "track_number": 1, "title": "Strangers By Nature"},
+        {"artist": "Taylor Swift", "album": "1989", "track_number": 1, "title": "Welcome To New York"},
+        {"artist": "Taylor Swift", "album": "Red", "track_number": 1, "title": "State of Grace"},
+        {"artist": "Adele", "album": "21", "track_number": 1, "title": "Rolling in the Deep"},
+    ]
+    keys = [
+        {"field": "artist", "direction": "asc"},
+        {"field": "album", "direction": "asc"},
+        {"field": "track_number", "direction": "asc"},
+    ]
+    sorted_res = sort_items(items, keys)
+    assert [i["title"] for i in sorted_res] == [
+        "Rolling in the Deep",  # Adele, 21, Track 1
+        "Strangers By Nature",  # Adele, 30, Track 1
+        "Welcome To New York",  # Taylor Swift, 1989, Track 1
+        "State of Grace",  # Taylor Swift, Red, Track 1
+        "Red (Track 2)",  # Taylor Swift, Red, Track 2
+    ]

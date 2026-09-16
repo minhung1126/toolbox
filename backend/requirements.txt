@@ -11,3 +11,4 @@ python-multipart==0.0.32
 cryptography==50.0.0
 itsdangerous==2.2.0
 tzdata==2026.3
+ytmusicapi==1.12.2
