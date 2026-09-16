@@ -2,7 +2,7 @@
 
 from backend.app.tools.builtin.creator_tools import CreatorToolsPlugin
 from backend.app.tools.builtin.photo_curator import PhotoCuratorPlugin
-from backend.app.tools.builtin.playlist_sorter import PlaylistSorterPlugin
+from backend.app.tools.builtin.playlist_sorter import PlaylistSorterPlugin, YouTubeMusicPlugin
 from backend.app.tools.builtin.sheets_tools import SheetsToolsPlugin
 from backend.app.tools.builtin.sticky_notes import StickyNotesPlugin
 from backend.app.tools.builtin.system_utility import SystemUtilityPlugin
@@ -17,6 +17,7 @@ __all__ = [
     "StickyNotesPlugin",
     "SystemUtilityPlugin",
     "YouTubeIntegrationsPlugin",
+    "YouTubeMusicPlugin",
     "register_builtin_tools",
 ]
 

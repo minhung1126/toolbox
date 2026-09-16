@@ -14,8 +14,10 @@ from backend.app.services.google_auth import (
     LOGIN_SCOPES,
     SHEETS_READONLY_SCOPE,
     SHEETS_SCOPES,
+    YOUTUBE_SCOPES,
     has_drive_read_scope,
     has_sheets_scope,
+    has_youtube_scope,
 )
 
 
@@ -188,3 +190,48 @@ def test_clear_sheets_and_drive(tmp_path: Path):
     store.clear_drive(sub)
     assert store.get_drive_credentials(sub) is None
     assert store.get_google_credentials(sub) is not None
+
+
+def test_ytmusic_decoupled_credentials(tmp_path: Path, monkeypatch):
+    """Ensure ytmusic credentials can be saved and retrieved independently, with proper fallback."""
+    cred_store = CredentialStore(tmp_path / "creds.json")
+    sess_store = SessionStore(tmp_path / "sess.json")
+    monkeypatch.setattr(google_auth, "credential_store", cred_store)
+    monkeypatch.setattr(google_auth, "session_store", sess_store)
+
+    sub = "subject-ytmusic-test"
+    # 1. Login only
+    login_token = _token_payload(LOGIN_SCOPES, sub=sub)
+    cred_store.save_google_connection(login_token, owner_sub=sub)
+    session_id = sess_store.create({"credential_provider": "google_login", "user": {"sub": sub}})
+
+    # Without any YouTube scopes, get_ytmusic_credentials returns None
+    assert google_auth.get_ytmusic_credentials(session_id=session_id) is None
+
+    # 2. Add YouTube primary slot
+    yt_token = _token_payload(YOUTUBE_SCOPES, token="yt-primary-token", sub=sub)
+    cred_store.save_youtube_connection(yt_token, owner_sub=sub, slot="primary")
+
+    # Fallback to youtube credentials works
+    fallback_creds = google_auth.get_ytmusic_credentials(session_id=session_id)
+    assert fallback_creds is not None
+    assert fallback_creds.token == "yt-primary-token"
+    assert has_youtube_scope(fallback_creds)
+
+    # 3. Add dedicated ytmusic connection
+    ytmusic_token = _token_payload(YOUTUBE_SCOPES, token="ytmusic-dedicated-token", sub=sub)
+    cred_store.save_ytmusic_connection(ytmusic_token, owner_sub=sub)
+
+    # Dedicated credentials take priority over fallback
+    dedicated_creds = google_auth.get_ytmusic_credentials(session_id=session_id)
+    assert dedicated_creds is not None
+    assert dedicated_creds.token == "ytmusic-dedicated-token"
+    assert has_youtube_scope(dedicated_creds)
+
+    # 4. Disconnect dedicated ytmusic
+    cred_store.clear_ytmusic(sub)
+    assert cred_store.get_ytmusic_credentials(sub) is None
+    # Now falls back to primary youtube again
+    re_fallback = google_auth.get_ytmusic_credentials(session_id=session_id)
+    assert re_fallback is not None
+    assert re_fallback.token == "yt-primary-token"

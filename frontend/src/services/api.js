@@ -214,6 +214,8 @@ export const api = {
   disconnectSheets: () => request('/auth/sheets/disconnect', { method: 'POST' }),
   getDriveAuthUrl: () => request('/auth/drive/url'),
   disconnectDrive: () => request('/auth/drive/disconnect', { method: 'POST' }),
+  getYtmusicAuthUrl: () => request('/auth/ytmusic/url'),
+  disconnectYtmusic: () => request('/auth/ytmusic/disconnect', { method: 'POST' }),
   getYoutubeAuthUrl: (slot = 'primary') => request(`/auth/youtube/${encodeURIComponent(slot)}/url`),
   disconnectYoutube: (slot = 'primary', { confirm = false } = {}) => request(`/auth/youtube/${encodeURIComponent(slot)}/disconnect${confirm ? '?confirm=true' : ''}`, { method: 'POST' }),
   activateYoutubeSlot: (slot) => request(`/auth/youtube/${encodeURIComponent(slot)}/activate`, { method: 'POST' }),

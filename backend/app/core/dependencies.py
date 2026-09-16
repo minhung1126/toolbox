@@ -9,11 +9,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 from google.oauth2.credentials import Credentials
 
 from backend.app.core.account_state import get_account_setting
 from backend.app.core.config import settings
+from backend.app.core.credential_store import credential_store
 from backend.app.core.error_contract import http_error
 from backend.app.core.session_store import session_store
 from backend.app.core.youtube_context import YouTubeRequestContext
@@ -22,8 +23,10 @@ from backend.app.services.google_auth import (
     get_drive_credentials,
     get_login_credentials,
     get_sheets_credentials,
+    get_ytmusic_credentials,
     has_drive_read_scope,
     has_sheets_scope,
+    has_youtube_scope,
 )
 from backend.app.services.youtube_quota_service import get_youtube_quota_tracker
 
@@ -229,6 +232,62 @@ async def require_youtube_context(request: Request) -> YouTubeRequestContext:
     )
 
 
+async def require_ytmusic_context(request: Request) -> YouTubeRequestContext:
+    """Resolve dedicated YouTube Music credentials and context.
+
+    Prefers dedicated YouTube Music authorization. Falls back to YouTube context if available.
+    Raises 403 if neither is authorized.
+    """
+    auth_session = get_authenticated_session(request)
+    session_id = auth_session.session_id
+    owner_sub = auth_session.subject
+
+    ytmusic_creds = get_ytmusic_credentials(session_id=session_id, owner_sub=owner_sub)
+    if ytmusic_creds and ytmusic_creds.valid and has_youtube_scope(ytmusic_creds):
+        ytmusic_public = credential_store.get_ytmusic_public(owner_sub) or {}
+        channel_id = ytmusic_public.get("channel_id")
+        limiter = get_youtube_quota_tracker("primary")
+
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+
+        estimated_units = estimate_youtube_request_units(
+            request.url.path,
+            body if isinstance(body, dict) else {},
+        )
+
+        logger.info(
+            "YouTube Music request routed with dedicated ytmusic credentials (channel=%s, estimated_units=%s)",
+            channel_id,
+            estimated_units,
+        )
+        return YouTubeRequestContext(
+            slot="primary",
+            credentials=ytmusic_creds,
+            quota_limiter=limiter,
+            owner_sub=owner_sub,
+            channel_id=channel_id,
+            routing_mode="ytmusic_dedicated",
+            selection_reason="ytmusic_oauth_connection",
+            estimated_units=estimated_units,
+            preferred_slot="primary",
+            session_id=session_id,
+        )
+
+    try:
+        return await require_youtube_context(request)
+    except HTTPException:
+        logger.warning("YouTube Music access attempted without authorization (sub=%s)", owner_sub)
+        raise http_error(
+            403,
+            "ytmusic_scope_required",
+            "YouTube Music 權限不足，請先授權 YouTube Music 帳號。",
+            reauthorization_required=True,
+        )
+
+
 __all__ = [
     "AuthenticatedSession",
     "create_youtube_request_context",
@@ -239,4 +298,5 @@ __all__ = [
     "require_login_credentials",
     "require_sheets_credentials",
     "require_youtube_context",
+    "require_ytmusic_context",
 ]

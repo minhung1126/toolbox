@@ -1,6 +1,6 @@
 # Toolbox 開發規範
 
-Toolbox 是一個高擴充性的多功能模組化工具箱平台，使用 FastAPI (Python 3.11+)、React/Vite 與 Docker，內建模組包含 Creator Tools（整合 Google Sheets、Google Drive 與 YouTube 創作者自動化工作流）、YouTube 播放清單排序工具（Playlist Sorter，支援多欄位排序、左右預覽比對與 Quota 控管）、試算表工具、便利貼備忘錄、Instagram 排版工具與系統維運工具。
+Toolbox 是一個高擴充性的多功能模組化工具箱平台，使用 FastAPI (Python 3.11+)、React/Vite 與 Docker，內建模組包含 Creator Tools（整合 Google Sheets、Google Drive 與 YouTube 創作者自動化工作流）、YouTube Music（獨立最高層音樂工具箱，具備專屬 YouTube Music 帳號授權、智慧多重排序、清單名稱即時搜尋篩選、左右預覽比對與 Quota 控管）、試算表工具、便利貼備忘錄、Instagram 排版工具與系統維運工具。
 
 ## 架構與安全
 
@@ -10,12 +10,13 @@ Toolbox 是一個高擴充性的多功能模組化工具箱平台，使用 FastA
 - 非 secret 執行期設定保存於 `data/runtime_config.json`，優先於 `.env` 預設值；`data/` 目錄必須持久化（包含加密憑證、Session、配額帳本與長任務狀態）。
 - 授權採模組化解耦架構：
   - 控制台登入限縮為純身分認證（`openid`, `userinfo.email`, `userinfo.profile`）。
-  - Google 試算表（`spreadsheets.readonly`）、Google 雲端硬碟（`drive.readonly`）與 YouTube（`youtube`）為獨立授權。
+  - Google 試算表（`spreadsheets.readonly`）、Google 雲端硬碟（`drive.readonly`）、YouTube 創作者頻道（`youtube`）與 YouTube Music 個人音樂庫（`youtube`）為獨立解耦授權。
   - FastAPI 認證依賴注入分別使用：
     - `require_login_credentials`：控制台身分驗證。
     - `require_sheets_credentials`：試算表讀取權限（具 legacy 憑證自動 fallback 相容）。
     - `require_drive_credentials`：雲端硬碟讀取權限（具 legacy 憑證自動 fallback 相容）。
-    - `require_youtube_context`：YouTube 頻道操作與配額槽位選擇（創作者工作流與播放清單排序共用相同 YouTube OAuth 憑證與 Quota 限流器）。
+    - `require_youtube_context`：YouTube 創作者頻道操作與配額槽位選擇。
+    - `require_ytmusic_context`：YouTube Music 專屬音樂授權（具 YouTube 頻道與 legacy 憑證自動 fallback 相容）。
 - 正式程式一律使用 `logging`，嚴格禁止使用 `print()`。
 
 ## 模組化擴充規範 (Toolbox Plugins)
@@ -29,7 +30,7 @@ Toolbox 是一個高擴充性的多功能模組化工具箱平台，使用 FastA
 
 - 禁止使用原生瀏覽器警告／確認對話框（`alert`, `confirm`）；統一使用 `useToast()` 與 `ConfirmDialog`。
 - 沿用暗色 Glassmorphism 與 `index.css` 的共用 class，避免重複 inline style。
-- 各獨立授權功能需在對應頁面（試算表設定頁、Drive 上傳頁、YouTube 設定頁、帳號總覽頁）就地提供授權狀態、連結與解除按鈕。
+- 各獨立授權功能需在對應頁面（試算表設定頁、Drive 上傳頁、YouTube 設定頁、YouTube Music 排序頁、帳號總覽頁）就地提供授權狀態、連結與解除按鈕。
 
 ## 驗證
 

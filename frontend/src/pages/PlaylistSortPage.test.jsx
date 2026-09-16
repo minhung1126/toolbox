@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import PlaylistSortPage from './PlaylistSortPage';
 import { api } from '../services/api';
 
@@ -9,6 +10,8 @@ vi.mock('../services/api', () => ({
     getPlaylistSortPlaylists: vi.fn(),
     previewPlaylistSort: vi.fn(),
     applyPlaylistSort: vi.fn(),
+    getYtmusicAuthUrl: vi.fn(),
+    disconnectYtmusic: vi.fn(),
   },
 }));
 
@@ -78,6 +81,20 @@ const mockPreview = {
   ],
 };
 
+const renderWithRouter = (ui) =>
+  render(
+    <MemoryRouter>
+      {React.cloneElement(ui, {
+        authUser: {
+          authorizations: {
+            ytmusic: { connected: true, user: { email: 'music@example.com' } },
+          },
+          youtube: { slots: { primary: { authenticated: true, channel_title: 'My Channel' } } },
+        },
+      })}
+    </MemoryRouter>
+  );
+
 describe('PlaylistSortPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -86,7 +103,7 @@ describe('PlaylistSortPage', () => {
   it('loads and displays user playlists', async () => {
     api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: mockPlaylists });
 
-    render(<PlaylistSortPage />);
+    renderWithRouter(<PlaylistSortPage />);
 
     await waitFor(() => {
       expect(screen.getByText('我的最愛音樂 (3 首)')).toBeInTheDocument();
@@ -106,7 +123,7 @@ describe('PlaylistSortPage', () => {
       },
     });
 
-    render(<PlaylistSortPage />);
+    renderWithRouter(<PlaylistSortPage />);
 
     await waitFor(() => {
       expect(screen.getByText('我的最愛音樂 (3 首)')).toBeInTheDocument();
@@ -147,7 +164,7 @@ describe('PlaylistSortPage', () => {
       quota_used: 100,
     });
 
-    render(<PlaylistSortPage />);
+    renderWithRouter(<PlaylistSortPage />);
 
     await waitFor(() => {
       expect(screen.getByText('我的最愛音樂 (3 首)')).toBeInTheDocument();
@@ -176,5 +193,29 @@ describe('PlaylistSortPage', () => {
       expect(screen.getByText('排序成功套用')).toBeInTheDocument();
       expect(screen.getByText(/成功移動/)).toBeInTheDocument();
     });
+  });
+
+  it('filters playlists by name and description', async () => {
+    api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: mockPlaylists });
+
+    renderWithRouter(<PlaylistSortPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('我的最愛音樂 (3 首)')).toBeInTheDocument();
+      expect(screen.getByText('健身歌單 (5 首)')).toBeInTheDocument();
+    });
+
+    const filterInput = screen.getByPlaceholderText('依播放清單名稱或說明快速篩選…');
+    fireEvent.change(filterInput, { target: { value: '健身' } });
+
+    expect(screen.getByText('健身歌單 (5 首)')).toBeInTheDocument();
+    expect(screen.queryByText('我的最愛音樂 (3 首)')).not.toBeInTheDocument();
+    expect(screen.getByText(/篩選符合 1 \/ 共 2 個/)).toBeInTheDocument();
+
+    const clearButton = screen.getByLabelText('清除篩選');
+    fireEvent.click(clearButton);
+
+    expect(screen.getByText('我的最愛音樂 (3 首)')).toBeInTheDocument();
+    expect(screen.getByText('健身歌單 (5 首)')).toBeInTheDocument();
   });
 });

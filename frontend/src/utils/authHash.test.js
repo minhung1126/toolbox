@@ -8,6 +8,8 @@ describe('OAuth callback hash parsing', () => {
     expect(parseAuthHash('#sheets_auth_error=denied')).toEqual({ type: 'sheets_error', value: 'denied' });
     expect(parseAuthHash('#drive_auth_success=1')).toEqual({ type: 'drive_success', value: '1' });
     expect(parseAuthHash('#drive_auth_error=denied')).toEqual({ type: 'drive_error', value: 'denied' });
+    expect(parseAuthHash('#ytmusic_auth_success=1')).toEqual({ type: 'ytmusic_success', value: '1' });
+    expect(parseAuthHash('#ytmusic_auth_error=denied')).toEqual({ type: 'ytmusic_error', value: 'denied' });
     expect(parseAuthHash('#not_auth_success=1')).toBeNull();
   });
 

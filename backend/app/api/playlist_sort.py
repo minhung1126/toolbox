@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from backend.app.core.dependencies import require_youtube_context
+from backend.app.core.dependencies import require_ytmusic_context
 from backend.app.core.error_contract import http_error
 from backend.app.core.preview import (
     build_preview_token,
@@ -58,7 +58,7 @@ class SortApplyInput(BaseModel):
 
 @router.get("/playlists")
 async def get_playlists(
-    context: YouTubeRequestContext = Depends(require_youtube_context),
+    context: YouTubeRequestContext = Depends(require_ytmusic_context),
 ):
     try:
         playlists = fetch_user_playlists(context)
@@ -75,7 +75,7 @@ async def get_playlists(
 @router.post("/preview")
 async def preview_sort(
     input_data: SortPreviewInput,
-    context: YouTubeRequestContext = Depends(require_youtube_context),
+    context: YouTubeRequestContext = Depends(require_ytmusic_context),
 ):
     try:
         original_items = fetch_playlist_items_for_sort(context, input_data.playlist_id)
@@ -116,7 +116,7 @@ async def preview_sort(
 @router.post("/apply")
 async def apply_sort(
     input_data: SortApplyInput,
-    context: YouTubeRequestContext = Depends(require_youtube_context),
+    context: YouTubeRequestContext = Depends(require_ytmusic_context),
     rate_limit=Depends(enforce_workflow_rate_limit),
 ):
     try:

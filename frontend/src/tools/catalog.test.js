@@ -13,7 +13,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(tools.length).toBe(7);
     const ids = tools.map((t) => t.id);
     expect(ids).toContain('creator-tools');
-    expect(ids).toContain('playlist-sorter');
+    expect(ids).toContain('youtube-music');
     expect(ids).toContain('sheets-tools');
     expect(ids).toContain('sticky-notes');
     expect(ids).toContain('photo-curator');
@@ -27,10 +27,10 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(tool.name).toBe('Creator Tools');
     expect(tool.navGroups.length).toBeGreaterThan(0);
 
-    const playlistSorterTool = getToolById('playlist-sorter');
-    expect(playlistSorterTool).not.toBeNull();
-    expect(playlistSorterTool.name).toBe('Playlist Sorter');
-    expect(playlistSorterTool.navGroups.length).toBeGreaterThan(0);
+    const ytmusicTool = getToolById('youtube-music');
+    expect(ytmusicTool).not.toBeNull();
+    expect(ytmusicTool.name).toBe('YouTube Music');
+    expect(ytmusicTool.navGroups.length).toBeGreaterThan(0);
 
     const sheetsTool = getToolById('sheets-tools');
     expect(sheetsTool).not.toBeNull();
@@ -53,7 +53,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     const navGroups = getToolNavGroups();
     const groupIds = navGroups.map((g) => g.id);
     expect(groupIds).toContain('youtube');
-    expect(groupIds).toContain('playlist_sort');
+    expect(groupIds).toContain('ytmusic');
     expect(groupIds).toContain('sheet');
     expect(groupIds).toContain('system');
     expect(groupIds).toContain('notes');
@@ -74,7 +74,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(cardIds).toContain('video_drafts');
     expect(cardIds).toContain('shorts_drafts');
     expect(cardIds).toContain('publish_clean');
-    expect(cardIds).toContain('playlist_sort_card');
+    expect(cardIds).toContain('ytmusic_playlist_sort_card');
     expect(cardIds).toContain('sheet_copy');
     expect(cardIds).toContain('youtube_connections_card');
     expect(cardIds).toContain('system_settings_card');

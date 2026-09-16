@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, ExternalLink, FileSpreadsheet, Key, ListVideo, RefreshCw, Shield, XCircle } from 'lucide-react';
+import { CheckCircle2, Disc3, ExternalLink, FileSpreadsheet, Key, ListVideo, RefreshCw, Shield, XCircle } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import { useToast } from '../components/Toast';
@@ -28,6 +28,15 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
     successMessage: '已解除 Google 試算表授權',
   });
 
+  const ytmusicOAuth = useOAuthConnect({
+    serviceName: 'ytmusic',
+    getAuthUrl: api.getYtmusicAuthUrl,
+    disconnect: api.disconnectYtmusic,
+    onAfterDisconnect: refreshAuthUser,
+    serviceLabel: 'YouTube Music 授權',
+    successMessage: '已解除 YouTube Music 授權',
+  });
+
   const handleStartLoginOAuth = async () => {
     try {
       saveOAuthReturnPath('google', `${location.pathname}${location.search}`);
@@ -40,6 +49,8 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
 
   const sheetsAuth = authUser?.authorizations?.sheets;
   const isSheetsConnected = Boolean(sheetsAuth?.connected || authUser?.google_scopes?.sheets_readonly);
+  const ytmusicAuth = authUser?.authorizations?.ytmusic;
+  const isYtmusicConnected = Boolean(ytmusicAuth?.connected);
 
   return (
     <div className="settings-page-section">
@@ -91,7 +102,30 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
         </Link>
       </div>
 
-      {/* 3. YouTube 頻道授權 */}
+      {/* 3. YouTube Music 帳號授權 */}
+      <ServiceAuthCard
+        icon={Disc3}
+        title="YouTube Music 帳號授權"
+        connected={isYtmusicConnected}
+        connectedBadgeText="已授權 YouTube Music"
+        disconnectedBadgeText="尚未授權 YouTube Music"
+        description="用於存取個人 YouTube Music 播放清單與歌曲，獨立於 YouTube 創作者頻道。支援播放清單智慧多重排序與即時雙欄預覽比對。"
+        accountEmail={ytmusicAuth?.user?.email}
+        warningText="尚未連結 YouTube Music 專屬帳號。若未另外連結，系統將自動沿用主要 YouTube 頻道授權（若有）。建議授權您個人日常聆聽音樂的 Google 帳號。"
+        connecting={ytmusicOAuth.connecting}
+        onConnect={ytmusicOAuth.handleConnect}
+        onDisconnect={() => ytmusicOAuth.setConfirmDisconnect(true)}
+        connectText="連結 YouTube Music 帳號"
+        reconnectText="重新授權 YouTube Music"
+        disconnectText="解除 YouTube Music 授權"
+      />
+      <div style={{ margin: '-0.75rem 0 1rem 0', display: 'flex', justifyContent: 'flex-end' }}>
+        <Link className="btn btn-secondary btn-sm" to={PATHS.ytmusicPlaylistSort}>
+          <Disc3 size={14} /> 前往 YouTube Music 播放清單排序
+        </Link>
+      </div>
+
+      {/* 4. YouTube 頻道授權 */}
       <div className="glass-panel card-padding settings-card card-stack">
         <div className="card-header">
           <div className="card-header-title"><ListVideo size={20} color="var(--primary)" /><h2>YouTube 頻道授權</h2></div>
@@ -104,7 +138,7 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
         </div>
       </div>
 
-      {/* 4. 系統安全與白名單 */}
+      {/* 5. 系統安全與白名單 */}
       <div className="glass-panel card-padding settings-card card-stack">
         <div className="card-header">
           <div className="card-header-title"><Shield size={20} color="#10b981" /><h2>系統設定與安全</h2></div>
@@ -126,6 +160,17 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
         variant="destructive"
         onConfirm={sheetsOAuth.handleConfirmDisconnect}
         onCancel={() => sheetsOAuth.setConfirmDisconnect(false)}
+      />
+
+      <ConfirmDialog
+        open={ytmusicOAuth.confirmDisconnect}
+        title="解除 YouTube Music 授權"
+        message="確定要解除 YouTube Music 授權嗎？解除後播放清單排序將無法讀取或更新您的 YouTube Music 播放清單，直到重新授權為止。"
+        confirmText="確認解除"
+        cancelText="取消"
+        variant="destructive"
+        onConfirm={ytmusicOAuth.handleConfirmDisconnect}
+        onCancel={() => ytmusicOAuth.setConfirmDisconnect(false)}
       />
     </div>
   );

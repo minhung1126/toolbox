@@ -103,7 +103,8 @@ export default function AppRoutes({
           <Route path="youtube/drafts/videos" element={<BatchUpdatePage key="video-drafts" sysSettings={sysSettings} authUser={authUser} videoType="Video" />} />
           <Route path="youtube/drafts/shorts" element={<BatchUpdatePage key="shorts-drafts" sysSettings={sysSettings} authUser={authUser} videoType="Shorts" />} />
           <Route path="youtube/publish-cleanup" element={<PublishCleanerPage sysSettings={sysSettings} authUser={authUser} />} />
-          <Route path="youtube/playlist-sort" element={<React.Suspense fallback={<div className="loading-center">載入中…</div>}><PlaylistSortPage {...pageProps} /></React.Suspense>} />
+          <Route path="youtube/playlist-sort" element={<Navigate replace to={PATHS.ytmusicPlaylistSort} />} />
+          <Route path="ytmusic/playlist-sort" element={<React.Suspense fallback={<div className="loading-center">載入中…</div>}><PlaylistSortPage {...pageProps} /></React.Suspense>} />
           <Route path="sheets/copy" element={<SheetCopyPage sysSettings={sysSettings} />} />
           <Route path="sheets/settings" element={<GoogleSheetSettingsPage {...pageProps} />} />
 

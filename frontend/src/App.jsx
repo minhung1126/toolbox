@@ -274,6 +274,11 @@ export function AppContent() {
           toast.success('YouTube 頻道 Google 授權成功');
           await fetchUser({ source: 'youtube-oauth-callback' });
           setOauthReturnPath(consumeOAuthReturnPath('youtube', PATHS.youtubeConnections));
+        } else if (authResult?.type === 'ytmusic_success') {
+          toast.success('YouTube Music 授權成功');
+          await fetchUser({ source: 'ytmusic-oauth-callback' });
+          setOauthReturnPath(consumeOAuthReturnPath('ytmusic', PATHS.ytmusicPlaylistSort));
+          if (user) await fetchSettings();
         } else if (authResult?.type === 'google_error') {
           const message = '控制台 Google 登入失敗，請重新嘗試。';
           consumeOAuthReturnPath('google', PATHS.dashboard);
@@ -290,6 +295,11 @@ export function AppContent() {
           const message = 'YouTube 頻道 Google 授權失敗，請重新嘗試。';
           toast.error(message);
           setOauthReturnPath(consumeOAuthReturnPath('youtube', PATHS.youtubeConnections));
+          if (user) await fetchSettings();
+        } else if (authResult?.type === 'ytmusic_error') {
+          const message = 'YouTube Music 授權失敗，請重新嘗試。';
+          toast.error(message);
+          setOauthReturnPath(consumeOAuthReturnPath('ytmusic', PATHS.ytmusicPlaylistSort));
           if (user) await fetchSettings();
         } else if (user) {
           await fetchSettings();

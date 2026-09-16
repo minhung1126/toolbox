@@ -1,13 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
   Check,
+  CheckCircle2,
+  Disc3,
   ListMusic,
   Loader2,
   Plus,
   RefreshCw,
+  Search,
   Sparkles,
   X,
 } from 'lucide-react';
@@ -15,6 +19,7 @@ import { api } from '../services/api';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { StatusMessage } from '../components/StatusMessage';
+import { useOAuthConnect } from '../hooks/useOAuthConnect';
 
 const SORT_PRESETS = [
   { id: 'title-asc', label: '歌名 A → Z', keys: [{ field: 'title', direction: 'asc' }] },
@@ -164,13 +169,64 @@ function PreviewTable({ title, items, icon: Icon }) {
   );
 }
 
-export default function PlaylistSortPage() {
+export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
   const toast = useToast();
+
+  const ytmusicAuth = authUser?.authorizations?.ytmusic;
+  const isYtmusicConnected = Boolean(ytmusicAuth?.connected);
+  const activeYoutubeConnected = Boolean(authUser?.youtube?.slots?.primary?.authenticated);
 
   // Playlist selection
   const [playlists, setPlaylists] = useState([]);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState('');
   const [loadingPlaylists, setLoadingPlaylists] = useState(true);
+  const [playlistFilterQuery, setPlaylistFilterQuery] = useState('');
+
+  const filteredPlaylists = useMemo(() => {
+    const q = playlistFilterQuery.trim().toLowerCase();
+    if (!q) return playlists;
+    return playlists.filter(
+      (pl) =>
+        (pl.title || '').toLowerCase().includes(q) ||
+        (pl.description || '').toLowerCase().includes(q)
+    );
+  }, [playlists, playlistFilterQuery]);
+
+  useEffect(() => {
+    if (playlistFilterQuery.trim() && filteredPlaylists.length > 0) {
+      if (!filteredPlaylists.some((p) => p.id === selectedPlaylistId)) {
+        setSelectedPlaylistId(filteredPlaylists[0].id);
+      }
+    }
+  }, [playlistFilterQuery, filteredPlaylists, selectedPlaylistId]);
+
+  // Load playlists
+  const fetchPlaylists = useCallback(async () => {
+    setLoadingPlaylists(true);
+    try {
+      const res = await api.getPlaylistSortPlaylists();
+      setPlaylists(res.playlists || []);
+      if ((res.playlists || []).length > 0 && !selectedPlaylistId) {
+        setSelectedPlaylistId(res.playlists[0].id);
+      }
+    } catch (err) {
+      toast.error(`載入播放清單失敗：${err.message || '未知錯誤'}`);
+    } finally {
+      setLoadingPlaylists(false);
+    }
+  }, [toast, selectedPlaylistId]);
+
+  const ytmusicOAuth = useOAuthConnect({
+    serviceName: 'ytmusic',
+    getAuthUrl: api.getYtmusicAuthUrl,
+    disconnect: api.disconnectYtmusic,
+    onAfterDisconnect: async () => {
+      await refreshAuthUser?.();
+      fetchPlaylists();
+    },
+    serviceLabel: 'YouTube Music 授權',
+    successMessage: '已解除 YouTube Music 授權',
+  });
 
   // Sort configuration
   const [presetMode, setPresetMode] = useState('title-asc');
@@ -192,22 +248,6 @@ export default function PlaylistSortPage() {
     const preset = SORT_PRESETS.find((p) => p.id === presetMode);
     return preset?.keys || [{ field: 'title', direction: 'asc' }];
   }, [presetMode, customKeys]);
-
-  // Load playlists on mount
-  const fetchPlaylists = useCallback(async () => {
-    setLoadingPlaylists(true);
-    try {
-      const res = await api.getPlaylistSortPlaylists();
-      setPlaylists(res.playlists || []);
-      if ((res.playlists || []).length > 0 && !selectedPlaylistId) {
-        setSelectedPlaylistId(res.playlists[0].id);
-      }
-    } catch (err) {
-      toast.error(`載入播放清單失敗：${err.message || '未知錯誤'}`);
-    } finally {
-      setLoadingPlaylists(false);
-    }
-  }, [toast, selectedPlaylistId]);
 
   useEffect(() => {
     fetchPlaylists();
@@ -321,33 +361,151 @@ export default function PlaylistSortPage() {
       {/* Page Header */}
       <header className="glass-panel page-header card-padding">
         <div className="badge badge-info dashboard-eyebrow">
-          <Sparkles size={14} aria-hidden="true" /> 播放清單管理
+          <Sparkles size={14} aria-hidden="true" /> YouTube Music
         </div>
-        <h1>YouTube 播放清單排序</h1>
+        <h1>YouTube Music 播放清單排序</h1>
         <p className="section-desc">
-          讀取 YouTube 播放清單，以歌名、頻道、日期、長度等欄位自訂排序，並即時預覽變更後一鍵套用。
+          讀取個人 YouTube Music 播放清單，以歌名、藝人/頻道、新增時間、發布日期、長度等欄位自訂多重排序，即時雙欄預覽並一鍵套用。
         </p>
       </header>
 
+      {/* YouTube Music In-Place Authorization Status */}
+      <section className="glass-panel card-padding">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div className="icon-box icon-box-primary" style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}>
+              <Disc3 size={22} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <strong style={{ fontSize: '1rem' }}>YouTube Music 帳號授權</strong>
+                {isYtmusicConnected ? (
+                  <span className="badge badge-connected"><CheckCircle2 size={12} /> 專屬帳號已授權</span>
+                ) : activeYoutubeConnected ? (
+                  <span className="badge badge-info">共用 YouTube 頻道授權</span>
+                ) : (
+                  <span className="badge badge-disconnected"><AlertTriangle size={12} /> 尚未授權</span>
+                )}
+              </div>
+              <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)' }}>
+                {isYtmusicConnected
+                  ? `已連結專屬音樂帳號：${ytmusicAuth?.user?.email || '已授權'}。個人音樂播放清單與 YouTube 創作者工作流獨立管理。`
+                  : activeYoutubeConnected
+                  ? `目前暫時沿用主要 YouTube 頻道（${authUser?.youtube?.slots?.primary?.channel_title || '品牌頻道'}）授權。若要使用個人日常音樂帳號，建議連結 YouTube Music 專屬帳號。`
+                  : '尚未連結 YouTube 或 YouTube Music 帳號，請先完成授權以載入個人播放清單。'}
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {isYtmusicConnected ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={ytmusicOAuth.handleConnect}
+                  disabled={ytmusicOAuth.connecting}
+                >
+                  <RefreshCw size={14} className={ytmusicOAuth.connecting ? 'spin' : ''} /> 重新授權
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ color: 'var(--color-danger, #ef4444)' }}
+                  onClick={() => ytmusicOAuth.setConfirmDisconnect(true)}
+                >
+                  解除授權
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={ytmusicOAuth.handleConnect}
+                disabled={ytmusicOAuth.connecting}
+              >
+                {ytmusicOAuth.connecting ? <Loader2 size={14} className="spin" /> : <Disc3 size={14} />} 連結 YouTube Music 專屬帳號
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+
       {/* Step 1: Select Playlist */}
       <section className="glass-panel card-padding">
-        <h3 style={{ margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <ListMusic size={18} /> 選擇播放清單
-        </h3>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ListMusic size={18} /> 選擇播放清單
+          </h3>
+          {playlists.length > 0 && (
+            <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)' }}>
+              {playlistFilterQuery
+                ? `篩選符合 ${filteredPlaylists.length} / 共 ${playlists.length} 個`
+                : `共 ${playlists.length} 個播放清單`}
+            </span>
+          )}
+        </div>
+
+        {/* Playlist Name Filter Input */}
+        <div style={{ position: 'relative', marginBottom: 10 }}>
+          <Search
+            size={16}
+            style={{
+              position: 'absolute',
+              left: 10,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'rgba(255,255,255,0.4)',
+              pointerEvents: 'none',
+            }}
+          />
+          <input
+            type="text"
+            className="form-input"
+            placeholder="依播放清單名稱或說明快速篩選…"
+            value={playlistFilterQuery}
+            onChange={(e) => setPlaylistFilterQuery(e.target.value)}
+            disabled={loadingPlaylists || playlists.length === 0}
+            style={{ paddingLeft: 32, paddingRight: playlistFilterQuery ? 32 : 12, width: '100%' }}
+          />
+          {playlistFilterQuery && (
+            <button
+              type="button"
+              onClick={() => setPlaylistFilterQuery('')}
+              style={{
+                position: 'absolute',
+                right: 8,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 'none',
+                color: 'rgba(255,255,255,0.5)',
+                cursor: 'pointer',
+                padding: 4,
+              }}
+              title="清除篩選"
+              aria-label="清除篩選"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select
             className="form-select"
             value={selectedPlaylistId}
             onChange={(e) => setSelectedPlaylistId(e.target.value)}
-            disabled={loadingPlaylists || playlists.length === 0}
+            disabled={loadingPlaylists || filteredPlaylists.length === 0}
             style={{ flex: 1, minWidth: 200 }}
           >
             {loadingPlaylists ? (
               <option value="">載入中…</option>
-            ) : playlists.length === 0 ? (
-              <option value="">找不到播放清單</option>
+            ) : filteredPlaylists.length === 0 ? (
+              <option value="">
+                {playlists.length === 0 ? '找不到播放清單' : '無符合關鍵字的播放清單'}
+              </option>
             ) : (
-              playlists.map((pl) => (
+              filteredPlaylists.map((pl) => (
                 <option key={pl.id} value={pl.id}>
                   {pl.title} ({pl.item_count} 首)
                 </option>
@@ -518,6 +676,17 @@ export default function PlaylistSortPage() {
           <p>確定要繼續嗎？</p>
         </div>
       </ConfirmDialog>
+
+      <ConfirmDialog
+        open={ytmusicOAuth.confirmDisconnect}
+        title="解除 YouTube Music 授權"
+        message="確定要解除 YouTube Music 專屬授權嗎？解除後將無法直接讀取該帳號的個人音樂播放清單，直到重新授權為止。"
+        confirmText="確認解除"
+        cancelText="取消"
+        variant="destructive"
+        onConfirm={ytmusicOAuth.handleConfirmDisconnect}
+        onCancel={() => ytmusicOAuth.setConfirmDisconnect(false)}
+      />
     </div>
   );
 }

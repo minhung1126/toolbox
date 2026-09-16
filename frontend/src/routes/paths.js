@@ -17,6 +17,7 @@ export const PATHS = Object.freeze({
   youtubeQuota: '/youtube/settings/quota',
   youtubePlaylist: '/youtube/settings/playlist',
   youtubePlaylistSort: '/youtube/playlist-sort',
+  ytmusicPlaylistSort: '/ytmusic/playlist-sort',
 
   sheetCopy: '/sheets/copy',
   sheetSettings: '/sheets/settings',
@@ -28,6 +29,7 @@ export const PATHS = Object.freeze({
 
 const RETURN_PATH_ALIASES = Object.freeze({
   [PATHS.youtubeSettings]: PATHS.youtubeConnections,
+  [PATHS.youtubePlaylistSort]: PATHS.ytmusicPlaylistSort,
   [PATHS.settings]: PATHS.googleSettings,
   '/settings/sheets': PATHS.sheetSettings,
   '/settings/system': PATHS.systemSettings,
@@ -47,6 +49,7 @@ const STATIC_RETURN_PATHS = new Set([
   PATHS.youtubeQuota,
   PATHS.youtubePlaylist,
   PATHS.youtubePlaylistSort,
+  PATHS.ytmusicPlaylistSort,
   PATHS.sheetCopy,
   PATHS.googleSettings,
   PATHS.sheetSettings,

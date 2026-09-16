@@ -7,6 +7,8 @@ const AUTH_HASH_KEYS = [
   ['drive_auth_error', 'drive_error'],
   ['youtube_auth_success', 'youtube_success'],
   ['youtube_auth_error', 'youtube_error'],
+  ['ytmusic_auth_success', 'ytmusic_success'],
+  ['ytmusic_auth_error', 'ytmusic_error'],
 ];
 
 export function parseAuthHash(hash = window.location.hash) {

@@ -88,13 +88,13 @@ describe('Navbar', () => {
     expect(igLink).toHaveClass('active');
   });
 
-  it('exposes Playlist Sorter tool in navigation with active state', () => {
+  it('exposes YouTube Music Playlist Sorter tool in navigation with active state', () => {
     window.localStorage.clear();
-    render(<NavbarHarness initialEntry={PATHS.youtubePlaylistSort} />);
+    render(<NavbarHarness initialEntry={PATHS.ytmusicPlaylistSort} />);
 
     const sortLink = screen.getByRole('link', { name: '播放清單排序' });
     expect(sortLink).toBeVisible();
-    expect(sortLink).toHaveAttribute('href', PATHS.youtubePlaylistSort);
+    expect(sortLink).toHaveAttribute('href', PATHS.ytmusicPlaylistSort);
     expect(sortLink).toHaveAttribute('aria-current', 'page');
     expect(sortLink).toHaveClass('active');
   });

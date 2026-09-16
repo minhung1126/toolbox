@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowUpDown, CheckCircle2, ChevronDown, Instagram, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, StickyNote, Video, X } from 'lucide-react';
+import { ArrowUpDown, CheckCircle2, ChevronDown, Disc3, Instagram, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, StickyNote, Video, X } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { youtubeIsConnected } from '../utils/youtubeRouting';
@@ -8,6 +8,7 @@ import { getSystemNavItems, getToolNavGroups } from '../tools/catalog';
 
 const toolNavGroups = getToolNavGroups();
 const systemNavItems = getSystemNavItems();
+const ytmusicGroup = toolNavGroups.find((g) => g.id === 'ytmusic') || { items: [] };
 const youtubeGroup = toolNavGroups.find((g) => g.id === 'youtube') || { items: [] };
 const sheetGroup = toolNavGroups.find((g) => g.id === 'sheet') || { items: [] };
 const systemGroup = toolNavGroups.find((g) => g.id === 'system') || {
@@ -21,13 +22,7 @@ const photoCuratorItem = photoCuratorGroup.items?.[0] || {
   label: 'Instagram 排版',
   icon: Instagram,
 };
-const playlistSortGroup = toolNavGroups.find((g) => g.id === 'playlist_sort') || { items: [] };
-const playlistSortItem = playlistSortGroup.items?.[0] || {
-  id: 'playlist_sort_main',
-  to: PATHS.youtubePlaylistSort,
-  label: '播放清單排序',
-  icon: ArrowUpDown,
-};
+const ytmusicItems = ytmusicGroup.items;
 const youtubeItems = youtubeGroup.items;
 const sheetItems = sheetGroup.items;
 const systemItems = systemGroup.items;
@@ -42,7 +37,8 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
   const pathname = location.pathname;
   const youtubeAuthorized = youtubeIsConnected(authUser?.youtube);
   const { value: savedNavigation, save: saveNavigation } = useAccountWorkState('navigation', {});
-  const [youtubeOpen, setYoutubeOpen] = useState(savedNavigation.youtubeOpen ?? pathname.startsWith('/youtube/'));
+  const [ytmusicOpen, setYtmusicOpen] = useState(savedNavigation.ytmusicOpen ?? (pathname.startsWith('/ytmusic/') || pathname === PATHS.youtubePlaylistSort));
+  const [youtubeOpen, setYoutubeOpen] = useState(savedNavigation.youtubeOpen ?? (pathname.startsWith('/youtube/') && pathname !== PATHS.youtubePlaylistSort));
   const [sheetOpen, setSheetOpen] = useState(savedNavigation.sheetOpen ?? pathname.startsWith('/sheets/'));
   const [systemOpen, setSystemOpen] = useState(savedNavigation.systemOpen ?? pathname.startsWith('/system/'));
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -56,7 +52,8 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
   };
 
   useEffect(() => {
-    if (pathname.startsWith('/youtube/')) setYoutubeOpen(true);
+    if (pathname.startsWith('/ytmusic/') || pathname === PATHS.youtubePlaylistSort) setYtmusicOpen(true);
+    if (pathname.startsWith('/youtube/') && pathname !== PATHS.youtubePlaylistSort) setYoutubeOpen(true);
     if (pathname.startsWith('/sheets/')) setSheetOpen(true);
     if (pathname.startsWith('/system/')) setSystemOpen(true);
     setDrawerOpen(false);
@@ -100,8 +97,8 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
   }, [drawerOpen]);
 
   useEffect(() => {
-    saveNavigation({ sidebarCollapsed, youtubeOpen, sheetOpen, systemOpen }, { debounceMs: 150 });
-  }, [saveNavigation, sheetOpen, sidebarCollapsed, systemOpen, youtubeOpen]);
+    saveNavigation({ sidebarCollapsed, ytmusicOpen, youtubeOpen, sheetOpen, systemOpen }, { debounceMs: 150 });
+  }, [saveNavigation, sheetOpen, sidebarCollapsed, systemOpen, youtubeOpen, ytmusicOpen]);
 
   const item = (value, child = false) => {
     const Icon = value.icon;
@@ -128,7 +125,8 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
     </div>
   );
 
-  const youtubeActive = pathname.startsWith('/youtube/');
+  const ytmusicActive = pathname.startsWith('/ytmusic/') || pathname === PATHS.youtubePlaylistSort;
+  const youtubeActive = pathname.startsWith('/youtube/') && pathname !== PATHS.youtubePlaylistSort;
   const sheetActive = pathname.startsWith('/sheets/');
   const systemActive = pathname.startsWith('/system/');
   const SidebarToggleIcon = sidebarCollapsed ? PanelLeftOpen : PanelLeftClose;
@@ -151,18 +149,13 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
           label: photoCuratorGroup.label || photoCuratorItem.label || 'Instagram 排版',
           icon: photoCuratorGroup.icon || photoCuratorItem.icon || Instagram,
         })}
-        {item({
-          id: playlistSortItem.id,
-          to: playlistSortItem.to || PATHS.youtubePlaylistSort,
-          label: playlistSortGroup.label || playlistSortItem.label || '播放清單排序',
-          icon: playlistSortItem.icon || ArrowUpDown,
-        })}
+        {group('ytmusic', 'YouTube Music', Disc3, ytmusicOpen, setYtmusicOpen, ytmusicItems, ytmusicActive)}
         {group('youtube', 'YouTube', youtubeGroup.icon, youtubeOpen, setYoutubeOpen, youtubeItems, youtubeActive)}
         {group('sheet', 'Sheet', sheetGroup.icon, sheetOpen, setSheetOpen, sheetItems, sheetActive)}
         {group('system', '系統管理', systemGroup.icon, systemOpen, setSystemOpen, systemItems, systemActive)}
         {item({ id: 'settings', to: PATHS.googleSettings, label: '控制台帳號', icon: Settings, activePrefix: '/settings' })}
       </nav>
-      <div className="sidebar-footer"><div className="glass-panel account-card"><strong className="account-title">帳號資訊</strong><span className="badge badge-connected account-status"><CheckCircle2 size={12} />控制台已登入</span><p className="account-email">{authUser?.email}</p><span className={`badge account-youtube-status ${youtubeAuthorized ? 'badge-connected' : 'badge-disconnected'}`}>{youtubeAuthorized ? 'YouTube 已授權' : 'YouTube 未連結'}</span><button type="button" className="logout-button" onClick={onLogout}>登出控制台</button></div></div>
+      <div className="sidebar-footer"><div className="glass-panel account-card"><strong className="account-title">帳號資訊</strong><span className="badge badge-connected account-status"><CheckCircle2 size={12} />控制台已登入</span><p className="account-email">{authUser?.email}</p><span className={`badge account-youtube-status ${youtubeAuthorized ? 'badge-connected' : 'badge-disconnected'}`}>{youtubeAuthorized ? 'YouTube 已授權' : 'YouTube 未連結'}</span><span className={`badge ${authUser?.authorizations?.ytmusic?.connected ? 'badge-connected' : 'badge-disconnected'}`} style={{ marginTop: '0.25rem' }}>{authUser?.authorizations?.ytmusic?.connected ? 'YT Music 已授權' : 'YT Music 未連結'}</span><button type="button" className="logout-button" onClick={onLogout}>登出控制台</button></div></div>
     </aside>
   </>;
 }
