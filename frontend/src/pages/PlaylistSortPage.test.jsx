@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import PlaylistSortPage from './PlaylistSortPage';
+import PlaylistSortPage, { sortTracksLocally } from './PlaylistSortPage';
 import { api } from '../services/api';
 
 vi.mock('../services/api', () => ({
@@ -12,6 +12,8 @@ vi.mock('../services/api', () => ({
     applyPlaylistSort: vi.fn(),
     getYtmusicAuthUrl: vi.fn(),
     disconnectYtmusic: vi.fn(),
+    updateWorkState: vi.fn((key, value) => Promise.resolve({ state: { [key]: value } })),
+    getWorkState: vi.fn(() => Promise.resolve({ state: {} })),
   },
 }));
 
@@ -81,17 +83,21 @@ const mockPreview = {
   ],
 };
 
-const renderWithRouter = (ui) =>
+import { AccountWorkStateProvider } from '../hooks/useAccountWorkState';
+
+const renderWithRouter = (ui, { initialState = {} } = {}) =>
   render(
     <MemoryRouter>
-      {React.cloneElement(ui, {
-        authUser: {
-          authorizations: {
-            ytmusic: { connected: true, user: { email: 'music@example.com' } },
+      <AccountWorkStateProvider initialState={initialState}>
+        {React.cloneElement(ui, {
+          authUser: {
+            authorizations: {
+              ytmusic: { connected: true, user: { email: 'music@example.com' } },
+            },
+            youtube: { slots: { primary: { authenticated: true, channel_title: 'My Channel' } } },
           },
-          youtube: { slots: { primary: { authenticated: true, channel_title: 'My Channel' } } },
-        },
-      })}
+        })}
+      </AccountWorkStateProvider>
     </MemoryRouter>
   );
 
@@ -189,6 +195,7 @@ describe('PlaylistSortPage', () => {
         playlistId: 'pl-1',
         sortKeys: [{ field: 'title', direction: 'asc' }],
         previewToken: 'token-abc',
+        sortedItemIds: ['item-1', 'item-3', 'item-2'],
       });
       expect(screen.getByText('排序成功套用')).toBeInTheDocument();
       expect(screen.getByText(/成功移動/)).toBeInTheDocument();
@@ -335,8 +342,63 @@ describe('PlaylistSortPage', () => {
         previewToken: 'token-abc',
         mode: 'new_playlist',
         newPlaylistTitle: '[已排序] 我的最愛音樂',
+        sortedItemIds: ['item-1', 'item-3', 'item-2'],
       });
       expect(screen.getByText(/前往 YouTube Music 查看新歌單/)).toBeInTheDocument();
     });
+  });
+
+  it('allows pinning and unpinning playlists to quickly find them', async () => {
+    api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: mockPlaylists });
+    renderWithRouter(<PlaylistSortPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/我的最愛音樂/)).toBeInTheDocument();
+    });
+
+    // Pin button should be present
+    const pinBtn = screen.getByRole('button', { name: /釘選目前播放清單/ });
+    expect(pinBtn).toBeInTheDocument();
+    expect(pinBtn).toHaveTextContent('釘選');
+
+    // Click to pin
+    fireEvent.click(pinBtn);
+
+    // It should now say 已釘選
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /取消釘選此播放清單/ })).toHaveTextContent('已釘選');
+      expect(screen.getByText(/常用釘選：/)).toBeInTheDocument();
+    });
+  });
+
+  it('respects track order within albums when sorting tracks locally', () => {
+    const tracks = [
+      { title: 'Track 3', album: 'Midnights', track_number: 3 },
+      { title: 'Track 1', album: 'Midnights', track_number: 1 },
+      { title: 'Track 2', album: 'Midnights', track_number: 2 },
+      { title: 'Bonus', album: 'Midnights', track_number: null },
+      { title: '1989 Track 2', album: '1989', track_number: 2 },
+      { title: '1989 Track 1', album: '1989', track_number: 1 },
+    ];
+
+    const sortedAsc = sortTracksLocally(tracks, [{ field: 'album', direction: 'asc' }]);
+    expect(sortedAsc.map((t) => t.title)).toEqual([
+      '1989 Track 1',
+      '1989 Track 2',
+      'Track 1',
+      'Track 2',
+      'Track 3',
+      'Bonus',
+    ]);
+
+    const sortedDesc = sortTracksLocally(tracks, [{ field: 'album', direction: 'desc' }]);
+    expect(sortedDesc.map((t) => t.title)).toEqual([
+      'Track 1',
+      'Track 2',
+      'Track 3',
+      'Bonus',
+      '1989 Track 1',
+      '1989 Track 2',
+    ]);
   });
 });

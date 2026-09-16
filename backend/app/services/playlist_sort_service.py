@@ -17,6 +17,7 @@ from backend.app.services.youtube_service import (
 from backend.app.services.ytmusic_service import (
     apply_ytmusic_sort_in_place,
     create_sorted_ytmusic_playlist,
+    enrich_tracks_with_ytdlp_fallback,
     fetch_ytmusic_playlist_tracks,
     fetch_ytmusic_playlists,
 )
@@ -94,12 +95,15 @@ def fetch_playlist_items_for_sort(
     context: YouTubeRequestContext,
     playlist_id: str,
     fetch_album_details: bool = True,
+    use_ytdlp_fallback: bool = True,
 ) -> list[dict[str, Any]]:
     """Fetch playlist items for sorting.
 
     Prioritizes YouTube Music API to retrieve artist, album, track_number, and release year (0 quota).
     Falls back to YouTube Data API v3 if necessary.
+    Uses yt-dlp fallback to acquire release_date when missing or for same-year tracks.
     """
+    items: list[dict[str, Any]] = []
     try:
         ytm_items = fetch_ytmusic_playlist_tracks(
             playlist_id=playlist_id,
@@ -108,51 +112,61 @@ def fetch_playlist_items_for_sort(
         )
         if ytm_items:
             logger.info("Retrieved %d tracks for playlist %s via YouTube Music client", len(ytm_items), playlist_id)
-            return ytm_items
+            items = ytm_items
     except Exception as exc:
         logger.debug("ytmusic_service.fetch_ytmusic_playlist_tracks fallback to Data API: %s", exc)
 
-    # Fallback to Google YouTube Data API v3
-    raw_items = fetch_playlist_items(context, playlist_id)
-    if not raw_items:
-        return []
+    # Fallback to Google YouTube Data API v3 if ytm_items empty
+    if not items:
+        raw_items = fetch_playlist_items(context, playlist_id)
+        if not raw_items:
+            return []
 
-    video_ids = [item["snippet"]["resourceId"]["videoId"] for item in raw_items]
-    video_details = fetch_video_details(context, video_ids)
+        video_ids = [item["snippet"]["resourceId"]["videoId"] for item in raw_items]
+        video_details = fetch_video_details(context, video_ids)
 
-    details_map = {
-        vid["id"]: {
-            "duration_seconds": _parse_iso8601_duration(vid.get("contentDetails", {}).get("duration", "")),
-            "published_at": vid.get("snippet", {}).get("publishedAt", ""),
-        }
-        for vid in video_details
-    }
-
-    result = []
-    for item in raw_items:
-        snippet = item["snippet"]
-        video_id = snippet["resourceId"]["videoId"]
-        detail = details_map.get(video_id, {})
-        channel_name = snippet.get("videoOwnerChannelTitle", snippet.get("channelTitle", ""))
-        result.append(
-            {
-                "playlist_item_id": item["id"],
-                "video_id": video_id,
-                "title": snippet["title"],
-                "artist": channel_name,
-                "channel_title": channel_name,
-                "album": "",
-                "album_id": None,
-                "track_number": None,
-                "year": None,
-                "added_at": snippet["publishedAt"],
-                "published_at": detail.get("published_at", ""),
-                "duration_seconds": detail.get("duration_seconds", 0),
-                "thumbnail_url": snippet.get("thumbnails", {}).get("default", {}).get("url", ""),
-                "position": snippet["position"],
+        details_map = {
+            vid["id"]: {
+                "duration_seconds": _parse_iso8601_duration(vid.get("contentDetails", {}).get("duration", "")),
+                "published_at": vid.get("snippet", {}).get("publishedAt", ""),
             }
-        )
-    return result
+            for vid in video_details
+        }
+
+        result = []
+        for item in raw_items:
+            snippet = item["snippet"]
+            video_id = snippet["resourceId"]["videoId"]
+            detail = details_map.get(video_id, {})
+            channel_name = snippet.get("videoOwnerChannelTitle", snippet.get("channelTitle", ""))
+            result.append(
+                {
+                    "playlist_item_id": item["id"],
+                    "video_id": video_id,
+                    "title": snippet["title"],
+                    "artist": channel_name,
+                    "channel_title": channel_name,
+                    "album": "",
+                    "album_id": None,
+                    "track_number": None,
+                    "year": None,
+                    "release_date": None,
+                    "added_at": snippet["publishedAt"],
+                    "published_at": detail.get("published_at", ""),
+                    "duration_seconds": detail.get("duration_seconds", 0),
+                    "thumbnail_url": snippet.get("thumbnails", {}).get("default", {}).get("url", ""),
+                    "position": snippet["position"],
+                }
+            )
+        items = result
+
+    if use_ytdlp_fallback and items:
+        try:
+            items = enrich_tracks_with_ytdlp_fallback(items, check_same_year=True)
+        except Exception as exc:
+            logger.warning("Failed to enrich tracks with yt-dlp fallback: %s", exc)
+
+    return items
 
 
 def sort_items(items: list[dict[str, Any]], sort_keys: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -160,9 +174,9 @@ def sort_items(items: list[dict[str, Any]], sort_keys: list[dict[str, Any]]) -> 
 
     Supports fields:
     - artist: 藝人名稱 (artist or channel_title)
-    - album: 專輯名稱
+    - album: 專輯名稱（同專輯內自動尊重曲目 track_number 編號）
     - track_number / track: 歌曲曲目 / 第幾首 (numeric, missing sorted to end)
-    - year / release_year: 發行年份 (numeric, missing sorted to end)
+    - year / release_year / release_date: 發行年份 / 日期（以 yt-dlp 精確比對同年曲目）
     - title: 歌曲名稱
     - duration / duration_seconds: 歌曲時長 (numeric)
     - added_at: 加入清單日期
@@ -192,8 +206,17 @@ def sort_items(items: list[dict[str, Any]], sort_keys: list[dict[str, Any]]) -> 
                     return unicodedata.normalize("NFKC", str(val)).casefold()
 
                 if sort_field == "album":
-                    val = item.get("album") or ""
-                    return unicodedata.normalize("NFKC", str(val)).casefold()
+                    album_str = unicodedata.normalize("NFKC", str(item.get("album") or "")).casefold()
+                    track_val = item.get("track_number")
+                    # When sorting by album, respect the track order within that album (always track 1, 2, 3...)
+                    if track_val is not None and str(track_val).strip() != "":
+                        try:
+                            track_num = int(track_val)
+                            return (album_str, 0, -track_num if rev else track_num)
+                        except (ValueError, TypeError):
+                            pass
+                    # Missing track number goes after numbered tracks in both asc and desc
+                    return (album_str, -1 if rev else 1, 0)
 
                 if sort_field in ("track_number", "track"):
                     val = item.get("track_number")
@@ -205,15 +228,22 @@ def sort_items(items: list[dict[str, Any]], sort_keys: list[dict[str, Any]]) -> 
                     except (ValueError, TypeError):
                         return (1, 0) if not rev else (0, -1)
 
-                if sort_field in ("year", "release_year"):
+                if sort_field in ("year", "release_year", "release_date"):
+                    # Priority 1: Exact release_date (e.g. from yt-dlp "2023-05-12" or "20230512")
+                    raw_date = str(item.get("release_date") or "").replace("-", "").strip()
+                    if raw_date and len(raw_date) >= 8 and raw_date[:8].isdigit():
+                        date_key = raw_date[:8]
+                        return (0, date_key) if not rev else (1, date_key)
+
+                    # Priority 2: Year string or published_at
                     val = item.get("year") or item.get("published_at") or ""
-                    if not val:
-                        return (1, 0) if not rev else (0, -1)
-                    match = re.search(r"\b(19\d\d|20\d\d)\b", str(val))
-                    if match:
-                        year_num = int(match.group(1))
-                        return (0, year_num) if not rev else (1, year_num)
-                    return (1, 0) if not rev else (0, -1)
+                    if val:
+                        match = re.search(r"\b(19\d\d|20\d\d)\b", str(val))
+                        if match:
+                            year_key = match.group(1) + "0000"
+                            return (0, year_key) if not rev else (1, year_key)
+
+                    return (1, "") if not rev else (0, "")
 
                 if sort_field == "title":
                     return unicodedata.normalize("NFKC", str(item.get("title") or "")).casefold()

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowDown,
@@ -11,6 +11,7 @@ import {
   GripVertical,
   ListMusic,
   Loader2,
+  Pin,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -94,17 +95,30 @@ export function sortTracksLocally(items, sortKeys) {
       if (field === 'album') {
         const aVal = (a.album || '').normalize('NFKC').toLowerCase();
         const bVal = (b.album || '').normalize('NFKC').toLowerCase();
-        return rev ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+        const albumCmp = aVal.localeCompare(bVal);
+        if (albumCmp !== 0) {
+          return rev ? -albumCmp : albumCmp;
+        }
+        // Same album: respect track_number (always ascending 1, 2, 3... within the album)
+        const aTrack = a.track_number != null && a.track_number !== '' ? Number(a.track_number) : Infinity;
+        const bTrack = b.track_number != null && b.track_number !== '' ? Number(b.track_number) : Infinity;
+        if (aTrack !== bTrack) {
+          return aTrack - bTrack;
+        }
+        return 0;
       }
       if (field === 'track_number') {
         const aVal = a.track_number != null && a.track_number !== '' ? Number(a.track_number) : (rev ? -Infinity : Infinity);
         const bVal = b.track_number != null && b.track_number !== '' ? Number(b.track_number) : (rev ? -Infinity : Infinity);
         return rev ? bVal - aVal : aVal - bVal;
       }
-      if (field === 'year') {
-        const aVal = a.year != null && a.year !== '' ? Number(a.year) : (rev ? -Infinity : Infinity);
-        const bVal = b.year != null && b.year !== '' ? Number(b.year) : (rev ? -Infinity : Infinity);
-        return rev ? bVal - aVal : aVal - bVal;
+      if (field === 'year' || field === 'release_year' || field === 'release_date') {
+        const aDate = String(a.release_date || (a.year ? `${a.year}` : '')).replace(/-/g, '').trim();
+        const bDate = String(b.release_date || (b.year ? `${b.year}` : '')).replace(/-/g, '').trim();
+        if (!aDate && !bDate) return 0;
+        if (!aDate) return 1;
+        if (!bDate) return -1;
+        return rev ? bDate.localeCompare(aDate) : aDate.localeCompare(bDate);
       }
       if (field === 'title') {
         const aVal = (a.title || '').normalize('NFKC').toLowerCase();
@@ -331,11 +345,15 @@ function PreviewTable({ title, items, icon: Icon, extraHeader }) {
                     #{item.track_number}
                   </span>
                 )}
-                {item.year && (
+                {item.release_date ? (
+                  <span style={{ color: 'rgba(255,255,255,0.45)' }} title={`發行日期：${item.release_date}`}>
+                    ({item.release_date})
+                  </span>
+                ) : item.year ? (
                   <span style={{ color: 'rgba(255,255,255,0.35)' }}>
                     ({item.year})
                   </span>
-                )}
+                ) : null}
               </div>
             </div>
             <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, flexShrink: 0 }}>
@@ -492,11 +510,15 @@ function InteractivePreviewTable({
                       #{item.track_number}
                     </span>
                   )}
-                  {item.year && (
+                  {item.release_date ? (
+                    <span style={{ color: 'rgba(255,255,255,0.45)' }} title={`發行日期：${item.release_date}`}>
+                      ({item.release_date})
+                    </span>
+                  ) : item.year ? (
                     <span style={{ color: 'rgba(255,255,255,0.35)' }}>
                       ({item.year})
                     </span>
-                  )}
+                  ) : null}
                 </div>
               </div>
               <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, flexShrink: 0 }}>
@@ -569,16 +591,121 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     successMessage: '已解除 YouTube Music 授權',
   });
 
-  // Sort configuration
-  const { value: preferences } = useAccountWorkState('ytmusic_preferences', { defaultPreset: 'title-asc' });
-  const [presetMode, setPresetMode] = useState(preferences?.defaultPreset || 'title-asc');
-  const [customKeys, setCustomKeys] = useState([{ field: 'title', direction: 'asc' }]);
+  // Pinned playlists persistence
+  const {
+    value: pinnedConfig,
+    save: savePinnedConfig,
+  } = useAccountWorkState('ytmusic_pinned_playlists', { ids: [] });
 
-  useEffect(() => {
-    if (preferences?.defaultPreset) {
-      setPresetMode((current) => (current === 'title-asc' ? preferences.defaultPreset : current));
+  const pinnedPlaylistIds = useMemo(() => {
+    if (Array.isArray(pinnedConfig?.ids)) return pinnedConfig.ids;
+    if (Array.isArray(pinnedConfig)) return pinnedConfig;
+    return [];
+  }, [pinnedConfig]);
+
+  const pinnedPlaylists = useMemo(() => {
+    if (!pinnedPlaylistIds.length || !playlists.length) return [];
+    return pinnedPlaylistIds
+      .map((id) => playlists.find((p) => p.id === id))
+      .filter(Boolean);
+  }, [pinnedPlaylistIds, playlists]);
+
+  const isSelectedPinned = useMemo(() => {
+    return selectedPlaylistId ? pinnedPlaylistIds.includes(selectedPlaylistId) : false;
+  }, [selectedPlaylistId, pinnedPlaylistIds]);
+
+  const togglePinPlaylist = useCallback((playlistId) => {
+    if (!playlistId) return;
+    const isPinned = pinnedPlaylistIds.includes(playlistId);
+    let next;
+    if (isPinned) {
+      next = pinnedPlaylistIds.filter((id) => id !== playlistId);
+      toast.info('已從常用清單取消釘選');
+    } else {
+      next = [...pinnedPlaylistIds, playlistId];
+      toast.success('已加入常用釘選清單');
     }
-  }, [preferences?.defaultPreset]);
+    savePinnedConfig({ ids: next }, { debounceMs: 0 });
+  }, [pinnedPlaylistIds, savePinnedConfig, toast]);
+
+  // Split filtered playlists into pinned and unpinned
+  const { pinnedFiltered, unpinnedFiltered } = useMemo(() => {
+    const pinnedSet = new Set(pinnedPlaylistIds);
+    const pinned = [];
+    const unpinned = [];
+    for (const pl of filteredPlaylists) {
+      if (pinnedSet.has(pl.id)) {
+        pinned.push(pl);
+      } else {
+        unpinned.push(pl);
+      }
+    }
+    return { pinnedFiltered: pinned, unpinnedFiltered: unpinned };
+  }, [filteredPlaylists, pinnedPlaylistIds]);
+
+  // Sort configuration auto-save and preferences
+  const {
+    ready: sortConfigReady,
+    value: sortConfig,
+    save: saveSortConfig,
+    saving: savingConfig,
+    saved: savedConfig,
+  } = useAccountWorkState('ytmusic_sort_config', {});
+
+  const { value: preferences } = useAccountWorkState('ytmusic_preferences', { defaultPreset: 'title-asc' });
+
+  const [presetMode, setPresetMode] = useState(
+    () => sortConfig?.presetMode || preferences?.defaultPreset || 'title-asc'
+  );
+  const [customKeys, setCustomKeys] = useState(() => {
+    if (Array.isArray(sortConfig?.customKeys) && sortConfig.customKeys.length > 0) {
+      return sortConfig.customKeys;
+    }
+    return [{ field: 'title', direction: 'asc' }];
+  });
+
+  // Apply options
+  const [applyMode, setApplyMode] = useState(() => sortConfig?.applyMode || 'in_place'); // 'in_place' | 'new_playlist'
+
+  // Helper to persist current sorting setup
+  const persistConfig = useCallback((patch = {}) => {
+    saveSortConfig({
+      presetMode,
+      customKeys,
+      applyMode,
+      selectedPlaylistId,
+      ...patch,
+    });
+  }, [presetMode, customKeys, applyMode, selectedPlaylistId, saveSortConfig]);
+
+  // Asynchronous restore from persisted sortConfig
+  const restoredConfigRef = useRef(false);
+  useEffect(() => {
+    if (sortConfigReady && !restoredConfigRef.current && sortConfig && typeof sortConfig === 'object') {
+      let restored = false;
+      if (sortConfig.presetMode) {
+        setPresetMode(sortConfig.presetMode);
+        restored = true;
+      } else if (preferences?.defaultPreset) {
+        setPresetMode(preferences.defaultPreset);
+      }
+      if (Array.isArray(sortConfig.customKeys) && sortConfig.customKeys.length > 0) {
+        setCustomKeys(sortConfig.customKeys);
+        restored = true;
+      }
+      if (sortConfig.applyMode) {
+        setApplyMode(sortConfig.applyMode);
+        restored = true;
+      }
+      if (sortConfig.selectedPlaylistId && !selectedPlaylistId) {
+        setSelectedPlaylistId(sortConfig.selectedPlaylistId);
+        restored = true;
+      }
+      if (restored) {
+        restoredConfigRef.current = true;
+      }
+    }
+  }, [sortConfigReady, sortConfig, preferences?.defaultPreset, selectedPlaylistId]);
 
   // Preview & Cached Simulation
   const [previewData, setPreviewData] = useState(null);
@@ -591,9 +718,6 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
   // Drag state for sort rules
   const [draggedRuleIdx, setDraggedRuleIdx] = useState(null);
   const [dragOverRuleIdx, setDragOverRuleIdx] = useState(null);
-
-  // Apply options
-  const [applyMode, setApplyMode] = useState('in_place'); // 'in_place' | 'new_playlist'
   const [newPlaylistTitle, setNewPlaylistTitle] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -727,7 +851,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         payload.mode = 'new_playlist';
         payload.newPlaylistTitle = newPlaylistTitle;
       }
-      if (isManuallyAdjusted && previewData?.items) {
+      if (previewData?.items && previewData.items.length > 0) {
         payload.sortedItemIds = previewData.items.map((it) => it.playlist_item_id);
       }
       const res = await api.applyPlaylistSort(payload);
@@ -751,7 +875,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     } finally {
       setApplying(false);
     }
-  }, [selectedPlaylistId, activeSortKeys, previewToken, applyMode, newPlaylistTitle, isManuallyAdjusted, previewData, toast]);
+  }, [selectedPlaylistId, activeSortKeys, previewToken, applyMode, newPlaylistTitle, previewData, toast]);
 
   // Drag & drop handlers for sort rule keys
   const handleRuleDragStart = (e, index) => {
@@ -769,12 +893,11 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
   const handleRuleDrop = (e, targetIdx) => {
     e.preventDefault();
     if (draggedRuleIdx !== null && draggedRuleIdx !== targetIdx) {
-      setCustomKeys((prev) => {
-        const next = [...prev];
-        const [moved] = next.splice(draggedRuleIdx, 1);
-        next.splice(targetIdx, 0, moved);
-        return next;
-      });
+      const next = [...customKeys];
+      const [moved] = next.splice(draggedRuleIdx, 1);
+      next.splice(targetIdx, 0, moved);
+      setCustomKeys(next);
+      persistConfig({ customKeys: next });
     }
     setDraggedRuleIdx(null);
     setDragOverRuleIdx(null);
@@ -786,19 +909,23 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
   };
 
   const handleCustomKeyChange = useCallback((index, newKey) => {
-    setCustomKeys((prev) => prev.map((k, i) => (i === index ? newKey : k)));
-  }, []);
+    const next = customKeys.map((k, i) => (i === index ? newKey : k));
+    setCustomKeys(next);
+    persistConfig({ customKeys: next });
+  }, [customKeys, persistConfig]);
 
   const handleCustomKeyRemove = useCallback((index) => {
-    setCustomKeys((prev) => prev.filter((_, i) => i !== index));
-  }, []);
+    const next = customKeys.filter((_, i) => i !== index);
+    setCustomKeys(next);
+    persistConfig({ customKeys: next });
+  }, [customKeys, persistConfig]);
 
   const handleAddCustomKey = useCallback(() => {
-    setCustomKeys((prev) => {
-      if (prev.length >= 5) return prev;
-      return [...prev, { field: 'title', direction: 'asc' }];
-    });
-  }, []);
+    if (customKeys.length >= 5) return;
+    const next = [...customKeys, { field: 'title', direction: 'asc' }];
+    setCustomKeys(next);
+    persistConfig({ customKeys: next });
+  }, [customKeys, persistConfig]);
 
   // Build original items for preview table
   const originalItems = cachedOriginalTracks
@@ -950,11 +1077,66 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
           )}
         </div>
 
+        {/* Pinned Playlists Quick Access Chips */}
+        {pinnedPlaylists.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <Pin size={13} style={{ transform: 'rotate(45deg)' }} /> 常用釘選：
+            </span>
+            {pinnedPlaylists.map((pl) => {
+              const isCurrent = pl.id === selectedPlaylistId;
+              return (
+                <button
+                  key={pl.id}
+                  type="button"
+                  className={`badge ${isCurrent ? 'badge-primary' : 'badge-secondary'}`}
+                  style={{
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '4px 8px',
+                    border: isCurrent ? '1px solid var(--color-primary, #3b82f6)' : '1px solid rgba(255,255,255,0.12)',
+                    background: isCurrent ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255,255,255,0.06)',
+                    color: isCurrent ? '#fff' : 'rgba(255,255,255,0.85)',
+                    borderRadius: 6,
+                  }}
+                  onClick={() => {
+                    setSelectedPlaylistId(pl.id);
+                    persistConfig({ selectedPlaylistId: pl.id });
+                  }}
+                  title={`快速切換至「${pl.title}」`}
+                >
+                  <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {pl.title}
+                  </span>
+                  <span style={{ fontSize: 11, opacity: 0.6 }}>({pl.item_count})</span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      togglePinPlaylist(pl.id);
+                    }}
+                    style={{ marginLeft: 3, opacity: 0.65, cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
+                    title="取消釘選"
+                  >
+                    <X size={12} />
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select
             className="form-select"
             value={selectedPlaylistId}
-            onChange={(e) => setSelectedPlaylistId(e.target.value)}
+            onChange={(e) => {
+              setSelectedPlaylistId(e.target.value);
+              persistConfig({ selectedPlaylistId: e.target.value });
+            }}
             disabled={loadingPlaylists || filteredPlaylists.length === 0}
             style={{ flex: 1, minWidth: 200 }}
           >
@@ -965,13 +1147,38 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                 {playlists.length === 0 ? '找不到播放清單' : '無符合關鍵字的播放清單'}
               </option>
             ) : (
-              filteredPlaylists.map((pl) => (
-                <option key={pl.id} value={pl.id}>
-                  {pl.title} ({pl.item_count} 首)
-                </option>
-              ))
+              <>
+                {pinnedFiltered.length > 0 && (
+                  <optgroup label="📌 常用釘選清單">
+                    {pinnedFiltered.map((pl) => (
+                      <option key={pl.id} value={pl.id}>
+                        📌 {pl.title} ({pl.item_count} 首)
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label={pinnedFiltered.length > 0 ? '全部播放清單' : '播放清單'}>
+                  {unpinnedFiltered.map((pl) => (
+                    <option key={pl.id} value={pl.id}>
+                      {pl.title} ({pl.item_count} 首)
+                    </option>
+                  ))}
+                </optgroup>
+              </>
             )}
           </select>
+          <button
+            type="button"
+            className={`btn ${isSelectedPinned ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => togglePinPlaylist(selectedPlaylistId)}
+            disabled={!selectedPlaylistId || loadingPlaylists}
+            title={isSelectedPinned ? '取消釘選此播放清單' : '釘選目前播放清單至頂端常用'}
+            aria-label={isSelectedPinned ? '取消釘選此播放清單' : '釘選目前播放清單至頂端常用'}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+          >
+            <Pin size={14} style={{ fill: isSelectedPinned ? 'currentColor' : 'none' }} />
+            {isSelectedPinned ? '已釘選' : '釘選'}
+          </button>
           <button
             type="button"
             className="btn btn-secondary"
@@ -995,18 +1202,37 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
           <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
             <ArrowUpDown size={18} /> 排序規則
           </h3>
-          {cachedOriginalTracks && (
-            <span className="badge badge-connected" style={{ fontSize: 11, padding: '2px 8px' }}>
-              ⚡ 即時快取動態模擬中
-            </span>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {savingConfig ? (
+              <span className="badge badge-warning" style={{ fontSize: 11, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Loader2 size={12} className="spin" /> 儲存設定中…
+              </span>
+            ) : savedConfig ? (
+              <span className="badge badge-connected" style={{ fontSize: 11, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <CheckCircle2 size={12} /> 排序設定已自動儲存
+              </span>
+            ) : (
+              <span className="badge badge-info" style={{ fontSize: 11, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <CheckCircle2 size={12} /> 自動記憶設定
+              </span>
+            )}
+            {cachedOriginalTracks && (
+              <span className="badge badge-connected" style={{ fontSize: 11, padding: '2px 8px' }}>
+                ⚡ 即時快取動態模擬中
+              </span>
+            )}
+          </div>
         </div>
 
         <div style={{ marginBottom: 12 }}>
           <select
             className="form-select"
             value={presetMode}
-            onChange={(e) => setPresetMode(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setPresetMode(next);
+              persistConfig({ presetMode: next });
+            }}
             style={{ maxWidth: 460 }}
           >
             {SORT_PRESETS.map((p) => (
@@ -1158,7 +1384,10 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                 name="apply_mode"
                 value="in_place"
                 checked={applyMode === 'in_place'}
-                onChange={() => setApplyMode('in_place')}
+                onChange={() => {
+                  setApplyMode('in_place');
+                  persistConfig({ applyMode: 'in_place' });
+                }}
               />
               <span>就地重新排序原播放清單</span>
             </label>
@@ -1168,7 +1397,10 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                 name="apply_mode"
                 value="new_playlist"
                 checked={applyMode === 'new_playlist'}
-                onChange={() => setApplyMode('new_playlist')}
+                onChange={() => {
+                  setApplyMode('new_playlist');
+                  persistConfig({ applyMode: 'new_playlist' });
+                }}
               />
               <span>另存為新排序歌單（保留原歌單備份）</span>
             </label>

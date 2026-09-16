@@ -85,10 +85,12 @@ async def preview_sort(
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
 ):
     try:
+        needs_year_fallback = any(k.field in ("year", "release_year", "release_date") for k in input_data.sort_keys)
         original_items = fetch_playlist_items_for_sort(
             context,
             input_data.playlist_id,
             fetch_album_details=input_data.fetch_album_details,
+            use_ytdlp_fallback=needs_year_fallback,
         )
 
         sort_keys_dict = [{"field": k.field, "direction": k.direction} for k in input_data.sort_keys]
@@ -141,10 +143,18 @@ async def apply_sort(
     rate_limit=Depends(enforce_workflow_rate_limit),
 ):
     try:
+        has_full_sorted_ids = bool(input_data.sorted_item_ids)
+        needs_album = any(
+            k.field in ("album", "track_number", "track", "year", "release_year", "release_date")
+            for k in input_data.sort_keys
+        )
+        fetch_album = needs_album if not has_full_sorted_ids else False
+
         original_items = fetch_playlist_items_for_sort(
             context,
             input_data.playlist_id,
-            fetch_album_details=False,
+            fetch_album_details=fetch_album,
+            use_ytdlp_fallback=False,
         )
         snapshot = playlist_snapshot_from_preview(original_items)
 

@@ -17,7 +17,7 @@ def test_parse_custom_token_input_json():
     json_str = '{"User-Agent": "Mozilla/5.0", "Cookie": "SID=abc", "authorization": "SAPISIDHASH 123"}'
     parsed = parse_custom_token_input(json_str)
     assert isinstance(parsed, dict)
-    assert parsed.get("Cookie") == "SID=abc"
+    assert parsed.get("cookie") == "SID=abc"
 
 
 def test_parse_custom_token_input_cookie():
@@ -170,10 +170,70 @@ def test_create_sorted_ytmusic_playlist(mock_get_client):
     assert result["quota_used"] == 0
     assert result["succeeded"] == 2
 
-    # Verify invalid characters '<' and '>' were stripped
     mock_client.create_playlist.assert_called_once_with(
         title="My Cool Playlist",
         description="Sorted description",
         privacy_status="PRIVATE",
         video_ids=["v1", "v2"],
     )
+
+
+def test_parse_custom_token_input_curl():
+    curl_input = """curl 'https://music.youtube.com/youtubei/v1/browse' \\
+      -H 'accept: */*' \\
+      -H 'authorization: SAPISIDHASH 1699999999_abcdef' \\
+      -H 'cookie: SID=secret_sid; HSID=secret_hsid; SAPISID=secret_sapisid' \\
+      -H 'user-agent: Mozilla/5.0' \\
+      -H 'x-origin: https://music.youtube.com'"""
+
+    parsed = parse_custom_token_input(curl_input)
+    assert isinstance(parsed, dict)
+    assert "cookie" in parsed
+    assert "secret_sid" in parsed["cookie"]
+    assert parsed.get("x-goog-authuser") == "0"
+
+
+def test_parse_custom_token_input_raw_headers():
+    raw_headers = """
+Accept: */*
+Accept-Language: zh-TW,zh;q=0.9
+Authorization: SAPISIDHASH 1699999999_abcdef
+Cookie: SID=my_sid_val; HSID=my_hsid_val
+User-Agent: Mozilla/5.0
+X-Goog-AuthUser: 0
+"""
+    parsed = parse_custom_token_input(raw_headers)
+    assert isinstance(parsed, dict)
+    assert "cookie" in parsed
+    assert "my_sid_val" in parsed["cookie"]
+    assert parsed.get("x-goog-authuser") == "0"
+
+
+@patch("backend.app.services.ytmusic_service.get_ytdlp_video_date")
+def test_enrich_tracks_with_ytdlp_fallback(mock_get_date):
+    from backend.app.services.ytmusic_service import enrich_tracks_with_ytdlp_fallback
+
+    mock_get_date.side_effect = lambda vid: {
+        "v_same_1": {"release_date": "2023-05-12", "year": 2023},
+        "v_same_2": {"release_date": "2023-10-01", "year": 2023},
+        "v_missing": {"release_date": "2019-03-20", "year": 2019},
+    }.get(vid, {})
+
+    tracks = [
+        {"video_id": "v_same_1", "title": "Song 1", "year": 2023, "release_date": None},
+        {"video_id": "v_same_2", "title": "Song 2", "year": 2023, "release_date": None},
+        {"video_id": "v_missing", "title": "Song Missing", "year": None, "release_date": None},
+        {"video_id": "v_unique", "title": "Song Unique", "year": 2021, "release_date": None},
+    ]
+
+    enriched = enrich_tracks_with_ytdlp_fallback(tracks, check_same_year=True)
+    assert enriched[0]["release_date"] == "2023-05-12"
+    assert enriched[1]["release_date"] == "2023-10-01"
+    assert enriched[2]["release_date"] == "2019-03-20"
+    assert enriched[2]["year"] == 2019
+    # v_unique has a unique year and does not collide, so yt-dlp is not called
+    assert enriched[3]["release_date"] is None
+    assert enriched[3]["year"] == 2021
+    # Check that v_unique was never fetched
+    called_vids = [call.args[0] for call in mock_get_date.call_args_list]
+    assert "v_unique" not in called_vids

@@ -202,3 +202,87 @@ def test_sort_artist_album_track_multi_key():
         "State of Grace",  # Taylor Swift, Red, Track 1
         "Red (Track 2)",  # Taylor Swift, Red, Track 2
     ]
+
+
+def test_sort_album_respects_track_number():
+    items = [
+        {"title": "Track 3", "album": "Midnights", "track_number": 3},
+        {"title": "Track 1", "album": "Midnights", "track_number": 1},
+        {"title": "Track 2", "album": "Midnights", "track_number": 2},
+        {"title": "Bonus", "album": "Midnights", "track_number": None},
+        {"title": "1989 Track 2", "album": "1989", "track_number": 2},
+        {"title": "1989 Track 1", "album": "1989", "track_number": 1},
+    ]
+    # Sorting by album alone must respect track numbers within each album
+    sorted_asc = sort_items(items, [{"field": "album", "direction": "asc"}])
+    assert [i["title"] for i in sorted_asc] == [
+        "1989 Track 1",
+        "1989 Track 2",
+        "Track 1",
+        "Track 2",
+        "Track 3",
+        "Bonus",
+    ]
+
+    sorted_desc = sort_items(items, [{"field": "album", "direction": "desc"}])
+    assert [i["title"] for i in sorted_desc] == [
+        "Track 1",
+        "Track 2",
+        "Track 3",
+        "Bonus",
+        "1989 Track 1",
+        "1989 Track 2",
+    ]
+
+
+def test_sort_by_year_with_same_year_release_date_fallback():
+    items = [
+        {"title": "October Single", "year": 2023, "release_date": "2023-10-01"},
+        {"title": "May Single", "year": 2023, "release_date": "2023-05-12"},
+        {"title": "January Single", "year": 2023, "release_date": "2023-01-15"},
+        {"title": "Old Song", "year": 2020, "release_date": "2020-06-01"},
+        {"title": "No Date Song", "year": None, "release_date": None},
+    ]
+    sorted_asc = sort_items(items, [{"field": "year", "direction": "asc"}])
+    assert [i["title"] for i in sorted_asc] == [
+        "Old Song",
+        "January Single",
+        "May Single",
+        "October Single",
+        "No Date Song",
+    ]
+
+    sorted_desc = sort_items(items, [{"field": "year", "direction": "desc"}])
+    assert [i["title"] for i in sorted_desc] == [
+        "October Single",
+        "May Single",
+        "January Single",
+        "Old Song",
+        "No Date Song",
+    ]
+
+
+def test_sort_artist_and_album_respects_track_number():
+    items = [
+        {"artist": "Taylor Swift", "album": "Red", "track_number": 2, "title": "Red (Track 2)"},
+        {"artist": "Taylor Swift", "album": "Red", "track_number": 1, "title": "State of Grace"},
+        {"artist": "Taylor Swift", "album": "Red", "track_number": None, "title": "Red Bonus"},
+        {"artist": "Taylor Swift", "album": "1989", "track_number": 2, "title": "Blank Space"},
+        {"artist": "Taylor Swift", "album": "1989", "track_number": 1, "title": "Welcome To New York"},
+        {"artist": "Adele", "album": "21", "track_number": 2, "title": "Rumour Has It"},
+        {"artist": "Adele", "album": "21", "track_number": 1, "title": "Rolling in the Deep"},
+    ]
+    keys = [
+        {"field": "artist", "direction": "asc"},
+        {"field": "album", "direction": "asc"},
+    ]
+    sorted_res = sort_items(items, keys)
+    assert [i["title"] for i in sorted_res] == [
+        "Rolling in the Deep",
+        "Rumour Has It",
+        "Welcome To New York",
+        "Blank Space",
+        "State of Grace",
+        "Red (Track 2)",
+        "Red Bonus",
+    ]

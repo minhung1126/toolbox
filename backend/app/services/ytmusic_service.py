@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import logging
 import re
+from collections import Counter
 from typing import Any
 
+try:
+    import yt_dlp
+except ImportError:
+    yt_dlp = None
 from ytmusicapi import YTMusic
-from ytmusicapi.auth.browser import setup_browser
+from ytmusicapi.auth.browser import initialize_headers, setup_browser
 from ytmusicapi.exceptions import YTMusicError
 
 from backend.app.core.credential_store import credential_store
@@ -14,43 +20,235 @@ from backend.app.core.youtube_context import YouTubeRequestContext
 
 logger = logging.getLogger(__name__)
 
+_ytdlp_date_cache: dict[str, dict[str, Any]] = {}
 
-def parse_custom_token_input(token_raw: str) -> dict[str, Any] | str:
+
+def _extract_headers_from_curl(curl_cmd: str) -> list[str]:
+    """Extract -H / --header parameters from a cURL command string."""
+    pattern = r"""(?:-H|--header)\s+(?:'([^']*)'|"([^"]*)")"""
+    matches = re.findall(pattern, curl_cmd)
+    headers = []
+    for m in matches:
+        hdr = m[0] if m[0] else m[1]
+        hdr = hdr.strip()
+        if ":" in hdr:
+            headers.append(hdr)
+    return headers
+
+
+def parse_custom_token_input(token_raw: str) -> dict[str, Any]:
     """Parse raw custom token input into a valid format accepted by YTMusic().
 
     Supports:
     1. JSON headers dict (e.g. {"Cookie": "...", "User-Agent": "..."})
-    2. Raw request headers copied from Chrome/Firefox/Edge network tab
-    3. Plain cookie string (e.g. "SID=...; SAPISID=...")
+    2. cURL command (copied from Chrome/Firefox/Edge network tab via 'Copy as cURL')
+    3. Raw request headers copied from DevTools Headers panel
+    4. Plain cookie string (e.g. "SID=...; SAPISID=...")
     """
     raw = str(token_raw or "").strip()
     if not raw:
         raise ValueError("Token 內容不可為空。")
 
-    # If already a valid JSON dictionary
+    # 1. If already a valid JSON dictionary
     if raw.startswith("{") and raw.endswith("}"):
         try:
             parsed = json.loads(raw)
             if isinstance(parsed, dict):
+                norm = {k.lower(): str(v) for k, v in parsed.items()}
+                if "cookie" in norm:
+                    if "x-goog-authuser" not in norm:
+                        norm["x-goog-authuser"] = "0"
+                    init_hdrs = initialize_headers()
+                    init_hdrs.update(norm)
+                    return dict(init_hdrs)
                 return parsed
         except Exception:
             pass
 
-    # If raw request headers or plain cookie string
-    try:
-        # Check if it looks like a pure cookie string without header prefix
-        if "Cookie:" not in raw and "cookie:" not in raw and ("=" in raw and ";" in raw):
-            headers_text = f"Cookie: {raw}\nX-Goog-AuthUser: 0"
-        else:
-            headers_text = raw
-            if "x-goog-authuser" not in headers_text.lower():
-                headers_text += "\nX-Goog-AuthUser: 0"
+    # 2. If it is a cURL command (e.g. starts with or contains 'curl ')
+    extracted_curl_headers = []
+    if "curl" in raw.lower() and ("-h" in raw.lower() or "--header" in raw.lower()):
+        extracted_curl_headers = _extract_headers_from_curl(raw)
 
+    # 3. Build headers lines
+    header_lines: list[str] = []
+    if extracted_curl_headers:
+        header_lines = extracted_curl_headers
+    else:
+        # Split raw by newline
+        lines = [line.strip() for line in raw.splitlines() if line.strip()]
+        for line in lines:
+            # Skip pseudo headers like :authority:, :method:, etc.
+            if line.startswith(":"):
+                continue
+            header_lines.append(line)
+
+    # Check if raw input is just a plain cookie string without "Cookie:" prefix
+    has_cookie_header = any(h.lower().startswith("cookie:") for h in header_lines)
+    if not has_cookie_header:
+        # Check if entire input or lines look like name=value cookie pairs
+        if (
+            "sid=" in raw.lower() or "sapisid=" in raw.lower() or ("=" in raw and ";" in raw)
+        ) and not extracted_curl_headers:
+            header_lines.insert(0, f"Cookie: {raw}")
+            has_cookie_header = True
+
+    if not has_cookie_header:
+        raise ValueError("無法在輸入內容中偵測到有效的 Cookie (例如 SID=... 或 Cookie: ...)。請確認複製內容。")
+
+    # Ensure x-goog-authuser is present
+    has_auth_user = any("x-goog-authuser" in h.lower() for h in header_lines)
+    if not has_auth_user:
+        header_lines.append("X-Goog-AuthUser: 0")
+
+    headers_text = "\n".join(header_lines)
+
+    # Attempt setup_browser first
+    try:
         parsed_json_str = setup_browser(headers_raw=headers_text)
         return json.loads(parsed_json_str)
     except Exception as exc:
-        logger.warning("Failed to parse custom browser headers: %s", exc)
-        raise ValueError(f"無法解析所提供的 YouTube Music Token 或 Headers：{exc}") from exc
+        logger.debug("setup_browser failed (%s), constructing headers dictionary manually", exc)
+
+    # Manual extraction fallback if setup_browser has strict header parsing constraints
+    user_headers: dict[str, str] = {}
+    for line in header_lines:
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            user_headers[k.strip().lower()] = v.strip()
+        elif ":" in line:
+            k, v = line.split(":", 1)
+            user_headers[k.strip().lower()] = v.strip()
+
+    if "cookie" not in user_headers:
+        raise ValueError("無法解析所提供的 YouTube Music Token 或 Headers：未找到 Cookie。")
+
+    if "x-goog-authuser" not in user_headers:
+        user_headers["x-goog-authuser"] = "0"
+
+    final_headers = initialize_headers()
+    final_headers.update(user_headers)
+    return dict(final_headers)
+
+
+def get_ytdlp_video_date(video_id: str) -> dict[str, Any]:
+    """Fetch exact release_date and year for a YouTube video using yt-dlp.
+
+    Returns dict with keys:
+    release_date (e.g. '2023-05-12'), year (int), upload_date (str).
+    """
+    if not video_id or yt_dlp is None:
+        return {}
+    cached = _ytdlp_date_cache.get(video_id)
+    if cached is not None:
+        return cached
+
+    ydl_opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "extract_flat": False,
+        "ignoreerrors": True,
+        "socket_timeout": 8,
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_id, download=False)
+            if not info or not isinstance(info, dict):
+                _ytdlp_date_cache[video_id] = {}
+                return {}
+
+            raw_date = info.get("release_date") or info.get("upload_date")
+            release_date = None
+            year = info.get("release_year")
+            if raw_date and len(str(raw_date)) == 8 and str(raw_date).isdigit():
+                s = str(raw_date)
+                release_date = f"{s[0:4]}-{s[4:6]}-{s[6:8]}"
+                if not year:
+                    year = int(s[0:4])
+            elif raw_date:
+                release_date = str(raw_date)
+                m = re.search(r"\b(19\d\d|20\d\d)\b", str(raw_date))
+                if m and not year:
+                    year = int(m.group(1))
+
+            result = {
+                "release_date": release_date,
+                "year": year,
+                "upload_date": str(info.get("upload_date") or ""),
+                "album": info.get("album"),
+                "track_number": info.get("track_number"),
+            }
+            _ytdlp_date_cache[video_id] = result
+            return result
+    except Exception as exc:
+        logger.warning("yt-dlp metadata extraction failed for video %s: %s", video_id, exc)
+        _ytdlp_date_cache[video_id] = {}
+        return {}
+
+
+def enrich_tracks_with_ytdlp_fallback(
+    tracks: list[dict[str, Any]],
+    check_same_year: bool = True,
+    max_workers: int = 8,
+) -> list[dict[str, Any]]:
+    """Enrich tracks with precise release_date / year using yt-dlp fallback.
+
+    Triggers fallback when:
+    1. A track has no year / release_date data.
+    2. Multiple tracks share the same year ('同年'), requiring exact day comparison.
+    """
+    if not tracks:
+        return tracks
+
+    # Count frequencies of each year among tracks that have year data
+    year_counts: Counter[str] = Counter()
+    for trk in tracks:
+        yr = trk.get("year")
+        if yr is not None and str(yr).strip() != "":
+            year_counts[str(yr).strip()] += 1
+
+    # Find candidate tracks that need yt-dlp fallback
+    candidates = []
+    for trk in tracks:
+        vid = trk.get("video_id")
+        if not vid:
+            continue
+
+        has_year = trk.get("year") is not None and str(trk.get("year")).strip() != ""
+        has_release_date = trk.get("release_date") is not None and str(trk.get("release_date")).strip() != ""
+
+        # Condition 1: No date / year data
+        needs_date = not has_year and not has_release_date
+        # Condition 2: Same year as other songs in playlist ("同年")
+        is_same_year = check_same_year and has_year and (year_counts[str(trk.get("year")).strip()] > 1)
+
+        if needs_date or (is_same_year and not has_release_date):
+            candidates.append(trk)
+
+    if not candidates:
+        return tracks
+
+    logger.info("Enriching %d tracks with yt-dlp release date fallback...", len(candidates))
+
+    def _fetch_for_track(track_item: dict[str, Any]) -> None:
+        vid = track_item.get("video_id")
+        if not vid:
+            return
+        meta = get_ytdlp_video_date(vid)
+        if meta.get("release_date"):
+            track_item["release_date"] = meta["release_date"]
+        if meta.get("year") and not track_item.get("year"):
+            track_item["year"] = meta["year"]
+        if meta.get("track_number") and track_item.get("track_number") is None:
+            track_item["track_number"] = meta["track_number"]
+        if meta.get("album") and not track_item.get("album"):
+            track_item["album"] = meta["album"]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(max_workers, len(candidates))) as executor:
+        list(executor.map(_fetch_for_track, candidates))
+
+    return tracks
 
 
 def get_ytmusic_client(
@@ -244,6 +442,7 @@ def fetch_ytmusic_playlist_tracks(
                 "album_id": album_id,
                 "track_number": track_number,
                 "year": release_year,
+                "release_date": None,
                 "duration_seconds": t.get("duration_seconds", 0),
                 "thumbnail_url": thumb_url,
                 "position": idx,
