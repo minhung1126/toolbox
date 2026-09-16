@@ -4,15 +4,19 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  FileSpreadsheet,
+  Settings,
   Sparkles,
 } from 'lucide-react';
 import { SourceLinkButton } from '../components/SourceLinkInput';
 import { youtubePreferredUiSlot } from '../utils/youtubeRouting';
-import { getAllTools } from '../tools/catalog';
+import { PATHS } from '../routes/paths';
+import { getDashboardFeatureCards, getAllTools } from '../tools/catalog';
 
 export default function DashboardPage({ authUser, sysSettings = {} }) {
   const activeSlot = youtubePreferredUiSlot(authUser?.youtube);
   const activeYoutube = authUser?.youtube?.slots?.[activeSlot] || {};
+  const featureCards = getDashboardFeatureCards();
   const allTools = getAllTools();
   const sheetsConnected = Boolean(
     authUser?.authorizations?.sheets?.connected || authUser?.google_scopes?.sheets_readonly

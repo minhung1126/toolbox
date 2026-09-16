@@ -2,10 +2,8 @@
 
 from typing import List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
-
-from backend.app.core.dependencies import require_account_subject
 
 router = APIRouter(prefix="/photo-curator", tags=["Photo Curator"])
 
@@ -122,18 +120,13 @@ class ChecklistResponse(BaseModel):
 
 
 @router.get("/presets", response_model=List[PresetTemplate])
-def get_preset_templates(
-    _owner_sub: str = Depends(require_account_subject),
-) -> List[PresetTemplate]:
+def get_preset_templates() -> List[PresetTemplate]:
     """Return preset curation models for 3-part social media posts."""
     return PRESET_TEMPLATES
 
 
 @router.post("/checklist", response_model=ChecklistResponse)
-def generate_checklist(
-    req: ChecklistRequest,
-    _owner_sub: str = Depends(require_account_subject),
-) -> ChecklistResponse:
+def generate_checklist(req: ChecklistRequest) -> ChecklistResponse:
     """Generate a clean markdown posting checklist for 3-part posts."""
     lines = [
         "# Instagram 貼文三部曲發布對照表",

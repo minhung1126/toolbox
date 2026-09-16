@@ -86,10 +86,7 @@ def matches_team_person(row: Dict[str, Any], team: str, person: str) -> bool:
 def read_sheet_data(service, spreadsheet_id: str, range_name: str) -> List[Dict[str, Any]]:
     """Read a named range/sheet and return rows as dictionaries keyed by header."""
     try:
-        query_range = range_name
-        if "!" not in range_name:
-            query_range = f"{range_name}!1:{MAX_SHEET_ROWS + 2}"
-        result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=query_range).execute()
+        result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=range_name).execute()
         rows = _validate_sheet_values(result.get("values", []))
         if not rows or len(rows) < 2:
             return []
@@ -241,7 +238,7 @@ def get_copyable_sheet_table(
         .values()
         .get(
             spreadsheetId=spreadsheet_id,
-            range=f"{quote_sheet_name(worksheet_name)}!1:{MAX_SHEET_ROWS + 2}",
+            range=quote_sheet_name(worksheet_name),
             valueRenderOption="FORMATTED_VALUE",
             dateTimeRenderOption="FORMATTED_STRING",
         )
