@@ -63,7 +63,11 @@ def _snippet_thumbnail(snippet: Dict[str, Any], video_id: str) -> str:
     return url
 
 
-def fetch_playlist_items(context: YouTubeRequestContext, playlist_id: str) -> List[Dict[str, Any]]:
+def fetch_playlist_items(
+    context: YouTubeRequestContext,
+    playlist_id: str,
+    hl: str = "zh-TW",
+) -> List[Dict[str, Any]]:
     """Fetch all items from a YouTube playlist (handles pagination)."""
     service = get_youtube_service(context)
     items = []
@@ -74,6 +78,7 @@ def fetch_playlist_items(context: YouTubeRequestContext, playlist_id: str) -> Li
             playlistId=playlist_id,
             maxResults=50,
             pageToken=next_page_token,
+            hl=hl,
         )
         response = _execute_with_quota(request, "playlistItems.list", context)
         items.extend(response.get("items", []))
@@ -97,7 +102,11 @@ def validate_playlist(context: YouTubeRequestContext, playlist_id: str) -> Dict[
     return dict(items[0])
 
 
-def fetch_video_details(context: YouTubeRequestContext, video_ids: List[str]) -> List[Dict[str, Any]]:
+def fetch_video_details(
+    context: YouTubeRequestContext,
+    video_ids: List[str],
+    hl: str = "zh-TW",
+) -> List[Dict[str, Any]]:
     """Fetch detailed info for unique video IDs in batches of 50."""
     video_ids = _deduplicate_video_ids(video_ids)
     if not video_ids:
@@ -111,6 +120,7 @@ def fetch_video_details(context: YouTubeRequestContext, video_ids: List[str]) ->
         request = service.videos().list(
             part="snippet,contentDetails,status",
             id=",".join(chunk),
+            hl=hl,
         )
         response = _execute_with_quota(request, "videos.list", context)
         detailed_videos.extend(response.get("items", []))
@@ -132,12 +142,13 @@ def _api_playlist_preview(context: YouTubeRequestContext, playlist_id: str) -> L
         video_id = item.get("contentDetails", {}).get("videoId")
         detail = details_map.get(video_id, {})
         snippet = detail.get("snippet", item.get("snippet", {}))
+        title = snippet.get("localized", {}).get("title") or snippet.get("title", "")
         parsed_videos.append(
             {
                 "sequence": index,
                 "video_id": video_id,
                 "playlist_item_id": item.get("id"),
-                "title": snippet.get("title", ""),
+                "title": title,
                 "description": snippet.get("description", ""),
                 "thumbnail_url": _snippet_thumbnail(snippet, video_id),
                 "published_at": snippet.get("publishedAt", ""),

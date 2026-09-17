@@ -16,6 +16,7 @@ except ImportError:
 from ytmusicapi import YTMusic
 from ytmusicapi.auth.browser import initialize_headers
 from ytmusicapi.auth.types import AuthType
+from ytmusicapi.constants import SUPPORTED_LANGUAGES, SUPPORTED_LOCATIONS
 from ytmusicapi.exceptions import YTMusicError
 from ytmusicapi.helpers import get_authorization
 
@@ -23,6 +24,75 @@ from backend.app.core.credential_store import credential_store
 from backend.app.core.youtube_context import YouTubeRequestContext
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_YTMUSIC_LANGUAGE = "zh_TW"
+DEFAULT_YTMUSIC_LOCATION = "TW"
+
+LOCALE_PRESETS: dict[str, dict[str, str]] = {
+    "TW": {"language": "zh_TW", "location": "TW", "label": "台灣（繁體中文）"},
+    "US": {"language": "en", "location": "US", "label": "英文 (US)"},
+    "KR": {"language": "ko", "location": "KR", "label": "韓文 (KR)"},
+    "JP": {"language": "ja", "location": "JP", "label": "日文 (JP)"},
+}
+
+
+def resolve_ytmusic_locale(
+    owner_sub: str | None = None,
+    language: str | None = None,
+    location: str | None = None,
+) -> tuple[str, str]:
+    """Resolve language and location for YTMusic API calls.
+
+    Priority:
+    1. Explicit language/location arguments
+    2. Stored preferences in account_state_store ('ytmusic_preferences')
+    3. Default fallback: language='zh_TW', location='TW'
+    """
+    resolved_lang = language
+    resolved_loc = location
+
+    if not resolved_lang or not resolved_loc:
+        if owner_sub:
+            try:
+                from backend.app.core.account_state_store import account_state_store
+
+                work_state = account_state_store.get_work_state(owner_sub)
+                prefs = work_state.get("ytmusic_preferences") if isinstance(work_state, dict) else {}
+                if isinstance(prefs, dict):
+                    region_preset = prefs.get("regionPreset") or prefs.get("region_preset")
+                    if region_preset in LOCALE_PRESETS:
+                        preset_info = LOCALE_PRESETS[region_preset]
+                        resolved_lang = resolved_lang or preset_info["language"]
+                        resolved_loc = resolved_loc or preset_info["location"]
+                    elif region_preset == "custom":
+                        resolved_lang = resolved_lang or prefs.get("customLanguage") or prefs.get("language")
+                        resolved_loc = resolved_loc or prefs.get("customLocation") or prefs.get("location")
+                    else:
+                        resolved_lang = resolved_lang or prefs.get("language")
+                        resolved_loc = resolved_loc or prefs.get("location")
+            except Exception as exc:
+                logger.debug("Failed to read account locale preferences for sub %s: %s", owner_sub, exc)
+
+    resolved_lang = (resolved_lang or DEFAULT_YTMUSIC_LANGUAGE).strip().replace("-", "_")
+    resolved_loc = (resolved_loc or DEFAULT_YTMUSIC_LOCATION).strip().upper()
+
+    if resolved_lang not in SUPPORTED_LANGUAGES:
+        logger.warning(
+            "Unsupported YTMusic language '%s', falling back to '%s'",
+            resolved_lang,
+            DEFAULT_YTMUSIC_LANGUAGE,
+        )
+        resolved_lang = DEFAULT_YTMUSIC_LANGUAGE
+
+    if resolved_loc not in SUPPORTED_LOCATIONS:
+        logger.warning(
+            "Unsupported YTMusic location '%s', falling back to '%s'",
+            resolved_loc,
+            DEFAULT_YTMUSIC_LOCATION,
+        )
+        resolved_loc = DEFAULT_YTMUSIC_LOCATION
+
+    return resolved_lang, resolved_loc
 
 
 def _clean_cmd_escapes(s: str) -> str:
@@ -80,7 +150,11 @@ def _extract_headers_from_fetch(fetch_cmd: str) -> dict[str, str]:
     return headers
 
 
-def parse_custom_token_input(token_raw: str) -> dict[str, Any]:
+def parse_custom_token_input(
+    token_raw: str,
+    language: str = DEFAULT_YTMUSIC_LANGUAGE,
+    location: str = DEFAULT_YTMUSIC_LOCATION,
+) -> dict[str, Any]:
     """Parse raw custom token input into a valid format accepted by YTMusic().
 
     Supports:
@@ -175,12 +249,23 @@ def parse_custom_token_input(token_raw: str) -> dict[str, Any]:
         origin_val = user_headers.get("origin", "https://music.youtube.com")
         user_headers["authorization"] = get_authorization(f"{sapisid_val} {origin_val}")
 
+    accept_lang_map = {
+        "zh_TW": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+        "zh_CN": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+        "ja": "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
+        "ko": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+        "en": "en-US,en;q=0.9",
+    }
+    user_headers["accept-language"] = accept_lang_map.get(
+        language, f"{language.replace('_', '-')},{language[:2]};q=0.9,en;q=0.8"
+    )
+
     final_headers = dict(initialize_headers())
     final_headers.update(user_headers)
 
     # Validate that YTMusic accepts these headers as AuthType.BROWSER
     try:
-        yt_test = YTMusic(auth=final_headers)
+        yt_test = YTMusic(auth=final_headers, language=language, location=location)
         if getattr(yt_test, "auth_type", None) != AuthType.BROWSER:
             raise ValueError("未能成功識別為 YouTube Music 瀏覽器憑證 (AuthType.BROWSER)。")
     except Exception as exc:
@@ -223,7 +308,7 @@ def normalize_artist_name(name: str | None) -> str:
 
 
 @lru_cache(maxsize=500)
-def get_ytdlp_video_date(video_id: str) -> dict[str, Any]:
+def get_ytdlp_video_date(video_id: str, language: str = "zh-TW") -> dict[str, Any]:
     """Fetch exact release_date and year for a YouTube video using yt-dlp.
 
     Results are cached (LRU, max 500 entries) to avoid repeated network calls.
@@ -239,6 +324,8 @@ def get_ytdlp_video_date(video_id: str) -> dict[str, Any]:
         "extract_flat": False,
         "ignoreerrors": True,
         "socket_timeout": 8,
+        "http_headers": {"Accept-Language": f"{language},en;q=0.8"},
+        "extractor_args": {"youtube": {"lang": [language]}},
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -280,6 +367,7 @@ def enrich_tracks_with_ytdlp_fallback(
     tracks: list[dict[str, Any]],
     check_same_year: bool = True,
     max_workers: int = 8,
+    language: str = "zh-TW",
 ) -> list[dict[str, Any]]:
     """Enrich tracks with precise release_date / year using yt-dlp fallback.
 
@@ -336,7 +424,10 @@ def enrich_tracks_with_ytdlp_fallback(
         vid = track_item.get("video_id")
         if not vid:
             return
-        meta = get_ytdlp_video_date(vid)
+        try:
+            meta = get_ytdlp_video_date(vid, language=language)
+        except TypeError:
+            meta = get_ytdlp_video_date(vid)
         if meta.get("release_date"):
             track_item["release_date"] = meta["release_date"]
         if meta.get("year") and not track_item.get("year"):
@@ -381,8 +472,10 @@ def get_ytmusic_client(
     context: YouTubeRequestContext | None = None,
     owner_sub: str | None = None,
     custom_token: str | None = None,
+    language: str | None = None,
+    location: str | None = None,
 ) -> YTMusic:
-    """Instantiate a configured YTMusic client.
+    """Instantiate a configured YTMusic client with localized language and location.
 
     Priority:
     1. Explicit custom_token parameter
@@ -390,6 +483,7 @@ def get_ytmusic_client(
     3. Unauthenticated YTMusic() fallback (0 quota read access for public/unlisted playlists)
     """
     sub = owner_sub or (context.owner_sub if context else None)
+    lang, loc = resolve_ytmusic_locale(owner_sub=sub, language=language, location=location)
 
     # 1. Custom token check
     token_to_use = custom_token
@@ -398,28 +492,31 @@ def get_ytmusic_client(
 
     if token_to_use:
         try:
-            parsed_auth = parse_custom_token_input(token_to_use)
-            return YTMusic(auth=parsed_auth)
+            parsed_auth = parse_custom_token_input(token_to_use, language=lang, location=loc)
+            return YTMusic(auth=parsed_auth, language=lang, location=loc)
         except Exception as e:
             logger.error("Failed to initialize YTMusic with custom token: %s", e)
             if not context or not context.credentials:
                 raise
 
     # 2. Unauthenticated YTMusic client
-    # Note: Google OAuth Bearer tokens cannot be passed to ytmusicapi's WEB_REMIX client
-    # because Innertube's music.youtube.com endpoint rejects web OAuth Bearer tokens with HTTP 400.
-    # Unauthenticated YTMusic() can read public and unlisted playlists and track album info with 0 quota.
-    # Write actions or private library operations require either a custom browser token or
-    # fallback to the Google YouTube Data API v3 service.
-    return YTMusic()
+    # Defaults to localized language (zh_TW) and location (TW)
+    return YTMusic(language=lang, location=loc)
 
 
 def fetch_ytmusic_playlists(
     context: YouTubeRequestContext | None = None,
     owner_sub: str | None = None,
+    language: str | None = None,
+    location: str | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch user's YouTube Music playlists using YTMusic API (0 API credit)."""
-    client = get_ytmusic_client(context=context, owner_sub=owner_sub)
+    client = get_ytmusic_client(
+        context=context,
+        owner_sub=owner_sub,
+        language=language,
+        location=location,
+    )
     try:
         raw_playlists = client.get_library_playlists(limit=None)
     except Exception as exc:
@@ -460,13 +557,20 @@ def fetch_ytmusic_playlist_tracks(
     context: YouTubeRequestContext | None = None,
     owner_sub: str | None = None,
     fetch_album_details: bool = True,
+    language: str | None = None,
+    location: str | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch full playlist track items including artists, album, track number, and duration.
 
     Uses an in-memory album cache so that multiple tracks from the same album
     only trigger one get_album query. Consumes 0 YouTube Data API quota.
     """
-    client = get_ytmusic_client(context=context, owner_sub=owner_sub)
+    client = get_ytmusic_client(
+        context=context,
+        owner_sub=owner_sub,
+        language=language,
+        location=location,
+    )
     try:
         playlist_data = client.get_playlist(playlist_id, limit=None)
     except Exception as e:
@@ -598,13 +702,20 @@ def apply_ytmusic_sort_in_place(
     original_items: list[dict[str, Any]],
     context: YouTubeRequestContext | None = None,
     owner_sub: str | None = None,
+    language: str | None = None,
+    location: str | None = None,
 ) -> dict[str, Any]:
     """Sort a YouTube Music playlist in-place using edit_playlist(moveItem=...).
 
     Simulates moves using greedy position alignment. Only calls moveItem for items
     that are out of order, consuming 0 YouTube Data API quota.
     """
-    client = get_ytmusic_client(context=context, owner_sub=owner_sub)
+    client = get_ytmusic_client(
+        context=context,
+        owner_sub=owner_sub,
+        language=language,
+        location=location,
+    )
 
     auth_type = getattr(client, "auth_type", None)
     if auth_type != AuthType.BROWSER and not isinstance(auth_type, (MagicMock, type(None))):
@@ -674,13 +785,20 @@ def create_sorted_ytmusic_playlist(
     privacy_status: str = "PRIVATE",
     context: YouTubeRequestContext | None = None,
     owner_sub: str | None = None,
+    language: str | None = None,
+    location: str | None = None,
 ) -> dict[str, Any]:
     """Create a brand new YouTube Music playlist with tracks already in sorted order.
 
     Instantly completes in 1 request and preserves the original playlist intact.
     Consumes 0 YouTube Data API quota.
     """
-    client = get_ytmusic_client(context=context, owner_sub=owner_sub)
+    client = get_ytmusic_client(
+        context=context,
+        owner_sub=owner_sub,
+        language=language,
+        location=location,
+    )
     auth_type = getattr(client, "auth_type", None)
     if auth_type != AuthType.BROWSER and not isinstance(auth_type, (MagicMock, type(None))):
         raise YTMusicError(

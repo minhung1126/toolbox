@@ -322,3 +322,75 @@ def test_apply_ytmusic_sort_in_place_rejects_unauthenticated(mock_get_client):
 
     with pytest.raises(YTMusicError, match="尚未設定或未啟用有效的瀏覽器 Token"):
         apply_ytmusic_sort_in_place("PL_TEST", sorted_items, original)
+
+
+def test_resolve_ytmusic_locale_defaults():
+    from backend.app.services.ytmusic_service import resolve_ytmusic_locale
+
+    lang, loc = resolve_ytmusic_locale()
+    assert lang == "zh_TW"
+    assert loc == "TW"
+
+
+def test_resolve_ytmusic_locale_explicit_args():
+    from backend.app.services.ytmusic_service import resolve_ytmusic_locale
+
+    lang, loc = resolve_ytmusic_locale(language="ja", location="JP")
+    assert lang == "ja"
+    assert loc == "JP"
+
+
+def test_resolve_ytmusic_locale_from_account_store(monkeypatch):
+    from backend.app.core.account_state_store import account_state_store
+    from backend.app.services.ytmusic_service import resolve_ytmusic_locale
+
+    mock_state = {
+        "ytmusic_preferences": {
+            "regionPreset": "KR",
+            "language": "ko",
+            "location": "KR",
+        }
+    }
+    monkeypatch.setattr(account_state_store, "get_work_state", lambda sub: mock_state)
+
+    lang, loc = resolve_ytmusic_locale(owner_sub="test-sub-123")
+    assert lang == "ko"
+    assert loc == "KR"
+
+
+def test_resolve_ytmusic_locale_custom_valid(monkeypatch):
+    from backend.app.core.account_state_store import account_state_store
+    from backend.app.services.ytmusic_service import resolve_ytmusic_locale
+
+    mock_state = {
+        "ytmusic_preferences": {
+            "regionPreset": "custom",
+            "customLanguage": "fr",
+            "customLocation": "FR",
+        }
+    }
+    monkeypatch.setattr(account_state_store, "get_work_state", lambda sub: mock_state)
+
+    lang, loc = resolve_ytmusic_locale(owner_sub="test-sub-custom")
+    assert lang == "fr"
+    assert loc == "FR"
+
+
+def test_resolve_ytmusic_locale_unsupported_fallback():
+    from backend.app.services.ytmusic_service import resolve_ytmusic_locale
+
+    # 'xx_YY' is not supported, should safely fallback to default zh_TW and TW
+    lang, loc = resolve_ytmusic_locale(language="xx_YY", location="ZZ")
+    assert lang == "zh_TW"
+    assert loc == "TW"
+
+
+def test_parse_custom_token_input_accept_language_header():
+    from backend.app.services.ytmusic_service import parse_custom_token_input
+
+    cookie_input = "SID=abc12345; HSID=def67890; SAPISID=ghi13579"
+    parsed_tw = parse_custom_token_input(cookie_input, language="zh_TW", location="TW")
+    assert "zh-TW" in parsed_tw["accept-language"]
+
+    parsed_ja = parse_custom_token_input(cookie_input, language="ja", location="JP")
+    assert "ja-JP" in parsed_ja["accept-language"]

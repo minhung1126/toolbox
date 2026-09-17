@@ -21,6 +21,7 @@ from backend.app.services.ytmusic_service import (
     fetch_ytmusic_playlist_tracks,
     fetch_ytmusic_playlists,
     normalize_artist_name,
+    resolve_ytmusic_locale,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,13 +40,26 @@ def _parse_iso8601_duration(value: str) -> int:
     return hours * 3600 + minutes * 60 + seconds
 
 
-def fetch_user_playlists(context: YouTubeRequestContext) -> list[dict[str, Any]]:
+def fetch_user_playlists(
+    context: YouTubeRequestContext,
+    language: str | None = None,
+    location: str | None = None,
+) -> list[dict[str, Any]]:
     """Fetch user playlists. First attempts YouTube Music API (0 quota),
 
     falling back to YouTube Data API v3 if needed.
     """
+    lang, loc = resolve_ytmusic_locale(
+        owner_sub=context.owner_sub,
+        language=language,
+        location=location,
+    )
     try:
-        ytm_playlists = fetch_ytmusic_playlists(context=context)
+        ytm_playlists = fetch_ytmusic_playlists(
+            context=context,
+            language=lang,
+            location=loc,
+        )
         if ytm_playlists:
             logger.info("Retrieved %d playlists via YouTube Music client", len(ytm_playlists))
             return ytm_playlists
@@ -53,6 +67,7 @@ def fetch_user_playlists(context: YouTubeRequestContext) -> list[dict[str, Any]]
         logger.debug("ytmusic_service.fetch_ytmusic_playlists fallback to Data API: %s", exc)
 
     # Fallback to Google YouTube Data API v3
+    hl = lang.replace("_", "-")
     service = get_youtube_service(context)
     playlists = []
     next_page_token = None
@@ -63,6 +78,7 @@ def fetch_user_playlists(context: YouTubeRequestContext) -> list[dict[str, Any]]
             mine=True,
             maxResults=50,
             pageToken=next_page_token,
+            hl=hl,
         )
         response = _execute_with_quota(request, "playlists.list", context)
 
@@ -74,10 +90,11 @@ def fetch_user_playlists(context: YouTubeRequestContext) -> list[dict[str, Any]]
             elif "default" in thumbnails:
                 thumbnail_url = thumbnails["default"].get("url", "")
 
+            title = item["snippet"].get("localized", {}).get("title") or item["snippet"].get("title", "")
             playlists.append(
                 {
                     "id": item["id"],
-                    "title": item["snippet"]["title"],
+                    "title": title,
                     "description": item["snippet"]["description"],
                     "thumbnail_url": thumbnail_url,
                     "item_count": item["contentDetails"]["itemCount"],
@@ -97,6 +114,8 @@ def fetch_playlist_items_for_sort(
     playlist_id: str,
     fetch_album_details: bool = True,
     use_ytdlp_fallback: bool = True,
+    language: str | None = None,
+    location: str | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch playlist items for sorting.
 
@@ -104,12 +123,19 @@ def fetch_playlist_items_for_sort(
     Falls back to YouTube Data API v3 if necessary.
     Uses yt-dlp fallback to acquire release_date when missing or for same-year tracks.
     """
+    lang, loc = resolve_ytmusic_locale(
+        owner_sub=context.owner_sub,
+        language=language,
+        location=location,
+    )
     items: list[dict[str, Any]] = []
     try:
         ytm_items = fetch_ytmusic_playlist_tracks(
             playlist_id=playlist_id,
             context=context,
             fetch_album_details=fetch_album_details,
+            language=lang,
+            location=loc,
         )
         if ytm_items:
             logger.info("Retrieved %d tracks for playlist %s via YouTube Music client", len(ytm_items), playlist_id)
@@ -119,12 +145,13 @@ def fetch_playlist_items_for_sort(
 
     # Fallback to Google YouTube Data API v3 if ytm_items empty
     if not items:
-        raw_items = fetch_playlist_items(context, playlist_id)
+        hl = lang.replace("_", "-")
+        raw_items = fetch_playlist_items(context, playlist_id, hl=hl)
         if not raw_items:
             return []
 
         video_ids = [item["snippet"]["resourceId"]["videoId"] for item in raw_items]
-        video_details = fetch_video_details(context, video_ids)
+        video_details = fetch_video_details(context, video_ids, hl=hl)
 
         details_map = {
             vid["id"]: {
@@ -168,7 +195,11 @@ def fetch_playlist_items_for_sort(
     )
     if (use_ytdlp_fallback or has_dateless_tracks) and items:
         try:
-            items = enrich_tracks_with_ytdlp_fallback(items, check_same_year=use_ytdlp_fallback)
+            items = enrich_tracks_with_ytdlp_fallback(
+                items,
+                check_same_year=use_ytdlp_fallback,
+                language=lang.replace("_", "-"),
+            )
         except Exception as exc:
             logger.warning("Failed to enrich tracks with yt-dlp fallback: %s", exc)
 
@@ -343,6 +374,8 @@ def apply_sort_to_playlist(
     mode: str = "in_place",
     new_playlist_title: str | None = None,
     use_youtube_api: bool = False,
+    language: str | None = None,
+    location: str | None = None,
 ) -> dict[str, Any]:
     """Apply sorting to the playlist.
 
@@ -360,6 +393,8 @@ def apply_sort_to_playlist(
                     description="透過 YouTube Music 智慧排序建立",
                     sorted_items=sorted_items,
                     context=context,
+                    language=language,
+                    location=location,
                 )
             else:
                 orig = original_items or sorted(
@@ -370,6 +405,8 @@ def apply_sort_to_playlist(
                     sorted_items=sorted_items,
                     original_items=orig,
                     context=context,
+                    language=language,
+                    location=location,
                 )
                 if res.get("failed", 0) > 0 and res.get("succeeded", 0) == 0 and res.get("moved", 0) > 0:
                     raise RuntimeError(f"YTMusic in-place sort failed: {res.get('failed_items')}")

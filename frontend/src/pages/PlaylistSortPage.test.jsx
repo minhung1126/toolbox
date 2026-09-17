@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import PlaylistSortPage, { normalizeArtistName, sortTracksLocally, TrackSubtitle } from './PlaylistSortPage';
+import PlaylistSortPage, { getLocaleCollation, normalizeArtistName, sortTracksLocally, TrackSubtitle } from './PlaylistSortPage';
 import { api } from '../services/api';
 
 vi.mock('../services/api', () => ({
@@ -142,6 +142,8 @@ describe('PlaylistSortPage', () => {
       expect(api.previewPlaylistSort).toHaveBeenCalledWith({
         playlistId: 'pl-1',
         sortKeys: [{ field: 'title', direction: 'asc' }],
+        language: 'zh_TW',
+        location: 'TW',
       });
       expect(screen.getByText(/不變 1 首/)).toBeInTheDocument();
       expect(screen.getByText(/移動 2 首/)).toBeInTheDocument();
@@ -196,6 +198,8 @@ describe('PlaylistSortPage', () => {
         sortKeys: [{ field: 'title', direction: 'asc' }],
         previewToken: 'token-abc',
         sortedItemIds: ['item-1', 'item-3', 'item-2'],
+        language: 'zh_TW',
+        location: 'TW',
       });
       expect(screen.getByText('排序成功套用')).toBeInTheDocument();
       expect(screen.getByText(/成功移動/)).toBeInTheDocument();
@@ -343,6 +347,8 @@ describe('PlaylistSortPage', () => {
         mode: 'new_playlist',
         newPlaylistTitle: '[已排序] 我的最愛音樂',
         sortedItemIds: ['item-1', 'item-3', 'item-2'],
+        language: 'zh_TW',
+        location: 'TW',
       });
       expect(screen.getByText(/前往 YouTube Music 查看新歌單/)).toBeInTheDocument();
     });
@@ -533,5 +539,26 @@ describe('PlaylistSortPage', () => {
     expect(container.textContent).toContain('QWER');
     expect(container.textContent).not.toContain('QWER - Topic');
     expect(container.textContent).not.toContain('- Topic');
+  });
+
+  it('maps language codes to appropriate collation locales in getLocaleCollation', () => {
+    expect(getLocaleCollation('zh_TW')).toBe('zh-Hant-TW');
+    expect(getLocaleCollation('zh-TW')).toBe('zh-Hant-TW');
+    expect(getLocaleCollation('en')).toBe('en-US');
+    expect(getLocaleCollation('ja')).toBe('ja-JP');
+    expect(getLocaleCollation('ko')).toBe('ko-KR');
+    expect(getLocaleCollation('fr')).toBe('fr');
+    expect(getLocaleCollation(null)).toBe('zh-Hant-TW');
+  });
+
+  it('displays Taiwan region badge by default linking to settings', async () => {
+    api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: mockPlaylists });
+    renderWithRouter(<PlaylistSortPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/地區：🇹🇼 台灣 \(繁中\)/)).toBeInTheDocument();
+    });
+    const settingsLink = screen.getByRole('link', { name: /地區：🇹🇼 台灣 \(繁中\)/ });
+    expect(settingsLink).toHaveAttribute('href', '/ytmusic/settings');
   });
 });

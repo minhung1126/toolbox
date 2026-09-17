@@ -9,6 +9,8 @@ vi.mock('../services/api', () => ({
   api: {
     getYtmusicAuthUrl: vi.fn(),
     disconnectYtmusic: vi.fn(),
+    updateWorkState: vi.fn((key, value) => Promise.resolve({ state: { [key]: value } })),
+    getWorkState: vi.fn(() => Promise.resolve({ state: {} })),
   },
 }));
 
@@ -145,6 +147,65 @@ describe('YtmusicSettingsPage', () => {
 
     await waitFor(() => expect(api.disconnectYtmusic).toHaveBeenCalledTimes(1));
     expect(refreshAuthUser).toHaveBeenCalled();
+  });
+
+  it('renders region and language selector defaulting to Taiwan and explains standards', () => {
+    render(
+      <MemoryRouter>
+        <YtmusicSettingsPage
+          authUser={{
+            email: 'admin@example.com',
+            authorizations: { ytmusic: { connected: true } },
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    const regionSelect = screen.getByLabelText('顯示地區與語言偏好');
+    expect(regionSelect).toBeInTheDocument();
+    expect(regionSelect.value).toBe('TW');
+
+    // Check that preset options exist
+    expect(screen.getByText(/台灣（繁體中文）/)).toBeInTheDocument();
+    expect(screen.getByText(/英文 \(English\)/)).toBeInTheDocument();
+    expect(screen.getByText(/韓文 \(한국어\)/)).toBeInTheDocument();
+    expect(screen.getByText(/日文 \(日本語\)/)).toBeInTheDocument();
+    expect(screen.getByText(/其他（自訂地區與語言代碼）/)).toBeInTheDocument();
+
+    // Check ISO standards reference
+    expect(screen.getByText(/ISO 3166-1 alpha-2/)).toBeInTheDocument();
+    expect(screen.getByText(/ISO 639-1/)).toBeInTheDocument();
+  });
+
+  it('allows switching to custom region and entering custom language and location', async () => {
+    render(
+      <MemoryRouter>
+        <YtmusicSettingsPage
+          authUser={{
+            email: 'admin@example.com',
+            authorizations: { ytmusic: { connected: true } },
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    const regionSelect = screen.getByLabelText('顯示地區與語言偏好');
+    fireEvent.change(regionSelect, { target: { value: 'custom' } });
+
+    expect(screen.getByLabelText('語言代碼 (Language)')).toBeInTheDocument();
+    expect(screen.getByLabelText('地區縮寫 (Location / Country)')).toBeInTheDocument();
+
+    const langInput = screen.getByLabelText('語言代碼 (Language)');
+    const locInput = screen.getByLabelText('地區縮寫 (Location / Country)');
+
+    fireEvent.change(langInput, { target: { value: 'fr' } });
+    fireEvent.change(locInput, { target: { value: 'fr' } });
+
+    expect(langInput.value).toBe('fr');
+    expect(locInput.value).toBe('FR');
+
+    const saveBtn = screen.getByRole('button', { name: /儲存偏好設定/ });
+    fireEvent.click(saveBtn);
   });
 
   it('triggers connect flow when clicking connect', async () => {

@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Disc3,
   ExternalLink,
+  Globe,
   GripVertical,
   ListMusic,
   Loader2,
@@ -28,6 +29,17 @@ import { StatusMessage } from '../components/StatusMessage';
 import { useOAuthConnect } from '../hooks/useOAuthConnect';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { PATHS } from '../routes/paths';
+
+export function getLocaleCollation(lang) {
+  if (!lang) return 'zh-Hant-TW';
+  const clean = String(lang).replace(/_/g, '-').toLowerCase();
+  if (clean.startsWith('zh-tw') || clean.startsWith('zh-hant') || clean === 'tw') return 'zh-Hant-TW';
+  if (clean.startsWith('zh-cn') || clean.startsWith('zh-hans') || clean === 'cn') return 'zh-Hans-CN';
+  if (clean.startsWith('ja')) return 'ja-JP';
+  if (clean.startsWith('ko')) return 'ko-KR';
+  if (clean.startsWith('en')) return 'en-US';
+  return clean;
+}
 
 const SORT_PRESETS = [
   {
@@ -93,7 +105,7 @@ export function normalizeArtistName(name) {
   return result || raw;
 }
 
-export function sortTracksLocally(items, sortKeys) {
+export function sortTracksLocally(items, sortKeys, locale = 'zh-Hant-TW') {
   if (!items || items.length === 0 || !sortKeys || sortKeys.length === 0) {
     return items.map((it, i) => ({ ...it, new_position: i }));
   }
@@ -110,7 +122,9 @@ export function sortTracksLocally(items, sortKeys) {
         const bRaw = b.artist || b.channel_title || '';
         const aVal = normalizeArtistName(aRaw).normalize('NFKC').toLowerCase();
         const bVal = normalizeArtistName(bRaw).normalize('NFKC').toLowerCase();
-        return rev ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+        return rev
+          ? bVal.localeCompare(aVal, locale, { numeric: true, sensitivity: 'base' })
+          : aVal.localeCompare(bVal, locale, { numeric: true, sensitivity: 'base' });
       }
       if (field === 'album') {
         // Release year/date fallback key as primary chronological anchor.
@@ -133,7 +147,7 @@ export function sortTracksLocally(items, sortKeys) {
 
         const aVal = aIsReal ? a.album.normalize('NFKC').toLowerCase() : '';
         const bVal = bIsReal ? b.album.normalize('NFKC').toLowerCase() : '';
-        const albumCmp = aVal.localeCompare(bVal);
+        const albumCmp = aVal.localeCompare(bVal, locale, { numeric: true, sensitivity: 'base' });
         if (albumCmp !== 0) {
           return rev ? -albumCmp : albumCmp;
         }
@@ -163,7 +177,9 @@ export function sortTracksLocally(items, sortKeys) {
       if (field === 'title') {
         const aVal = (a.title || '').normalize('NFKC').toLowerCase();
         const bVal = (b.title || '').normalize('NFKC').toLowerCase();
-        return rev ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+        return rev
+          ? bVal.localeCompare(aVal, locale, { numeric: true, sensitivity: 'base' })
+          : aVal.localeCompare(bVal, locale, { numeric: true, sensitivity: 'base' });
       }
       if (field === 'duration') {
         const aSec = a.duration_seconds || 0;
@@ -700,11 +716,36 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     }
   }, [playlistFilterQuery, filteredPlaylists, selectedPlaylistId]);
 
+  // Preferences (including locale/region defaults to Taiwan)
+  const { value: preferences } = useAccountWorkState('ytmusic_preferences', {
+    defaultPreset: 'title-asc',
+    region: 'TW',
+    language: 'zh_TW',
+    location: 'TW',
+  });
+
+  const activeLanguage = preferences?.language || 'zh_TW';
+  const activeLocation = preferences?.location || 'TW';
+  const activeCollationLocale = useMemo(() => getLocaleCollation(activeLanguage), [activeLanguage]);
+
+  const regionDisplayLabel = useMemo(() => {
+    const loc = (preferences?.location || 'TW').toUpperCase();
+    const lang = preferences?.language || 'zh_TW';
+    if (loc === 'TW' && (lang === 'zh_TW' || lang === 'zh-TW')) return '🇹🇼 台灣 (繁中)';
+    if (loc === 'US' && lang === 'en') return '🇺🇸 美國 (英文)';
+    if (loc === 'KR' && lang === 'ko') return '🇰🇷 韓國 (韓文)';
+    if (loc === 'JP' && lang === 'ja') return '🇯🇵 日本 (日文)';
+    return `🌐 ${lang} / ${loc}`;
+  }, [preferences?.location, preferences?.language]);
+
   // Load playlists
   const fetchPlaylists = useCallback(async () => {
     setLoadingPlaylists(true);
     try {
-      const res = await api.getPlaylistSortPlaylists();
+      const res = await api.getPlaylistSortPlaylists({
+        language: activeLanguage,
+        location: activeLocation,
+      });
       setPlaylists(res.playlists || []);
       if ((res.playlists || []).length > 0 && !selectedPlaylistId) {
         setSelectedPlaylistId(res.playlists[0].id);
@@ -714,7 +755,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     } finally {
       setLoadingPlaylists(false);
     }
-  }, [toast, selectedPlaylistId]);
+  }, [toast, selectedPlaylistId, activeLanguage, activeLocation]);
 
   const ytmusicOAuth = useOAuthConnect({
     serviceName: 'ytmusic',
@@ -784,7 +825,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     return { pinnedFiltered: pinned, unpinnedFiltered: unpinned };
   }, [filteredPlaylists, pinnedPlaylistIds]);
 
-  // Sort configuration auto-save and preferences
+  // Sort configuration auto-save
   const {
     ready: sortConfigReady,
     value: sortConfig,
@@ -792,8 +833,6 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     saving: savingConfig,
     saved: savedConfig,
   } = useAccountWorkState('ytmusic_sort_config', {});
-
-  const { value: preferences } = useAccountWorkState('ytmusic_preferences', { defaultPreset: 'title-asc' });
 
   const [presetMode, setPresetMode] = useState(
     () => sortConfig?.presetMode || preferences?.defaultPreset || 'title-asc'
@@ -898,11 +937,11 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
   useEffect(() => {
     if (!cachedOriginalTracks || cachedOriginalTracks.length === 0) return;
 
-    const locallySorted = sortTracksLocally(cachedOriginalTracks, activeSortKeys);
+    const locallySorted = sortTracksLocally(cachedOriginalTracks, activeSortKeys, activeCollationLocale);
     const simulatedPreview = buildPreviewFromSorted(cachedOriginalTracks, locallySorted);
     setPreviewData(simulatedPreview);
     setIsManuallyAdjusted(false);
-  }, [cachedOriginalTracks, activeSortKeys]);
+  }, [cachedOriginalTracks, activeSortKeys, activeCollationLocale]);
 
   const handlePreview = useCallback(async () => {
     if (!selectedPlaylistId) {
@@ -920,6 +959,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
       const res = await api.previewPlaylistSort({
         playlistId: selectedPlaylistId,
         sortKeys: activeSortKeys,
+        language: activeLanguage,
+        location: activeLocation,
       });
       setPreviewData(res.preview || null);
       setPreviewToken(res.preview_token || '');
@@ -946,7 +987,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     } finally {
       setPreviewing(false);
     }
-  }, [selectedPlaylistId, activeSortKeys, toast]);
+  }, [selectedPlaylistId, activeSortKeys, activeLanguage, activeLocation, toast]);
 
   // Handle reordering tracks manually via drag-and-drop in the right preview list
   const handleReorderTracks = useCallback((sourceIdx, targetIdx) => {
@@ -964,12 +1005,12 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
   // Reset to automated rule order
   const handleResetToRuleOrder = useCallback(() => {
     if (!cachedOriginalTracks) return;
-    const locallySorted = sortTracksLocally(cachedOriginalTracks, activeSortKeys);
+    const locallySorted = sortTracksLocally(cachedOriginalTracks, activeSortKeys, activeCollationLocale);
     const simulatedPreview = buildPreviewFromSorted(cachedOriginalTracks, locallySorted);
     setPreviewData(simulatedPreview);
     setIsManuallyAdjusted(false);
     toast.info('已重設為目前規則排序');
-  }, [cachedOriginalTracks, activeSortKeys, toast]);
+  }, [cachedOriginalTracks, activeSortKeys, activeCollationLocale, toast]);
 
   const handleApplyClick = useCallback(() => {
     if (!previewData || (applyMode === 'in_place' && previewData.moved_count === 0)) {
@@ -987,6 +1028,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         playlistId: selectedPlaylistId,
         sortKeys: activeSortKeys,
         previewToken,
+        language: activeLanguage,
+        location: activeLocation,
       };
       if (applyMode === 'new_playlist') {
         payload.mode = 'new_playlist';
@@ -1016,7 +1059,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     } finally {
       setApplying(false);
     }
-  }, [selectedPlaylistId, activeSortKeys, previewToken, applyMode, newPlaylistTitle, previewData, toast]);
+  }, [selectedPlaylistId, activeSortKeys, previewToken, applyMode, newPlaylistTitle, previewData, activeLanguage, activeLocation, toast]);
 
   // Drag & drop handlers for sort rule keys
   const handleRuleDragStart = (e, index) => {
@@ -1121,9 +1164,12 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             <Link
               to={PATHS.ytmusicSettings}
               className="btn btn-secondary btn-sm"
-              title="前往 YouTube Music 設定"
+              title="前往 YouTube Music 設定（可切換歌名與歌手名地區顯示）"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
-              <Settings size={14} /> 設定
+              <Globe size={14} />
+              <span>地區：{regionDisplayLabel}</span>
+              <Settings size={14} style={{ marginLeft: 2 }} />
             </Link>
             {isYtmusicConnected ? (
               <>

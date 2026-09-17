@@ -51,6 +51,8 @@ class SortPreviewInput(BaseModel):
     sort_keys: list[SortKeyInput]
     fetch_album_details: bool = True
     use_youtube_api: bool = False
+    language: Optional[str] = None
+    location: Optional[str] = None
 
 
 class SortApplyInput(BaseModel):
@@ -61,14 +63,18 @@ class SortApplyInput(BaseModel):
     new_playlist_title: Optional[str] = None
     use_youtube_api: bool = False
     sorted_item_ids: Optional[list[str]] = None
+    language: Optional[str] = None
+    location: Optional[str] = None
 
 
 @router.get("/playlists")
 async def get_playlists(
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
+    language: Optional[str] = None,
+    location: Optional[str] = None,
 ):
     try:
-        playlists = fetch_user_playlists(context)
+        playlists = fetch_user_playlists(context, language=language, location=location)
         return {"playlists": playlists}
     except YouTubeQuotaUnavailable as exc:
         raise _quota_http_exception(exc) from exc
@@ -96,6 +102,8 @@ async def preview_sort(
             input_data.playlist_id,
             fetch_album_details=input_data.fetch_album_details,
             use_ytdlp_fallback=needs_year_fallback,
+            language=input_data.language,
+            location=input_data.location,
         )
 
         sort_keys_dict = [{"field": k.field, "direction": k.direction} for k in input_data.sort_keys]
@@ -160,6 +168,8 @@ async def apply_sort(
             input_data.playlist_id,
             fetch_album_details=fetch_album,
             use_ytdlp_fallback=False,
+            language=input_data.language,
+            location=input_data.location,
         )
         snapshot = playlist_snapshot_from_preview(original_items)
 
@@ -197,6 +207,8 @@ async def apply_sort(
             mode=input_data.mode,
             new_playlist_title=input_data.new_playlist_title,
             use_youtube_api=input_data.use_youtube_api,
+            language=input_data.language,
+            location=input_data.location,
         )
         return result
     except YouTubeQuotaUnavailable as exc:

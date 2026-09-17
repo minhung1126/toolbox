@@ -318,8 +318,21 @@ export const api = {
   }),
 
   // Playlist Sort API
-  getPlaylistSortPlaylists: () => request('/playlist-sort/playlists'),
-  previewPlaylistSort: ({ playlistId, sortKeys, fetchAlbumDetails = true, useYoutubeApi = false }) => request('/playlist-sort/preview', {
+  getPlaylistSortPlaylists: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params?.language) q.set('language', params.language);
+    if (params?.location) q.set('location', params.location);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return request(`/playlist-sort/playlists${qs}`);
+  },
+  previewPlaylistSort: ({
+    playlistId,
+    sortKeys,
+    fetchAlbumDetails = true,
+    useYoutubeApi = false,
+    language = null,
+    location = null,
+  }) => request('/playlist-sort/preview', {
     method: 'POST',
     timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
     body: JSON.stringify({
@@ -327,6 +340,8 @@ export const api = {
       sort_keys: sortKeys,
       fetch_album_details: fetchAlbumDetails,
       use_youtube_api: useYoutubeApi,
+      language,
+      location,
     }),
   }),
   applyPlaylistSort: ({
@@ -337,6 +352,8 @@ export const api = {
     newPlaylistTitle = null,
     useYoutubeApi = false,
     sortedItemIds = null,
+    language = null,
+    location = null,
   }) => request('/playlist-sort/apply', {
     method: 'POST',
     timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
@@ -348,6 +365,8 @@ export const api = {
       new_playlist_title: newPlaylistTitle,
       use_youtube_api: useYoutubeApi,
       sorted_item_ids: sortedItemIds,
+      language,
+      location,
     }),
   }),
   saveYtmusicCustomToken: (token) => request('/auth/ytmusic/custom-token', {

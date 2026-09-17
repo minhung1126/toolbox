@@ -6,12 +6,14 @@ import {
   Code2,
   Disc3,
   ExternalLink,
+  Globe,
   HelpCircle,
   Info,
   Key,
   ListMusic,
   Loader2,
   RefreshCw,
+  Save,
   Sliders,
   Sparkles,
   Trash2,
@@ -25,6 +27,49 @@ import { useOAuthConnect } from '../hooks/useOAuthConnect';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { PATHS } from '../routes/paths';
 import { formatTokenDate, tokenStatusLabel } from '../utils/formatters';
+
+export const REGION_PRESETS = [
+  {
+    id: 'TW',
+    label: '台灣（繁體中文）',
+    badge: '預設',
+    language: 'zh_TW',
+    location: 'TW',
+    description: '顯示台灣在地化中文歌名與藝人名稱（例如：五月天、周興哲、小男孩樂團）',
+  },
+  {
+    id: 'US',
+    label: '英文 (English)',
+    badge: 'US',
+    language: 'en',
+    location: 'US',
+    description: '顯示英文歌名與羅馬拼音藝人名稱（例如：Mayday、Eric Chou）',
+  },
+  {
+    id: 'KR',
+    label: '韓文 (한국어)',
+    badge: 'KR',
+    language: 'ko',
+    location: 'KR',
+    description: '顯示韓文在地化藝人與歌曲名稱',
+  },
+  {
+    id: 'JP',
+    label: '日文 (日本語)',
+    badge: 'JP',
+    language: 'ja',
+    location: 'JP',
+    description: '顯示日文在地化藝人與歌曲名稱',
+  },
+  {
+    id: 'custom',
+    label: '其他（自訂地區與語言代碼）',
+    badge: '自訂',
+    language: '',
+    location: '',
+    description: '自訂 YouTube Music Innertube API 與備援管道的語言代碼與地區縮寫',
+  },
+];
 
 const PRESET_OPTIONS = [
   { value: 'album-order', label: '經典完整專輯（藝人 → 年份 → 專輯 → 曲目 #）' },
@@ -41,6 +86,15 @@ const PRESET_OPTIONS = [
   { value: 'duration-longest', label: '長度（長 → 短）' },
   { value: 'random', label: '隨機排序' },
 ];
+
+const DEFAULT_PREFERENCES = Object.freeze({
+  defaultPreset: 'title-asc',
+  regionPreset: 'TW',
+  language: 'zh_TW',
+  location: 'TW',
+  customLanguage: '',
+  customLocation: '',
+});
 
 export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
   const toast = useToast();
@@ -60,10 +114,15 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
 
   const { value: preferences, save: savePreferences } = useAccountWorkState(
     'ytmusic_preferences',
-    { defaultPreset: 'title-asc' }
+    DEFAULT_PREFERENCES
   );
 
-  const [selectedPreset, setSelectedPreset] = useState(preferences?.defaultPreset || 'title-asc');
+  const [selectedPreset, setSelectedPreset] = useState(() => preferences?.defaultPreset || 'title-asc');
+  const [selectedRegion, setSelectedRegion] = useState(() => preferences?.regionPreset || 'TW');
+  const [customLanguage, setCustomLanguage] = useState(() => preferences?.customLanguage || '');
+  const [customLocation, setCustomLocation] = useState(() => preferences?.customLocation || '');
+  const [savingPrefs, setSavingPrefs] = useState(false);
+
   const [customTokenInput, setCustomTokenInput] = useState('');
   const [savingToken, setSavingToken] = useState(false);
   const [showClearTokenConfirm, setShowClearTokenConfirm] = useState(false);
@@ -73,12 +132,74 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
     if (preferences?.defaultPreset) {
       setSelectedPreset(preferences.defaultPreset);
     }
-  }, [preferences?.defaultPreset]);
+    if (preferences?.regionPreset) {
+      setSelectedRegion(preferences.regionPreset);
+    }
+    if (preferences?.customLanguage !== undefined) {
+      setCustomLanguage(preferences.customLanguage);
+    }
+    if (preferences?.customLocation !== undefined) {
+      setCustomLocation(preferences.customLocation);
+    }
+  }, [preferences?.defaultPreset, preferences?.regionPreset, preferences?.customLanguage, preferences?.customLocation]);
+
+  const handleSavePreferences = async (overrideParams = {}) => {
+    const reg = overrideParams.regionPreset !== undefined ? overrideParams.regionPreset : selectedRegion;
+    const preset = overrideParams.defaultPreset !== undefined ? overrideParams.defaultPreset : selectedPreset;
+    const cLang = overrideParams.customLanguage !== undefined ? overrideParams.customLanguage : customLanguage;
+    const cLoc = overrideParams.customLocation !== undefined ? overrideParams.customLocation : customLocation;
+
+    let lang = 'zh_TW';
+    let loc = 'TW';
+
+    if (reg === 'TW') {
+      lang = 'zh_TW';
+      loc = 'TW';
+    } else if (reg === 'US') {
+      lang = 'en';
+      loc = 'US';
+    } else if (reg === 'KR') {
+      lang = 'ko';
+      loc = 'KR';
+    } else if (reg === 'JP') {
+      lang = 'ja';
+      loc = 'JP';
+    } else if (reg === 'custom') {
+      lang = cLang.trim() || 'zh_TW';
+      loc = cLoc.trim().toUpperCase() || 'TW';
+    }
+
+    setSavingPrefs(true);
+    try {
+      await savePreferences({
+        ...preferences,
+        defaultPreset: preset,
+        regionPreset: reg,
+        language: lang,
+        location: loc,
+        customLanguage: cLang.trim(),
+        customLocation: cLoc.trim().toUpperCase(),
+      });
+      toast.success('YouTube Music 偏好設定已成功儲存！');
+    } catch (err) {
+      toast.error(`儲存偏好設定失敗：${err.message || '未知錯誤'}`);
+    } finally {
+      setSavingPrefs(false);
+    }
+  };
 
   const handlePresetChange = (e) => {
     const nextPreset = e.target.value;
     setSelectedPreset(nextPreset);
-    savePreferences({ ...preferences, defaultPreset: nextPreset });
+    handleSavePreferences({ defaultPreset: nextPreset });
+  };
+
+  const handleRegionChange = (e) => {
+    const nextRegion = e.target.value;
+    setSelectedRegion(nextRegion);
+    if (nextRegion !== 'custom') {
+      handleSavePreferences({ regionPreset: nextRegion });
+    }
   };
 
   const handleSaveCustomToken = async () => {
@@ -362,10 +483,10 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <div>
             <h2 className="settings-heading" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 4px 0' }}>
-              <Sliders size={20} color="var(--accent)" /> 播放清單排序預設偏好
+              <Globe size={20} color="var(--primary)" /> 歌名與藝人顯示地區／語言偏好
             </h2>
             <p className="section-desc" style={{ margin: 0 }}>
-              設定進入播放清單排序頁面時的預設排序規則，修改後將自動保存於個人偏好。
+              設定 YouTube Music 讀取與排序時的在地化語言與國家/地區（預設為台灣繁體中文）。系統將固定使用此設定向 Google 請求對應語系的曲目與藝人名稱。
             </p>
           </div>
           <span className="badge badge-connected">
@@ -373,7 +494,110 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
           </span>
         </div>
 
+        {/* Region & Language Selector */}
         <div className="form-group" style={{ marginTop: 12 }}>
+          <label className="form-label" htmlFor="ytmusic-region-preset">
+            顯示地區與語言偏好
+          </label>
+          <select
+            id="ytmusic-region-preset"
+            className="form-select"
+            value={selectedRegion}
+            onChange={handleRegionChange}
+            style={{ maxWidth: 440 }}
+          >
+            {REGION_PRESETS.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label} {opt.badge ? `[${opt.badge}]` : ''}
+              </option>
+            ))}
+          </select>
+          <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)', marginTop: 4 }}>
+            {REGION_PRESETS.find((p) => p.id === selectedRegion)?.description}
+          </div>
+        </div>
+
+        {/* Custom Inputs if "custom" is selected */}
+        {selectedRegion === 'custom' && (
+          <div
+            style={{
+              marginTop: 10,
+              padding: '14px 16px',
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: 8,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+            }}
+          >
+            <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--primary)' }}>
+              自訂語言代碼與地區縮寫
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" htmlFor="ytmusic-custom-language">
+                  語言代碼 (Language)
+                </label>
+                <input
+                  id="ytmusic-custom-language"
+                  type="text"
+                  className="form-input"
+                  placeholder="例如：zh_TW, zh_CN, fr, de, es, it"
+                  value={customLanguage}
+                  onChange={(e) => setCustomLanguage(e.target.value)}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" htmlFor="ytmusic-custom-location">
+                  地區縮寫 (Location / Country)
+                </label>
+                <input
+                  id="ytmusic-custom-location"
+                  type="text"
+                  className="form-input"
+                  placeholder="例如：TW, US, JP, KR, HK, GB, DE"
+                  value={customLocation}
+                  onChange={(e) => setCustomLocation(e.target.value.toUpperCase())}
+                  style={{ width: '100%' }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Standard Reference Info Banner */}
+        <div
+          style={{
+            marginTop: 14,
+            padding: '12px 14px',
+            background: 'rgba(59, 130, 246, 0.08)',
+            border: '1px solid rgba(59, 130, 246, 0.2)',
+            borderRadius: 8,
+            fontSize: '0.825rem',
+            color: 'rgba(255, 255, 255, 0.85)',
+            lineHeight: 1.6,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <HelpCircle size={16} color="#60a5fa" style={{ flexShrink: 0, marginTop: 2 }} />
+            <div>
+              <strong style={{ color: '#60a5fa' }}>代碼標準參考指南：</strong>
+              <ul style={{ margin: '4px 0 0', paddingLeft: 18, color: 'rgba(255, 255, 255, 0.75)' }}>
+                <li>
+                  <strong>地區縮寫標準</strong>：請參考 <strong>ISO 3166-1 alpha-2</strong> 雙字母國家/地區標準代碼（例如：台灣 <code>TW</code>、美國 <code>US</code>、日本 <code>JP</code>、韓國 <code>KR</code>、香港 <code>HK</code>、英國 <code>GB</code>、德國 <code>DE</code> 等）。
+                </li>
+                <li>
+                  <strong>語言代碼標準</strong>：請參考 <strong>ISO 639-1</strong> / YouTube Music 支援語系代碼（例如：繁體中文 <code>zh_TW</code>、簡體中文 <code>zh_CN</code>、英文 <code>en</code>、日文 <code>ja</code>、韓文 <code>ko</code>、法文 <code>fr</code>、德文 <code>de</code>、西班牙文 <code>es</code> 等）。
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Default Sort Preset */}
+        <div className="form-group" style={{ marginTop: 14 }}>
           <label className="form-label" htmlFor="ytmusic-default-preset">
             預設排序規則
           </label>
@@ -390,6 +614,20 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Explicit Save Button */}
+        <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => handleSavePreferences()}
+            disabled={savingPrefs}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            {savingPrefs ? <Loader2 size={14} className="spin" /> : <Save size={14} />}
+            儲存偏好設定
+          </button>
         </div>
       </div>
 
