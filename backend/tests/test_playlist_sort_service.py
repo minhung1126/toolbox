@@ -6,8 +6,11 @@ from backend.app.services.playlist_sort_service import (
     _parse_iso8601_duration,
     apply_sort_to_playlist,
     build_sort_preview,
+    get_first_artist,
+    is_generic_artist,
     normalize_artist_name,
     sort_items,
+    split_artists,
 )
 
 
@@ -648,3 +651,133 @@ async def test_preview_sort_quota_estimate_no_custom_token(monkeypatch):
     assert res["quota_estimate"]["moved_count"] == 2
     assert res["quota_estimate"]["total_units"] == 100
     assert "未設定 YouTube Music 瀏覽器 Token" in res["quota_estimate"]["message"]
+
+
+def test_split_artists_and_collaboration_detection():
+    assert split_artists("周杰倫, 費玉清") == ["周杰倫", "費玉清"]
+    assert split_artists("周杰倫、費玉清") == ["周杰倫", "費玉清"]
+    assert split_artists("周杰倫 & 費玉清") == ["周杰倫", "費玉清"]
+    assert split_artists("周杰倫 feat. 費玉清") == ["周杰倫", "費玉清"]
+    assert split_artists("周杰倫 (feat. 費玉清)") == ["周杰倫", "費玉清"]
+    assert split_artists("Ed Sheeran & Justin Bieber") == ["Ed Sheeran", "Justin Bieber"]
+    assert split_artists("QWER - Topic") == ["QWER"]
+    assert split_artists("QWER") == ["QWER"]
+    assert get_first_artist("周杰倫, 費玉清") == "周杰倫"
+    assert get_first_artist("Ed Sheeran & Justin Bieber") == "Ed Sheeran"
+    assert is_generic_artist("Various Artists") is True
+    assert is_generic_artist("群星") is True
+    assert is_generic_artist("周杰倫") is False
+
+
+def test_sort_collaborative_song_first_author_in_album_order():
+    """If a song is collaborative, prioritize the first author in classic album sort."""
+    tracks = [
+        {
+            "title": "夜的第七章 (feat. 潘兒)",
+            "artist": "周杰倫, 潘兒",
+            "album": "依然范特西",
+            "track_number": 1,
+            "year": 2006,
+        },
+        {"title": "聽媽媽的話", "artist": "周杰倫", "album": "依然范特西", "track_number": 2, "year": 2006},
+        {
+            "title": "千里之外 (feat. 費玉清)",
+            "artist": "周杰倫, 費玉清",
+            "album": "依然范特西",
+            "track_number": 3,
+            "year": 2006,
+        },
+        {"title": "本草綱目", "artist": "周杰倫", "album": "依然范特西", "track_number": 4, "year": 2006},
+        {"title": "可愛女人", "artist": "周杰倫", "album": "Jay", "track_number": 1, "year": 2000},
+    ]
+    keys = [
+        {"field": "artist", "direction": "asc"},
+        {"field": "year", "direction": "asc"},
+        {"field": "album", "direction": "asc"},
+        {"field": "track_number", "direction": "asc"},
+    ]
+    sorted_res = sort_items(tracks, keys)
+    assert [t["title"] for t in sorted_res] == [
+        "可愛女人",  # Jay (2000) Track 1
+        "夜的第七章 (feat. 潘兒)",  # 依然范特西 (2006) Track 1
+        "聽媽媽的話",  # 依然范特西 (2006) Track 2
+        "千里之外 (feat. 費玉清)",  # 依然范特西 (2006) Track 3 (collaborative stays intact!)
+        "本草綱目",  # 依然范特西 (2006) Track 4
+    ]
+
+
+def test_sort_collaborative_song_uncertain_first_author_stays_with_album():
+    """If uncertain who the first author is (e.g. guest listed first), keep with the album."""
+    tracks = [
+        {"title": "夜的第七章", "artist": "周杰倫", "album": "依然范特西", "track_number": 1, "year": 2006},
+        # Here Fei Yu-ching is listed first, but Jay Chou is co-artist and album belongs to Jay Chou
+        {"title": "千里之外", "artist": "費玉清, 周杰倫", "album": "依然范特西", "track_number": 2, "year": 2006},
+        {"title": "本草綱目", "artist": "周杰倫", "album": "依然范特西", "track_number": 3, "year": 2006},
+        # Distinct solo album from Fei Yu-ching
+        {"title": "一剪梅", "artist": "費玉清", "album": "一剪梅", "track_number": 1, "year": 1983},
+    ]
+    keys = [
+        {"field": "artist", "direction": "asc"},
+        {"field": "year", "direction": "asc"},
+        {"field": "album", "direction": "asc"},
+        {"field": "track_number", "direction": "asc"},
+    ]
+    sorted_res = sort_items(tracks, keys)
+    titles = [t["title"] for t in sorted_res]
+
+    # "依然范特西" tracks must stay together under Jay Chou, not torn away to Fei Yu-ching
+    jay_idx = [titles.index("夜的第七章"), titles.index("千里之外"), titles.index("本草綱目")]
+    assert jay_idx[1] == jay_idx[0] + 1
+    assert jay_idx[2] == jay_idx[1] + 1
+
+
+def test_sort_compilation_soundtrack_album_stays_together():
+    """Compilation/Soundtrack albums with various artists stay together in album order."""
+    tracks = [
+        {"title": "City of Stars", "artist": "Ryan Gosling", "album": "La La Land", "track_number": 1, "year": 2016},
+        {"title": "Audition", "artist": "Emma Stone", "album": "La La Land", "track_number": 2, "year": 2016},
+        {
+            "title": "A Lovely Night",
+            "artist": "Ryan Gosling, Emma Stone",
+            "album": "La La Land",
+            "track_number": 3,
+            "year": 2016,
+        },
+        {"title": "Solo Pop Song", "artist": "Adele", "album": "21", "track_number": 1, "year": 2011},
+    ]
+    keys = [
+        {"field": "artist", "direction": "asc"},
+        {"field": "year", "direction": "asc"},
+        {"field": "album", "direction": "asc"},
+        {"field": "track_number", "direction": "asc"},
+    ]
+    sorted_res = sort_items(tracks, keys)
+    titles = [t["title"] for t in sorted_res]
+
+    la_la_idx = [titles.index("City of Stars"), titles.index("Audition"), titles.index("A Lovely Night")]
+    assert la_la_idx[1] == la_la_idx[0] + 1
+    assert la_la_idx[2] == la_la_idx[1] + 1
+
+
+def test_sort_single_collaboration_uses_first_author():
+    """Collaborative singles without albums use the first author."""
+    tracks = [
+        {
+            "title": "I Don't Care",
+            "artist": "Ed Sheeran & Justin Bieber",
+            "album": "單曲",
+            "release_date": "2019-05-10",
+        },
+        {"title": "Shape of You", "artist": "Ed Sheeran", "album": "單曲", "release_date": "2017-01-06"},
+        {"title": "Baby", "artist": "Justin Bieber", "album": "單曲", "release_date": "2010-01-18"},
+    ]
+    keys = [
+        {"field": "artist", "direction": "asc"},
+        {"field": "year", "direction": "asc"},
+    ]
+    sorted_res = sort_items(tracks, keys)
+    titles = [t["title"] for t in sorted_res]
+    # Ed Sheeran comes first alphabetically, Justin Bieber second
+    # "I Don't Care" (first author Ed Sheeran) must be grouped with "Shape of You" before "Baby"
+    assert titles.index("Shape of You") < titles.index("Baby")
+    assert titles.index("I Don't Care") < titles.index("Baby")

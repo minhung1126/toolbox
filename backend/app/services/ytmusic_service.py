@@ -4,6 +4,7 @@ import concurrent.futures
 import json
 import logging
 import re
+import unicodedata
 from collections import Counter
 from functools import lru_cache
 from typing import Any
@@ -307,6 +308,81 @@ def normalize_artist_name(name: str | None) -> str:
 
     result = ", ".join(normalized_parts)
     return result if result.strip() else raw
+
+
+GENERIC_ARTIST_NAMES = frozenset(
+    {
+        "various artists",
+        "various",
+        "va",
+        "群星",
+        "合輯",
+        "合辑",
+        "原聲帶",
+        "原声带",
+        "soundtrack",
+        "ost",
+    }
+)
+
+
+def is_generic_artist(name: str | None) -> bool:
+    """Check if an artist name represents generic/compilation artists (e.g. Various Artists, 群星)."""
+    if not name:
+        return False
+    norm = unicodedata.normalize("NFKC", str(name)).strip().casefold()
+    return norm in GENERIC_ARTIST_NAMES
+
+
+def split_artists(name: str | None) -> list[str]:
+    """Split an artist string or collaboration into individual artist names.
+
+    Handles:
+    - Comma / Chinese ideographic comma: 'Artist A, Artist B', 'Artist A、Artist B'
+    - Ampersand: 'Artist A & Artist B'
+    - Feat keywords: 'Artist A feat. Artist B', 'Artist A ft. Artist B', 'Artist A featuring Artist B', 'Artist A with Artist B'
+    - Parenthesized feat: 'Artist A (feat. Artist B)', 'Artist A [ft. Artist B]'
+    - Slashes and cross marks: 'Artist A / Artist B', 'Artist A x Artist B', 'Artist A × Artist B'
+    - Auto-generated YouTube Topic suffixes are cleanly stripped.
+    """
+    if not name:
+        return []
+    raw = str(name).strip()
+    if not raw:
+        return []
+
+    cleaned = normalize_artist_name(raw)
+
+    feat_paren_match = re.search(
+        r"[\(\[\（](?:feat\.?|ft\.?|featuring|with)\s+([^\)\]\）]+)[\)\]\）]",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    extra_artists: list[str] = []
+    if feat_paren_match:
+        feat_str = feat_paren_match.group(1).strip()
+        cleaned = (cleaned[: feat_paren_match.start()] + cleaned[feat_paren_match.end() :]).strip()
+        extra_artists = [p.strip() for p in re.split(r",|、|&|/|;", feat_str) if p.strip()]
+
+    pattern = r"\s*(?:,\s*|、|;\s*|\s+(?:feat\.?|ft\.?|featuring|with)\s+|\s+/\s+|\s+&\s+|\s+[xX×]\s+)\s*"
+    parts = [p.strip() for p in re.split(pattern, cleaned, flags=re.IGNORECASE) if p.strip()]
+
+    all_parts = parts + extra_artists
+    seen: set[str] = set()
+    result: list[str] = []
+    for p in all_parts:
+        norm_p = unicodedata.normalize("NFKC", p).strip()
+        if norm_p and norm_p.casefold() not in seen:
+            seen.add(norm_p.casefold())
+            result.append(norm_p)
+
+    return result if result else [cleaned]
+
+
+def get_first_artist(name: str | None) -> str:
+    """Extract the primary (first) artist from an artist string."""
+    artists = split_artists(name)
+    return artists[0] if artists else (normalize_artist_name(name) if name else "")
 
 
 @lru_cache(maxsize=500)
@@ -691,6 +767,7 @@ def fetch_ytmusic_playlist_tracks(
         # Track number and year resolution from cached album data
         track_number: int | None = None
         release_year: int | None = None
+        album_artist: str | None = None
 
         if album_id and album_id in album_cache:
             alb = album_cache[album_id]
@@ -700,6 +777,17 @@ def fetch_ytmusic_playlist_tracks(
                     release_year = int(alb_year)
                 except (ValueError, TypeError):
                     pass
+
+            alb_artists = alb.get("artists")
+            if isinstance(alb_artists, list) and alb_artists:
+                alb_artist_names = [
+                    a.get("name", "").strip() for a in alb_artists if isinstance(a, dict) and a.get("name")
+                ]
+                album_artist = ", ".join(alb_artist_names)
+            elif isinstance(alb.get("artist"), str):
+                album_artist = alb.get("artist")
+            if album_artist:
+                album_artist = normalize_artist_name(album_artist)
 
             alb_tracks = alb.get("tracks") or []
             for track_idx, atrack in enumerate(alb_tracks):
@@ -740,6 +828,7 @@ def fetch_ytmusic_playlist_tracks(
                 "title": t.get("title") or "",
                 "artist": artist_name,
                 "channel_title": artist_name,
+                "album_artist": album_artist,
                 "album": album_name,
                 "album_id": album_id,
                 "track_number": track_number,

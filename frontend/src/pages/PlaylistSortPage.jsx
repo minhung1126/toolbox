@@ -105,12 +105,221 @@ export function normalizeArtistName(name) {
   return result || raw;
 }
 
+export const GENERIC_ARTIST_NAMES = Object.freeze(
+  new Set([
+    'various artists',
+    'various',
+    'va',
+    '群星',
+    '合輯',
+    '合辑',
+    '原聲帶',
+    '原声带',
+    'soundtrack',
+    'ost',
+  ])
+);
+
+export const NON_ALBUM_NAMES = Object.freeze(
+  new Set([
+    '單曲',
+    '单曲',
+    'single',
+    'singles',
+    '影片',
+    '视频',
+    'video',
+    'videos',
+  ])
+);
+
+export function isGenericArtist(name) {
+  if (!name) return false;
+  const norm = String(name).normalize('NFKC').trim().toLowerCase();
+  return GENERIC_ARTIST_NAMES.has(norm);
+}
+
+export function isRealAlbum(albumName) {
+  if (!albumName) return false;
+  const norm = String(albumName).normalize('NFKC').trim().toLowerCase();
+  return Boolean(norm && !NON_ALBUM_NAMES.has(norm));
+}
+
+export function splitArtists(name) {
+  if (!name) return [];
+  const raw = String(name).trim();
+  if (!raw) return [];
+
+  let cleaned = normalizeArtistName(raw);
+
+  let extraArtists = [];
+  const featParenRegex = /[([（](?:feat\.?|ft\.?|featuring|with)\s+([^\])）]+)[\])）]/i;
+  const featMatch = cleaned.match(featParenRegex);
+  if (featMatch) {
+    const featStr = featMatch[1].trim();
+    cleaned = (cleaned.slice(0, featMatch.index) + cleaned.slice(featMatch.index + featMatch[0].length)).trim();
+    extraArtists = featStr.split(/[,、&/;]/).map((p) => p.trim()).filter(Boolean);
+  }
+
+  const delimRegex = /\s*(?:,\s*|、|;\s*|\s+(?:feat\.?|ft\.?|featuring|with)\s+|\s+\/\s+|\s+&\s+|\s+[xX×]\s+)\s*/i;
+  const parts = cleaned.split(delimRegex).map((p) => p.trim()).filter(Boolean);
+
+  const allParts = [...parts, ...extraArtists];
+  const seen = new Set();
+  const result = [];
+  for (const p of allParts) {
+    const norm = p.normalize('NFKC').trim();
+    const key = norm.toLowerCase();
+    if (norm && !seen.has(key)) {
+      seen.add(key);
+      result.push(norm);
+    }
+  }
+
+  return result.length > 0 ? result : [cleaned];
+}
+
+export function getFirstArtist(name) {
+  const artists = splitArtists(name);
+  return artists.length > 0 ? artists[0] : (name ? normalizeArtistName(name) : '');
+}
+
+export function buildAlbumContextMap(items) {
+  const albumTracks = {};
+  for (const item of items) {
+    const rawAlbum = String(item.album || '').trim();
+    if (!isRealAlbum(rawAlbum)) continue;
+    const normAlbum = rawAlbum.normalize('NFKC').toLowerCase();
+    if (!albumTracks[normAlbum]) {
+      albumTracks[normAlbum] = [];
+    }
+    albumTracks[normAlbum].push(item);
+  }
+
+  const contextMap = {};
+  for (const [normAlbum, tracks] of Object.entries(albumTracks)) {
+    let explicitAlbumArtist = null;
+    for (const trk of tracks) {
+      const albArt = trk.album_artist;
+      if (albArt && !isGenericArtist(albArt)) {
+        explicitAlbumArtist = normalizeArtistName(String(albArt));
+        break;
+      }
+    }
+
+    const artistCounts = {};
+    for (const trk of tracks) {
+      const rawArt = trk.artist || trk.channel_title || '';
+      const parsed = splitArtists(rawArt);
+      const firstArt = parsed.length > 0 ? parsed[0] : normalizeArtistName(String(rawArt));
+      if (firstArt && !isGenericArtist(firstArt)) {
+        artistCounts[firstArt] = (artistCounts[firstArt] || 0) + 1;
+      }
+    }
+
+    let dominantArtist = null;
+    let maxCount = 0;
+    for (const [art, count] of Object.entries(artistCounts)) {
+      if (count > maxCount) {
+        maxCount = count;
+        dominantArtist = art;
+      }
+    }
+
+    let isCompilation = false;
+    if (!explicitAlbumArtist && dominantArtist) {
+      if (tracks.length >= 3 && maxCount <= tracks.length / 2) {
+        isCompilation = true;
+      }
+    }
+    if (Object.keys(artistCounts).length === 0 && tracks.some((trk) => isGenericArtist(trk.artist))) {
+      isCompilation = true;
+    }
+
+    let primaryArtist = explicitAlbumArtist || dominantArtist || '';
+    if (isCompilation) {
+      primaryArtist = explicitAlbumArtist || 'Various Artists';
+    }
+
+    let albumYear = null;
+    let albumReleaseDate = null;
+    for (const trk of tracks) {
+      if (trk.release_date) {
+        albumReleaseDate = trk.release_date;
+        break;
+      }
+      if (trk.year && !albumYear) {
+        albumYear = trk.year;
+      }
+    }
+
+    contextMap[normAlbum] = {
+      primaryArtist,
+      isCompilation,
+      year: albumYear,
+      releaseDate: albumReleaseDate,
+    };
+  }
+
+  return contextMap;
+}
+
+export function getEffectiveSortArtist(item, albumMap = {}) {
+  const rawArtist = item.artist || item.channel_title || '';
+  const rawAlbum = String(item.album || '').trim();
+  const realAlbum = isRealAlbum(rawAlbum);
+
+  const trackArtists = splitArtists(rawArtist);
+  const firstArtist = trackArtists.length > 0 ? trackArtists[0] : normalizeArtistName(String(rawArtist));
+
+  if (realAlbum) {
+    const normAlbum = rawAlbum.normalize('NFKC').toLowerCase();
+    const albumInfo = albumMap[normAlbum];
+    if (albumInfo) {
+      const albPrimary = albumInfo.primaryArtist || '';
+      const isComp = albumInfo.isCompilation;
+
+      if (isComp) {
+        return albPrimary || 'Various Artists';
+      }
+
+      if (albPrimary) {
+        const normAlbPrimary = albPrimary.normalize('NFKC').toLowerCase();
+        const normFirst = firstArtist.normalize('NFKC').toLowerCase();
+
+        // If first artist matches album primary artist
+        if (normFirst === normAlbPrimary) {
+          return albPrimary;
+        }
+
+        // If first artist is generic ("Various Artists", "群星", etc.)
+        if (isGenericArtist(firstArtist)) {
+          return albPrimary;
+        }
+
+        // If album primary artist is one of the collaborating artists on this track
+        for (const a of trackArtists) {
+          if (a.normalize('NFKC').toLowerCase() === normAlbPrimary) {
+            return albPrimary;
+          }
+        }
+
+        // Keep with the album
+        return albPrimary;
+      }
+    }
+  }
+
+  return firstArtist;
+}
+
 export function sortTracksLocally(items, sortKeys, locale = 'zh-Hant-TW') {
   if (!items || items.length === 0 || !sortKeys || sortKeys.length === 0) {
     return items.map((it, i) => ({ ...it, new_position: i }));
   }
 
   const sorted = [...items];
+  const albumMap = buildAlbumContextMap(sorted);
 
   for (let k = sortKeys.length - 1; k >= 0; k--) {
     const { field, direction } = sortKeys[k];
@@ -118,20 +327,32 @@ export function sortTracksLocally(items, sortKeys, locale = 'zh-Hant-TW') {
 
     sorted.sort((a, b) => {
       if (field === 'artist') {
-        const aRaw = a.artist || a.channel_title || '';
-        const bRaw = b.artist || b.channel_title || '';
-        const aVal = normalizeArtistName(aRaw).normalize('NFKC').toLowerCase();
-        const bVal = normalizeArtistName(bRaw).normalize('NFKC').toLowerCase();
+        const aVal = getEffectiveSortArtist(a, albumMap);
+        const bVal = getEffectiveSortArtist(b, albumMap);
+        const aNorm = normalizeArtistName(aVal).normalize('NFKC').toLowerCase();
+        const bNorm = normalizeArtistName(bVal).normalize('NFKC').toLowerCase();
         return rev
-          ? bVal.localeCompare(aVal, locale, { numeric: true, sensitivity: 'base' })
-          : aVal.localeCompare(bVal, locale, { numeric: true, sensitivity: 'base' });
+          ? bNorm.localeCompare(aNorm, locale, { numeric: true, sensitivity: 'base' })
+          : aNorm.localeCompare(bNorm, locale, { numeric: true, sensitivity: 'base' });
       }
       if (field === 'album') {
-        // Release year/date fallback key as primary chronological anchor.
-        // Singles without an album use release date/year fallback to sort in the
-        // artist's chronological timeline rather than being forced to the very front.
-        const aDate = String(a.release_date || (a.year ? `${a.year}` : '') || a.published_at || '').replace(/-/g, '').trim();
-        const bDate = String(b.release_date || (b.year ? `${b.year}` : '') || b.published_at || '').replace(/-/g, '').trim();
+        const aIsReal = isRealAlbum(a.album);
+        const bIsReal = isRealAlbum(b.album);
+
+        let aDate = String(a.release_date || (a.year ? `${a.year}` : '') || a.published_at || '').replace(/-/g, '').trim();
+        let bDate = String(b.release_date || (b.year ? `${b.year}` : '') || b.published_at || '').replace(/-/g, '').trim();
+
+        if (!aDate && aIsReal) {
+          const aInfo = albumMap[String(a.album).normalize('NFKC').toLowerCase()];
+          if (aInfo?.releaseDate) aDate = String(aInfo.releaseDate).replace(/-/g, '').trim();
+          else if (aInfo?.year) aDate = `${aInfo.year}0000`;
+        }
+        if (!bDate && bIsReal) {
+          const bInfo = albumMap[String(b.album).normalize('NFKC').toLowerCase()];
+          if (bInfo?.releaseDate) bDate = String(bInfo.releaseDate).replace(/-/g, '').trim();
+          else if (bInfo?.year) bDate = `${bInfo.year}0000`;
+        }
+
         const aYearKey = aDate && aDate.length >= 4 ? (aDate.length >= 8 ? aDate.slice(0, 8) : `${aDate.slice(0, 4)}0000`) : '99999999';
         const bYearKey = bDate && bDate.length >= 4 ? (bDate.length >= 8 ? bDate.slice(0, 8) : `${bDate.slice(0, 4)}0000`) : '99999999';
 
@@ -139,8 +360,6 @@ export function sortTracksLocally(items, sortKeys, locale = 'zh-Hant-TW') {
           return rev ? bYearKey.localeCompare(aYearKey) : aYearKey.localeCompare(bYearKey);
         }
 
-        const aIsReal = Boolean(a.album && a.album !== '單曲' && a.album !== '影片');
-        const bIsReal = Boolean(b.album && b.album !== '單曲' && b.album !== '影片');
         if (aIsReal !== bIsReal) {
           return aIsReal ? -1 : 1; // Real album tracks first within the same year
         }
@@ -166,9 +385,23 @@ export function sortTracksLocally(items, sortKeys, locale = 'zh-Hant-TW') {
         return rev ? bVal - aVal : aVal - bVal;
       }
       if (field === 'year' || field === 'release_year' || field === 'release_date') {
-        // Mirror the backend sort_key_func: release_date > year > published_at
-        const aDate = String(a.release_date || (a.year ? `${a.year}` : '') || a.published_at || '').replace(/-/g, '').trim();
-        const bDate = String(b.release_date || (b.year ? `${b.year}` : '') || b.published_at || '').replace(/-/g, '').trim();
+        const aIsReal = isRealAlbum(a.album);
+        const bIsReal = isRealAlbum(b.album);
+
+        let aDate = String(a.release_date || (a.year ? `${a.year}` : '') || a.published_at || '').replace(/-/g, '').trim();
+        let bDate = String(b.release_date || (b.year ? `${b.year}` : '') || b.published_at || '').replace(/-/g, '').trim();
+
+        if (!aDate && aIsReal) {
+          const aInfo = albumMap[String(a.album).normalize('NFKC').toLowerCase()];
+          if (aInfo?.releaseDate) aDate = String(aInfo.releaseDate).replace(/-/g, '').trim();
+          else if (aInfo?.year) aDate = `${aInfo.year}0000`;
+        }
+        if (!bDate && bIsReal) {
+          const bInfo = albumMap[String(b.album).normalize('NFKC').toLowerCase()];
+          if (bInfo?.releaseDate) bDate = String(bInfo.releaseDate).replace(/-/g, '').trim();
+          else if (bInfo?.year) bDate = `${bInfo.year}0000`;
+        }
+
         if (!aDate && !bDate) return 0;
         if (!aDate) return 1;
         if (!bDate) return -1;

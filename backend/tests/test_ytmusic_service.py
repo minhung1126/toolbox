@@ -91,6 +91,7 @@ def test_fetch_ytmusic_playlist_tracks_with_album_resolution(mock_get_client):
     # Mock album details
     mock_client.get_album.return_value = {
         "year": "2023",
+        "artists": [{"name": "Album Artist Alpha"}],
         "tracks": [
             {"videoId": "vid_1", "title": "Song One"},
             {"videoId": "vid_2", "title": "Song Two"},
@@ -101,9 +102,10 @@ def test_fetch_ytmusic_playlist_tracks_with_album_resolution(mock_get_client):
     tracks = fetch_ytmusic_playlist_tracks("PL123", fetch_album_details=True)
     assert len(tracks) == 3
 
-    # First track: album resolved, track number 1, year 2023
+    # First track: album resolved, track number 1, year 2023, album_artist resolved
     assert tracks[0]["title"] == "Song One"
     assert tracks[0]["artist"] == "Artist A"
+    assert tracks[0]["album_artist"] == "Album Artist Alpha"
     assert tracks[0]["album"] == "Album Alpha"
     assert tracks[0]["track_number"] == 1
     assert tracks[0]["year"] == 2023

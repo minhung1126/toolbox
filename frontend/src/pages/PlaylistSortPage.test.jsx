@@ -2,7 +2,15 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import PlaylistSortPage, { getLocaleCollation, normalizeArtistName, sortTracksLocally, TrackSubtitle } from './PlaylistSortPage';
+import PlaylistSortPage, {
+  getLocaleCollation,
+  normalizeArtistName,
+  sortTracksLocally,
+  TrackSubtitle,
+  splitArtists,
+  getFirstArtist,
+  isGenericArtist,
+} from './PlaylistSortPage';
 import { api } from '../services/api';
 
 vi.mock('../services/api', () => ({
@@ -560,5 +568,86 @@ describe('PlaylistSortPage', () => {
     });
     const settingsLink = screen.getByRole('link', { name: /地區：🇹🇼 台灣 \(繁中\)/ });
     expect(settingsLink).toHaveAttribute('href', '/ytmusic/settings');
+  });
+
+  it('splits artist collaborations and detects primary author', () => {
+    expect(splitArtists('周杰倫, 費玉清')).toEqual(['周杰倫', '費玉清']);
+    expect(splitArtists('周杰倫、費玉清')).toEqual(['周杰倫', '費玉清']);
+    expect(splitArtists('周杰倫 & 費玉清')).toEqual(['周杰倫', '費玉清']);
+    expect(splitArtists('周杰倫 feat. 費玉清')).toEqual(['周杰倫', '費玉清']);
+    expect(splitArtists('周杰倫 (feat. 費玉清)')).toEqual(['周杰倫', '費玉清']);
+    expect(splitArtists('Ed Sheeran & Justin Bieber')).toEqual(['Ed Sheeran', 'Justin Bieber']);
+    expect(splitArtists('QWER - Topic')).toEqual(['QWER']);
+    expect(getFirstArtist('周杰倫, 費玉清')).toBe('周杰倫');
+    expect(isGenericArtist('Various Artists')).toBe(true);
+    expect(isGenericArtist('群星')).toBe(true);
+    expect(isGenericArtist('周杰倫')).toBe(false);
+  });
+
+  it('prioritizes first author in collaborative songs under classic album sort', () => {
+    const tracks = [
+      { title: '夜的第七章 (feat. 潘兒)', artist: '周杰倫, 潘兒', album: '依然范特西', track_number: 1, year: 2006 },
+      { title: '聽媽媽的話', artist: '周杰倫', album: '依然范特西', track_number: 2, year: 2006 },
+      { title: '千里之外 (feat. 費玉清)', artist: '周杰倫, 費玉清', album: '依然范特西', track_number: 3, year: 2006 },
+      { title: '本草綱目', artist: '周杰倫', album: '依然范特西', track_number: 4, year: 2006 },
+      { title: '可愛女人', artist: '周杰倫', album: 'Jay', track_number: 1, year: 2000 },
+    ];
+
+    const sorted = sortTracksLocally(tracks, [
+      { field: 'artist', direction: 'asc' },
+      { field: 'year', direction: 'asc' },
+      { field: 'album', direction: 'asc' },
+      { field: 'track_number', direction: 'asc' },
+    ]);
+
+    expect(sorted.map((t) => t.title)).toEqual([
+      '可愛女人',
+      '夜的第七章 (feat. 潘兒)',
+      '聽媽媽的話',
+      '千里之外 (feat. 費玉清)',
+      '本草綱目',
+    ]);
+  });
+
+  it('keeps collaborative song with album when first author is uncertain or guest listed first', () => {
+    const tracks = [
+      { title: '夜的第七章', artist: '周杰倫', album: '依然范特西', track_number: 1, year: 2006 },
+      { title: '千里之外', artist: '費玉清, 周杰倫', album: '依然范特西', track_number: 2, year: 2006 },
+      { title: '本草綱目', artist: '周杰倫', album: '依然范特西', track_number: 3, year: 2006 },
+      { title: '一剪梅', artist: '費玉清', album: '一剪梅', track_number: 1, year: 1983 },
+    ];
+
+    const sorted = sortTracksLocally(tracks, [
+      { field: 'artist', direction: 'asc' },
+      { field: 'year', direction: 'asc' },
+      { field: 'album', direction: 'asc' },
+      { field: 'track_number', direction: 'asc' },
+    ]);
+
+    const titles = sorted.map((t) => t.title);
+    const jayIdx = [titles.indexOf('夜的第七章'), titles.indexOf('千里之外'), titles.indexOf('本草綱目')];
+    expect(jayIdx[1]).toBe(jayIdx[0] + 1);
+    expect(jayIdx[2]).toBe(jayIdx[1] + 1);
+  });
+
+  it('keeps compilation/soundtrack albums together under album sort', () => {
+    const tracks = [
+      { title: 'City of Stars', artist: 'Ryan Gosling', album: 'La La Land', track_number: 1, year: 2016 },
+      { title: 'Audition', artist: 'Emma Stone', album: 'La La Land', track_number: 2, year: 2016 },
+      { title: 'A Lovely Night', artist: 'Ryan Gosling, Emma Stone', album: 'La La Land', track_number: 3, year: 2016 },
+      { title: 'Rolling in the Deep', artist: 'Adele', album: '21', track_number: 1, year: 2011 },
+    ];
+
+    const sorted = sortTracksLocally(tracks, [
+      { field: 'artist', direction: 'asc' },
+      { field: 'year', direction: 'asc' },
+      { field: 'album', direction: 'asc' },
+      { field: 'track_number', direction: 'asc' },
+    ]);
+
+    const titles = sorted.map((t) => t.title);
+    const laLaIdx = [titles.indexOf('City of Stars'), titles.indexOf('Audition'), titles.indexOf('A Lovely Night')];
+    expect(laLaIdx[1]).toBe(laLaIdx[0] + 1);
+    expect(laLaIdx[2]).toBe(laLaIdx[1] + 1);
   });
 });

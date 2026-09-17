@@ -20,11 +20,29 @@ from backend.app.services.ytmusic_service import (
     enrich_tracks_with_ytdlp_fallback,
     fetch_ytmusic_playlist_tracks,
     fetch_ytmusic_playlists,
+    get_first_artist,
+    is_generic_artist,
     normalize_artist_name,
     resolve_ytmusic_locale,
+    split_artists,
 )
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "apply_sort_to_playlist",
+    "build_album_context_map",
+    "build_sort_preview",
+    "fetch_playlist_items_for_sort",
+    "fetch_user_playlists",
+    "get_effective_sort_artist",
+    "get_first_artist",
+    "is_generic_artist",
+    "is_real_album",
+    "normalize_artist_name",
+    "sort_items",
+    "split_artists",
+]
 
 
 def _parse_iso8601_duration(value: str) -> int:
@@ -229,11 +247,153 @@ def fetch_playlist_items_for_sort(
     return items
 
 
+NON_ALBUM_NAMES = frozenset(
+    {
+        "單曲",
+        "单曲",
+        "single",
+        "singles",
+        "影片",
+        "视频",
+        "video",
+        "videos",
+    }
+)
+
+
+def is_real_album(album_name: str | None) -> bool:
+    """Check if an album string represents a genuine studio/compilation album."""
+    if not album_name:
+        return False
+    norm = unicodedata.normalize("NFKC", str(album_name)).strip().casefold()
+    return bool(norm and norm not in NON_ALBUM_NAMES)
+
+
+def build_album_context_map(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Build a mapping of normalized album name -> metadata for sorting:
+
+    - primary_artist: explicit album_artist or dominant artist across tracks
+    - is_compilation: whether the album is a compilation / various artists album
+    - year: resolved album year
+    - release_date: resolved album release date
+    """
+    album_tracks: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        raw_album = str(item.get("album") or "").strip()
+        if not is_real_album(raw_album):
+            continue
+        norm_album = unicodedata.normalize("NFKC", raw_album).casefold()
+        album_tracks.setdefault(norm_album, []).append(item)
+
+    context_map: dict[str, dict[str, Any]] = {}
+    for norm_album, tracks in album_tracks.items():
+        # 1. Explicit album_artist from metadata
+        explicit_album_artist = None
+        for trk in tracks:
+            alb_art = trk.get("album_artist")
+            if alb_art and not is_generic_artist(alb_art):
+                explicit_album_artist = normalize_artist_name(str(alb_art))
+                break
+
+        # 2. First-artist occurrence counts
+        artist_counts: dict[str, int] = {}
+        for trk in tracks:
+            raw_art = trk.get("artist") or trk.get("channel_title") or ""
+            parsed = split_artists(raw_art)
+            first_art = parsed[0] if parsed else normalize_artist_name(str(raw_art))
+            if first_art and not is_generic_artist(first_art):
+                artist_counts[first_art] = artist_counts.get(first_art, 0) + 1
+
+        dominant_artist = None
+        if artist_counts:
+            dominant_artist = max(artist_counts.items(), key=lambda x: x[1])[0]
+
+        is_compilation = False
+        if not explicit_album_artist and dominant_artist:
+            # If 3 or more tracks and dominant artist accounts for <= half, treat as compilation
+            if len(tracks) >= 3 and artist_counts[dominant_artist] <= len(tracks) / 2:
+                is_compilation = True
+
+        if not artist_counts and any(is_generic_artist(trk.get("artist")) for trk in tracks):
+            is_compilation = True
+
+        primary_artist = explicit_album_artist or dominant_artist or ""
+        if is_compilation:
+            primary_artist = explicit_album_artist or "Various Artists"
+
+        album_year = None
+        album_release_date = None
+        for trk in tracks:
+            if trk.get("release_date"):
+                album_release_date = trk["release_date"]
+                break
+            if trk.get("year") and not album_year:
+                album_year = trk["year"]
+
+        context_map[norm_album] = {
+            "primary_artist": primary_artist,
+            "is_compilation": is_compilation,
+            "year": album_year,
+            "release_date": album_release_date,
+        }
+
+    return context_map
+
+
+def get_effective_sort_artist(item: dict[str, Any], album_map: dict[str, dict[str, Any]]) -> str:
+    """Determine the effective artist string for sorting.
+
+    Rules:
+    1. If the track is a collaboration, prioritize the first author.
+    2. If it is uncertain who the first author is (e.g. compilation album, generic artist,
+       or an album track where the album's primary artist is one of the collaborating artists),
+       keep it together with the album (using the album's primary artist).
+    """
+    raw_artist = item.get("artist") or item.get("channel_title") or ""
+    raw_album = str(item.get("album") or "").strip()
+    real_album = is_real_album(raw_album)
+
+    track_artists = split_artists(str(raw_artist))
+    first_artist = track_artists[0] if track_artists else normalize_artist_name(str(raw_artist))
+
+    if real_album:
+        norm_album = unicodedata.normalize("NFKC", raw_album).casefold()
+        album_info = album_map.get(norm_album)
+        if album_info:
+            alb_primary = album_info.get("primary_artist") or ""
+            is_comp = album_info.get("is_compilation", False)
+
+            if is_comp:
+                return alb_primary or "Various Artists"
+
+            if alb_primary:
+                norm_alb_primary = unicodedata.normalize("NFKC", alb_primary).casefold()
+                norm_first = unicodedata.normalize("NFKC", first_artist).casefold()
+
+                # If first artist matches album primary artist
+                if norm_first == norm_alb_primary:
+                    return alb_primary
+
+                # If first artist is generic ("Various Artists", "群星", etc.)
+                if is_generic_artist(first_artist):
+                    return alb_primary
+
+                # If album primary artist is one of the collaborating artists on this track
+                for a in track_artists:
+                    if unicodedata.normalize("NFKC", a).casefold() == norm_alb_primary:
+                        return alb_primary
+
+                # Track belongs to this album: keep it with the album
+                return alb_primary
+
+    return first_artist
+
+
 def sort_items(items: list[dict[str, Any]], sort_keys: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Sort playlist tracks according to multi-key rules.
 
     Supports fields:
-    - artist: 藝人名稱 (artist or channel_title)
+    - artist: 藝人名稱 (artist or channel_title，合作歌曲以第一作者為主，不確定則與專輯放置同處)
     - album: 專輯名稱（同專輯內自動尊重曲目 track_number 編號）
     - track_number / track: 歌曲曲目 / 第幾首 (numeric, missing sorted to end)
     - year / release_year / release_date: 發行年份 / 日期（以 yt-dlp 精確比對同年曲目）
@@ -248,6 +408,7 @@ def sort_items(items: list[dict[str, Any]], sort_keys: list[dict[str, Any]]) -> 
         return [item.copy() for item in items]
 
     sorted_list = [item.copy() for item in items]
+    album_map = build_album_context_map(sorted_list)
 
     for key_config in reversed(sort_keys):
         field = key_config["field"]
@@ -262,23 +423,34 @@ def sort_items(items: list[dict[str, Any]], sort_keys: list[dict[str, Any]]) -> 
 
             def sort_key_func(item: dict[str, Any], sort_field: str = field, rev: bool = reverse) -> Any:
                 if sort_field == "artist":
-                    val = item.get("artist") or item.get("channel_title") or ""
+                    val = get_effective_sort_artist(item, album_map)
                     val = normalize_artist_name(str(val))
                     return unicodedata.normalize("NFKC", val).casefold()
 
                 if sort_field == "album":
                     raw_album = str(item.get("album") or "").strip()
-                    is_real = bool(raw_album and raw_album not in ("單曲", "影片"))
+                    is_real = is_real_album(raw_album)
                     album_str = unicodedata.normalize("NFKC", raw_album).casefold() if is_real else ""
 
                     # Release year/date resolution as chronological anchor for albums, singles & videos.
-                    # Videos & singles without an album use release date/year fallback to sort in the
-                    # artist's chronological timeline rather than being forced to the very front or end.
+                    # Inherit release_date / year from album_map if missing on a real album track.
                     raw_date = str(item.get("release_date") or "").replace("-", "").strip()
+                    if not raw_date and is_real:
+                        alb_info = album_map.get(album_str)
+                        if alb_info and alb_info.get("release_date"):
+                            raw_date = str(alb_info["release_date"]).replace("-", "").strip()
+
                     if raw_date and len(raw_date) >= 8 and raw_date[:8].isdigit():
                         year_key = raw_date[:8]
                     else:
-                        yr = item.get("year") or item.get("published_at")
+                        yr = item.get("year")
+                        if not yr and is_real:
+                            alb_info = album_map.get(album_str)
+                            if alb_info and alb_info.get("year"):
+                                yr = alb_info["year"]
+                        if not yr:
+                            yr = item.get("published_at")
+
                         if yr:
                             year_match = re.search(r"\b(19\d\d|20\d\d)\b", str(yr))
                             year_key = year_match.group(1) + "0000" if year_match else "99999999"
@@ -307,14 +479,30 @@ def sort_items(items: list[dict[str, Any]], sort_keys: list[dict[str, Any]]) -> 
                         return (1, 0) if not rev else (0, -1)
 
                 if sort_field in ("year", "release_year", "release_date"):
+                    raw_album = str(item.get("album") or "").strip()
+                    is_real = is_real_album(raw_album)
+                    album_str = unicodedata.normalize("NFKC", raw_album).casefold() if is_real else ""
+
                     # Priority 1: Exact release_date (e.g. from yt-dlp "2023-05-12" or "20230512")
                     raw_date = str(item.get("release_date") or "").replace("-", "").strip()
+                    if not raw_date and is_real:
+                        alb_info = album_map.get(album_str)
+                        if alb_info and alb_info.get("release_date"):
+                            raw_date = str(alb_info["release_date"]).replace("-", "").strip()
+
                     if raw_date and len(raw_date) >= 8 and raw_date[:8].isdigit():
                         date_key = raw_date[:8]
                         return (0, date_key) if not rev else (1, date_key)
 
                     # Priority 2: Year string or published_at
-                    val = item.get("year") or item.get("published_at") or ""
+                    val = item.get("year")
+                    if not val and is_real:
+                        alb_info = album_map.get(album_str)
+                        if alb_info and alb_info.get("year"):
+                            val = alb_info["year"]
+                    if not val:
+                        val = item.get("published_at") or ""
+
                     if val:
                         match = re.search(r"\b(19\d\d|20\d\d)\b", str(val))
                         if match:
