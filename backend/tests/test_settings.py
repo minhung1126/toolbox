@@ -148,3 +148,29 @@ def test_youtube_draft_response_uses_the_current_config_shape(monkeypatch):
         },
         "shorts": {},
     }
+
+
+def test_work_state_update_ytmusic_keys_allowed(monkeypatch):
+    updates = []
+    monkeypatch.setattr(
+        settings_api,
+        "update_account_work_state",
+        lambda owner, key, val: updates.append((owner, key, val)) or {key: val},
+    )
+
+    payload = settings_api.WorkStateUpdateModel(
+        key="ytmusic_pinned_playlists",
+        value={"ids": ["PL123", "PL456"]},
+    )
+    res = settings_api.update_work_state(payload, SimpleNamespace(), "google-user")
+
+    assert updates == [("google-user", "ytmusic_pinned_playlists", {"ids": ["PL123", "PL456"]})]
+    assert res == {"version": 1, "state": {"ytmusic_pinned_playlists": {"ids": ["PL123", "PL456"]}}}
+
+
+def test_work_state_update_rejects_unsupported_key():
+    with pytest.raises(Exception):
+        settings_api.WorkStateUpdateModel(
+            key="unsupported_random_key",
+            value={"data": 123},
+        )

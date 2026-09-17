@@ -6,6 +6,7 @@ from typing import Any
 
 from backend.app.core.account_state_store import (
     ACCOUNT_SETTING_KEYS,
+    DEFAULT_WORK_STATE_KEYS,
     MISSING,
     WORK_STATE_KEYS,
     account_state_store,
@@ -107,6 +108,8 @@ def update_account_work_state(owner_sub: str, key: str, value: dict[str, Any]) -
 
 
 __all__ = [
+    "DEFAULT_WORK_STATE_KEYS",
+    "WORK_STATE_KEYS",
     "ensure_account",
     "get_account_active_slot",
     "get_account_setting",

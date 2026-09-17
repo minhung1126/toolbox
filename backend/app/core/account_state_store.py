@@ -43,6 +43,9 @@ DEFAULT_WORK_STATE_KEYS = frozenset(
         "youtube_publish_cleaner",
         "youtube_draft_video",
         "youtube_draft_shorts",
+        "ytmusic_pinned_playlists",
+        "ytmusic_sort_config",
+        "ytmusic_preferences",
     }
 )
 

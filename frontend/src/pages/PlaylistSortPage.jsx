@@ -635,7 +635,11 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
       next = [...pinnedPlaylistIds, playlistId];
       toast.success('已加入常用釘選清單');
     }
-    savePinnedConfig({ ids: next }, { debounceMs: 0 });
+    savePinnedConfig({ ids: next }, { debounceMs: 0 })?.then((res) => {
+      if (!res) {
+        toast.error('儲存常用釘選清單失敗，請稍後重試。');
+      }
+    });
   }, [pinnedPlaylistIds, savePinnedConfig, toast]);
 
   // Split filtered playlists into pinned and unpinned

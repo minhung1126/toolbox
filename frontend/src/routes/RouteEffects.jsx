@@ -13,6 +13,8 @@ const TITLES = [
   [/^\/youtube\/drafts\/videos$/, 'Video 草稿｜Toolbox'],
   [/^\/youtube\/drafts\/shorts$/, 'Shorts 草稿｜Toolbox'],
   [/^\/youtube\/publish-cleanup$/, '發布草稿｜Toolbox'],
+  [/^\/(?:ytmusic|youtube)\/playlist-sort$/, 'YouTube Music 播放清單排序｜Toolbox'],
+  [/^\/ytmusic\/settings$/, 'YouTube Music 設定｜Toolbox'],
   [/^\/youtube\/settings(?:\/connections)?$/, 'YouTube 授權組合｜Toolbox'],
   [/^\/youtube\/settings\/routing$/, 'YouTube 路由模式｜Toolbox'],
   [/^\/youtube\/settings\/quota$/, 'YouTube 配額設定｜Toolbox'],

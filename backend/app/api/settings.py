@@ -3,9 +3,10 @@ from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends
 from google.oauth2.credentials import Credentials
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.app.core.account_state import (
+    WORK_STATE_KEYS,
     get_account_active_slot,
     get_account_setting,
     get_account_work_state,
@@ -89,14 +90,15 @@ class YouTubeDraftConfigUpdateModel(BaseModel):
 
 
 class WorkStateUpdateModel(BaseModel):
-    key: Literal[
-        "navigation",
-        "sheet_copy",
-        "youtube_publish_cleaner",
-        "youtube_draft_video",
-        "youtube_draft_shorts",
-    ]
+    key: str = Field(..., min_length=1, max_length=100)
     value: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("key")
+    @classmethod
+    def validate_key(cls, v: str) -> str:
+        if v not in WORK_STATE_KEYS:
+            raise ValueError(f"Unsupported work state: {v}")
+        return v
 
 
 def _draft_config_key(video_type: str) -> str:

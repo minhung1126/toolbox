@@ -31,6 +31,9 @@ describe('RouteEffects and titleForPath', () => {
       [PATHS.youtubeRouting, 'YouTube 路由模式｜Toolbox'],
       [PATHS.youtubeQuota, 'YouTube 配額設定｜Toolbox'],
       [PATHS.youtubePlaylist, '預設播放清單｜Toolbox'],
+      [PATHS.youtubePlaylistSort, 'YouTube Music 播放清單排序｜Toolbox'],
+      [PATHS.ytmusicPlaylistSort, 'YouTube Music 播放清單排序｜Toolbox'],
+      [PATHS.ytmusicSettings, 'YouTube Music 設定｜Toolbox'],
     ];
 
     for (const [path, expectedTitle] of expectedMappings) {
