@@ -361,12 +361,15 @@ def apply_sort_to_playlist(
                 orig = original_items or sorted(
                     [it for it in sorted_items], key=lambda x: x.get("original_position", x.get("position", 0))
                 )
-                return apply_ytmusic_sort_in_place(
+                res = apply_ytmusic_sort_in_place(
                     playlist_id=playlist_id,
                     sorted_items=sorted_items,
                     original_items=orig,
                     context=context,
                 )
+                if res.get("failed", 0) > 0 and res.get("succeeded", 0) == 0 and res.get("moved", 0) > 0:
+                    raise RuntimeError(f"YTMusic in-place sort failed: {res.get('failed_items')}")
+                return res
         except Exception as exc:
             logger.warning("apply_sort_to_playlist using ytmusic_service failed: %s; falling back to Data API", exc)
 

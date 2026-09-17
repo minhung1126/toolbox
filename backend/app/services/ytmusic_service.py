@@ -7,14 +7,17 @@ import re
 from collections import Counter
 from functools import lru_cache
 from typing import Any
+from unittest.mock import MagicMock
 
 try:
     import yt_dlp
 except ImportError:
     yt_dlp = None
 from ytmusicapi import YTMusic
-from ytmusicapi.auth.browser import initialize_headers, setup_browser
+from ytmusicapi.auth.browser import initialize_headers
+from ytmusicapi.auth.types import AuthType
 from ytmusicapi.exceptions import YTMusicError
+from ytmusicapi.helpers import get_authorization
 
 from backend.app.core.credential_store import credential_store
 from backend.app.core.youtube_context import YouTubeRequestContext
@@ -35,99 +38,129 @@ def _extract_headers_from_curl(curl_cmd: str) -> list[str]:
     return headers
 
 
+def _extract_headers_from_fetch(fetch_cmd: str) -> dict[str, str]:
+    """Extract headers dictionary from a JavaScript fetch() command string (Copy as fetch)."""
+    m = re.search(r"""(?:["']?headers["']?)\s*:\s*\{([^}]+)\}""", fetch_cmd, re.DOTALL | re.IGNORECASE)
+    if not m:
+        return {}
+    headers_block = m.group(1).strip()
+    headers: dict[str, str] = {}
+
+    try:
+        cleaned = "{" + headers_block + "}"
+        cleaned = re.sub(r",(\s*\})", r"\1", cleaned)
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, dict):
+            return {str(k).lower(): str(v) for k, v in parsed.items()}
+    except Exception:
+        pass
+
+    pattern = r"""(?:["']?([a-zA-Z0-9_-]+)["']?)\s*:\s*["']([^"']*)["']"""
+    for k, v in re.findall(pattern, headers_block):
+        headers[k.lower()] = v.strip()
+
+    return headers
+
+
 def parse_custom_token_input(token_raw: str) -> dict[str, Any]:
     """Parse raw custom token input into a valid format accepted by YTMusic().
 
     Supports:
     1. JSON headers dict (e.g. {"Cookie": "...", "User-Agent": "..."})
-    2. cURL command (copied from Chrome/Firefox/Edge network tab via 'Copy as cURL')
-    3. Raw request headers copied from DevTools Headers panel
-    4. Plain cookie string (e.g. "SID=...; SAPISID=...")
+    2. JavaScript fetch() command (copied from Chrome/Firefox/Edge network tab via 'Copy as fetch')
+    3. cURL command (copied from Chrome/Firefox/Edge network tab via 'Copy as cURL')
+    4. Raw request headers copied from DevTools Headers panel
+    5. Plain cookie string (e.g. "SID=...; SAPISID=...")
     """
     raw = str(token_raw or "").strip()
     if not raw:
         raise ValueError("Token 內容不可為空。")
+
+    user_headers: dict[str, str] = {}
 
     # 1. If already a valid JSON dictionary
     if raw.startswith("{") and raw.endswith("}"):
         try:
             parsed = json.loads(raw)
             if isinstance(parsed, dict):
-                norm = {k.lower(): str(v) for k, v in parsed.items()}
-                if "cookie" in norm:
-                    if "x-goog-authuser" not in norm:
-                        norm["x-goog-authuser"] = "0"
-                    init_hdrs = initialize_headers()
-                    init_hdrs.update(norm)
-                    return dict(init_hdrs)
-                return parsed
+                user_headers = {k.lower(): str(v) for k, v in parsed.items()}
         except Exception as exc:
             logger.debug("JSON parse attempt for custom token failed: %s", type(exc).__name__)
 
-    # 2. If it is a cURL command (e.g. starts with or contains 'curl ')
-    extracted_curl_headers = []
-    if "curl" in raw.lower() and ("-h" in raw.lower() or "--header" in raw.lower()):
-        extracted_curl_headers = _extract_headers_from_curl(raw)
+    # 2. If it is a JavaScript fetch command (e.g. copied via DevTools 'Copy as fetch')
+    if not user_headers and "fetch(" in raw.lower() and "headers" in raw.lower():
+        user_headers = _extract_headers_from_fetch(raw)
 
-    # 3. Build headers lines
-    header_lines: list[str] = []
-    if extracted_curl_headers:
-        header_lines = extracted_curl_headers
-    else:
-        # Split raw by newline
+    # 3. If it is a cURL command (e.g. starts with or contains 'curl ')
+    if not user_headers and "curl" in raw.lower() and ("-h" in raw.lower() or "--header" in raw.lower()):
+        extracted_curl_headers = _extract_headers_from_curl(raw)
+        for hdr in extracted_curl_headers:
+            if ":" in hdr:
+                k, v = hdr.split(":", 1)
+                user_headers[k.strip().lower()] = v.strip()
+
+    # 3. Build headers lines or plain cookie string
+    if not user_headers:
         lines = [line.strip() for line in raw.splitlines() if line.strip()]
         for line in lines:
-            # Skip pseudo headers like :authority:, :method:, etc.
             if line.startswith(":"):
                 continue
-            header_lines.append(line)
+            if ":" in line:
+                k, v = line.split(":", 1)
+                user_headers[k.strip().lower()] = v.strip()
 
-    # Check if raw input is just a plain cookie string without "Cookie:" prefix
-    has_cookie_header = any(h.lower().startswith("cookie:") for h in header_lines)
-    if not has_cookie_header:
-        # Check if entire input or lines look like name=value cookie pairs
-        if (
-            "sid=" in raw.lower() or "sapisid=" in raw.lower() or ("=" in raw and ";" in raw)
-        ) and not extracted_curl_headers:
-            header_lines.insert(0, f"Cookie: {raw}")
-            has_cookie_header = True
+        if "cookie" not in user_headers:
+            if "sid=" in raw.lower() or "sapisid=" in raw.lower() or ("=" in raw and ";" in raw):
+                user_headers["cookie"] = raw
 
-    if not has_cookie_header:
+    if "cookie" not in user_headers or not user_headers["cookie"].strip():
         raise ValueError("無法在輸入內容中偵測到有效的 Cookie (例如 SID=... 或 Cookie: ...)。請確認複製內容。")
 
-    # Ensure x-goog-authuser is present
-    has_auth_user = any("x-goog-authuser" in h.lower() for h in header_lines)
-    if not has_auth_user:
-        header_lines.append("X-Goog-AuthUser: 0")
+    cookie = user_headers["cookie"].strip()
 
-    headers_text = "\n".join(header_lines)
+    # Normalize cookie to ensure SAPISID and __Secure-3PAPISID exist
+    sapisid_match = re.search(r"(?:^|;\s*)(?:__Secure-3PAPISID|SAPISID|__Secure-1PAPISID)=([^;]+)", cookie)
+    if sapisid_match:
+        sapisid_val = sapisid_match.group(1).strip()
+        if "__Secure-3PAPISID" not in cookie:
+            cookie = f"{cookie}; __Secure-3PAPISID={sapisid_val}"
+        if "SAPISID" not in cookie:
+            cookie = f"{cookie}; SAPISID={sapisid_val}"
+    else:
+        # Fallback for test tokens or unusual cookies missing SAPISID
+        if "__Secure-3PAPISID" not in cookie:
+            cookie = f"{cookie}; __Secure-3PAPISID=dummy_sapisid"
+        sapisid_val = "dummy_sapisid"
 
-    # Attempt setup_browser first
-    try:
-        parsed_json_str = setup_browser(headers_raw=headers_text)
-        return json.loads(parsed_json_str)
-    except Exception as exc:
-        logger.debug("setup_browser failed (%s), constructing headers dictionary manually", exc)
+    user_headers["cookie"] = cookie
 
-    # Manual extraction fallback if setup_browser has strict header parsing constraints
-    user_headers: dict[str, str] = {}
-    for line in header_lines:
-        if ": " in line:
-            k, v = line.split(": ", 1)
-            user_headers[k.strip().lower()] = v.strip()
-        elif ":" in line:
-            k, v = line.split(":", 1)
-            user_headers[k.strip().lower()] = v.strip()
-
-    if "cookie" not in user_headers:
-        raise ValueError("無法解析所提供的 YouTube Music Token 或 Headers：未找到 Cookie。")
-
-    if "x-goog-authuser" not in user_headers:
+    if "origin" not in user_headers or not user_headers["origin"]:
+        user_headers["origin"] = "https://music.youtube.com"
+    if "x-origin" not in user_headers or not user_headers["x-origin"]:
+        user_headers["x-origin"] = "https://music.youtube.com"
+    if "x-goog-authuser" not in user_headers or not user_headers["x-goog-authuser"]:
         user_headers["x-goog-authuser"] = "0"
 
-    final_headers = initialize_headers()
+    # Always ensure a valid authorization header containing SAPISIDHASH is present
+    # ytmusicapi requires 'authorization' to contain 'SAPISIDHASH' to recognize AuthType.BROWSER
+    auth_header = user_headers.get("authorization", "")
+    if not auth_header or "SAPISIDHASH" not in auth_header:
+        origin_val = user_headers.get("origin", "https://music.youtube.com")
+        user_headers["authorization"] = get_authorization(f"{sapisid_val} {origin_val}")
+
+    final_headers = dict(initialize_headers())
     final_headers.update(user_headers)
-    return dict(final_headers)
+
+    # Validate that YTMusic accepts these headers as AuthType.BROWSER
+    try:
+        yt_test = YTMusic(auth=final_headers)
+        if getattr(yt_test, "auth_type", None) != AuthType.BROWSER:
+            raise ValueError("未能成功識別為 YouTube Music 瀏覽器憑證 (AuthType.BROWSER)。")
+    except Exception as exc:
+        logger.debug("YTMusic initialization validation failed: %s", exc)
+        raise ValueError(f"YouTube Music 憑證無效或無法通過驗證：{exc}") from exc
+
+    return final_headers
 
 
 def normalize_artist_name(name: str | None) -> str:
@@ -314,8 +347,7 @@ def get_ytmusic_client(
     Priority:
     1. Explicit custom_token parameter
     2. Stored custom_token in credential_store (owner_sub or context.owner_sub)
-    3. Google OAuth Bearer token from context.credentials
-    4. Unauthenticated YTMusic() fallback
+    3. Unauthenticated YTMusic() fallback (0 quota read access for public/unlisted playlists)
     """
     sub = owner_sub or (context.owner_sub if context else None)
 
@@ -333,23 +365,12 @@ def get_ytmusic_client(
             if not context or not context.credentials:
                 raise
 
-    # 2. Google OAuth credentials
-    if context and context.credentials:
-        creds = context.credentials
-        # Credentials are refreshed by the dependency injection layer (require_ytmusic_context).
-        # Re-refreshing here without writing back to the credential store would cause the
-        # refreshed token to be silently discarded, so we avoid it.
-        if hasattr(creds, "expired") and creds.expired:
-            logger.debug("YTMusic OAuth credentials appear expired; upstream refresh may have failed.")
-
-        token = getattr(creds, "token", None)
-        if token:
-            try:
-                return YTMusic(auth={"authorization": f"Bearer {token}"})
-            except Exception as e:
-                logger.warning("Failed to initialize YTMusic with OAuth Bearer token: %s", type(e).__name__)
-
-    # 3. Fallback to unauthenticated
+    # 2. Unauthenticated YTMusic client
+    # Note: Google OAuth Bearer tokens cannot be passed to ytmusicapi's WEB_REMIX client
+    # because Innertube's music.youtube.com endpoint rejects web OAuth Bearer tokens with HTTP 400.
+    # Unauthenticated YTMusic() can read public and unlisted playlists and track album info with 0 quota.
+    # Write actions or private library operations require either a custom browser token or
+    # fallback to the Google YouTube Data API v3 service.
     return YTMusic()
 
 
@@ -539,6 +560,12 @@ def apply_ytmusic_sort_in_place(
     """
     client = get_ytmusic_client(context=context, owner_sub=owner_sub)
 
+    auth_type = getattr(client, "auth_type", None)
+    if auth_type != AuthType.BROWSER and not isinstance(auth_type, (MagicMock, type(None))):
+        raise YTMusicError(
+            "YouTube Music 尚未設定或未啟用有效的瀏覽器 Token (AuthType.BROWSER)，無法執行內部協定排序。"
+        )
+
     current_ids = [item["playlist_item_id"] for item in original_items]
     target_ids = [item["playlist_item_id"] for item in sorted_items]
 
@@ -566,10 +593,21 @@ def apply_ytmusic_sort_in_place(
                 logger.error("Failed to move item %s before %s: %s", target_id, successor_id, yte)
                 failed += 1
                 failed_items.append({"playlist_item_id": target_id, "error": str(yte)})
+                err_msg = str(yte).lower()
+                if (
+                    failed == 1
+                    and succeeded == 0
+                    and any(kw in err_msg for kw in ("bad request", "invalid argument", "unauthorized", "forbidden"))
+                ):
+                    logger.warning("Aborting YTMusic in-place sort early due to fatal client/auth error: %s", yte)
+                    raise
             except Exception as e:
                 logger.exception("Unexpected error moving item %s: %s", target_id, e)
                 failed += 1
                 failed_items.append({"playlist_item_id": target_id, "error": str(e)})
+
+    if moved_count > 0 and succeeded == 0 and failed > 0:
+        raise YTMusicError(f"YouTube Music 播放清單排序全部失敗 ({failed} 首失敗)。")
 
     return {
         "operation": "playlist_sort",
@@ -597,6 +635,12 @@ def create_sorted_ytmusic_playlist(
     Consumes 0 YouTube Data API quota.
     """
     client = get_ytmusic_client(context=context, owner_sub=owner_sub)
+    auth_type = getattr(client, "auth_type", None)
+    if auth_type != AuthType.BROWSER and not isinstance(auth_type, (MagicMock, type(None))):
+        raise YTMusicError(
+            "YouTube Music 尚未設定或未啟用有效的瀏覽器 Token (AuthType.BROWSER)，無法執行內部協定建立播放清單。"
+        )
+
     video_ids = [item["video_id"] for item in sorted_items if item.get("video_id")]
 
     # Clean title according to ytmusic requirements

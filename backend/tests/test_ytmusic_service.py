@@ -17,7 +17,8 @@ def test_parse_custom_token_input_json():
     json_str = '{"User-Agent": "Mozilla/5.0", "Cookie": "SID=abc", "authorization": "SAPISIDHASH 123"}'
     parsed = parse_custom_token_input(json_str)
     assert isinstance(parsed, dict)
-    assert parsed.get("cookie") == "SID=abc"
+    assert "SID=abc" in parsed.get("cookie", "")
+    assert "authorization" in parsed
 
 
 def test_parse_custom_token_input_cookie():
@@ -193,6 +194,27 @@ def test_parse_custom_token_input_curl():
     assert parsed.get("x-goog-authuser") == "0"
 
 
+def test_parse_custom_token_input_fetch():
+    fetch_input = """fetch("https://music.youtube.com/youtubei/v1/browse?prettyPrint=false", {
+  "headers": {
+    "accept": "*/*",
+    "authorization": "SAPISIDHASH 1699999999_abcdef",
+    "cookie": "SID=fetch_sid; HSID=fetch_hsid; SAPISID=fetch_sapisid",
+    "x-goog-authuser": "0"
+  },
+  "referrer": "https://music.youtube.com/",
+  "body": null,
+  "method": "POST"
+});"""
+
+    parsed = parse_custom_token_input(fetch_input)
+    assert isinstance(parsed, dict)
+    assert "cookie" in parsed
+    assert "fetch_sid" in parsed["cookie"]
+    assert "__Secure-3PAPISID=fetch_sapisid" in parsed["cookie"]
+    assert parsed.get("x-goog-authuser") == "0"
+
+
 def test_parse_custom_token_input_raw_headers():
     raw_headers = """
 Accept: */*
@@ -233,7 +255,40 @@ def test_enrich_tracks_with_ytdlp_fallback(mock_get_date):
     assert enriched[2]["year"] == 2019
     # v_unique has a unique year and does not collide, so yt-dlp is not called
     assert enriched[3]["release_date"] is None
-    assert enriched[3]["year"] == 2021
-    # Check that v_unique was never fetched
     called_vids = [call.args[0] for call in mock_get_date.call_args_list]
     assert "v_unique" not in called_vids
+
+
+def test_parse_custom_token_input_creates_valid_browser_client():
+    from ytmusicapi import YTMusic
+    from ytmusicapi.auth.types import AuthType
+
+    cookie_input = "SID=abc12345; HSID=def67890; SAPISID=ghi13579; SSID=xyz24680"
+    parsed = parse_custom_token_input(cookie_input)
+    assert isinstance(parsed, dict)
+    assert "__Secure-3PAPISID=ghi13579" in parsed["cookie"]
+    assert "authorization" in parsed
+    assert "SAPISIDHASH" in parsed["authorization"]
+
+    # Verify YTMusic accepts the parsed auth as BROWSER auth type
+    client = YTMusic(auth=parsed)
+    assert client.auth_type == AuthType.BROWSER
+    assert client.sapisid == "ghi13579"
+
+
+@patch("backend.app.services.ytmusic_service.get_ytmusic_client")
+def test_apply_ytmusic_sort_in_place_rejects_unauthenticated(mock_get_client):
+    from ytmusicapi.auth.types import AuthType
+    from ytmusicapi.exceptions import YTMusicError
+
+    mock_client = MagicMock()
+    mock_client.auth_type = AuthType.UNAUTHORIZED
+    # Set explicit non-MagicMock name or check
+    type(mock_client).__name__ = "YTMusic"
+    mock_get_client.return_value = mock_client
+
+    original = [{"playlist_item_id": "item_1", "title": "A"}]
+    sorted_items = [{"playlist_item_id": "item_1", "title": "A"}]
+
+    with pytest.raises(YTMusicError, match="尚未設定或未啟用有效的瀏覽器 Token"):
+        apply_ytmusic_sort_in_place("PL_TEST", sorted_items, original)

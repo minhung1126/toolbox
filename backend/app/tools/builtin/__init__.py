@@ -24,10 +24,16 @@ __all__ = [
 
 def register_builtin_tools() -> None:
     """Register all default built-in tools into the global ToolRegistry."""
-    tool_registry.register(CreatorToolsPlugin())
-    tool_registry.register(PhotoCuratorPlugin())
-    tool_registry.register(PlaylistSorterPlugin())
-    tool_registry.register(SheetsToolsPlugin())
-    tool_registry.register(StickyNotesPlugin())
-    tool_registry.register(YouTubeIntegrationsPlugin())
-    tool_registry.register(SystemUtilityPlugin())
+    plugins = [
+        CreatorToolsPlugin,
+        PhotoCuratorPlugin,
+        PlaylistSorterPlugin,
+        SheetsToolsPlugin,
+        StickyNotesPlugin,
+        YouTubeIntegrationsPlugin,
+        SystemUtilityPlugin,
+    ]
+    for plugin_cls in plugins:
+        plugin = plugin_cls()
+        if not tool_registry.get(plugin.metadata.id):
+            tool_registry.register(plugin)

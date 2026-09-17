@@ -3,7 +3,11 @@ import {
   ArrowRight,
   ArrowUpDown,
   CheckCircle2,
+  Code2,
   Disc3,
+  ExternalLink,
+  HelpCircle,
+  Info,
   Key,
   ListMusic,
   Loader2,
@@ -63,6 +67,7 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
   const [customTokenInput, setCustomTokenInput] = useState('');
   const [savingToken, setSavingToken] = useState(false);
   const [showClearTokenConfirm, setShowClearTokenConfirm] = useState(false);
+  const [showTokenUpdateForm, setShowTokenUpdateForm] = useState(false);
 
   useEffect(() => {
     if (preferences?.defaultPreset) {
@@ -156,7 +161,7 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
               <Key size={20} color="var(--primary)" /> 自訂 YouTube Music 瀏覽器 Token／Cookie
             </h2>
             <p className="section-desc" style={{ margin: 0 }}>
-              支援直接貼上來自 music.youtube.com 的 Cookie 或 Network Headers。使用 Token 排序可直接讀取專輯、曲目序號且 <strong>消耗 0 Google API 配額</strong>。
+              支援直接貼上來自 music.youtube.com 的 <strong>Copy as fetch</strong>、<strong>Copy as cURL</strong>、Request Headers 或 Cookie。使用 Token 排序可讀取完整專輯與曲目序號且 <strong>消耗 0 Google API 配額</strong>。
             </p>
           </div>
           {hasCustomToken && (
@@ -166,54 +171,158 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
           )}
         </div>
 
-        {hasCustomToken ? (
+        {hasCustomToken && (
           <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, background: 'rgba(255,255,255,0.03)', padding: '12px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)' }}>
             <div>
-              <strong>已啟用自訂瀏覽器 Token</strong>
+              <strong style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#4ade80' }}>
+                <CheckCircle2 size={16} /> 已啟用自訂瀏覽器 Token
+              </strong>
               <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)' }}>
-                系統將優先使用此 Token 進行 YouTube Music 播放清單與曲目操作。
+                系統將優先使用此 Token 進行 YouTube Music 播放清單與曲目操作。若 Cookie 逾期失效，可隨時重新貼上更新。
               </p>
             </div>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              style={{ color: 'var(--color-danger, #ef4444)', display: 'flex', alignItems: 'center', gap: 4 }}
-              onClick={() => setShowClearTokenConfirm(true)}
-              disabled={savingToken}
-            >
-              <Trash2 size={14} /> 清除自訂 Token
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowTokenUpdateForm(!showTokenUpdateForm)}
+              >
+                {showTokenUpdateForm ? '收合教學與輸入框' : '更換 / 重新設定 Token'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ color: 'var(--color-danger, #ef4444)', display: 'flex', alignItems: 'center', gap: 4 }}
+                onClick={() => setShowClearTokenConfirm(true)}
+                disabled={savingToken}
+              >
+                <Trash2 size={14} /> 清除自訂 Token
+              </button>
+            </div>
           </div>
-        ) : (
-          <div style={{ marginTop: 12 }}>
-            <div className="form-group">
-              <label className="form-label" htmlFor="ytmusic-custom-token-input">
-                貼上 Cookie 或 Request Headers（選填）
+        )}
+
+        {(!hasCustomToken || showTokenUpdateForm) && (
+          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Step-by-Step DevTools Guide */}
+            <div
+              style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: 10,
+                padding: '16px 18px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, color: 'var(--primary)' }}>
+                  <HelpCircle size={18} />
+                  <span>開發者工具 (F12) 快速獲取教學</span>
+                </div>
+                <span className="badge badge-info" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem' }}>
+                  <Code2 size={12} /> 完全支援右鍵 Copy as fetch
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: '0.875rem', lineHeight: 1.6, color: 'rgba(255, 255, 255, 0.85)' }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <span style={{ background: 'var(--primary)', color: '#000', fontWeight: 'bold', minWidth: 22, height: 22, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: '0.75rem' }}>1</span>
+                  <div>
+                    <strong>開啟 YouTube Music 並登入</strong>：在瀏覽器分頁中打開{' '}
+                    <a
+                      href="https://music.youtube.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: 'var(--primary)', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: 2 }}
+                    >
+                      music.youtube.com <ExternalLink size={12} />
+                    </a>
+                    ，確認右上角已登入個人 Google 帳號。
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <span style={{ background: 'var(--primary)', color: '#000', fontWeight: 'bold', minWidth: 22, height: 22, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: '0.75rem' }}>2</span>
+                  <div>
+                    <strong>開啟開發者工具 (DevTools)</strong>：在 YouTube Music 頁面上按下鍵盤 <kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4, fontFamily: 'monospace', border: '1px solid rgba(255,255,255,0.15)' }}>F12</kbd>（或在網頁任意處按右鍵選擇「檢查 / Inspect」），上方切換至 <strong>Network (網路)</strong> 標籤頁。
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <span style={{ background: 'var(--primary)', color: '#000', fontWeight: 'bold', minWidth: 22, height: 22, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: '0.75rem' }}>3</span>
+                  <div>
+                    <strong>觸發任一網路請求</strong>：在 YouTube Music 頁面上隨意點選任一歌單、歌曲或「媒體庫 / Library」，Network 面板便會出現請求列表（可在上方篩選框輸入 <code>browse</code> 快速過濾定位）。
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <span style={{ background: 'var(--primary)', color: '#000', fontWeight: 'bold', minWidth: 22, height: 22, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: '0.75rem' }}>4</span>
+                  <div style={{ flex: 1 }}>
+                    <strong>右鍵直接複製（支援以下任一種方式，推薦方式一）：</strong>
+                    <div style={{ margin: '8px 0 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ padding: '8px 12px', background: 'rgba(74, 222, 128, 0.08)', border: '1px solid rgba(74, 222, 128, 0.2)', borderRadius: 6 }}>
+                        <div style={{ color: '#4ade80', fontWeight: 600 }}>⭐ 方式一（最推薦・最快速）：Copy as fetch</div>
+                        <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
+                          在請求（如 <code>browse</code>）上點擊右鍵 ➔ <strong>Copy (複製)</strong> ➔ <strong>Copy as fetch (複製為 fetch)</strong>，整段代碼直接貼入下方即可！
+                        </div>
+                      </div>
+
+                      <div style={{ padding: '8px 12px', background: 'rgba(96, 165, 250, 0.08)', border: '1px solid rgba(96, 165, 250, 0.2)', borderRadius: 6 }}>
+                        <div style={{ color: '#60a5fa', fontWeight: 600 }}>⭐ 方式二：Copy as cURL</div>
+                        <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
+                          在請求上點擊右鍵 ➔ <strong>Copy</strong> ➔ <strong>Copy as cURL (bash / cmd / PowerShell)</strong>，整段貼入即可。
+                        </div>
+                      </div>
+
+                      <div style={{ padding: '8px 12px', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: 6 }}>
+                        <div style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>方式三：手動複製 Request Headers 或 Cookie</div>
+                        <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
+                          點選該請求 ➔ 右側面板切換至 <strong>Headers (標頭)</strong> ➔ 滾動至 <strong>Request Headers</strong> ➔ 複製整段 Request Headers 或 <code>Cookie:</code> 欄位的值。
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 14, padding: '10px 14px', background: 'rgba(255, 255, 255, 0.04)', borderRadius: 6, fontSize: '0.825rem', color: 'rgba(255, 255, 255, 0.75)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <Info size={16} color="var(--primary)" style={{ flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <strong>💡 可以右鍵直接複製 fetch 嗎？</strong>
+                  <br />
+                  <strong>完全可以！</strong> 系統已具備智慧剖析器，會自動識別 <code>fetch(...)</code> 語法並提取認證標頭與安全 Cookie（含 <code>SAPISID</code> 與 <code>__Secure-3PAPISID</code>），無需手動清洗或剪裁。
+                </div>
+              </div>
+            </div>
+
+            {/* Input Form */}
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" htmlFor="ytmusic-custom-token-input" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>貼上 Token 代碼、fetch、cURL 或 Cookie</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 'normal', color: 'rgba(255,255,255,0.5)' }}>支援 fetch / cURL / Headers / Cookie</span>
               </label>
               <textarea
                 id="ytmusic-custom-token-input"
                 className="form-input"
-                rows={3}
-                placeholder="貼上瀏覽器開發者工具中的 Cookie: SID=... 或完整的 Request Headers..."
+                rows={4}
+                placeholder="可直接貼上右鍵『Copy as fetch』、『Copy as cURL』、完整的 Request Headers 或 Cookie 字串..."
                 value={customTokenInput}
                 onChange={(e) => setCustomTokenInput(e.target.value)}
-                style={{ fontFamily: 'monospace', fontSize: '0.85rem', width: '100%' }}
+                style={{ fontFamily: 'monospace', fontSize: '0.85rem', width: '100%', lineHeight: 1.4 }}
                 disabled={savingToken}
               />
-              <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.45)', display: 'block', marginTop: 4 }}>
-                提示：可在瀏覽器開啟 music.youtube.com ➔ 開發者工具 (F12) ➔ Network (網路) ➔ 複製任一請求的 Cookie 或 Request Headers 貼於此處。
-              </span>
             </div>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={handleSaveCustomToken}
-              disabled={savingToken || !customTokenInput.trim()}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}
-            >
-              {savingToken ? <Loader2 size={14} className="spin" /> : <Key size={14} />}
-              儲存自訂 Token
-            </button>
+            <div>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={handleSaveCustomToken}
+                disabled={savingToken || !customTokenInput.trim()}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                {savingToken ? <Loader2 size={14} className="spin" /> : <Key size={14} />}
+                儲存自訂 Token
+              </button>
+            </div>
           </div>
         )}
       </div>
