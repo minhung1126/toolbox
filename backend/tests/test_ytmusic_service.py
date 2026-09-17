@@ -113,11 +113,12 @@ def test_fetch_ytmusic_playlist_tracks_with_album_resolution(mock_get_client):
     assert tracks[1]["track_number"] == 2
     assert tracks[1]["year"] == 2023
 
-    # Third track: no album → treated as single (單曲) with default track_number 1
+    # Third track: no album → treated as video (影片) with track_number None and is_video True
     assert tracks[2]["title"] == "Single Song"
     assert tracks[2]["artist"] == "Artist B"
-    assert tracks[2]["album"] == "單曲"
-    assert tracks[2]["track_number"] == 1
+    assert tracks[2]["album"] == "影片"
+    assert tracks[2]["track_number"] is None
+    assert tracks[2]["is_video"] is True
 
     # Verify get_album was only called once for MPREb_album1 (cached!)
     mock_client.get_album.assert_called_once_with("MPREb_album1")

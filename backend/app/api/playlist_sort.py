@@ -85,9 +85,9 @@ async def preview_sort(
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
 ):
     try:
-        # Also run yt-dlp fallback when sorting by album so that singles (items
-        # without an album, displayed as "單曲") receive their release year for
-        # correct chronological ordering within the singles group.
+        # Also run yt-dlp fallback when sorting by album so that singles and videos (items
+        # without an album, displayed as "影片") receive their release year for
+        # correct chronological ordering within the timeline.
         needs_year_fallback = any(
             k.field in ("year", "release_year", "release_date", "album") for k in input_data.sort_keys
         )

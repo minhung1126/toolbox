@@ -298,7 +298,10 @@ def enrich_tracks_with_ytdlp_fallback(
             year_counts[str(yr).strip()] += 1
 
     # Find candidate tracks that need yt-dlp fallback
-    candidates = []
+    # High priority: Tracks that have no year or release_date (e.g. videos without album info)
+    # Low priority: Same year tracks needing precise day-level release_date
+    high_priority_candidates = []
+    low_priority_candidates = []
     for trk in tracks:
         vid = trk.get("video_id")
         if not vid:
@@ -312,13 +315,22 @@ def enrich_tracks_with_ytdlp_fallback(
         # Condition 2: Same year as other songs in playlist ("同年")
         is_same_year = check_same_year and has_year and (year_counts[str(trk.get("year")).strip()] > 1)
 
-        if needs_date or (is_same_year and not has_release_date):
-            candidates.append(trk)
+        if needs_date:
+            high_priority_candidates.append(trk)
+        elif is_same_year and not has_release_date:
+            low_priority_candidates.append(trk)
+
+    candidates = high_priority_candidates + low_priority_candidates
 
     if not candidates:
         return tracks
 
-    logger.info("Enriching %d tracks with yt-dlp release date fallback...", len(candidates))
+    logger.info(
+        "Enriching %d tracks (high_priority=%d, low_priority=%d) with yt-dlp release date fallback...",
+        len(candidates),
+        len(high_priority_candidates),
+        len(low_priority_candidates),
+    )
 
     def _fetch_for_track(track_item: dict[str, Any]) -> None:
         vid = track_item.get("video_id")
@@ -347,8 +359,9 @@ def enrich_tracks_with_ytdlp_fallback(
                     track_item["year"] = int(m.group(1))
         if meta.get("track_number") and track_item.get("track_number") is None:
             track_item["track_number"] = meta["track_number"]
-        if meta.get("album") and (not track_item.get("album") or track_item.get("album") == "單曲"):
+        if meta.get("album") and (not track_item.get("album") or track_item.get("album") in ("單曲", "影片")):
             track_item["album"] = meta["album"]
+            track_item["is_video"] = False
         if meta.get("artist") and (not track_item.get("artist") or track_item.get("artist") == "（無藝人）"):
             track_item["artist"] = meta["artist"]
             if not track_item.get("channel_title"):
@@ -503,12 +516,14 @@ def fetch_ytmusic_playlist_tracks(
             album_name = str(album_info or "")
             album_id = None
 
-        # Items without an album (pure YouTube videos, music videos, singles) are
-        # displayed and sorted as "單曲" (Single). This prevents the empty string
-        # from sorting before real album names, so a 2025 video does not appear
-        # before a 2023 album when album-based sorting is applied.
-        if not album_name.strip():
-            album_name = "單曲"
+        # Items without an album (pure YouTube videos, music videos, covers, etc.)
+        # are classified as "影片" (Video) instead of "單曲". They do NOT have an
+        # album track number (no fake #1), and will fallback to yt-dlp / upload date.
+        is_video = False
+        if not album_name.strip() or t.get("resultType") == "video":
+            album_name = "影片"
+            is_video = True
+
         # Track number and year resolution from cached album data
         track_number: int | None = None
         release_year: int | None = None
@@ -543,9 +558,12 @@ def fetch_ytmusic_playlist_tracks(
             except (ValueError, TypeError):
                 track_number = None
 
-        # Singles (album="單曲") without a resolved track number default to 1
+        # Singles (album="單曲") without a resolved track number default to 1,
+        # but videos ("影片") should remain track_number = None.
         if track_number is None and album_name == "單曲":
             track_number = 1
+        elif is_video:
+            track_number = None
 
         thumbnails = t.get("thumbnails") or []
         thumb_url = thumbnails[-1].get("url", "") if thumbnails else ""
@@ -567,6 +585,7 @@ def fetch_ytmusic_playlist_tracks(
                 "position": idx,
                 "added_at": "",
                 "published_at": str(release_year) if release_year else "",
+                "is_video": is_video,
             }
         )
 

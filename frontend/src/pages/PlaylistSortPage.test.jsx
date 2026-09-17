@@ -419,6 +419,21 @@ describe('PlaylistSortPage', () => {
     ]);
   });
 
+  it('orders videos (album="影片") chronologically with albums by release date instead of throwing to end', () => {
+    const tracks = [
+      { title: '2026 Album Track', album: 'To Be Continued', track_number: 1, release_date: '2026-06-01', year: 2026 },
+      { title: "[DNFM] 'Embracing me' (Video)", album: '影片', release_date: '2023-11-09', year: 2023 },
+      { title: 'Good Bye Bye (Cover Video)', album: '影片', release_date: '2024-02-08', year: 2024 },
+    ];
+
+    const sortedAsc = sortTracksLocally(tracks, [{ field: 'album', direction: 'asc' }]);
+    expect(sortedAsc.map((t) => t.title)).toEqual([
+      "[DNFM] 'Embracing me' (Video)",
+      'Good Bye Bye (Cover Video)',
+      '2026 Album Track',
+    ]);
+  });
+
   it('renders TrackSubtitle with all used items, full-width dot separator, and unparenthesized date', () => {
     const item = {
       artist: '周杰倫',
@@ -452,6 +467,23 @@ describe('PlaylistSortPage', () => {
     expect(container.textContent).toContain('2020-06-12');
     expect(container.textContent).not.toContain('💿');
     expect(container.textContent).not.toContain('(2020-06-12)');
+  });
+
+  it('renders TrackSubtitle for video items with 🎬 影片 and no fake #1 track number', () => {
+    const item = {
+      title: "[DNFM] 'Embracing me' QWER Ver.",
+      artist: 'QWER',
+      album: '影片',
+      release_date: '2023-11-09',
+      is_video: true,
+    };
+
+    const { container } = render(<TrackSubtitle item={item} />);
+    expect(container.textContent).toContain('QWER');
+    expect(container.textContent).toContain('🎬 影片');
+    expect(container.textContent).toContain('2023-11-09');
+    expect(container.textContent).not.toContain('#1');
+    expect(container.textContent).not.toContain('💿');
   });
 
   it('normalizes Topic channel suffixes with normalizeArtistName', () => {

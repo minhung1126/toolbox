@@ -162,9 +162,13 @@ def fetch_playlist_items_for_sort(
             )
         items = result
 
-    if use_ytdlp_fallback and items:
+    # Automatically enrich dateless tracks (e.g. videos or tracks without release_date)
+    has_dateless_tracks = any(
+        (not trk.get("year") and not trk.get("release_date")) or trk.get("album") == "影片" for trk in items
+    )
+    if (use_ytdlp_fallback or has_dateless_tracks) and items:
         try:
-            items = enrich_tracks_with_ytdlp_fallback(items, check_same_year=True)
+            items = enrich_tracks_with_ytdlp_fallback(items, check_same_year=use_ytdlp_fallback)
         except Exception as exc:
             logger.warning("Failed to enrich tracks with yt-dlp fallback: %s", exc)
 
@@ -232,12 +236,12 @@ def sort_items(items: list[dict[str, Any]], sort_keys: list[dict[str, Any]]) -> 
 
                 if sort_field == "album":
                     raw_album = str(item.get("album") or "").strip()
-                    is_real = bool(raw_album and raw_album != "單曲")
+                    is_real = bool(raw_album and raw_album not in ("單曲", "影片"))
                     album_str = unicodedata.normalize("NFKC", raw_album).casefold() if is_real else ""
 
-                    # Release year/date resolution as chronological anchor for albums & singles.
-                    # Singles without an album use release date/year fallback to sort in the
-                    # artist's chronological timeline rather than being forced to the very front.
+                    # Release year/date resolution as chronological anchor for albums, singles & videos.
+                    # Videos & singles without an album use release date/year fallback to sort in the
+                    # artist's chronological timeline rather than being forced to the very front or end.
                     raw_date = str(item.get("release_date") or "").replace("-", "").strip()
                     if raw_date and len(raw_date) >= 8 and raw_date[:8].isdigit():
                         year_key = raw_date[:8]

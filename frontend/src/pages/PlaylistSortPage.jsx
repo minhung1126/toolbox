@@ -125,8 +125,8 @@ export function sortTracksLocally(items, sortKeys) {
           return rev ? bYearKey.localeCompare(aYearKey) : aYearKey.localeCompare(bYearKey);
         }
 
-        const aIsReal = Boolean(a.album && a.album !== '單曲');
-        const bIsReal = Boolean(b.album && b.album !== '單曲');
+        const aIsReal = Boolean(a.album && a.album !== '單曲' && a.album !== '影片');
+        const bIsReal = Boolean(b.album && b.album !== '單曲' && b.album !== '影片');
         if (aIsReal !== bIsReal) {
           return aIsReal ? -1 : 1; // Real album tracks first within the same year
         }
@@ -345,9 +345,24 @@ export function TrackSubtitle({ item, sortKeys = [] }) {
     });
   }
 
-  // 2. 專輯 (album)
-  if (item.album) {
-    const isSingle = item.album === '單曲';
+  // 2. 專輯 (album) 或 影片標示
+  const isVideo = item.album === '影片' || Boolean(item.is_video);
+  const isSingle = item.album === '單曲';
+
+  if (item.album || isVideo) {
+    let albumDisplay;
+    let albumTitle;
+    if (isVideo) {
+      albumDisplay = '🎬 影片';
+      albumTitle = '影片（無專輯資訊）';
+    } else if (isSingle) {
+      albumDisplay = '單曲';
+      albumTitle = '單曲';
+    } else {
+      albumDisplay = `💿 ${item.album}`;
+      albumTitle = `專輯：${item.album}`;
+    }
+
     parts.push({
       key: 'album',
       node: (
@@ -360,16 +375,16 @@ export function TrackSubtitle({ item, sortKeys = [] }) {
             textOverflow: 'ellipsis',
             maxWidth: 140,
           }}
-          title={`專輯：${item.album}`}
+          title={albumTitle}
         >
-          {isSingle ? '單曲' : `💿 ${item.album}`}
+          {albumDisplay}
         </span>
       ),
     });
   }
 
-  // 3. 曲目編號 (track_number)
-  if (item.track_number != null && String(item.track_number).trim() !== '') {
+  // 3. 曲目編號 (track_number) - 影片不顯示曲目編號
+  if (!isVideo && item.track_number != null && String(item.track_number).trim() !== '') {
     parts.push({
       key: 'track_number',
       node: (

@@ -350,6 +350,40 @@ def test_sort_album_singles_with_cjk_album():
     assert titles[1] == "2024 Single"
 
 
+def test_sort_album_videos_ordered_chronologically():
+    """Verify that videos (album='影片') with fallback release_date are sorted chronologically with albums."""
+    items = [
+        {
+            "title": "2026 Album Track",
+            "album": "To Be Continued",
+            "track_number": 1,
+            "year": 2026,
+            "release_date": None,
+        },
+        {
+            "title": "[DNFM] 'Embracing me' (Video)",
+            "album": "影片",
+            "track_number": None,
+            "year": 2023,
+            "release_date": "2023-11-09",
+        },
+        {
+            "title": "Good Bye Bye (Cover Video)",
+            "album": "影片",
+            "track_number": None,
+            "year": 2024,
+            "release_date": "2024-02-08",
+        },
+    ]
+    sorted_res = sort_items(items, [{"field": "album", "direction": "asc"}])
+    titles = [i["title"] for i in sorted_res]
+    assert titles == [
+        "[DNFM] 'Embracing me' (Video)",
+        "Good Bye Bye (Cover Video)",
+        "2026 Album Track",
+    ]
+
+
 def test_normalize_artist_name():
     """Verify stripping of YouTube Topic channel suffixes."""
     assert normalize_artist_name("QWER - Topic") == "QWER"
