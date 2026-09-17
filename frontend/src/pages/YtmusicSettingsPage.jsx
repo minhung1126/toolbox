@@ -257,19 +257,19 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
                 <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <span style={{ background: 'var(--primary)', color: '#000', fontWeight: 'bold', minWidth: 22, height: 22, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: '0.75rem' }}>4</span>
                   <div style={{ flex: 1 }}>
-                    <strong>右鍵直接複製（支援以下任一種方式，推薦方式一）：</strong>
+                    <strong>右鍵直接複製（支援以下任一種方式，推薦方式一或方式二）：</strong>
                     <div style={{ margin: '8px 0 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <div style={{ padding: '8px 12px', background: 'rgba(74, 222, 128, 0.08)', border: '1px solid rgba(74, 222, 128, 0.2)', borderRadius: 6 }}>
-                        <div style={{ color: '#4ade80', fontWeight: 600 }}>⭐ 方式一（最推薦・一鍵完整複製）：Copy as cURL</div>
+                        <div style={{ color: '#4ade80', fontWeight: 600 }}>⭐ 方式一（最簡單・最推薦）：Copy as Node.js fetch</div>
                         <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
-                          在請求（如 <code>browse</code>）上點擊右鍵 ➔ <strong>Copy (複製)</strong> ➔ <strong>Copy as cURL (bash)</strong> 或 <strong>Copy as cURL (cmd)</strong>，整段貼入下方即可！cURL 會 100% 包含 Cookie、SAPISID 與所有授權標頭。
+                          在請求（如 <code>browse</code>）上點擊右鍵 ➔ <strong>Copy (複製)</strong> ➔ <strong>Copy as Node.js fetch</strong>，整段貼入下方即可！Node.js 版會完整附帶 Cookie 與所有認證。
                         </div>
                       </div>
 
                       <div style={{ padding: '8px 12px', background: 'rgba(96, 165, 250, 0.08)', border: '1px solid rgba(96, 165, 250, 0.2)', borderRadius: 6 }}>
-                        <div style={{ color: '#60a5fa', fontWeight: 600 }}>方式二：Copy as Node.js fetch</div>
+                        <div style={{ color: '#60a5fa', fontWeight: 600 }}>⭐ 方式二：Copy as cURL (cmd 或 bash)</div>
                         <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
-                          若右鍵選單中有 <strong>Copy as Node.js fetch</strong>，亦可直接複製貼上（Node.js 版會包含 Cookie 標頭）。
+                          在請求上點擊右鍵 ➔ <strong>Copy</strong> ➔ <strong>Copy as cURL (cmd)</strong> 或 <strong>Copy as cURL (bash)</strong>，整段貼入即可（系統已支援 Windows <code>^</code> 轉義與 <code>-b</code> 標籤）。
                         </div>
                       </div>
 

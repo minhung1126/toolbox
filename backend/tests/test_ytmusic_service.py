@@ -194,6 +194,21 @@ def test_parse_custom_token_input_curl():
     assert parsed.get("x-goog-authuser") == "0"
 
 
+def test_parse_custom_token_input_cmd_curl():
+    cmd_curl_input = r'''curl --url ^"https://music.youtube.com/youtubei/v1/browse^" ^
+  -H ^"accept: */*^" ^
+  -H ^"authorization: SAPISIDHASH 1699999999_abcdef^" ^
+  -b ^"SID=cmd_sid; SAPISID=cmd_sapisid^" ^
+  -H ^"origin: https://music.youtube.com^"'''
+
+    parsed = parse_custom_token_input(cmd_curl_input)
+    assert isinstance(parsed, dict)
+    assert "cookie" in parsed
+    assert "cmd_sid" in parsed["cookie"]
+    assert "cmd_sapisid" in parsed["cookie"]
+    assert parsed.get("x-goog-authuser") == "0"
+
+
 def test_parse_custom_token_input_fetch():
     fetch_input = """fetch("https://music.youtube.com/youtubei/v1/browse?prettyPrint=false", {
   "headers": {

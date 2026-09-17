@@ -25,16 +25,34 @@ from backend.app.core.youtube_context import YouTubeRequestContext
 logger = logging.getLogger(__name__)
 
 
-def _extract_headers_from_curl(curl_cmd: str) -> list[str]:
-    """Extract -H / --header parameters from a cURL command string."""
-    pattern = r"""(?:-H|--header)\s+(?:'([^']*)'|"([^"]*)")"""
-    matches = re.findall(pattern, curl_cmd)
-    headers = []
-    for m in matches:
-        hdr = m[0] if m[0] else m[1]
-        hdr = hdr.strip()
+def _clean_cmd_escapes(s: str) -> str:
+    """Unescape Windows cmd.exe escape sequences in cURL commands."""
+    if "^" not in s:
+        return s
+    s = s.replace("^%^", "%")
+    return re.sub(r"\^([&\"^%()\\=<>|])", r"\1", s)
+
+
+def _extract_headers_from_curl(curl_cmd: str) -> dict[str, str]:
+    """Extract headers and cookies from a cURL command string (bash, cmd, or PowerShell)."""
+    cleaned = _clean_cmd_escapes(curl_cmd)
+    headers: dict[str, str] = {}
+
+    # 1. Extract -H / --header parameters
+    h_pattern = r"""(?:-H|--header)\s+(?:'([^']*)'|"([^"]*)"|([^\s'"]+:[^\s'"]+))"""
+    for m in re.findall(h_pattern, cleaned):
+        hdr = m[0] or m[1] or m[2]
         if ":" in hdr:
-            headers.append(hdr)
+            k, v = hdr.split(":", 1)
+            headers[k.strip().lower()] = v.strip()
+
+    # 2. Extract -b / --cookie parameters (used by Windows cmd cURL export)
+    b_pattern = r"""(?:-b|--cookie)\s+(?:'([^']*)'|"([^"]*)")"""
+    for m in re.findall(b_pattern, cleaned):
+        cookie_val = m[0] or m[1]
+        if cookie_val:
+            headers["cookie"] = cookie_val.strip()
+
     return headers
 
 
@@ -92,12 +110,12 @@ def parse_custom_token_input(token_raw: str) -> dict[str, Any]:
         user_headers = _extract_headers_from_fetch(raw)
 
     # 3. If it is a cURL command (e.g. starts with or contains 'curl ')
-    if not user_headers and "curl" in raw.lower() and ("-h" in raw.lower() or "--header" in raw.lower()):
-        extracted_curl_headers = _extract_headers_from_curl(raw)
-        for hdr in extracted_curl_headers:
-            if ":" in hdr:
-                k, v = hdr.split(":", 1)
-                user_headers[k.strip().lower()] = v.strip()
+    if (
+        not user_headers
+        and "curl" in raw.lower()
+        and ("-h" in raw.lower() or "--header" in raw.lower() or "-b" in raw.lower() or "--cookie" in raw.lower())
+    ):
+        user_headers = _extract_headers_from_curl(raw)
 
     # 3. Build headers lines or plain cookie string
     if not user_headers:
