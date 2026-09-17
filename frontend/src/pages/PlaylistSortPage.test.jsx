@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import PlaylistSortPage, { sortTracksLocally } from './PlaylistSortPage';
+import PlaylistSortPage, { sortTracksLocally, TrackSubtitle } from './PlaylistSortPage';
 import { api } from '../services/api';
 
 vi.mock('../services/api', () => ({
@@ -400,5 +400,57 @@ describe('PlaylistSortPage', () => {
       '1989 Track 1',
       '1989 Track 2',
     ]);
+  });
+
+  it('orders non-album singles chronologically with albums by release year instead of shoving to front', () => {
+    const tracks = [
+      { title: '2024 Single', album: '', release_date: '2024-05-20', year: 2024 },
+      { title: '2003 Album Track', album: '葉惠美', release_date: '2003-07-31', year: 2003, track_number: 1 },
+      { title: '2010 Album Track', album: '跨時代', release_date: '2010-05-18', year: 2010, track_number: 1 },
+      { title: '2000 Single', album: '單曲', release_date: '2000-11-06', year: 2000 },
+    ];
+
+    const sortedAsc = sortTracksLocally(tracks, [{ field: 'album', direction: 'asc' }]);
+    expect(sortedAsc.map((t) => t.title)).toEqual([
+      '2000 Single',
+      '2003 Album Track',
+      '2010 Album Track',
+      '2024 Single',
+    ]);
+  });
+
+  it('renders TrackSubtitle with all used items, full-width dot separator, and unparenthesized date', () => {
+    const item = {
+      artist: '周杰倫',
+      album: '最偉大的作品',
+      track_number: 1,
+      release_date: '2022-07-15',
+    };
+
+    const { container } = render(<TrackSubtitle item={item} sortKeys={[{ field: 'title' }]} />);
+
+    // Text content should contain artist, album, track number and date
+    expect(container.textContent).toContain('周杰倫');
+    expect(container.textContent).toContain('💿 最偉大的作品');
+    expect(container.textContent).toContain('#1');
+    expect(container.textContent).toContain('2022-07-15');
+    // Date must not be wrapped in parentheses
+    expect(container.textContent).not.toContain('(2022-07-15)');
+    // Separator should be the full-width dot
+    expect(container.textContent).toContain('・');
+  });
+
+  it('renders TrackSubtitle for non-album singles with date and no fake album icon', () => {
+    const item = {
+      artist: '周杰倫',
+      album: '',
+      release_date: '2020-06-12',
+    };
+
+    const { container } = render(<TrackSubtitle item={item} />);
+    expect(container.textContent).toContain('周杰倫');
+    expect(container.textContent).toContain('2020-06-12');
+    expect(container.textContent).not.toContain('💿');
+    expect(container.textContent).not.toContain('(2020-06-12)');
   });
 });

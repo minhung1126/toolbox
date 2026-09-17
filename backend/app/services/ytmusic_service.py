@@ -233,9 +233,25 @@ def enrich_tracks_with_ytdlp_fallback(
             track_item["release_date"] = meta["release_date"]
         if meta.get("year") and not track_item.get("year"):
             track_item["year"] = meta["year"]
+        # Fallback year from release_date if year is not set
+        if not track_item.get("year") and track_item.get("release_date"):
+            m = re.search(r"\b(19\d\d|20\d\d)\b", str(track_item["release_date"]))
+            if m:
+                track_item["year"] = int(m.group(1))
+        # Fallback from upload_date
+        if meta.get("upload_date"):
+            ud = str(meta["upload_date"]).strip()
+            if not track_item.get("published_at"):
+                track_item["published_at"] = ud
+            if not track_item.get("release_date") and len(ud) == 8 and ud.isdigit():
+                track_item["release_date"] = f"{ud[:4]}-{ud[4:6]}-{ud[6:8]}"
+            if not track_item.get("year"):
+                m = re.search(r"\b(19\d\d|20\d\d)\b", ud)
+                if m:
+                    track_item["year"] = int(m.group(1))
         if meta.get("track_number") and track_item.get("track_number") is None:
             track_item["track_number"] = meta["track_number"]
-        if meta.get("album") and not track_item.get("album"):
+        if meta.get("album") and (not track_item.get("album") or track_item.get("album") == "單曲"):
             track_item["album"] = meta["album"]
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(max_workers, len(candidates))) as executor:
@@ -418,6 +434,13 @@ def fetch_ytmusic_playlist_tracks(
                 ):
                     track_number = track_idx + 1
                     break
+
+        # Fallback year from track's own year field if not found in album
+        if release_year is None and t.get("year"):
+            try:
+                release_year = int(str(t["year"]).strip())
+            except (ValueError, TypeError):
+                pass
 
         if track_number is None and t.get("trackNumber") is not None:
             try:

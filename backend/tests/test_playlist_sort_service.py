@@ -289,10 +289,10 @@ def test_sort_artist_and_album_respects_track_number():
 
 
 def test_sort_album_singles_ordered_by_year():
-    """Verify that singles (album='單曲') within the same group are sorted by year.
+    """Verify that singles (album='單曲') and albums are ordered chronologically by release year.
 
     A 2025 video (single) must not appear before a 2023 album track when sorting
-    by album, and singles themselves should be ordered chronologically.
+    by album, and non-album singles should slot into their chronological release positions.
     """
     items = [
         {
@@ -319,8 +319,31 @@ def test_sort_album_singles_ordered_by_year():
     ]
     sorted_res = sort_items(items, [{"field": "album", "direction": "asc"}])
     titles = [i["title"] for i in sorted_res]
-    # "My Album" (Latin) < "單曲" (CJK) alphabetically → album track comes first
-    assert titles[0] == "2023 Album Track", f"Expected album track first, got: {titles}"
-    # Within 單曲 group: 2021 before 2025
-    assert titles[1] == "2021 Single", f"Expected 2021 single second, got: {titles}"
+    # Chronological by release year: 2021 single < 2023 album track < 2025 single
+    assert titles[0] == "2021 Single", f"Expected 2021 single first, got: {titles}"
+    assert titles[1] == "2023 Album Track", f"Expected 2023 album track second, got: {titles}"
     assert titles[2] == "2025 Single", f"Expected 2025 single third, got: {titles}"
+
+
+def test_sort_album_singles_with_cjk_album():
+    """Verify non-album tracks are not shoved before CJK album tracks when sorting by album."""
+    items = [
+        {
+            "title": "2024 Single",
+            "album": "",
+            "track_number": 1,
+            "year": 2024,
+            "release_date": "2024-05-20",
+        },
+        {
+            "title": "2003 Album Track",
+            "album": "葉惠美",
+            "track_number": 1,
+            "year": 2003,
+            "release_date": "2003-07-31",
+        },
+    ]
+    sorted_res = sort_items(items, [{"field": "album", "direction": "asc"}])
+    titles = [i["title"] for i in sorted_res]
+    assert titles[0] == "2003 Album Track"
+    assert titles[1] == "2024 Single"

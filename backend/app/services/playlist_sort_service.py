@@ -166,6 +166,24 @@ def fetch_playlist_items_for_sort(
         except Exception as exc:
             logger.warning("Failed to enrich tracks with yt-dlp fallback: %s", exc)
 
+    # Final pass fallback: populate year and release_date from published_at if still missing
+    for item in items:
+        if not item.get("year"):
+            if item.get("release_date"):
+                m = re.search(r"\b(19\d\d|20\d\d)\b", str(item["release_date"]))
+                if m:
+                    item["year"] = int(m.group(1))
+            elif item.get("published_at"):
+                m = re.search(r"\b(19\d\d|20\d\d)\b", str(item["published_at"]))
+                if m:
+                    item["year"] = int(m.group(1))
+        if not item.get("release_date") and item.get("published_at"):
+            pub = str(item["published_at"]).strip()
+            if len(pub) >= 10 and pub[4] == "-" and pub[7] == "-":
+                item["release_date"] = pub[:10]
+            elif len(pub) >= 8 and pub[:8].isdigit():
+                item["release_date"] = f"{pub[:4]}-{pub[4:6]}-{pub[6:8]}"
+
     return items
 
 
@@ -206,16 +224,18 @@ def sort_items(items: list[dict[str, Any]], sort_keys: list[dict[str, Any]]) -> 
                     return unicodedata.normalize("NFKC", str(val)).casefold()
 
                 if sort_field == "album":
-                    album_str = unicodedata.normalize("NFKC", str(item.get("album") or "")).casefold()
+                    raw_album = str(item.get("album") or "").strip()
+                    is_real = bool(raw_album and raw_album != "單曲")
+                    album_str = unicodedata.normalize("NFKC", raw_album).casefold() if is_real else ""
 
-                    # Include release year as secondary sort within the same album group.
-                    # This ensures singles ("單曲") are ordered chronologically so that
-                    # a 2025 video does not sort before a 2023 album track in the same group.
+                    # Release year/date resolution as chronological anchor for albums & singles.
+                    # Singles without an album use release date/year fallback to sort in the
+                    # artist's chronological timeline rather than being forced to the very front.
                     raw_date = str(item.get("release_date") or "").replace("-", "").strip()
                     if raw_date and len(raw_date) >= 8 and raw_date[:8].isdigit():
                         year_key = raw_date[:8]
                     else:
-                        yr = item.get("year")
+                        yr = item.get("year") or item.get("published_at")
                         if yr:
                             year_match = re.search(r"\b(19\d\d|20\d\d)\b", str(yr))
                             year_key = year_match.group(1) + "0000" if year_match else "99999999"
@@ -227,11 +247,11 @@ def sort_items(items: list[dict[str, Any]], sort_keys: list[dict[str, Any]]) -> 
                     if track_val is not None and str(track_val).strip() != "":
                         try:
                             track_num = int(track_val)
-                            return (album_str, year_key, 0, -track_num if rev else track_num)
+                            return (year_key, 0 if is_real else 1, album_str, 0, -track_num if rev else track_num)
                         except (ValueError, TypeError):
                             pass
                     # Missing track number goes after numbered tracks in both asc and desc
-                    return (album_str, year_key, -1 if rev else 1, 0)
+                    return (year_key, 0 if is_real else 1, album_str, -1 if rev else 1, 0)
 
                 if sort_field in ("track_number", "track"):
                     val = item.get("track_number")

@@ -93,21 +93,31 @@ export function sortTracksLocally(items, sortKeys) {
         return rev ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
       }
       if (field === 'album') {
-        const aVal = (a.album || '').normalize('NFKC').toLowerCase();
-        const bVal = (b.album || '').normalize('NFKC').toLowerCase();
+        // Release year/date fallback key as primary chronological anchor.
+        // Singles without an album use release date/year fallback to sort in the
+        // artist's chronological timeline rather than being forced to the very front.
+        const aDate = String(a.release_date || (a.year ? `${a.year}` : '') || a.published_at || '').replace(/-/g, '').trim();
+        const bDate = String(b.release_date || (b.year ? `${b.year}` : '') || b.published_at || '').replace(/-/g, '').trim();
+        const aYearKey = aDate && aDate.length >= 4 ? (aDate.length >= 8 ? aDate.slice(0, 8) : `${aDate.slice(0, 4)}0000`) : '99999999';
+        const bYearKey = bDate && bDate.length >= 4 ? (bDate.length >= 8 ? bDate.slice(0, 8) : `${bDate.slice(0, 4)}0000`) : '99999999';
+
+        if (aYearKey !== bYearKey) {
+          return rev ? bYearKey.localeCompare(aYearKey) : aYearKey.localeCompare(bYearKey);
+        }
+
+        const aIsReal = Boolean(a.album && a.album !== '單曲');
+        const bIsReal = Boolean(b.album && b.album !== '單曲');
+        if (aIsReal !== bIsReal) {
+          return aIsReal ? -1 : 1; // Real album tracks first within the same year
+        }
+
+        const aVal = aIsReal ? a.album.normalize('NFKC').toLowerCase() : '';
+        const bVal = bIsReal ? b.album.normalize('NFKC').toLowerCase() : '';
         const albumCmp = aVal.localeCompare(bVal);
         if (albumCmp !== 0) {
           return rev ? -albumCmp : albumCmp;
         }
-        // Same album group: also sort by year so that singles (單曲) are ordered
-        // chronologically — a 2025 single should not appear before a 2023 single.
-        const aDate = String(a.release_date || (a.year ? `${a.year}` : '')).replace(/-/g, '').trim();
-        const bDate = String(b.release_date || (b.year ? `${b.year}` : '')).replace(/-/g, '').trim();
-        if (aDate !== bDate) {
-          if (!aDate) return 1;   // unknown year → sort last within group
-          if (!bDate) return -1;
-          return aDate.localeCompare(bDate);  // always asc within same album group
-        }
+
         // Same album + year: respect track_number (always ascending 1, 2, 3... within the album)
         const aTrack = a.track_number != null && a.track_number !== '' ? Number(a.track_number) : Infinity;
         const bTrack = b.track_number != null && b.track_number !== '' ? Number(b.track_number) : Infinity;
@@ -294,7 +304,133 @@ function SortKeyRow({
   );
 }
 
-function PreviewTable({ title, items, icon: Icon, extraHeader }) {
+export function TrackSubtitle({ item, sortKeys = [] }) {
+  const parts = [];
+
+  // 1. 歌手 / 藝人 (artist / channel_title)
+  const artist = item.artist || item.channel_title;
+  if (artist) {
+    parts.push({
+      key: 'artist',
+      node: (
+        <span
+          key="artist"
+          style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}
+          title={artist}
+        >
+          {artist}
+        </span>
+      ),
+    });
+  }
+
+  // 2. 專輯 (album)
+  if (item.album) {
+    const isSingle = item.album === '單曲';
+    parts.push({
+      key: 'album',
+      node: (
+        <span
+          key="album"
+          style={{
+            color: 'rgba(255,255,255,0.6)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: 140,
+          }}
+          title={`專輯：${item.album}`}
+        >
+          {isSingle ? '單曲' : `💿 ${item.album}`}
+        </span>
+      ),
+    });
+  }
+
+  // 3. 曲目編號 (track_number)
+  if (item.track_number != null && String(item.track_number).trim() !== '') {
+    parts.push({
+      key: 'track_number',
+      node: (
+        <span
+          key="track_number"
+          className="badge badge-info"
+          style={{ fontSize: 10, padding: '1px 5px', height: 'auto', lineHeight: '12px' }}
+          title={`曲目編號：#${item.track_number}`}
+        >
+          #{item.track_number}
+        </span>
+      ),
+    });
+  }
+
+  // 4. 發行日期 / 年份 (不加括號)
+  const dateVal = item.release_date || (item.year ? String(item.year) : null);
+  if (dateVal) {
+    parts.push({
+      key: 'date',
+      node: (
+        <span
+          key="date"
+          style={{ color: 'rgba(255,255,255,0.45)' }}
+          title={`發行日期：${dateVal}`}
+        >
+          {dateVal}
+        </span>
+      ),
+    });
+  }
+
+  // 5. 排序有用到的額外欄位 (例如發布日期 published_at、加入清單日期 added_at)
+  const activeFields = new Set((sortKeys || []).map((k) => k.field));
+  if (activeFields.has('published_at') && item.published_at && String(item.published_at).slice(0, 10) !== dateVal) {
+    const pubStr = String(item.published_at).slice(0, 10);
+    parts.push({
+      key: 'published_at',
+      node: (
+        <span key="published_at" style={{ color: 'rgba(255,255,255,0.4)' }} title={`發布日期：${item.published_at}`}>
+          發布 {pubStr}
+        </span>
+      ),
+    });
+  }
+
+  if (activeFields.has('added_at') && item.added_at) {
+    const addStr = String(item.added_at).slice(0, 10);
+    parts.push({
+      key: 'added_at',
+      node: (
+        <span key="added_at" style={{ color: 'rgba(255,255,255,0.4)' }} title={`加入清單日期：${item.added_at}`}>
+          加入 {addStr}
+        </span>
+      ),
+    });
+  }
+
+  if (parts.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        fontSize: 11,
+        color: 'rgba(255,255,255,0.45)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 3,
+        flexWrap: 'wrap',
+      }}
+    >
+      {parts.map((p, i) => (
+        <React.Fragment key={p.key}>
+          {i > 0 && <span style={{ color: 'rgba(255,255,255,0.3)', userSelect: 'none' }}>・</span>}
+          {p.node}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+function PreviewTable({ title, items, icon: Icon, extraHeader, sortKeys = [] }) {
   return (
     <div style={{ flex: 1, minWidth: 320 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -341,30 +477,7 @@ function PreviewTable({ title, items, icon: Icon, extraHeader }) {
               <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.title}>
                 {item.title || '（無標題）'}
               </div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>
-                  {item.artist || item.channel_title || ''}
-                </span>
-                {item.album && (
-                  <span style={{ color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>
-                    · 💿 {item.album}
-                  </span>
-                )}
-                {item.track_number != null && (
-                  <span className="badge badge-info" style={{ fontSize: 10, padding: '1px 5px', height: 'auto', lineHeight: '12px' }}>
-                    #{item.track_number}
-                  </span>
-                )}
-                {item.release_date ? (
-                  <span style={{ color: 'rgba(255,255,255,0.45)' }} title={`發行日期：${item.release_date}`}>
-                    ({item.release_date})
-                  </span>
-                ) : item.year ? (
-                  <span style={{ color: 'rgba(255,255,255,0.35)' }}>
-                    ({item.year})
-                  </span>
-                ) : null}
-              </div>
+              <TrackSubtitle item={item} sortKeys={sortKeys} />
             </div>
             <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, flexShrink: 0 }}>
               {formatDuration(item.duration_seconds)}
@@ -383,6 +496,7 @@ function InteractivePreviewTable({
   onReorder,
   isManuallyAdjusted,
   onResetOrder,
+  sortKeys = [],
 }) {
   const [draggedIdx, setDraggedIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
@@ -506,30 +620,7 @@ function InteractivePreviewTable({
                 <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.title}>
                   {item.title || '（無標題）'}
                 </div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>
-                    {item.artist || item.channel_title || ''}
-                  </span>
-                  {item.album && (
-                    <span style={{ color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>
-                      · 💿 {item.album}
-                    </span>
-                  )}
-                  {item.track_number != null && (
-                    <span className="badge badge-info" style={{ fontSize: 10, padding: '1px 5px', height: 'auto', lineHeight: '12px' }}>
-                      #{item.track_number}
-                    </span>
-                  )}
-                  {item.release_date ? (
-                    <span style={{ color: 'rgba(255,255,255,0.45)' }} title={`發行日期：${item.release_date}`}>
-                      ({item.release_date})
-                    </span>
-                  ) : item.year ? (
-                    <span style={{ color: 'rgba(255,255,255,0.35)' }}>
-                      ({item.year})
-                    </span>
-                  ) : null}
-                </div>
+                <TrackSubtitle item={item} sortKeys={sortKeys} />
               </div>
               <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, flexShrink: 0 }}>
                 {formatDuration(item.duration_seconds)}
@@ -1338,11 +1429,13 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             <PreviewTable
               title="目前原始順序"
               items={originalItems}
+              sortKeys={activeSortKeys}
             />
             <InteractivePreviewTable
               title="即時排序結果"
               items={sortedItems}
               icon={ArrowUpDown}
+              sortKeys={activeSortKeys}
               onReorder={handleReorderTracks}
               isManuallyAdjusted={isManuallyAdjusted}
               onResetOrder={handleResetToRuleOrder}
