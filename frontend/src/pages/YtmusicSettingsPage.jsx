@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  AlertCircle,
   ArrowRight,
   ArrowUpDown,
   CheckCircle2,
@@ -14,6 +15,7 @@ import {
   Loader2,
   RefreshCw,
   Save,
+  ShieldCheck,
   Sliders,
   Sparkles,
   Trash2,
@@ -125,6 +127,8 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
 
   const [customTokenInput, setCustomTokenInput] = useState('');
   const [savingToken, setSavingToken] = useState(false);
+  const [validatingToken, setValidatingToken] = useState(false);
+  const [tokenValidationResult, setTokenValidationResult] = useState(null);
   const [showClearTokenConfirm, setShowClearTokenConfirm] = useState(false);
   const [showTokenUpdateForm, setShowTokenUpdateForm] = useState(false);
 
@@ -202,6 +206,31 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
     }
   };
 
+  const handleValidateCustomToken = async (tokenToTest = null) => {
+    setValidatingToken(true);
+    setTokenValidationResult(null);
+    try {
+      const res = await api.validateYtmusicCustomToken(tokenToTest);
+      setTokenValidationResult({
+        valid: true,
+        message: res.message || 'Token 驗證成功，可正常讀取 YouTube Music 音樂庫與播放清單。',
+        account_name: res.account_name,
+        channel_handle: res.channel_handle,
+        account_photo_url: res.account_photo_url,
+      });
+      toast.success(res.message || 'YouTube Music Token 驗證成功！');
+    } catch (err) {
+      const errMsg = err.message || 'Token 驗證失敗或 Cookie 已過期';
+      setTokenValidationResult({
+        valid: false,
+        message: errMsg,
+      });
+      toast.error(`Token 驗證失敗：${errMsg}`);
+    } finally {
+      setValidatingToken(false);
+    }
+  };
+
   const handleSaveCustomToken = async () => {
     const trimmed = customTokenInput.trim();
     if (!trimmed) {
@@ -213,6 +242,7 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
       await api.saveYtmusicCustomToken(trimmed);
       toast.success('YouTube Music 自訂 Token 已成功儲存！');
       setCustomTokenInput('');
+      setTokenValidationResult(null);
       await refreshAuthUser?.();
     } catch (err) {
       toast.error(`儲存 Token 失敗：${err.message || '格式不正確'}`);
@@ -227,6 +257,7 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
     try {
       await api.clearYtmusicCustomToken();
       toast.success('已清除 YouTube Music 自訂 Token');
+      setTokenValidationResult(null);
       await refreshAuthUser?.();
     } catch (err) {
       toast.error(`清除 Token 失敗：${err.message || '未知錯誤'}`);
@@ -292,6 +323,58 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
           )}
         </div>
 
+        {tokenValidationResult && (
+          <div
+            data-testid="token-validation-result"
+            style={{
+              marginTop: 12,
+              padding: '12px 16px',
+              borderRadius: 8,
+              border: tokenValidationResult.valid
+                ? '1px solid rgba(74, 222, 128, 0.3)'
+                : '1px solid rgba(239, 68, 68, 0.3)',
+              background: tokenValidationResult.valid
+                ? 'rgba(74, 222, 128, 0.08)'
+                : 'rgba(239, 68, 68, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {tokenValidationResult.valid ? (
+                <CheckCircle2 size={20} color="#4ade80" style={{ flexShrink: 0 }} />
+              ) : (
+                <AlertCircle size={20} color="#f87171" style={{ flexShrink: 0 }} />
+              )}
+              <div>
+                <div style={{ fontWeight: 600, color: tokenValidationResult.valid ? '#4ade80' : '#f87171', fontSize: '0.9rem' }}>
+                  {tokenValidationResult.valid ? 'Token 驗證成功' : 'Token 驗證失敗'}
+                </div>
+                <div style={{ fontSize: '0.825rem', color: 'rgba(255, 255, 255, 0.85)', marginTop: 2 }}>
+                  {tokenValidationResult.message}
+                </div>
+                {tokenValidationResult.account_name && (
+                  <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.65)', marginTop: 4 }}>
+                    認證帳號：<strong>{tokenValidationResult.account_name}</strong>
+                    {tokenValidationResult.channel_handle && ` (${tokenValidationResult.channel_handle})`}
+                  </div>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+              onClick={() => setTokenValidationResult(null)}
+            >
+              關閉
+            </button>
+          </div>
+        )}
+
         {hasCustomToken && (
           <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, background: 'rgba(255,255,255,0.03)', padding: '12px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)' }}>
             <div>
@@ -302,7 +385,17 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
                 系統將優先使用此 Token 進行 YouTube Music 播放清單與曲目操作。若 Cookie 逾期失效，可隨時重新貼上更新。
               </p>
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => handleValidateCustomToken()}
+                disabled={validatingToken || savingToken}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                {validatingToken ? <Loader2 size={14} className="spin" /> : <ShieldCheck size={14} />}
+                檢查目前 Token 有效性
+              </button>
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -313,9 +406,9 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                style={{ color: 'var(--color-danger, #ef4444)', display: 'flex', alignItems: 'center', gap: 4 }}
+                style={{ color: 'var(--color-danger, #ef4444)', display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 onClick={() => setShowClearTokenConfirm(true)}
-                disabled={savingToken}
+                disabled={savingToken || validatingToken}
               >
                 <Trash2 size={14} /> 清除自訂 Token
               </button>
@@ -431,19 +524,29 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
                 value={customTokenInput}
                 onChange={(e) => setCustomTokenInput(e.target.value)}
                 style={{ fontFamily: 'monospace', fontSize: '0.85rem', width: '100%', lineHeight: 1.4 }}
-                disabled={savingToken}
+                disabled={savingToken || validatingToken}
               />
             </div>
-            <div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
                 onClick={handleSaveCustomToken}
-                disabled={savingToken || !customTokenInput.trim()}
+                disabled={savingToken || validatingToken || !customTokenInput.trim()}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
                 {savingToken ? <Loader2 size={14} className="spin" /> : <Key size={14} />}
                 儲存自訂 Token
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => handleValidateCustomToken(customTokenInput.trim())}
+                disabled={savingToken || validatingToken || !customTokenInput.trim()}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                {validatingToken ? <Loader2 size={14} className="spin" /> : <ShieldCheck size={14} />}
+                檢查此 Token 是否有效
               </button>
             </div>
           </div>

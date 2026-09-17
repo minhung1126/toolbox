@@ -235,3 +235,88 @@ def test_ytmusic_decoupled_credentials(tmp_path: Path, monkeypatch):
     re_fallback = google_auth.get_ytmusic_credentials(session_id=session_id)
     assert re_fallback is not None
     assert re_fallback.token == "yt-primary-token"
+
+
+def test_validate_ytmusic_custom_token_endpoint(tmp_path: Path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from backend.app import main
+    from backend.app.api import auth as auth_api
+    from backend.app.core.credential_store import CredentialStore
+    from backend.app.core.session_store import SessionStore
+
+    cred_store = CredentialStore(tmp_path / "creds.json")
+    sess_store = SessionStore(tmp_path / "sess.json")
+
+    monkeypatch.setattr(auth_api, "credential_store", cred_store)
+    monkeypatch.setattr(dependencies, "credential_store", cred_store)
+    monkeypatch.setattr(auth_api, "session_store", sess_store)
+    monkeypatch.setattr(dependencies, "session_store", sess_store)
+
+    sub = "sub-validate-token-test"
+    auth_sess = dependencies.AuthenticatedSession(
+        session_id="test-sid",
+        session_data={"user": {"sub": sub, "email": "test@example.com"}},
+        user={"sub": sub, "email": "test@example.com"},
+        subject=sub,
+        email="test@example.com",
+        credentials=None,
+    )
+    monkeypatch.setattr(auth_api, "get_authenticated_session", lambda req: auth_sess)
+    monkeypatch.setattr(dependencies, "get_authenticated_session", lambda req: auth_sess)
+
+    # Mock validate_ytmusic_custom_token in auth_api / ytmusic_service
+    monkeypatch.setattr(
+        "backend.app.services.ytmusic_service.validate_ytmusic_custom_token",
+        lambda token, **kwargs: (
+            {
+                "valid": True,
+                "account_name": "API Tester",
+                "channel_handle": "@tester",
+                "account_photo_url": None,
+                "message": "Token 有效！",
+            }
+            if token.startswith("valid")
+            else (_ for _ in ()).throw(ValueError("Token 驗證失敗或 Cookie 已過期"))
+        ),
+    )
+
+    client = TestClient(main.app)
+
+    # 1. Empty token without saved token -> 400 empty_token
+    resp = client.post(
+        "/api/v1/auth/ytmusic/custom-token/validate", json={}, headers={"Origin": "http://localhost:3000"}
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "empty_token"
+
+    # 2. Valid token passed in payload -> 200 success
+    resp = client.post(
+        "/api/v1/auth/ytmusic/custom-token/validate",
+        json={"token": "valid-token-string"},
+        headers={"Origin": "http://localhost:3000"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "success"
+    assert data["valid"] is True
+    assert data["account_name"] == "API Tester"
+
+    # 3. Fallback to stored token when payload token is empty
+    cred_store.save_ytmusic_custom_token("valid-saved-token", owner_sub=sub)
+    resp = client.post(
+        "/api/v1/auth/ytmusic/custom-token/validate",
+        json={},
+        headers={"Origin": "http://localhost:3000"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["valid"] is True
+
+    # 4. Invalid token -> 400 token_invalid
+    resp = client.post(
+        "/api/v1/auth/ytmusic/custom-token/validate",
+        json={"token": "invalid-token"},
+        headers={"Origin": "http://localhost:3000"},
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "token_invalid"

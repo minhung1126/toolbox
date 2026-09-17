@@ -11,6 +11,9 @@ vi.mock('../services/api', () => ({
     disconnectYtmusic: vi.fn(),
     updateWorkState: vi.fn((key, value) => Promise.resolve({ state: { [key]: value } })),
     getWorkState: vi.fn(() => Promise.resolve({ state: {} })),
+    saveYtmusicCustomToken: vi.fn(),
+    clearYtmusicCustomToken: vi.fn(),
+    validateYtmusicCustomToken: vi.fn(),
   },
 }));
 
@@ -226,5 +229,86 @@ describe('YtmusicSettingsPage', () => {
     fireEvent.click(connectBtn);
 
     await waitFor(() => expect(api.getYtmusicAuthUrl).toHaveBeenCalledTimes(1));
+  });
+
+  it('validates currently saved custom token and displays success result', async () => {
+    api.validateYtmusicCustomToken.mockResolvedValue({
+      status: 'success',
+      valid: true,
+      account_name: 'Test Music User',
+      channel_handle: '@testmusic',
+      message: 'Token 有效！已成功認證 YouTube Music 帳號：Test Music User (@testmusic)',
+    });
+
+    render(
+      <MemoryRouter>
+        <YtmusicSettingsPage
+          authUser={{
+            email: 'admin@example.com',
+            authorizations: {
+              ytmusic: {
+                connected: true,
+                has_custom_token: true,
+              },
+            },
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    const validateBtn = screen.getByRole('button', { name: /檢查目前 Token 有效性/ });
+    expect(validateBtn).toBeInTheDocument();
+    fireEvent.click(validateBtn);
+
+    await waitFor(() => {
+      expect(api.validateYtmusicCustomToken).toHaveBeenCalledWith(null);
+    });
+
+    expect(await screen.findByText('Token 驗證成功')).toBeInTheDocument();
+    expect(screen.getAllByText(/Test Music User/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/@testmusic/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('validates input token and displays error when validation fails', async () => {
+    api.validateYtmusicCustomToken.mockRejectedValue(new Error('Token 驗證失敗或 Cookie 已過期：SAPISID 已失效'));
+
+    render(
+      <MemoryRouter>
+        <YtmusicSettingsPage
+          authUser={{
+            email: 'admin@example.com',
+            authorizations: {
+              ytmusic: {
+                connected: false,
+                has_custom_token: false,
+              },
+            },
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    const input = screen.getByPlaceholderText(/直接貼上右鍵/);
+    const validateBtn = screen.getByRole('button', { name: /檢查此 Token 是否有效/ });
+
+    // Initially disabled when empty
+    expect(validateBtn).toBeDisabled();
+
+    fireEvent.change(input, { target: { value: 'curl "https://music.youtube.com" -H "cookie: invalid"' } });
+    expect(validateBtn).not.toBeDisabled();
+
+    fireEvent.click(validateBtn);
+
+    await waitFor(() => {
+      expect(api.validateYtmusicCustomToken).toHaveBeenCalledWith('curl "https://music.youtube.com" -H "cookie: invalid"');
+    });
+
+    expect(await screen.findByText('Token 驗證失敗')).toBeInTheDocument();
+    expect(screen.getByText(/SAPISID 已失效/)).toBeInTheDocument();
+
+    // Dismiss validation result
+    const closeBtn = screen.getByRole('button', { name: '關閉' });
+    fireEvent.click(closeBtn);
+    expect(screen.queryByText('Token 驗證失敗')).not.toBeInTheDocument();
   });
 });

@@ -376,4 +376,8 @@ export const api = {
   clearYtmusicCustomToken: () => request('/auth/ytmusic/custom-token', {
     method: 'DELETE',
   }),
+  validateYtmusicCustomToken: (token = null) => request('/auth/ytmusic/custom-token/validate', {
+    method: 'POST',
+    body: JSON.stringify(token ? { token } : {}),
+  }),
 };

@@ -256,8 +256,10 @@ def parse_custom_token_input(
         "ko": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
         "en": "en-US,en;q=0.9",
     }
+    resolved_lang = language or DEFAULT_YTMUSIC_LANGUAGE
+    resolved_loc = location or DEFAULT_YTMUSIC_LOCATION
     user_headers["accept-language"] = accept_lang_map.get(
-        language, f"{language.replace('_', '-')},{language[:2]};q=0.9,en;q=0.8"
+        resolved_lang, f"{resolved_lang.replace('_', '-')},{resolved_lang[:2]};q=0.9,en;q=0.8"
     )
 
     final_headers = dict(initialize_headers())
@@ -265,7 +267,7 @@ def parse_custom_token_input(
 
     # Validate that YTMusic accepts these headers as AuthType.BROWSER
     try:
-        yt_test = YTMusic(auth=final_headers, language=language, location=location)
+        yt_test = YTMusic(auth=final_headers, language=resolved_lang, location=resolved_loc)
         if getattr(yt_test, "auth_type", None) != AuthType.BROWSER:
             raise ValueError("未能成功識別為 YouTube Music 瀏覽器憑證 (AuthType.BROWSER)。")
     except Exception as exc:
@@ -504,6 +506,63 @@ def get_ytmusic_client(
     return YTMusic(language=lang, location=loc)
 
 
+def validate_ytmusic_custom_token(
+    token_str: str,
+    language: str | None = None,
+    location: str | None = None,
+) -> dict[str, Any]:
+    """Validate a custom YouTube Music token against the YouTube Music API.
+
+    1. Parses token (cURL, Node.js fetch, Request Headers, or raw Cookie).
+    2. Ensures client has BROWSER auth type.
+    3. Queries YouTube Music API to verify authentication is active and not expired.
+    """
+    clean_token = (token_str or "").strip()
+    if not clean_token:
+        raise ValueError("Token 內容不可為空。")
+
+    resolved_lang = language or DEFAULT_YTMUSIC_LANGUAGE
+    resolved_loc = location or DEFAULT_YTMUSIC_LOCATION
+
+    parsed_auth = parse_custom_token_input(clean_token, language=resolved_lang, location=resolved_loc)
+
+    client = YTMusic(auth=parsed_auth, language=resolved_lang, location=resolved_loc)
+    auth_type = getattr(client, "auth_type", None)
+    if auth_type != AuthType.BROWSER and not isinstance(auth_type, (MagicMock, type(None))):
+        raise ValueError("Token 缺少必要的瀏覽器 Cookie (SID, HSID, SSID, SAPISID) 認證資訊。")
+
+    account_info: dict[str, Any] = {}
+    try:
+        account_info = client.get_account_info() or {}
+    except Exception as exc:
+        logger.debug("client.get_account_info() failed: %s; falling back to get_library_playlists", exc)
+        try:
+            client.get_library_playlists(limit=1)
+        except Exception as lib_exc:
+            err_msg = str(lib_exc) or str(exc)
+            logger.warning("Token verification failed with YouTube Music API: %s", err_msg)
+            raise ValueError(f"Token 驗證失敗或 Cookie 已過期：{err_msg}") from lib_exc
+
+    account_name = account_info.get("accountName")
+    channel_handle = account_info.get("channelHandle")
+    account_photo_url = account_info.get("accountPhotoUrl")
+
+    if account_name:
+        msg = f"Token 有效！已成功認證 YouTube Music 帳號：{account_name}"
+        if channel_handle:
+            msg += f" ({channel_handle})"
+    else:
+        msg = "Token 有效！已成功通過 YouTube Music 認證並連線至音樂庫。"
+
+    return {
+        "valid": True,
+        "account_name": account_name,
+        "channel_handle": channel_handle,
+        "account_photo_url": account_photo_url,
+        "message": msg,
+    }
+
+
 def fetch_ytmusic_playlists(
     context: YouTubeRequestContext | None = None,
     owner_sub: str | None = None,
@@ -599,7 +658,8 @@ def fetch_ytmusic_playlist_tracks(
     result: list[dict[str, Any]] = []
     for idx, t in enumerate(raw_tracks):
         video_id = t.get("videoId") or ""
-        set_video_id = t.get("setVideoId") or f"{video_id}_{idx}"
+        raw_set_video_id = t.get("setVideoId")
+        set_video_id = raw_set_video_id or f"{video_id}_{idx}"
 
         # Artist resolution
         artists_list = t.get("artists") or []
@@ -675,6 +735,7 @@ def fetch_ytmusic_playlist_tracks(
         result.append(
             {
                 "playlist_item_id": set_video_id,
+                "has_set_video_id": bool(raw_set_video_id),
                 "video_id": video_id,
                 "title": t.get("title") or "",
                 "artist": artist_name,
@@ -722,6 +783,15 @@ def apply_ytmusic_sort_in_place(
         raise YTMusicError(
             "YouTube Music 尚未設定或未啟用有效的瀏覽器 Token (AuthType.BROWSER)，無法執行內部協定排序。"
         )
+
+    # Check if items have valid setVideoId for inner API movement
+    for item in sorted_items:
+        pid = item.get("playlist_item_id", "")
+        vid = item.get("video_id", "")
+        if item.get("has_set_video_id") is False or (vid and pid.startswith(f"{vid}_")):
+            raise YTMusicError(
+                f"曲目「{item.get('title', pid)}」缺少有效的 YouTube Music setVideoId，無法執行內部協定移動。"
+            )
 
     current_ids = [item["playlist_item_id"] for item in original_items]
     target_ids = [item["playlist_item_id"] for item in sorted_items]

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from backend.app.services.playlist_sort_service import (
     _parse_iso8601_duration,
+    apply_sort_to_playlist,
     build_sort_preview,
     normalize_artist_name,
     sort_items,
@@ -456,3 +459,192 @@ def test_sort_artist_normalizes_topic_channels_together():
         "2024 Single (from main channel)",
         "2024 Album Track 1 (from Topic channel)",
     ]
+
+
+def test_apply_sort_to_playlist_resolves_synthetic_ids_via_data_api(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from ytmusicapi.exceptions import YTMusicError
+
+    import backend.app.services.playlist_sort_service as pss
+    from backend.app.core.youtube_context import YouTubeRequestContext
+
+    context = YouTubeRequestContext(
+        slot="primary",
+        credentials=object(),
+        quota_limiter=SimpleNamespace(),
+        owner_sub="test-user",
+    )
+
+    # YTMusic in-place sort fails (e.g. no browser token)
+    monkeypatch.setattr(
+        pss,
+        "apply_ytmusic_sort_in_place",
+        MagicMock(side_effect=YTMusicError("No browser token")),
+    )
+
+    # Mock Data API fetch_playlist_items returning real Data API IDs
+    mock_data_api_items = [
+        {
+            "id": "REAL_ID_BLnk",
+            "snippet": {
+                "resourceId": {"videoId": "BLnkLdzlCx4"},
+                "position": 0,
+            },
+        },
+        {
+            "id": "REAL_ID_rgNd",
+            "snippet": {
+                "resourceId": {"videoId": "rgNdeflYdYw"},
+                "position": 1,
+            },
+        },
+    ]
+    monkeypatch.setattr(pss, "fetch_playlist_items", lambda _ctx, _pid: mock_data_api_items)
+
+    # Mock YouTube Service and playlistItems().update()
+    mock_service = MagicMock()
+    recorded_updates = []
+
+    def mock_update(part, body):
+        recorded_updates.append(body)
+        mock_req = MagicMock()
+        mock_req.execute.return_value = body
+        return mock_req
+
+    mock_service.playlistItems().update.side_effect = mock_update
+    monkeypatch.setattr(pss, "get_youtube_service", lambda _ctx: mock_service)
+    monkeypatch.setattr(pss, "_execute_with_quota", lambda req, _op, _ctx: req.execute())
+
+    original_items = [
+        {"playlist_item_id": "BLnkLdzlCx4_80", "video_id": "BLnkLdzlCx4", "position": 0},
+        {"playlist_item_id": "rgNdeflYdYw_82", "video_id": "rgNdeflYdYw", "position": 1},
+    ]
+    sorted_items = [
+        {
+            "playlist_item_id": "rgNdeflYdYw_82",
+            "video_id": "rgNdeflYdYw",
+            "original_position": 1,
+            "new_position": 0,
+            "status": "moved",
+        },
+        {
+            "playlist_item_id": "BLnkLdzlCx4_80",
+            "video_id": "BLnkLdzlCx4",
+            "original_position": 0,
+            "new_position": 1,
+            "status": "moved",
+        },
+    ]
+
+    res = apply_sort_to_playlist(
+        context=context,
+        playlist_id="PL_TEST",
+        sorted_items=sorted_items,
+        original_items=original_items,
+        mode="in_place",
+        use_youtube_api=False,
+    )
+
+    assert res["succeeded"] == 2
+    assert res["failed"] == 0
+    assert len(recorded_updates) == 2
+
+    # Verify that synthetic IDs (rgNdeflYdYw_82, BLnkLdzlCx4_80) were remapped to real Data API IDs
+    assert recorded_updates[0]["id"] == "REAL_ID_rgNd"
+    assert recorded_updates[0]["snippet"]["position"] == 0
+    assert recorded_updates[0]["snippet"]["resourceId"]["videoId"] == "rgNdeflYdYw"
+
+    assert recorded_updates[1]["id"] == "REAL_ID_BLnk"
+    assert recorded_updates[1]["snippet"]["position"] == 1
+    assert recorded_updates[1]["snippet"]["resourceId"]["videoId"] == "BLnkLdzlCx4"
+
+
+def test_apply_sort_to_playlist_new_playlist_via_data_api(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import backend.app.services.playlist_sort_service as pss
+    from backend.app.core.youtube_context import YouTubeRequestContext
+
+    context = YouTubeRequestContext(
+        slot="primary",
+        credentials=object(),
+        quota_limiter=SimpleNamespace(),
+        owner_sub="test-user",
+    )
+
+    mock_service = MagicMock()
+    mock_pl_req = MagicMock()
+    mock_pl_req.execute.return_value = {"id": "NEW_PL_123"}
+    mock_service.playlists().insert.return_value = mock_pl_req
+
+    added_videos = []
+
+    def mock_item_insert(part, body):
+        added_videos.append(body["snippet"]["resourceId"]["videoId"])
+        mock_item_req = MagicMock()
+        mock_item_req.execute.return_value = {"id": "NEW_ITEM_ID"}
+        return mock_item_req
+
+    mock_service.playlistItems().insert.side_effect = mock_item_insert
+    monkeypatch.setattr(pss, "get_youtube_service", lambda _ctx: mock_service)
+    monkeypatch.setattr(pss, "_execute_with_quota", lambda req, _op, _ctx: req.execute())
+
+    sorted_items = [
+        {"video_id": "v1", "playlist_item_id": "v1_0"},
+        {"video_id": "v2", "playlist_item_id": "v2_1"},
+    ]
+
+    res = apply_sort_to_playlist(
+        context=context,
+        playlist_id="PL_ORIG",
+        sorted_items=sorted_items,
+        mode="new_playlist",
+        new_playlist_title="My New Sorted Playlist",
+        use_youtube_api=True,
+    )
+
+    assert res["mode"] == "new_playlist"
+    assert res["new_playlist_id"] == "NEW_PL_123"
+    assert res["succeeded"] == 2
+    assert added_videos == ["v1", "v2"]
+
+
+@pytest.mark.anyio
+async def test_preview_sort_quota_estimate_no_custom_token(monkeypatch):
+    from types import SimpleNamespace
+
+    import backend.app.api.playlist_sort as ps_api
+    from backend.app.api.playlist_sort import SortKeyInput, SortPreviewInput, preview_sort
+    from backend.app.core.credential_store import credential_store
+    from backend.app.core.youtube_context import YouTubeRequestContext
+
+    context = YouTubeRequestContext(
+        slot="primary",
+        credentials=object(),
+        quota_limiter=SimpleNamespace(),
+        owner_sub="user-no-token",
+    )
+
+    monkeypatch.setattr(credential_store, "get_ytmusic_custom_token", lambda sub: None)
+
+    mock_items = [
+        {"playlist_item_id": "v1_0", "video_id": "v1", "title": "B", "position": 0, "has_set_video_id": False},
+        {"playlist_item_id": "v2_1", "video_id": "v2", "title": "A", "position": 1, "has_set_video_id": False},
+    ]
+    monkeypatch.setattr(ps_api, "fetch_playlist_items_for_sort", lambda *args, **kwargs: mock_items)
+
+    inp = SortPreviewInput(
+        playlist_id="PL_123",
+        sort_keys=[SortKeyInput(field="title", direction="asc")],
+        use_youtube_api=False,
+    )
+
+    res = await preview_sort(inp, context=context)
+    assert res["quota_estimate"]["engine"] == "youtube_data_api_v3"
+    assert res["quota_estimate"]["units_per_move"] == 50
+    assert res["quota_estimate"]["moved_count"] == 2
+    assert res["quota_estimate"]["total_units"] == 100
+    assert "未設定 YouTube Music 瀏覽器 Token" in res["quota_estimate"]["message"]

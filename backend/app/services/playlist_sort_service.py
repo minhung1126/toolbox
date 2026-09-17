@@ -171,6 +171,7 @@ def fetch_playlist_items_for_sort(
             result.append(
                 {
                     "playlist_item_id": item["id"],
+                    "has_set_video_id": False,
                     "video_id": video_id,
                     "title": snippet["title"],
                     "artist": norm_channel,
@@ -414,8 +415,102 @@ def apply_sort_to_playlist(
         except Exception as exc:
             logger.warning("apply_sort_to_playlist using ytmusic_service failed: %s; falling back to Data API", exc)
 
-    # Legacy Google YouTube Data API v3 update
+    # Google YouTube Data API v3 update
     service = get_youtube_service(context)
+
+    if mode == "new_playlist":
+        safe_title = new_playlist_title or f"[已排序] {playlist_id}"
+        req = service.playlists().insert(
+            part="snippet,status",
+            body={
+                "snippet": {
+                    "title": safe_title,
+                    "description": "透過 Toolbox 智慧排序建立",
+                },
+                "status": {
+                    "privacyStatus": "private",
+                },
+            },
+        )
+        new_pl = _execute_with_quota(req, "playlists.insert", context)
+        new_playlist_id = new_pl.get("id", "")
+
+        succeeded = 0
+        failed = 0
+        failed_items = []
+        quota_used = 50
+
+        for item in sorted_items:
+            vid = item.get("video_id")
+            if not vid:
+                continue
+            try:
+                add_req = service.playlistItems().insert(
+                    part="snippet",
+                    body={
+                        "snippet": {
+                            "playlistId": new_playlist_id,
+                            "resourceId": {"kind": "youtube#video", "videoId": vid},
+                        },
+                    },
+                )
+                _execute_with_quota(add_req, "playlistItems.insert", context)
+                succeeded += 1
+                quota_used += 50
+            except YouTubeQuotaUnavailable:
+                logger.warning("YouTube quota exceeded while creating new sorted playlist %s", new_playlist_id)
+                raise
+            except Exception as e:
+                logger.error("Failed to add video %s to new playlist %s: %s", vid, new_playlist_id, e)
+                failed += 1
+                failed_items.append({"video_id": vid, "error": str(e)})
+
+        return {
+            "operation": "playlist_sort",
+            "mode": "new_playlist",
+            "new_playlist_id": new_playlist_id,
+            "new_playlist_url": f"https://www.youtube.com/playlist?list={new_playlist_id}",
+            "total": len(sorted_items),
+            "moved": len(sorted_items),
+            "succeeded": succeeded,
+            "failed": failed,
+            "failed_items": failed_items,
+            "quota_used": quota_used,
+        }
+
+    # Mode: in_place using Google YouTube Data API v3
+    raw_playlist_items = fetch_playlist_items(context, playlist_id)
+    existing_data_ids = {r["id"] for r in raw_playlist_items if isinstance(r, dict) and "id" in r}
+
+    # Resolve Data API playlist_item_ids if sorted_items contain synthetic or YTMusic IDs
+    all_valid_data_ids = existing_data_ids and all(
+        item.get("playlist_item_id") in existing_data_ids for item in sorted_items
+    )
+    id_map: dict[str, str] = {}
+
+    if not all_valid_data_ids and raw_playlist_items:
+        orig_list = original_items or sorted(
+            [it for it in sorted_items], key=lambda x: x.get("original_position", x.get("position", 0))
+        )
+        data_items_by_vid: dict[str, list[dict[str, Any]]] = {}
+        for r in raw_playlist_items:
+            vid = r.get("snippet", {}).get("resourceId", {}).get("videoId")
+            if vid:
+                data_items_by_vid.setdefault(vid, []).append(r)
+
+        for orig in orig_list:
+            orig_id = orig.get("playlist_item_id")
+            vid = orig.get("video_id")
+            if not orig_id:
+                continue
+            if vid and vid in data_items_by_vid and data_items_by_vid[vid]:
+                matched = data_items_by_vid[vid].pop(0)
+                id_map[orig_id] = matched["id"]
+            else:
+                orig_pos = orig.get("original_position", orig.get("position"))
+                if orig_pos is not None and 0 <= orig_pos < len(raw_playlist_items):
+                    id_map[orig_id] = raw_playlist_items[orig_pos]["id"]
+
     moved_count = 0
     succeeded = 0
     failed = 0
@@ -427,15 +522,19 @@ def apply_sort_to_playlist(
             "original_position", item.get("position")
         ):
             moved_count += 1
+            raw_id = item.get("playlist_item_id")
+            target_id = id_map.get(raw_id, raw_id)
+            target_pos = item.get("new_position", item.get("position"))
+
             try:
                 request = service.playlistItems().update(
                     part="snippet",
                     body={
-                        "id": item["playlist_item_id"],
+                        "id": target_id,
                         "snippet": {
                             "playlistId": playlist_id,
                             "resourceId": {"kind": "youtube#video", "videoId": item["video_id"]},
-                            "position": item.get("new_position", item.get("position")),
+                            "position": target_pos,
                         },
                     },
                 )
@@ -444,13 +543,21 @@ def apply_sort_to_playlist(
                 quota_used += 50
             except YouTubeQuotaUnavailable:
                 logger.warning(
-                    "YouTube quota exceeded while sorting playlist %s at item %s", playlist_id, item["playlist_item_id"]
+                    "YouTube quota exceeded while sorting playlist %s at item %s (resolved id: %s)",
+                    playlist_id,
+                    raw_id,
+                    target_id,
                 )
                 raise
             except Exception as e:
-                logger.error("Failed to update playlist item %s: %s", item["playlist_item_id"], e)
+                logger.error(
+                    "Failed to update playlist item %s (resolved id: %s): %s",
+                    raw_id,
+                    target_id,
+                    e,
+                )
                 failed += 1
-                failed_items.append({"playlist_item_id": item["playlist_item_id"], "error": str(e)})
+                failed_items.append({"playlist_item_id": raw_id, "resolved_id": target_id, "error": str(e)})
 
     return {
         "operation": "playlist_sort",

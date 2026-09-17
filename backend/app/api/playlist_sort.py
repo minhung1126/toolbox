@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from backend.app.core.credential_store import credential_store
 from backend.app.core.dependencies import require_ytmusic_context
 from backend.app.core.error_contract import http_error
 from backend.app.core.preview import (
@@ -120,9 +121,24 @@ async def preview_sort(
             playlist=snapshot,
         )
 
-        is_ytm = not input_data.use_youtube_api
+        has_custom_token = bool(credential_store.get_ytmusic_custom_token(context.owner_sub))
+        has_valid_set_video_ids = all(item.get("has_set_video_id", True) for item in original_items)
+        can_use_ytm = not input_data.use_youtube_api and has_custom_token and has_valid_set_video_ids
+
+        is_ytm = can_use_ytm
         units_per_move = 0 if is_ytm else 50
         total_units = 0 if is_ytm else preview["moved_count"] * 50
+
+        if is_ytm:
+            quota_message = "使用 YouTube Music Token 模式更新，消耗 0 Google API 配額。"
+        elif not has_custom_token:
+            quota_message = "未設定 YouTube Music 瀏覽器 Token，將使用 Google YouTube Data API 執行更新。"
+        elif not has_valid_set_video_ids:
+            quota_message = (
+                "播放清單包含無法由 YouTube Music 內部協定識別的項目，將使用 Google YouTube Data API 執行更新。"
+            )
+        else:
+            quota_message = "使用 Google YouTube Data API 更新。"
 
         return {
             "preview": preview,
@@ -133,11 +149,7 @@ async def preview_sort(
                 "units_per_move": units_per_move,
                 "total_units": total_units,
                 "engine": "ytmusic_innertube" if is_ytm else "youtube_data_api_v3",
-                "message": (
-                    "使用 YouTube Music Token 模式更新，消耗 0 Google API 配額。"
-                    if is_ytm
-                    else "使用 Google YouTube Data API 更新。"
-                ),
+                "message": quota_message,
             },
         }
     except YouTubeQuotaUnavailable as exc:

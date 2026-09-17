@@ -338,6 +338,30 @@ def clear_ytmusic_custom_token(request: Request):
     return {"status": "success", "message": "YouTube Music 自訂 Token 已清除。"}
 
 
+class YtmusicTokenValidateInput(BaseModel):
+    token: Optional[str] = None
+
+
+@router.post("/ytmusic/custom-token/validate")
+def validate_ytmusic_token(payload: YtmusicTokenValidateInput, request: Request):
+    """Validate a custom YouTube Music token (either provided in payload or currently stored)."""
+    from backend.app.services.ytmusic_service import validate_ytmusic_custom_token
+
+    auth_session = get_authenticated_session(request)
+    token_str = (payload.token or "").strip()
+    if not token_str:
+        token_str = credential_store.get_ytmusic_custom_token(auth_session.subject) or ""
+
+    if not token_str:
+        raise http_error(400, "empty_token", "請輸入 Token 內容或確認已儲存自訂 Token。")
+
+    try:
+        result = validate_ytmusic_custom_token(token_str)
+        return {"status": "success", **result}
+    except Exception as exc:
+        raise http_error(400, "token_invalid", str(exc)) from exc
+
+
 @router.get("/youtube/{slot}/url")
 def get_youtube_slot_auth_url(slot: str, request: Request, response: Response):
     """Generate a separate OAuth URL for one configured YouTube slot."""

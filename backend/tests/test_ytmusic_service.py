@@ -155,6 +155,26 @@ def test_apply_ytmusic_sort_in_place(mock_get_client):
 
 
 @patch("backend.app.services.ytmusic_service.get_ytmusic_client")
+def test_apply_ytmusic_sort_in_place_rejects_synthetic_id(mock_get_client):
+    from ytmusicapi.exceptions import YTMusicError
+
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+
+    original = [
+        {"playlist_item_id": "vid_b_0", "video_id": "vid_b", "title": "B", "has_set_video_id": False},
+        {"playlist_item_id": "vid_a_1", "video_id": "vid_a", "title": "A", "has_set_video_id": False},
+    ]
+    sorted_items = [
+        {"playlist_item_id": "vid_a_1", "video_id": "vid_a", "title": "A", "has_set_video_id": False},
+        {"playlist_item_id": "vid_b_0", "video_id": "vid_b", "title": "B", "has_set_video_id": False},
+    ]
+
+    with pytest.raises(YTMusicError, match="缺少有效的 YouTube Music setVideoId"):
+        apply_ytmusic_sort_in_place("PL_TEST", sorted_items, original)
+
+
+@patch("backend.app.services.ytmusic_service.get_ytmusic_client")
 def test_create_sorted_ytmusic_playlist(mock_get_client):
     mock_client = MagicMock()
     mock_client.create_playlist.return_value = "PL_NEW_123"
@@ -394,3 +414,77 @@ def test_parse_custom_token_input_accept_language_header():
 
     parsed_ja = parse_custom_token_input(cookie_input, language="ja", location="JP")
     assert "ja-JP" in parsed_ja["accept-language"]
+
+
+def test_validate_ytmusic_custom_token_success_with_account_info(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from ytmusicapi.auth.types import AuthType
+
+    from backend.app.services.ytmusic_service import validate_ytmusic_custom_token
+
+    mock_client = MagicMock()
+    mock_client.auth_type = AuthType.BROWSER
+    mock_client.get_account_info.return_value = {
+        "accountName": "VIP Music Listener",
+        "channelHandle": "@viplistener",
+        "accountPhotoUrl": "https://example.com/avatar.jpg",
+    }
+    monkeypatch.setattr("backend.app.services.ytmusic_service.YTMusic", lambda **kwargs: mock_client)
+
+    token = "curl 'https://music.youtube.com' -H 'cookie: SID=s1; HSID=h1; SAPISID=sp1'"
+    result = validate_ytmusic_custom_token(token)
+
+    assert result["valid"] is True
+    assert result["account_name"] == "VIP Music Listener"
+    assert result["channel_handle"] == "@viplistener"
+    assert "VIP Music Listener" in result["message"]
+
+
+def test_validate_ytmusic_custom_token_fallback_playlists(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from ytmusicapi.auth.types import AuthType
+
+    from backend.app.services.ytmusic_service import validate_ytmusic_custom_token
+
+    mock_client = MagicMock()
+    mock_client.auth_type = AuthType.BROWSER
+    mock_client.get_account_info.side_effect = Exception("Account menu unavailable")
+    mock_client.get_library_playlists.return_value = [{"title": "Playlist A"}]
+    monkeypatch.setattr("backend.app.services.ytmusic_service.YTMusic", lambda **kwargs: mock_client)
+
+    token = "SID=s1; HSID=h1; SAPISID=sp1"
+    result = validate_ytmusic_custom_token(token)
+
+    assert result["valid"] is True
+    assert result["account_name"] is None
+    assert "已成功通過 YouTube Music 認證" in result["message"]
+
+
+def test_validate_ytmusic_custom_token_empty_error():
+    import pytest
+
+    from backend.app.services.ytmusic_service import validate_ytmusic_custom_token
+
+    with pytest.raises(ValueError, match="Token 內容不可為空"):
+        validate_ytmusic_custom_token("   ")
+
+
+def test_validate_ytmusic_custom_token_api_failure(monkeypatch):
+    from unittest.mock import MagicMock
+
+    import pytest
+    from ytmusicapi.auth.types import AuthType
+
+    from backend.app.services.ytmusic_service import validate_ytmusic_custom_token
+
+    mock_client = MagicMock()
+    mock_client.auth_type = AuthType.BROWSER
+    mock_client.get_account_info.side_effect = Exception("HTTP 401 Unauthorized")
+    mock_client.get_library_playlists.side_effect = Exception("HTTP 401 Unauthorized")
+    monkeypatch.setattr("backend.app.services.ytmusic_service.YTMusic", lambda **kwargs: mock_client)
+
+    token = "SID=expired; HSID=expired; SAPISID=expired"
+    with pytest.raises(ValueError, match="Token 驗證失敗或 Cookie 已過期"):
+        validate_ytmusic_custom_token(token)
