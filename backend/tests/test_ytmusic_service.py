@@ -215,6 +215,20 @@ def test_parse_custom_token_input_fetch():
     assert parsed.get("x-goog-authuser") == "0"
 
 
+def test_parse_custom_token_input_fetch_missing_cookie_explains_chrome_behavior():
+    fetch_without_cookie = """fetch("https://music.youtube.com/youtubei/v1/browse", {
+  "headers": {
+    "accept": "*/*",
+    "authorization": "SAPISIDHASH 1699999999_abcdef"
+  },
+  "credentials": "include"
+});"""
+    with pytest.raises(ValueError) as exc_info:
+        parse_custom_token_input(fetch_without_cookie)
+    assert "缺少 Cookie" in str(exc_info.value)
+    assert "Copy as cURL" in str(exc_info.value)
+
+
 def test_parse_custom_token_input_raw_headers():
     raw_headers = """
 Accept: */*

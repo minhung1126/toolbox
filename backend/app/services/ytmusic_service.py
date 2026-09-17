@@ -114,6 +114,15 @@ def parse_custom_token_input(token_raw: str) -> dict[str, Any]:
                 user_headers["cookie"] = raw
 
     if "cookie" not in user_headers or not user_headers["cookie"].strip():
+        if "fetch(" in raw.lower() or "credentials" in raw.lower():
+            raise ValueError(
+                "您貼上的 fetch 代碼中缺少 Cookie！"
+                "這是因為 Chrome/Edge 瀏覽器的「Copy as fetch」是給網頁前端執行的，根據瀏覽器安全規範會刻意移除 Cookie 標頭（改用 credentials: 'include'），導致後端伺服器缺少登入憑證。\n\n"
+                "【請改用以下方式（推薦一鍵完成）】：\n"
+                "👉 在該請求按右鍵 ➔ Copy (複製) ➔ 選擇【Copy as cURL (bash)】或【Copy as cURL (cmd)】（最推薦，100% 完整附帶 Cookie）\n"
+                "👉 或選擇【Copy as Node.js fetch】（若瀏覽器選單有此選項）\n"
+                "👉 或在 Headers 標籤頁下方直接複製「Cookie:」欄位值"
+            )
         raise ValueError("無法在輸入內容中偵測到有效的 Cookie (例如 SID=... 或 Cookie: ...)。請確認複製內容。")
 
     cookie = user_headers["cookie"].strip()

@@ -219,7 +219,7 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
                   <span>開發者工具 (F12) 快速獲取教學</span>
                 </div>
                 <span className="badge badge-info" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem' }}>
-                  <Code2 size={12} /> 完全支援右鍵 Copy as fetch
+                  <Code2 size={12} /> 最推薦 Copy as cURL
                 </span>
               </div>
 
@@ -260,23 +260,23 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
                     <strong>右鍵直接複製（支援以下任一種方式，推薦方式一）：</strong>
                     <div style={{ margin: '8px 0 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <div style={{ padding: '8px 12px', background: 'rgba(74, 222, 128, 0.08)', border: '1px solid rgba(74, 222, 128, 0.2)', borderRadius: 6 }}>
-                        <div style={{ color: '#4ade80', fontWeight: 600 }}>⭐ 方式一（最推薦・最快速）：Copy as fetch</div>
+                        <div style={{ color: '#4ade80', fontWeight: 600 }}>⭐ 方式一（最推薦・一鍵完整複製）：Copy as cURL</div>
                         <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
-                          在請求（如 <code>browse</code>）上點擊右鍵 ➔ <strong>Copy (複製)</strong> ➔ <strong>Copy as fetch (複製為 fetch)</strong>，整段代碼直接貼入下方即可！
+                          在請求（如 <code>browse</code>）上點擊右鍵 ➔ <strong>Copy (複製)</strong> ➔ <strong>Copy as cURL (bash)</strong> 或 <strong>Copy as cURL (cmd)</strong>，整段貼入下方即可！cURL 會 100% 包含 Cookie、SAPISID 與所有授權標頭。
                         </div>
                       </div>
 
                       <div style={{ padding: '8px 12px', background: 'rgba(96, 165, 250, 0.08)', border: '1px solid rgba(96, 165, 250, 0.2)', borderRadius: 6 }}>
-                        <div style={{ color: '#60a5fa', fontWeight: 600 }}>⭐ 方式二：Copy as cURL</div>
+                        <div style={{ color: '#60a5fa', fontWeight: 600 }}>方式二：Copy as Node.js fetch</div>
                         <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
-                          在請求上點擊右鍵 ➔ <strong>Copy</strong> ➔ <strong>Copy as cURL (bash / cmd / PowerShell)</strong>，整段貼入即可。
+                          若右鍵選單中有 <strong>Copy as Node.js fetch</strong>，亦可直接複製貼上（Node.js 版會包含 Cookie 標頭）。
                         </div>
                       </div>
 
                       <div style={{ padding: '8px 12px', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: 6 }}>
                         <div style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>方式三：手動複製 Request Headers 或 Cookie</div>
                         <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
-                          點選該請求 ➔ 右側面板切換至 <strong>Headers (標頭)</strong> ➔ 滾動至 <strong>Request Headers</strong> ➔ 複製整段 Request Headers 或 <code>Cookie:</code> 欄位的值。
+                          點選該請求 ➔ 右側切換至 <strong>Headers (標頭)</strong> ➔ 滾動至 <strong>Request Headers</strong> ➔ 複製整段 Request Headers 或 <code>Cookie:</code> 欄位的值。
                         </div>
                       </div>
                     </div>
@@ -284,12 +284,14 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
                 </div>
               </div>
 
-              <div style={{ marginTop: 14, padding: '10px 14px', background: 'rgba(255, 255, 255, 0.04)', borderRadius: 6, fontSize: '0.825rem', color: 'rgba(255, 255, 255, 0.75)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                <Info size={16} color="var(--primary)" style={{ flexShrink: 0, marginTop: 2 }} />
+              <div style={{ marginTop: 14, padding: '10px 14px', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 6, fontSize: '0.825rem', color: 'rgba(255, 255, 255, 0.85)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <Info size={16} color="#f87171" style={{ flexShrink: 0, marginTop: 2 }} />
                 <div>
-                  <strong>💡 可以右鍵直接複製 fetch 嗎？</strong>
+                  <strong style={{ color: '#f87171' }}>⚠️ 為什麼不能用普通的「Copy as fetch」？</strong>
                   <br />
-                  <strong>完全可以！</strong> 系統已具備智慧剖析器，會自動識別 <code>fetch(...)</code> 語法並提取認證標頭與安全 Cookie（含 <code>SAPISID</code> 與 <code>__Secure-3PAPISID</code>），無需手動清洗或剪裁。
+                  Chrome／Edge 的「Copy as fetch」是專門給瀏覽器內部 JavaScript 執行的，根據 W3C 瀏覽器安全規範會<strong>刻意移除 Cookie 標頭</strong>（改為 <code>{'credentials: "include"'}</code>）。後端伺服器缺少登入 Cookie 就無法識別身分。
+                  <br />
+                  因此<strong>請務必選擇【Copy as cURL】</strong>，即可一鍵完整複製 Cookie 與認證！
                 </div>
               </div>
             </div>
@@ -297,14 +299,14 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
             {/* Input Form */}
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label" htmlFor="ytmusic-custom-token-input" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>貼上 Token 代碼、fetch、cURL 或 Cookie</span>
-                <span style={{ fontSize: '0.8rem', fontWeight: 'normal', color: 'rgba(255,255,255,0.5)' }}>支援 fetch / cURL / Headers / Cookie</span>
+                <span>貼上 Token 代碼、cURL、Node.js fetch 或 Cookie</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 'normal', color: 'rgba(255,255,255,0.5)' }}>支援 cURL / Node.js fetch / Headers / Cookie</span>
               </label>
               <textarea
                 id="ytmusic-custom-token-input"
                 className="form-input"
                 rows={4}
-                placeholder="可直接貼上右鍵『Copy as fetch』、『Copy as cURL』、完整的 Request Headers 或 Cookie 字串..."
+                placeholder="直接貼上右鍵『Copy as cURL (bash/cmd)』、『Copy as Node.js fetch』、Request Headers 或 Cookie 字串..."
                 value={customTokenInput}
                 onChange={(e) => setCustomTokenInput(e.target.value)}
                 style={{ fontFamily: 'monospace', fontSize: '0.85rem', width: '100%', lineHeight: 1.4 }}
