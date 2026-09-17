@@ -371,8 +371,8 @@ class CredentialStore:
             subject = _require_subject(owner_sub)
             user_records = self._data.get("users", {}).get(subject)
             if isinstance(user_records, dict):
-                user_records[key] = None
-                if not any(value for value in user_records.values()):
+                user_records.pop(key, None)
+                if not any(isinstance(v, dict) and v for v in user_records.values()):
                     self._data["users"].pop(subject, None)
             self._save()
 

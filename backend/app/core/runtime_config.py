@@ -68,8 +68,8 @@ class RuntimeConfig:
 
             if hasattr(settings, "sync_dynamic_config"):
                 settings.sync_dynamic_config()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error("Failed to sync dynamic settings config: %s", type(exc).__name__)
 
     def get(self, key: str, default: Any = "") -> Any:
         with self._lock:

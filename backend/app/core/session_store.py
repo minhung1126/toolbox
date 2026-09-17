@@ -7,6 +7,7 @@ associated user profile remain encrypted in ``data/sessions.json``.
 import json
 import logging
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import RLock
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _DEFAULT_PATH = _PROJECT_ROOT / "data" / "sessions.json"
 SESSION_MAX_AGE = 7 * 24 * 60 * 60
+_PURGE_INTERVAL_SECONDS = 5 * 60  # purge at most every 5 minutes
 
 
 def _now() -> datetime:
@@ -37,6 +39,7 @@ class SessionStore:
         # from the signing SECRET_KEY.
         self._fernet = derive_fernet(settings.CREDENTIAL_ENCRYPTION_KEY)
         self._data: dict[str, Any] = {"version": 1, "sessions": {}}
+        self._last_purge_time: float = 0.0
         self._load()
 
     def _load(self) -> None:
@@ -68,6 +71,14 @@ class SessionStore:
         if expired:
             self._save()
 
+    def _maybe_purge_expired(self) -> None:
+        """Purge expired sessions at most once per _PURGE_INTERVAL_SECONDS."""
+        now = time.monotonic()
+        if now - self._last_purge_time < _PURGE_INTERVAL_SECONDS:
+            return
+        self._purge_expired()
+        self._last_purge_time = now
+
     def create(self, data: dict[str, Any], max_age: int = SESSION_MAX_AGE) -> str:
         session_id = secrets.token_urlsafe(32)
         record = {
@@ -75,7 +86,7 @@ class SessionStore:
             "data": self._fernet.encrypt(json.dumps(data, ensure_ascii=False).encode("utf-8")).decode("ascii"),
         }
         with self._lock:
-            self._purge_expired()
+            self._maybe_purge_expired()
             self._data["sessions"][session_id] = record
             self._save()
         return session_id
@@ -84,7 +95,7 @@ class SessionStore:
         if not session_id or len(session_id) > 200:
             return None
         with self._lock:
-            self._purge_expired()
+            self._maybe_purge_expired()
             record = self._data["sessions"].get(session_id)
             if not isinstance(record, dict):
                 return None

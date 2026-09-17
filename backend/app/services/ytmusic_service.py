@@ -5,6 +5,7 @@ import json
 import logging
 import re
 from collections import Counter
+from functools import lru_cache
 from typing import Any
 
 try:
@@ -19,8 +20,6 @@ from backend.app.core.credential_store import credential_store
 from backend.app.core.youtube_context import YouTubeRequestContext
 
 logger = logging.getLogger(__name__)
-
-_ytdlp_date_cache: dict[str, dict[str, Any]] = {}
 
 
 def _extract_headers_from_curl(curl_cmd: str) -> list[str]:
@@ -62,8 +61,8 @@ def parse_custom_token_input(token_raw: str) -> dict[str, Any]:
                     init_hdrs.update(norm)
                     return dict(init_hdrs)
                 return parsed
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("JSON parse attempt for custom token failed: %s", type(exc).__name__)
 
     # 2. If it is a cURL command (e.g. starts with or contains 'curl ')
     extracted_curl_headers = []
@@ -131,17 +130,15 @@ def parse_custom_token_input(token_raw: str) -> dict[str, Any]:
     return dict(final_headers)
 
 
+@lru_cache(maxsize=500)
 def get_ytdlp_video_date(video_id: str) -> dict[str, Any]:
     """Fetch exact release_date and year for a YouTube video using yt-dlp.
 
-    Returns dict with keys:
-    release_date (e.g. '2023-05-12'), year (int), upload_date (str).
+    Results are cached (LRU, max 500 entries) to avoid repeated network calls.
+    Returns dict with keys: release_date (e.g. '2023-05-12'), year (int), upload_date (str).
     """
     if not video_id or yt_dlp is None:
         return {}
-    cached = _ytdlp_date_cache.get(video_id)
-    if cached is not None:
-        return cached
 
     ydl_opts = {
         "quiet": True,
@@ -155,7 +152,6 @@ def get_ytdlp_video_date(video_id: str) -> dict[str, Any]:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_id, download=False)
             if not info or not isinstance(info, dict):
-                _ytdlp_date_cache[video_id] = {}
                 return {}
 
             raw_date = info.get("release_date") or info.get("upload_date")
@@ -172,18 +168,15 @@ def get_ytdlp_video_date(video_id: str) -> dict[str, Any]:
                 if m and not year:
                     year = int(m.group(1))
 
-            result = {
+            return {
                 "release_date": release_date,
                 "year": year,
                 "upload_date": str(info.get("upload_date") or ""),
                 "album": info.get("album"),
                 "track_number": info.get("track_number"),
             }
-            _ytdlp_date_cache[video_id] = result
-            return result
     except Exception as exc:
-        logger.warning("yt-dlp metadata extraction failed for video %s: %s", video_id, exc)
-        _ytdlp_date_cache[video_id] = {}
+        logger.warning("yt-dlp metadata extraction failed for video %s: %s", video_id, type(exc).__name__)
         return {}
 
 
@@ -283,20 +276,18 @@ def get_ytmusic_client(
     # 2. Google OAuth credentials
     if context and context.credentials:
         creds = context.credentials
-        if hasattr(creds, "expired") and creds.expired and getattr(creds, "refresh_token", None):
-            try:
-                from google.auth.transport.requests import Request
-
-                creds.refresh(Request())
-            except Exception as e:
-                logger.warning("Failed to refresh Google OAuth token for YouTube Music: %s", e)
+        # Credentials are refreshed by the dependency injection layer (require_ytmusic_context).
+        # Re-refreshing here without writing back to the credential store would cause the
+        # refreshed token to be silently discarded, so we avoid it.
+        if hasattr(creds, "expired") and creds.expired:
+            logger.debug("YTMusic OAuth credentials appear expired; upstream refresh may have failed.")
 
         token = getattr(creds, "token", None)
         if token:
             try:
                 return YTMusic(auth={"authorization": f"Bearer {token}"})
             except Exception as e:
-                logger.warning("Failed to initialize YTMusic with OAuth Bearer token: %s", e)
+                logger.warning("Failed to initialize YTMusic with OAuth Bearer token: %s", type(e).__name__)
 
     # 3. Fallback to unauthenticated
     return YTMusic()
@@ -401,6 +392,12 @@ def fetch_ytmusic_playlist_tracks(
             album_name = str(album_info or "")
             album_id = None
 
+        # Items without an album (pure YouTube videos, music videos, singles) are
+        # displayed and sorted as "單曲" (Single). This prevents the empty string
+        # from sorting before real album names, so a 2025 video does not appear
+        # before a 2023 album when album-based sorting is applied.
+        if not album_name.strip():
+            album_name = "單曲"
         # Track number and year resolution from cached album data
         track_number: int | None = None
         release_year: int | None = None
@@ -427,6 +424,10 @@ def fetch_ytmusic_playlist_tracks(
                 track_number = int(t["trackNumber"])
             except (ValueError, TypeError):
                 track_number = None
+
+        # Singles (album="單曲") without a resolved track number default to 1
+        if track_number is None and album_name == "單曲":
+            track_number = 1
 
         thumbnails = t.get("thumbnails") or []
         thumb_url = thumbnails[-1].get("url", "") if thumbnails else ""

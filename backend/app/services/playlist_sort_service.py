@@ -207,16 +207,31 @@ def sort_items(items: list[dict[str, Any]], sort_keys: list[dict[str, Any]]) -> 
 
                 if sort_field == "album":
                     album_str = unicodedata.normalize("NFKC", str(item.get("album") or "")).casefold()
+
+                    # Include release year as secondary sort within the same album group.
+                    # This ensures singles ("單曲") are ordered chronologically so that
+                    # a 2025 video does not sort before a 2023 album track in the same group.
+                    raw_date = str(item.get("release_date") or "").replace("-", "").strip()
+                    if raw_date and len(raw_date) >= 8 and raw_date[:8].isdigit():
+                        year_key = raw_date[:8]
+                    else:
+                        yr = item.get("year")
+                        if yr:
+                            year_match = re.search(r"\b(19\d\d|20\d\d)\b", str(yr))
+                            year_key = year_match.group(1) + "0000" if year_match else "99999999"
+                        else:
+                            year_key = "99999999"  # unknown year → sort last within group
+
                     track_val = item.get("track_number")
                     # When sorting by album, respect the track order within that album (always track 1, 2, 3...)
                     if track_val is not None and str(track_val).strip() != "":
                         try:
                             track_num = int(track_val)
-                            return (album_str, 0, -track_num if rev else track_num)
+                            return (album_str, year_key, 0, -track_num if rev else track_num)
                         except (ValueError, TypeError):
                             pass
                     # Missing track number goes after numbered tracks in both asc and desc
-                    return (album_str, -1 if rev else 1, 0)
+                    return (album_str, year_key, -1 if rev else 1, 0)
 
                 if sort_field in ("track_number", "track"):
                     val = item.get("track_number")

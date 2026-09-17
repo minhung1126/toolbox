@@ -14,6 +14,13 @@ from backend.app.core.credential_store import credential_store
 from backend.app.core.session_store import session_store
 from backend.app.services.youtube_quota_service import get_youtube_quota_tracker
 
+# Configure OAUTHLIB transport security once at module load time to avoid
+# race conditions when multiple OAuth flows run concurrently.
+if not settings.is_production:
+    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+else:
+    os.environ.pop("OAUTHLIB_INSECURE_TRANSPORT", None)
+
 logger = logging.getLogger(__name__)
 
 DRIVE_READONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
@@ -146,12 +153,7 @@ def create_oauth_flow(
     config = get_client_config(purpose=purpose, slot=slot_name)
     redirect_uri = settings.get_redirect_uri()
 
-    # Only allow insecure transport (HTTP) in non-production environments
-    if not settings.is_production:
-        os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-    else:
-        os.environ.pop("OAUTHLIB_INSECURE_TRANSPORT", None)
-
+    # OAUTHLIB_INSECURE_TRANSPORT is configured at module load time (see module level)
     flow = Flow.from_client_config(
         config,
         scopes=_scopes_for(purpose),
@@ -362,8 +364,11 @@ def _refresh_credentials(
                 credential_store.save_google_connection(refreshed, owner_sub=owner_sub)
             return credentials
         except Exception as exc:
+            from google.auth.exceptions import RefreshError
+
             raw_message = str(exc).casefold()
-            requires_reauthorization = any(
+            is_refresh_error = isinstance(exc, RefreshError)
+            requires_reauthorization = is_refresh_error and any(
                 marker in raw_message for marker in ("invalid_grant", "invalid client", "revoked")
             )
             # Never persist or expose the provider's raw response body. The

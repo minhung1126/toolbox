@@ -286,3 +286,41 @@ def test_sort_artist_and_album_respects_track_number():
         "Red (Track 2)",
         "Red Bonus",
     ]
+
+
+def test_sort_album_singles_ordered_by_year():
+    """Verify that singles (album='單曲') within the same group are sorted by year.
+
+    A 2025 video (single) must not appear before a 2023 album track when sorting
+    by album, and singles themselves should be ordered chronologically.
+    """
+    items = [
+        {
+            "title": "2025 Single",
+            "album": "單曲",
+            "track_number": 1,
+            "year": None,
+            "release_date": "2025-03-15",
+        },
+        {
+            "title": "2023 Album Track",
+            "album": "My Album",
+            "track_number": 1,
+            "year": 2023,
+            "release_date": None,
+        },
+        {
+            "title": "2021 Single",
+            "album": "單曲",
+            "track_number": 1,
+            "year": 2021,
+            "release_date": "2021-07-04",
+        },
+    ]
+    sorted_res = sort_items(items, [{"field": "album", "direction": "asc"}])
+    titles = [i["title"] for i in sorted_res]
+    # "My Album" (Latin) < "單曲" (CJK) alphabetically → album track comes first
+    assert titles[0] == "2023 Album Track", f"Expected album track first, got: {titles}"
+    # Within 單曲 group: 2021 before 2025
+    assert titles[1] == "2021 Single", f"Expected 2021 single second, got: {titles}"
+    assert titles[2] == "2025 Single", f"Expected 2025 single third, got: {titles}"

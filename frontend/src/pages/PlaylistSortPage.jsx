@@ -99,7 +99,16 @@ export function sortTracksLocally(items, sortKeys) {
         if (albumCmp !== 0) {
           return rev ? -albumCmp : albumCmp;
         }
-        // Same album: respect track_number (always ascending 1, 2, 3... within the album)
+        // Same album group: also sort by year so that singles (單曲) are ordered
+        // chronologically — a 2025 single should not appear before a 2023 single.
+        const aDate = String(a.release_date || (a.year ? `${a.year}` : '')).replace(/-/g, '').trim();
+        const bDate = String(b.release_date || (b.year ? `${b.year}` : '')).replace(/-/g, '').trim();
+        if (aDate !== bDate) {
+          if (!aDate) return 1;   // unknown year → sort last within group
+          if (!bDate) return -1;
+          return aDate.localeCompare(bDate);  // always asc within same album group
+        }
+        // Same album + year: respect track_number (always ascending 1, 2, 3... within the album)
         const aTrack = a.track_number != null && a.track_number !== '' ? Number(a.track_number) : Infinity;
         const bTrack = b.track_number != null && b.track_number !== '' ? Number(b.track_number) : Infinity;
         if (aTrack !== bTrack) {
@@ -113,8 +122,9 @@ export function sortTracksLocally(items, sortKeys) {
         return rev ? bVal - aVal : aVal - bVal;
       }
       if (field === 'year' || field === 'release_year' || field === 'release_date') {
-        const aDate = String(a.release_date || (a.year ? `${a.year}` : '')).replace(/-/g, '').trim();
-        const bDate = String(b.release_date || (b.year ? `${b.year}` : '')).replace(/-/g, '').trim();
+        // Mirror the backend sort_key_func: release_date > year > published_at
+        const aDate = String(a.release_date || (a.year ? `${a.year}` : '') || a.published_at || '').replace(/-/g, '').trim();
+        const bDate = String(b.release_date || (b.year ? `${b.year}` : '') || b.published_at || '').replace(/-/g, '').trim();
         if (!aDate && !bDate) return 0;
         if (!aDate) return 1;
         if (!bDate) return -1;

@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+import threading
 import warnings
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -38,6 +39,10 @@ class YouTubeOAuthSlot:
         if not self.client_id:
             return None
         return hashlib.sha256(self.client_id.encode("utf-8")).hexdigest()[:16]
+
+
+# Protects concurrent mutations to the global settings singleton fields.
+_settings_sync_lock = threading.RLock()
 
 
 class Settings(BaseSettings):
@@ -337,42 +342,43 @@ class Settings(BaseSettings):
 
     def sync_dynamic_config(self) -> None:
         """Sync in-memory settings with persistent system secrets and runtime config."""
-        from backend.app.core.runtime_config import runtime_config
-        from backend.app.core.system_secrets import system_secrets
+        with _settings_sync_lock:
+            from backend.app.core.runtime_config import runtime_config
+            from backend.app.core.system_secrets import system_secrets
 
-        creds = system_secrets.get_credentials()
+            creds = system_secrets.get_credentials()
 
-        if creds.get("google_client_id"):
-            self.GOOGLE_CLIENT_ID = creds["google_client_id"]
-        if creds.get("google_client_secret"):
-            self.GOOGLE_CLIENT_SECRET = creds["google_client_secret"]
-        if creds.get("youtube_primary_client_id"):
-            self.YOUTUBE_OAUTH_PRIMARY_CLIENT_ID = creds["youtube_primary_client_id"]
-        if creds.get("youtube_primary_client_secret"):
-            self.YOUTUBE_OAUTH_PRIMARY_CLIENT_SECRET = creds["youtube_primary_client_secret"]
-        if creds.get("youtube_secondary_client_id"):
-            self.YOUTUBE_OAUTH_SECONDARY_CLIENT_ID = creds["youtube_secondary_client_id"]
-        if creds.get("youtube_secondary_client_secret"):
-            self.YOUTUBE_OAUTH_SECONDARY_CLIENT_SECRET = creds["youtube_secondary_client_secret"]
+            if creds.get("google_client_id"):
+                self.GOOGLE_CLIENT_ID = creds["google_client_id"]
+            if creds.get("google_client_secret"):
+                self.GOOGLE_CLIENT_SECRET = creds["google_client_secret"]
+            if creds.get("youtube_primary_client_id"):
+                self.YOUTUBE_OAUTH_PRIMARY_CLIENT_ID = creds["youtube_primary_client_id"]
+            if creds.get("youtube_primary_client_secret"):
+                self.YOUTUBE_OAUTH_PRIMARY_CLIENT_SECRET = creds["youtube_primary_client_secret"]
+            if creds.get("youtube_secondary_client_id"):
+                self.YOUTUBE_OAUTH_SECONDARY_CLIENT_ID = creds["youtube_secondary_client_id"]
+            if creds.get("youtube_secondary_client_secret"):
+                self.YOUTUBE_OAUTH_SECONDARY_CLIENT_SECRET = creds["youtube_secondary_client_secret"]
 
-        sec_enabled = runtime_config.get("youtube_oauth_secondary_enabled", None)
-        if sec_enabled is not None:
-            self.YOUTUBE_OAUTH_SECONDARY_ENABLED = bool(sec_enabled)
-        pri_label = runtime_config.get("youtube_oauth_primary_label", None)
-        if pri_label:
-            self.YOUTUBE_OAUTH_PRIMARY_LABEL = str(pri_label)
-        sec_label = runtime_config.get("youtube_oauth_secondary_label", None)
-        if sec_label:
-            self.YOUTUBE_OAUTH_SECONDARY_LABEL = str(sec_label)
-        def_slot = runtime_config.get("youtube_oauth_default_slot", None)
-        if def_slot:
-            try:
-                self.YOUTUBE_OAUTH_DEFAULT_SLOT = normalize_youtube_slot(def_slot)
-            except ValueError:
-                pass
-        allow_users = runtime_config.get("allow_new_users", None)
-        if allow_users is not None:
-            self.ALLOW_NEW_USERS = bool(allow_users)
+            sec_enabled = runtime_config.get("youtube_oauth_secondary_enabled", None)
+            if sec_enabled is not None:
+                self.YOUTUBE_OAUTH_SECONDARY_ENABLED = bool(sec_enabled)
+            pri_label = runtime_config.get("youtube_oauth_primary_label", None)
+            if pri_label:
+                self.YOUTUBE_OAUTH_PRIMARY_LABEL = str(pri_label)
+            sec_label = runtime_config.get("youtube_oauth_secondary_label", None)
+            if sec_label:
+                self.YOUTUBE_OAUTH_SECONDARY_LABEL = str(sec_label)
+            def_slot = runtime_config.get("youtube_oauth_default_slot", None)
+            if def_slot:
+                try:
+                    self.YOUTUBE_OAUTH_DEFAULT_SLOT = normalize_youtube_slot(def_slot)
+                except ValueError:
+                    pass
+            allow_users = runtime_config.get("allow_new_users", None)
+            if allow_users is not None:
+                self.ALLOW_NEW_USERS = bool(allow_users)
 
 
 settings = Settings()
