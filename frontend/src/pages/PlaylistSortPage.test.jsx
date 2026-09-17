@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import PlaylistSortPage, { sortTracksLocally, TrackSubtitle } from './PlaylistSortPage';
+import PlaylistSortPage, { normalizeArtistName, sortTracksLocally, TrackSubtitle } from './PlaylistSortPage';
 import { api } from '../services/api';
 
 vi.mock('../services/api', () => ({
@@ -452,5 +452,54 @@ describe('PlaylistSortPage', () => {
     expect(container.textContent).toContain('2020-06-12');
     expect(container.textContent).not.toContain('💿');
     expect(container.textContent).not.toContain('(2020-06-12)');
+  });
+
+  it('normalizes Topic channel suffixes with normalizeArtistName', () => {
+    expect(normalizeArtistName('QWER - Topic')).toBe('QWER');
+    expect(normalizeArtistName('QWER - 主題')).toBe('QWER');
+    expect(normalizeArtistName('QWER - 主题')).toBe('QWER');
+    expect(normalizeArtistName('QWER (Topic)')).toBe('QWER');
+    expect(normalizeArtistName('QWER（主題）')).toBe('QWER');
+    expect(normalizeArtistName('QWER-Topic')).toBe('QWER');
+    expect(normalizeArtistName('QWER')).toBe('QWER');
+    expect(normalizeArtistName('Topic')).toBe('Topic');
+    expect(normalizeArtistName('- Topic')).toBe('- Topic');
+    expect(normalizeArtistName('')).toBe('');
+    expect(normalizeArtistName(null)).toBe('');
+  });
+
+  it('groups Artist and Artist - Topic together and sorts chronologically', () => {
+    const tracks = [
+      { title: '2024 Single', artist: 'QWER', album: '單曲', release_date: '2024-02-08', year: 2024 },
+      { title: '2023 Album Track', artist: 'QWER - Topic', album: 'Harmony from Discord', release_date: '2023-10-18', year: 2023, track_number: 1 },
+      { title: '2023 Single', artist: 'QWER', album: '單曲', release_date: '2023-11-09', year: 2023 },
+      { title: '2024 Album Track', artist: 'QWER - 主題', album: 'MANITO', release_date: '2024-04-01', year: 2024, track_number: 1 },
+    ];
+
+    const sorted = sortTracksLocally(tracks, [
+      { field: 'artist', direction: 'asc' },
+      { field: 'album', direction: 'asc' },
+    ]);
+
+    expect(sorted.map((t) => t.title)).toEqual([
+      '2023 Album Track',
+      '2023 Single',
+      '2024 Single',
+      '2024 Album Track',
+    ]);
+  });
+
+  it('renders TrackSubtitle with normalized artist name stripping - Topic', () => {
+    const item = {
+      artist: 'QWER - Topic',
+      album: 'MANITO',
+      track_number: 1,
+      release_date: '2024-04-01',
+    };
+
+    const { container } = render(<TrackSubtitle item={item} />);
+    expect(container.textContent).toContain('QWER');
+    expect(container.textContent).not.toContain('QWER - Topic');
+    expect(container.textContent).not.toContain('- Topic');
   });
 });

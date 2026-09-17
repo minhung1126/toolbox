@@ -130,6 +130,38 @@ def parse_custom_token_input(token_raw: str) -> dict[str, Any]:
     return dict(final_headers)
 
 
+def normalize_artist_name(name: str | None) -> str:
+    """Normalize artist name by removing YouTube auto-generated Topic channel suffixes.
+
+    YouTube generates "- Topic" (or localized variants like "- 主題", "(Topic)")
+    channels for official audio tracks. Stripping this suffix ensures that
+    tracks uploaded to the main artist channel and tracks released via Topic
+    channels group under the same artist for sorting and display.
+
+    Examples:
+        'QWER - Topic' -> 'QWER'
+        'QWER - 主題' -> 'QWER'
+        'QWER (Topic)' -> 'QWER'
+        'QWER（主題）' -> 'QWER'
+    """
+    if not name:
+        return ""
+    raw = str(name).strip()
+    if not raw:
+        return ""
+
+    parts = [p.strip() for p in raw.split(",")]
+    normalized_parts: list[str] = []
+    for p in parts:
+        cleaned = re.sub(r"\s*[-–—－]\s*(?:topic|主題|主题)\s*$", "", p, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*[\(（](?:topic|主題|主题)[\)）]\s*$", "", cleaned, flags=re.IGNORECASE)
+        cleaned = cleaned.strip()
+        normalized_parts.append(cleaned if cleaned else p)
+
+    result = ", ".join(normalized_parts)
+    return result if result.strip() else raw
+
+
 @lru_cache(maxsize=500)
 def get_ytdlp_video_date(video_id: str) -> dict[str, Any]:
     """Fetch exact release_date and year for a YouTube video using yt-dlp.
@@ -168,12 +200,16 @@ def get_ytdlp_video_date(video_id: str) -> dict[str, Any]:
                 if m and not year:
                     year = int(m.group(1))
 
+            raw_artist = info.get("artist") or info.get("uploader") or info.get("channel")
+            norm_artist = normalize_artist_name(raw_artist) if raw_artist else None
+
             return {
                 "release_date": release_date,
                 "year": year,
                 "upload_date": str(info.get("upload_date") or ""),
                 "album": info.get("album"),
                 "track_number": info.get("track_number"),
+                "artist": norm_artist,
             }
     except Exception as exc:
         logger.warning("yt-dlp metadata extraction failed for video %s: %s", video_id, type(exc).__name__)
@@ -253,6 +289,14 @@ def enrich_tracks_with_ytdlp_fallback(
             track_item["track_number"] = meta["track_number"]
         if meta.get("album") and (not track_item.get("album") or track_item.get("album") == "單曲"):
             track_item["album"] = meta["album"]
+        if meta.get("artist") and (not track_item.get("artist") or track_item.get("artist") == "（無藝人）"):
+            track_item["artist"] = meta["artist"]
+            if not track_item.get("channel_title"):
+                track_item["channel_title"] = meta["artist"]
+        if track_item.get("artist"):
+            track_item["artist"] = normalize_artist_name(track_item["artist"])
+        if track_item.get("channel_title"):
+            track_item["channel_title"] = normalize_artist_name(track_item["channel_title"])
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(max_workers, len(candidates))) as executor:
         list(executor.map(_fetch_for_track, candidates))
@@ -395,9 +439,12 @@ def fetch_ytmusic_playlist_tracks(
         # Artist resolution
         artists_list = t.get("artists") or []
         if isinstance(artists_list, list):
-            artist_name = ", ".join(a.get("name", "") for a in artists_list if isinstance(a, dict) and a.get("name"))
+            raw_artist = ", ".join(a.get("name", "") for a in artists_list if isinstance(a, dict) and a.get("name"))
         else:
-            artist_name = str(artists_list)
+            raw_artist = str(artists_list)
+        if not raw_artist.strip() and t.get("author"):
+            raw_artist = str(t.get("author") or "")
+        artist_name = normalize_artist_name(raw_artist) or raw_artist
 
         # Album resolution
         album_info = t.get("album")

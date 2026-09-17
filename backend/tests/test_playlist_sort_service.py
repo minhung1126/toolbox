@@ -3,6 +3,7 @@ from __future__ import annotations
 from backend.app.services.playlist_sort_service import (
     _parse_iso8601_duration,
     build_sort_preview,
+    normalize_artist_name,
     sort_items,
 )
 
@@ -347,3 +348,77 @@ def test_sort_album_singles_with_cjk_album():
     titles = [i["title"] for i in sorted_res]
     assert titles[0] == "2003 Album Track"
     assert titles[1] == "2024 Single"
+
+
+def test_normalize_artist_name():
+    """Verify stripping of YouTube Topic channel suffixes."""
+    assert normalize_artist_name("QWER - Topic") == "QWER"
+    assert normalize_artist_name("QWER - 主題") == "QWER"
+    assert normalize_artist_name("QWER - 主题") == "QWER"
+    assert normalize_artist_name("QWER (Topic)") == "QWER"
+    assert normalize_artist_name("QWER（主題）") == "QWER"
+    assert normalize_artist_name("QWER — Topic") == "QWER"
+    assert normalize_artist_name("QWER － 主題") == "QWER"
+    assert normalize_artist_name("QWER-Topic") == "QWER"
+    assert normalize_artist_name("QWER") == "QWER"
+    assert normalize_artist_name("IU - Topic, Suga") == "IU, Suga"
+    assert normalize_artist_name("Topic") == "Topic"
+    assert normalize_artist_name("- Topic") == "- Topic"
+    assert normalize_artist_name("") == ""
+    assert normalize_artist_name(None) == ""
+
+
+def test_sort_artist_normalizes_topic_channels_together():
+    """Verify that 'Artist' and 'Artist - Topic' tracks are grouped under the same artist and sorted chronologically."""
+    items = [
+        {
+            "title": "2024 Single (from main channel)",
+            "artist": "QWER",
+            "album": "單曲",
+            "track_number": 1,
+            "release_date": "2024-02-08",
+        },
+        {
+            "title": "2023 Album Track 1 (from Topic channel)",
+            "artist": "QWER - Topic",
+            "album": "Harmony from Discord",
+            "track_number": 1,
+            "release_date": "2023-10-18",
+        },
+        {
+            "title": "2023 Single (from main channel)",
+            "artist": "QWER",
+            "album": "單曲",
+            "track_number": 1,
+            "release_date": "2023-11-09",
+        },
+        {
+            "title": "2024 Album Track 1 (from Topic channel)",
+            "artist": "QWER - 主題",
+            "album": "MANITO",
+            "track_number": 1,
+            "release_date": "2024-04-01",
+        },
+    ]
+
+    # Preset: artist -> album -> track_number
+    sort_keys = [
+        {"field": "artist", "direction": "asc"},
+        {"field": "album", "direction": "asc"},
+        {"field": "track_number", "direction": "asc"},
+    ]
+    sorted_res = sort_items(items, sort_keys)
+    titles = [i["title"] for i in sorted_res]
+
+    # Without normalization, "QWER" sorts before "QWER - Topic", shoving both 2023 & 2024 singles ahead of 2023 album.
+    # With normalization, all 4 belong to "QWER" and sort chronologically:
+    # 1. 2023-10-18 Album track
+    # 2. 2023-11-09 Single
+    # 3. 2024-02-08 Single
+    # 4. 2024-04-01 Album track
+    assert titles == [
+        "2023 Album Track 1 (from Topic channel)",
+        "2023 Single (from main channel)",
+        "2024 Single (from main channel)",
+        "2024 Album Track 1 (from Topic channel)",
+    ]

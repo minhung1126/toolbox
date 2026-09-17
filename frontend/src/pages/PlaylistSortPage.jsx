@@ -75,6 +75,24 @@ const SORT_FIELDS = [
   { value: 'random', label: '隨機' },
 ];
 
+export function normalizeArtistName(name) {
+  if (!name) return '';
+  const raw = String(name).trim();
+  if (!raw) return '';
+
+  const parts = raw.split(',');
+  const normalizedParts = parts.map((p) => {
+    let cleaned = p.trim();
+    cleaned = cleaned.replace(/\s*[-–—－]\s*(?:topic|主題|主题)\s*$/i, '');
+    cleaned = cleaned.replace(/\s*[(（](?:topic|主題|主题)[)）]\s*$/i, '');
+    cleaned = cleaned.trim();
+    return cleaned || p.trim();
+  });
+
+  const result = normalizedParts.filter(Boolean).join(', ');
+  return result || raw;
+}
+
 export function sortTracksLocally(items, sortKeys) {
   if (!items || items.length === 0 || !sortKeys || sortKeys.length === 0) {
     return items.map((it, i) => ({ ...it, new_position: i }));
@@ -88,8 +106,10 @@ export function sortTracksLocally(items, sortKeys) {
 
     sorted.sort((a, b) => {
       if (field === 'artist') {
-        const aVal = (a.artist || a.channel_title || '').normalize('NFKC').toLowerCase();
-        const bVal = (b.artist || b.channel_title || '').normalize('NFKC').toLowerCase();
+        const aRaw = a.artist || a.channel_title || '';
+        const bRaw = b.artist || b.channel_title || '';
+        const aVal = normalizeArtistName(aRaw).normalize('NFKC').toLowerCase();
+        const bVal = normalizeArtistName(bRaw).normalize('NFKC').toLowerCase();
         return rev ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
       }
       if (field === 'album') {
@@ -308,7 +328,8 @@ export function TrackSubtitle({ item, sortKeys = [] }) {
   const parts = [];
 
   // 1. 歌手 / 藝人 (artist / channel_title)
-  const artist = item.artist || item.channel_title;
+  const rawArtist = item.artist || item.channel_title;
+  const artist = normalizeArtistName(rawArtist);
   if (artist) {
     parts.push({
       key: 'artist',

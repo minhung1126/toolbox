@@ -20,6 +20,7 @@ from backend.app.services.ytmusic_service import (
     enrich_tracks_with_ytdlp_fallback,
     fetch_ytmusic_playlist_tracks,
     fetch_ytmusic_playlists,
+    normalize_artist_name,
 )
 
 logger = logging.getLogger(__name__)
@@ -139,13 +140,14 @@ def fetch_playlist_items_for_sort(
             video_id = snippet["resourceId"]["videoId"]
             detail = details_map.get(video_id, {})
             channel_name = snippet.get("videoOwnerChannelTitle", snippet.get("channelTitle", ""))
+            norm_channel = normalize_artist_name(channel_name) or channel_name
             result.append(
                 {
                     "playlist_item_id": item["id"],
                     "video_id": video_id,
                     "title": snippet["title"],
-                    "artist": channel_name,
-                    "channel_title": channel_name,
+                    "artist": norm_channel,
+                    "channel_title": norm_channel,
                     "album": "",
                     "album_id": None,
                     "track_number": None,
@@ -168,6 +170,10 @@ def fetch_playlist_items_for_sort(
 
     # Final pass fallback: populate year and release_date from published_at if still missing
     for item in items:
+        if item.get("artist"):
+            item["artist"] = normalize_artist_name(item["artist"]) or item["artist"]
+        if item.get("channel_title"):
+            item["channel_title"] = normalize_artist_name(item["channel_title"]) or item["channel_title"]
         if not item.get("year"):
             if item.get("release_date"):
                 m = re.search(r"\b(19\d\d|20\d\d)\b", str(item["release_date"]))
@@ -221,7 +227,8 @@ def sort_items(items: list[dict[str, Any]], sort_keys: list[dict[str, Any]]) -> 
             def sort_key_func(item: dict[str, Any], sort_field: str = field, rev: bool = reverse) -> Any:
                 if sort_field == "artist":
                     val = item.get("artist") or item.get("channel_title") or ""
-                    return unicodedata.normalize("NFKC", str(val)).casefold()
+                    val = normalize_artist_name(str(val))
+                    return unicodedata.normalize("NFKC", val).casefold()
 
                 if sort_field == "album":
                     raw_album = str(item.get("album") or "").strip()
