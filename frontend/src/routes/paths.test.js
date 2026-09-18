@@ -11,6 +11,7 @@ describe('route paths', () => {
     expect(PATHS.sheetSettings).toBe('/sheets/settings');
     expect(PATHS.systemSettings).toBe('/system/settings');
     expect(PATHS.photoCurator).toBe('/photo-curator');
+    expect(PATHS.ffmpegGenerator).toBe('/ffmpeg-generator');
   });
 
   it('accepts known protected internal paths without hashes', () => {

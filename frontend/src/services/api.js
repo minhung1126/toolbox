@@ -317,6 +317,17 @@ export const api = {
     body: JSON.stringify({ posts, notes }),
   }),
 
+  // FFmpeg Generator API
+  getFfmpegPresets: () => request('/ffmpeg-generator/presets'),
+  parseFfmpegTime: (payload) => request('/ffmpeg-generator/parse-time', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }),
+  buildFfmpegCommand: (payload) => request('/ffmpeg-generator/build', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }),
+
   // Playlist Sort API
   getPlaylistSortPlaylists: (params = {}) => {
     const q = new URLSearchParams();

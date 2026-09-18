@@ -10,13 +10,14 @@ import {
 describe('Toolbox Frontend Tool Catalog', () => {
   it('returns registered tools with metadata', () => {
     const tools = getAllTools();
-    expect(tools.length).toBe(7);
+    expect(tools.length).toBe(8);
     const ids = tools.map((t) => t.id);
     expect(ids).toContain('creator-tools');
     expect(ids).toContain('youtube-music');
     expect(ids).toContain('sheets-tools');
     expect(ids).toContain('sticky-notes');
     expect(ids).toContain('photo-curator');
+    expect(ids).toContain('ffmpeg-generator');
     expect(ids).toContain('integrations-quota');
     expect(ids).toContain('system-utility');
   });
@@ -50,6 +51,10 @@ describe('Toolbox Frontend Tool Catalog', () => {
     const photoCuratorTool = getToolById('photo-curator');
     expect(photoCuratorTool).not.toBeNull();
     expect(photoCuratorTool.name).toBe('Photo Curator');
+
+    const ffmpegTool = getToolById('ffmpeg-generator');
+    expect(ffmpegTool).not.toBeNull();
+    expect(ffmpegTool.name).toBe('FFmpeg Generator');
   });
 
   it('aggregates navigation groups and system items', () => {
@@ -61,6 +66,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(groupIds).toContain('system');
     expect(groupIds).toContain('notes');
     expect(groupIds).toContain('photo_curator_nav');
+    expect(groupIds).toContain('ffmpeg_nav');
     expect(groupIds).toContain('integrations');
 
     const systemItems = getSystemNavItems();

@@ -21,6 +21,7 @@ import SetupWizardPage from '../pages/SetupWizardPage';
 import SystemInfoPage from '../pages/SystemInfoPage';
 import StickyNotesPage from '../pages/StickyNotesPage';
 import PhotoCuratorPage from '../pages/PhotoCuratorPage';
+import FfmpegGeneratorPage from '../pages/FfmpegGeneratorPage';
 import RequireAuth from './RequireAuth';
 import RouteEffects from './RouteEffects';
 import { getSafeReturnPath, PATHS } from './paths';
@@ -98,6 +99,7 @@ export default function AppRoutes({
           <Route path="dashboard" element={<DashboardPage authUser={authUser} sysSettings={sysSettings} />} />
           <Route path="notes" element={<StickyNotesPage {...pageProps} />} />
           <Route path="photo-curator" element={<PhotoCuratorPage {...pageProps} />} />
+          <Route path="ffmpeg-generator" element={<FfmpegGeneratorPage {...pageProps} />} />
           <Route path="system/health" element={<ApiHealthPage authUser={authUser} />} />
           <Route path="system/info" element={<SystemInfoPage sysSettings={sysSettings} />} />
           <Route path="system/settings" element={<SystemSettingsPage {...pageProps} />} />
