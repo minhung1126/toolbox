@@ -155,7 +155,38 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
         {group('system', '系統管理', systemGroup.icon, systemOpen, setSystemOpen, systemItems, systemActive)}
         {item({ id: 'settings', to: PATHS.googleSettings, label: '控制台帳號', icon: Settings, activePrefix: '/settings' })}
       </nav>
-      <div className="sidebar-footer"><div className="glass-panel account-card"><strong className="account-title">帳號資訊</strong><span className="badge badge-connected account-status"><CheckCircle2 size={12} />控制台已登入</span><p className="account-email">{authUser?.email}</p><span className={`badge account-youtube-status ${youtubeAuthorized ? 'badge-connected' : 'badge-disconnected'}`}>{youtubeAuthorized ? 'YouTube 已授權' : 'YouTube 未連結'}</span><span className={`badge ${authUser?.authorizations?.ytmusic?.connected ? 'badge-connected' : 'badge-disconnected'}`} style={{ marginTop: '0.25rem' }}>{authUser?.authorizations?.ytmusic?.connected ? 'YT Music 已授權' : 'YT Music 未連結'}</span><button type="button" className="logout-button" onClick={onLogout}>登出控制台</button></div></div>
+      <div className="sidebar-footer">
+        <div className="account-card">
+          <div className="account-header-row">
+            <div className="account-user-badge">
+              <span className="account-avatar" aria-hidden="true">
+                {(authUser?.email?.[0] || 'U').toUpperCase()}
+              </span>
+              <p className="account-email" title={authUser?.email}>{authUser?.email}</p>
+            </div>
+            <button
+              type="button"
+              className="logout-button"
+              onClick={onLogout}
+              title="登出控制台"
+              aria-label="登出控制台"
+            >
+              登出
+            </button>
+          </div>
+          <div className="account-badges-row">
+            <span className="badge badge-connected account-status">
+              <CheckCircle2 size={10} /> 控制台已登入
+            </span>
+            <span className={`badge account-youtube-status ${youtubeAuthorized ? 'badge-connected' : 'badge-disconnected'}`}>
+              {youtubeAuthorized ? 'YouTube' : 'YouTube 未連結'}
+            </span>
+            <span className={`badge ${authUser?.authorizations?.ytmusic?.connected ? 'badge-connected' : 'badge-disconnected'}`}>
+              {authUser?.authorizations?.ytmusic?.connected ? 'YT Music' : 'YT Music 未連結'}
+            </span>
+          </div>
+        </div>
+      </div>
     </aside>
   </>;
 }

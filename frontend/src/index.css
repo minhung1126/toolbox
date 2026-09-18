@@ -7,31 +7,33 @@
   --app-bar-height: 64px;
   --mobile-shell-offset: calc(var(--app-bar-height) + env(safe-area-inset-top));
 
-  --bg-canvas: #090d16;
-  --bg-primary: #090d16;
-  --bg-secondary: #0f172a;
-  --bg-card: #111827;
-  --bg-card-hover: #162238;
-  --surface-inset: #0a0f1d;
-  --surface-raised: #172236;
+  --bg-canvas: #121316;
+  --bg-primary: #121316;
+  --bg-secondary: #181a1f;
+  --bg-card: #1c1e24;
+  --bg-card-hover: #242730;
+  --surface-inset: #14151a;
+  --surface-raised: #262a34;
 
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-color: rgba(255, 255, 255, 0.12);
-  --border-hover: rgba(255, 255, 255, 0.22);
-  --border-glow: rgba(99, 102, 241, 0.4);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-color: rgba(255, 255, 255, 0.09);
+  --border-hover: rgba(255, 255, 255, 0.16);
+  --border-glow: transparent;
 
   --primary: #6366f1;
   --primary-hover: #4f46e5;
   --primary-active: #4338ca;
   --primary-glow: rgba(99, 102, 241, 0.22);
+  --primary-subtle: rgba(99, 102, 241, 0.12);
+  --primary-border: rgba(99, 102, 241, 0.35);
 
-  --accent: #0ea5e9;
-  --accent-hover: #0284c7;
+  --accent: #6366f1;
+  --accent-hover: #4f46e5;
   --secondary: #ec4899;
 
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-  --text-dim: #64748b;
+  --text-main: #f3f4f6;
+  --text-muted: #9ca3af;
+  --text-dim: #6b7280;
 
   --success: #10b981;
   --warning: #f59e0b;
@@ -311,8 +313,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .sidebar {
   width: var(--sidebar-width);
-  background: rgba(10, 13, 20, 0.85);
-  backdrop-filter: blur(20px);
+  background: #101114;
   border-right: 1px solid var(--border-color);
   padding: 24px 16px;
   display: flex;

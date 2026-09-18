@@ -87,7 +87,7 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
                 const Icon = card.icon;
                 return (
                   <div key={card.id} className="glass-panel glass-panel-interactive feature-card">
-                    <div className={`icon-box icon-box-${card.colorTheme || 'primary'}`}><Icon size={28} /></div>
+                    <div className={`icon-box icon-box-${card.colorTheme || 'primary'}`}><Icon size={20} aria-hidden="true" /></div>
                     <div className="feature-card-copy">
                       <h3>{card.title}</h3>
                       <p>{card.description}</p>
