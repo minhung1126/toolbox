@@ -142,16 +142,16 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
       <div className="sidebar-brand"><div className="brand-mark"><Video size={24} aria-hidden="true" /></div><div className="sidebar-brand-copy"><h2>Toolbox</h2><p>多功能模組化工具箱</p></div><button type="button" className="sidebar-toggle" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} aria-label={sidebarToggleLabel} title={sidebarToggleLabel} aria-expanded={!sidebarCollapsed} aria-controls="primary-navigation"><SidebarToggleIcon size={20} aria-hidden="true" /></button><button ref={closeButtonRef} type="button" className="drawer-close" onClick={closeDrawer} aria-label="關閉導覽選單"><X size={22} aria-hidden="true" /></button></div>
       <nav className="sidebar-nav">
         {item({ id: 'dashboard', to: PATHS.dashboard, label: '儀表板總覽', icon: LayoutDashboard })}
-        {item({ id: 'notes', to: PATHS.notes, label: '便利貼', icon: StickyNote })}
+        {group('youtube', 'YouTube', youtubeGroup.icon, youtubeOpen, setYoutubeOpen, youtubeItems, youtubeActive)}
+        {group('ytmusic', 'YouTube Music', Disc3, ytmusicOpen, setYtmusicOpen, ytmusicItems, ytmusicActive)}
+        {group('sheet', 'Sheet', sheetGroup.icon, sheetOpen, setSheetOpen, sheetItems, sheetActive)}
         {item({
           id: photoCuratorItem.id,
           to: photoCuratorItem.to || PATHS.photoCurator,
           label: photoCuratorGroup.label || photoCuratorItem.label || 'Instagram 排版',
           icon: photoCuratorGroup.icon || photoCuratorItem.icon || Instagram,
         })}
-        {group('ytmusic', 'YouTube Music', Disc3, ytmusicOpen, setYtmusicOpen, ytmusicItems, ytmusicActive)}
-        {group('youtube', 'YouTube', youtubeGroup.icon, youtubeOpen, setYoutubeOpen, youtubeItems, youtubeActive)}
-        {group('sheet', 'Sheet', sheetGroup.icon, sheetOpen, setSheetOpen, sheetItems, sheetActive)}
+        {item({ id: 'notes', to: PATHS.notes, label: '便利貼', icon: StickyNote })}
         {group('system', '系統管理', systemGroup.icon, systemOpen, setSystemOpen, systemItems, systemActive)}
         {item({ id: 'settings', to: PATHS.googleSettings, label: '控制台帳號', icon: Settings, activePrefix: '/settings' })}
       </nav>

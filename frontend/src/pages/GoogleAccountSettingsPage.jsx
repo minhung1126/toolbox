@@ -9,6 +9,7 @@ import { useOAuthConnect } from '../hooks/useOAuthConnect';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
 import { PATHS } from '../routes/paths';
 import { formatTokenDate, tokenStatusLabel } from '../utils/formatters';
+import { youtubeIsConnected, youtubePreferredUiSlot } from '../utils/youtubeRouting';
 
 const GITHUB_DOCS = {
   google: 'https://github.com/minhung1126/toolbox/blob/main/docs/GOOGLE_API_SETUP.md',
@@ -51,6 +52,11 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
   const isSheetsConnected = Boolean(sheetsAuth?.connected || authUser?.google_scopes?.sheets_readonly);
   const ytmusicAuth = authUser?.authorizations?.ytmusic;
   const isYtmusicConnected = Boolean(ytmusicAuth?.connected);
+  const isYoutubeConnected = youtubeIsConnected(authUser?.youtube);
+  const preferredSlot = youtubePreferredUiSlot(authUser?.youtube);
+  const activeYoutubeSlot = authUser?.youtube?.slots?.[preferredSlot] || {};
+  const activeYoutubeChannelTitle = activeYoutubeSlot.channel_title;
+  const activeYoutubeEmail = activeYoutubeSlot.user?.email;
 
   return (
     <div className="settings-page-section">
@@ -77,6 +83,16 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
         <p className="section-desc">控制台 Google Access Token 會在到期前 5 分鐘由後端自動更新，Refresh Token 以加密方式保存於 <code>/data</code>，不放在瀏覽器 Cookie 中。</p>
         {sysSettings.redirect_uri && <div className="settings-code-block"><p><strong>Google Authorized Redirect URI：</strong></p><code>{sysSettings.redirect_uri}</code></div>}
         <div className="page-actions settings-card-actions"><button className="btn btn-primary" onClick={handleStartLoginOAuth} type="button"><RefreshCw size={16} /> 重新連結控制台 Google 帳號</button></div>
+      </div>
+
+      {/* Group 2: 已連線第三方服務授權 */}
+      <div style={{ margin: '1.75rem 0 0.75rem 0' }}>
+        <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 0.25rem 0' }}>
+          第三方服務授權矩陣
+        </h3>
+        <p className="section-desc" style={{ margin: 0, fontSize: '0.85rem' }}>
+          控制台採用解耦授權設計，各服務權限依需獨立授權，並提供詳細專屬設定頁面。
+        </p>
       </div>
 
       {/* 2. Google 試算表授權 */}
@@ -131,14 +147,46 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
       {/* 4. YouTube 頻道授權 */}
       <div className="glass-panel card-padding settings-card card-stack">
         <div className="card-header">
-          <div className="card-header-title"><ListVideo size={20} color="var(--primary)" /><h2>YouTube 頻道授權</h2></div>
+          <div className="card-header-title">
+            <ListVideo size={20} color="var(--primary)" />
+            <h2>YouTube 頻道授權</h2>
+          </div>
+          {isYoutubeConnected ? (
+            <span className="badge badge-connected">
+              <CheckCircle2 size={14} /> 已授權：{activeYoutubeChannelTitle || '主要頻道'}
+            </span>
+          ) : (
+            <span className="badge badge-disconnected">
+              <XCircle size={14} /> 尚未授權頻道
+            </span>
+          )}
         </div>
-        <p className="section-desc">YouTube Data API 授權獨立管理，支援主要與次要配額 Slot 切換、自動分流與配額防護。請至專屬頁面管理各 Slot 頻道授權。</p>
+        <p className="section-desc">
+          YouTube Data API 授權獨立管理，支援主要 (Primary) 與次要 (Secondary) 雙槽位配額切換、自動容錯分流與 Quota 安全防護。請至專屬頁面管理各 Slot 頻道授權與連線憑證。
+        </p>
+        {activeYoutubeEmail && (
+          <div className="settings-grid" style={{ marginBottom: '0.5rem' }}>
+            <div className="glass-panel settings-info-card">
+              <strong>連線帳號</strong>
+              <p>{activeYoutubeEmail}</p>
+            </div>
+          </div>
+        )}
         <div className="page-actions settings-card-actions">
           <Link className="btn btn-secondary" to={PATHS.youtubeConnections}>
             <ListVideo size={16} /> 前往 YouTube 頻道授權設定
           </Link>
         </div>
+      </div>
+
+      {/* Group 3: 系統安全與維運 */}
+      <div style={{ margin: '1.75rem 0 0.75rem 0' }}>
+        <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 0.25rem 0' }}>
+          全站系統安全與維運
+        </h3>
+        <p className="section-desc" style={{ margin: 0, fontSize: '0.85rem' }}>
+          平台管理者安全配置、全域 OAuth Client 憑證與存取權限控制。
+        </p>
       </div>
 
       {/* 5. 系統安全與白名單 */}
