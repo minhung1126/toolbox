@@ -354,6 +354,7 @@ export const api = {
     sortedItemIds = null,
     language = null,
     location = null,
+    allowQuotaFallback = false,
   }) => request('/playlist-sort/apply', {
     method: 'POST',
     timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
@@ -367,6 +368,7 @@ export const api = {
       sorted_item_ids: sortedItemIds,
       language,
       location,
+      allow_quota_fallback: allowQuotaFallback,
     }),
   }),
   saveYtmusicCustomToken: (token) => request('/auth/ytmusic/custom-token', {

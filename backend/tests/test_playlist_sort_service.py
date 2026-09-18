@@ -781,3 +781,102 @@ def test_sort_single_collaboration_uses_first_author():
     # "I Don't Care" (first author Ed Sheeran) must be grouped with "Shape of You" before "Baby"
     assert titles.index("Shape of You") < titles.index("Baby")
     assert titles.index("I Don't Care") < titles.index("Baby")
+
+
+@pytest.mark.anyio
+async def test_apply_sort_strict_defense_blocks_fallback_when_token_fails(monkeypatch):
+    """When a custom token is present but fails, apply_sort blocks silent fallback to Data API."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from fastapi import HTTPException
+    from ytmusicapi.exceptions import YTMusicError
+
+    import backend.app.api.playlist_sort as ps_api
+    from backend.app.api.playlist_sort import SortApplyInput, SortKeyInput, apply_sort
+    from backend.app.core.credential_store import credential_store
+    from backend.app.core.youtube_context import YouTubeRequestContext
+
+    context = YouTubeRequestContext(
+        slot="primary",
+        credentials=object(),
+        quota_limiter=SimpleNamespace(),
+        owner_sub="user-with-failing-token",
+    )
+
+    # Simulate that user has a custom token
+    monkeypatch.setattr(credential_store, "get_ytmusic_custom_token", lambda sub: "dummy-token")
+    monkeypatch.setattr(ps_api, "verify_preview_token", lambda *args, **kwargs: True)
+
+    mock_items = [
+        {"playlist_item_id": "v1_0", "video_id": "v1", "title": "B", "position": 0, "has_set_video_id": True},
+        {"playlist_item_id": "v2_1", "video_id": "v2", "title": "A", "position": 1, "has_set_video_id": True},
+    ]
+    monkeypatch.setattr(ps_api, "fetch_playlist_items_for_sort", lambda *args, **kwargs: mock_items)
+
+    # YTMusic execution fails (e.g. expired session)
+    monkeypatch.setattr(
+        ps_api,
+        "apply_sort_to_playlist",
+        MagicMock(side_effect=YTMusicError("Unauthorized: Session expired")),
+    )
+
+    inp = SortApplyInput(
+        playlist_id="PL_FAIL",
+        sort_keys=[SortKeyInput(field="title", direction="asc")],
+        preview_token="valid_token",
+        mode="in_place",
+        allow_quota_fallback=False,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await apply_sort(inp, context=context)
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail["code"] == "TOKEN_FALLBACK_BLOCKED"
+    assert "已啟動嚴格防禦保護" in exc_info.value.detail["message"]
+
+
+@pytest.mark.anyio
+async def test_apply_sort_allows_fallback_when_explicitly_permitted(monkeypatch):
+    """When allow_quota_fallback=True is passed, apply_sort permits Data API fallback."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import backend.app.api.playlist_sort as ps_api
+    from backend.app.api.playlist_sort import SortApplyInput, SortKeyInput, apply_sort
+    from backend.app.core.credential_store import credential_store
+    from backend.app.core.youtube_context import YouTubeRequestContext
+
+    context = YouTubeRequestContext(
+        slot="primary",
+        credentials=object(),
+        quota_limiter=SimpleNamespace(),
+        owner_sub="user-with-token",
+    )
+
+    monkeypatch.setattr(credential_store, "get_ytmusic_custom_token", lambda sub: "dummy-token")
+    monkeypatch.setattr(ps_api, "verify_preview_token", lambda *args, **kwargs: True)
+
+    mock_items = [
+        {"playlist_item_id": "v1_0", "video_id": "v1", "title": "B", "position": 0, "has_set_video_id": True},
+        {"playlist_item_id": "v2_1", "video_id": "v2", "title": "A", "position": 1, "has_set_video_id": True},
+    ]
+    monkeypatch.setattr(ps_api, "fetch_playlist_items_for_sort", lambda *args, **kwargs: mock_items)
+
+    mock_apply = MagicMock(return_value={"status": "success", "quota_used": 100, "succeeded": 2})
+    monkeypatch.setattr(ps_api, "apply_sort_to_playlist", mock_apply)
+
+    inp = SortApplyInput(
+        playlist_id="PL_ALLOWED",
+        sort_keys=[SortKeyInput(field="title", direction="asc")],
+        preview_token="valid_token",
+        mode="in_place",
+        allow_quota_fallback=True,
+    )
+
+    res = await apply_sort(inp, context=context)
+    assert res["status"] == "success"
+    # verify allow_quota_fallback was passed as True
+    _, kwargs = mock_apply.call_args
+    assert kwargs.get("allow_quota_fallback") is True

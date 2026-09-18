@@ -565,6 +565,7 @@ def apply_sort_to_playlist(
     use_youtube_api: bool = False,
     language: str | None = None,
     location: str | None = None,
+    allow_quota_fallback: bool = True,
 ) -> dict[str, Any]:
     """Apply sorting to the playlist.
 
@@ -601,6 +602,12 @@ def apply_sort_to_playlist(
                     raise RuntimeError(f"YTMusic in-place sort failed: {res.get('failed_items')}")
                 return res
         except Exception as exc:
+            if not allow_quota_fallback:
+                logger.warning(
+                    "apply_sort_to_playlist using ytmusic_service failed: %s; quota fallback blocked by strict defense",
+                    exc,
+                )
+                raise
             logger.warning("apply_sort_to_playlist using ytmusic_service failed: %s; falling back to Data API", exc)
 
     # Google YouTube Data API v3 update

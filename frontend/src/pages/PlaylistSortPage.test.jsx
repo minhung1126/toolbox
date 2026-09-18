@@ -93,21 +93,41 @@ const mockPreview = {
 
 import { AccountWorkStateProvider } from '../hooks/useAccountWorkState';
 
-const renderWithRouter = (ui, { initialState = {} } = {}) =>
-  render(
+const renderWithRouter = (ui, { initialState = {} } = {}) => {
+  const defaultAuthUser = {
+    authorizations: {
+      ytmusic: { connected: true, user: { email: 'music@example.com' } },
+    },
+    youtube: { slots: { primary: { authenticated: true, channel_title: 'My Channel' } } },
+  };
+  const propAuthUser = ui.props?.authUser;
+  const authUser = propAuthUser
+    ? {
+        ...defaultAuthUser,
+        ...propAuthUser,
+        authorizations: {
+          ...defaultAuthUser.authorizations,
+          ...(propAuthUser.authorizations || {}),
+          ytmusic: {
+            ...defaultAuthUser.authorizations.ytmusic,
+            ...(propAuthUser.authorizations?.ytmusic || {}),
+          },
+        },
+        youtube: {
+          ...defaultAuthUser.youtube,
+          ...(propAuthUser.youtube || {}),
+        },
+      }
+    : defaultAuthUser;
+
+  return render(
     <MemoryRouter>
       <AccountWorkStateProvider initialState={initialState}>
-        {React.cloneElement(ui, {
-          authUser: {
-            authorizations: {
-              ytmusic: { connected: true, user: { email: 'music@example.com' } },
-            },
-            youtube: { slots: { primary: { authenticated: true, channel_title: 'My Channel' } } },
-          },
-        })}
+        {React.cloneElement(ui, { authUser })}
       </AccountWorkStateProvider>
     </MemoryRouter>
   );
+};
 
 describe('PlaylistSortPage', () => {
   beforeEach(() => {
@@ -649,5 +669,130 @@ describe('PlaylistSortPage', () => {
     const laLaIdx = [titles.indexOf('City of Stars'), titles.indexOf('Audition'), titles.indexOf('A Lovely Night')];
     expect(laLaIdx[1]).toBe(laLaIdx[0] + 1);
     expect(laLaIdx[2]).toBe(laLaIdx[1] + 1);
+  });
+
+  it('toggles QuickTokenDrawer when clicking paste token button', async () => {
+    api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: mockPlaylists });
+
+    renderWithRouter(
+      <PlaylistSortPage
+        authUser={{
+          authorizations: {
+            ytmusic: { connected: true, has_custom_token: false },
+          },
+        }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('我的最愛音樂 (3 首)')).toBeInTheDocument();
+    });
+
+    const toggleBtn = screen.getByRole('button', { name: /貼上 Token 啟用 0 配額/ });
+    fireEvent.click(toggleBtn);
+
+    expect(screen.getByTestId('quick-token-drawer')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /收合面板/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /收合面板/ }));
+    expect(screen.queryByTestId('quick-token-drawer')).not.toBeInTheDocument();
+  });
+
+  it('intercepts token failure with strict defense dialog and permits user to continue with quota', async () => {
+    api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: mockPlaylists });
+    api.previewPlaylistSort.mockResolvedValueOnce({
+      preview: mockPreview,
+      preview_token: 'token-ytm-0',
+      quota_estimate: { moved_count: 2, units_per_move: 0, total_units: 0 },
+    });
+
+    const tokenError = new Error('Token 已過期');
+    tokenError.code = 'TOKEN_FALLBACK_BLOCKED';
+    api.applyPlaylistSort.mockRejectedValueOnce(tokenError);
+
+    renderWithRouter(
+      <PlaylistSortPage
+        authUser={{
+          authorizations: {
+            ytmusic: { connected: true, has_custom_token: true },
+          },
+        }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('我的最愛音樂 (3 首)')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /模擬預覽/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /套用排序/ })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /套用排序/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText('確認套用排序')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '確認套用' }));
+
+    // Strict defense dialog pops up!
+    await waitFor(() => {
+      expect(screen.getByText(/YouTube Music Token 認證失效（嚴格防禦保護）/)).toBeInTheDocument();
+      expect(screen.getByText(/嚴格防禦政策/)).toBeInTheDocument();
+    });
+
+    // Mock subsequent success when user confirms allowing quota fallback
+    api.applyPlaylistSort.mockResolvedValueOnce({
+      operation: 'playlist_sort',
+      mode: 'in_place',
+      total: 3,
+      moved: 2,
+      succeeded: 2,
+      failed: 0,
+      quota_used: 100,
+    });
+
+    const fallbackBtn = screen.getByRole('button', { name: /以 Google API 配額繼續/ });
+    fireEvent.click(fallbackBtn);
+
+    await waitFor(() => {
+      expect(api.applyPlaylistSort).toHaveBeenCalledWith(
+        expect.objectContaining({
+          allowQuotaFallback: true,
+        })
+      );
+      expect(screen.getByText('排序成功套用')).toBeInTheDocument();
+    });
+  });
+
+  it('triggers 429 quota exceeded recovery dialog and can open token drawer', async () => {
+    api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: mockPlaylists });
+    const quotaError = new Error('Google YouTube Data API 配額已達每日上限');
+    quotaError.status = 429;
+    quotaError.code = 'quota_unavailable';
+    api.previewPlaylistSort.mockRejectedValueOnce(quotaError);
+
+    renderWithRouter(<PlaylistSortPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('我的最愛音樂 (3 首)')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /模擬預覽/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Google API 每日配額已用盡')).toBeInTheDocument();
+      expect(screen.getByText(/即刻救援方案/)).toBeInTheDocument();
+    });
+
+    const rescueBtn = screen.getByRole('button', { name: /展開 Token 面板啟用 0 配額救援/ });
+    fireEvent.click(rescueBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('quick-token-drawer')).toBeInTheDocument();
+    });
   });
 });

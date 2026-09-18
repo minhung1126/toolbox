@@ -260,6 +260,11 @@ class CredentialStore:
     def get_ytmusic_public(self, owner_sub: str) -> Optional[Dict[str, Any]]:
         public = self._get_public("ytmusic", owner_sub)
         has_custom = bool(self.get_ytmusic_custom_token(owner_sub))
+        custom_record = self._find_record("ytmusic_custom_token", owner_sub) if has_custom else None
+        token_account = custom_record.get("account_name") if isinstance(custom_record, dict) else None
+        token_handle = custom_record.get("channel_handle") if isinstance(custom_record, dict) else None
+        token_updated = custom_record.get("updated_at") if isinstance(custom_record, dict) else None
+
         if public is None:
             if has_custom:
                 return {
@@ -268,10 +273,17 @@ class CredentialStore:
                     "engine": "ytmusic_innertube",
                     "status": "active",
                     "token_status": "active",
+                    "token_account_name": token_account,
+                    "token_channel_handle": token_handle,
+                    "token_updated_at": token_updated,
                 }
             return None
         public["has_custom_token"] = has_custom
-        public["engine"] = "ytmusic_innertube"
+        public["engine"] = "ytmusic_innertube" if has_custom else "google_oauth"
+        if has_custom:
+            public["token_account_name"] = token_account
+            public["token_channel_handle"] = token_handle
+            public["token_updated_at"] = token_updated
         return public
 
     def _get_public(self, key: str, owner_sub: str) -> Optional[Dict[str, Any]]:
@@ -385,7 +397,13 @@ class CredentialStore:
     def clear_drive(self, owner_sub: str) -> None:
         self._clear("drive", owner_sub)
 
-    def save_ytmusic_custom_token(self, token_data: str, owner_sub: str) -> None:
+    def save_ytmusic_custom_token(
+        self,
+        token_data: str,
+        owner_sub: str,
+        account_name: Optional[str] = None,
+        channel_handle: Optional[str] = None,
+    ) -> None:
         """Persist encrypted custom YouTube Music browser token / headers."""
         with self._lock:
             subject = _require_subject(owner_sub)
@@ -395,9 +413,28 @@ class CredentialStore:
                 "owner_sub": subject,
                 "token_encrypted": encrypted,
                 "updated_at": to_iso(utc_now()),
+                "account_name": account_name,
+                "channel_handle": channel_handle,
             }
             user_records["ytmusic_custom_token"] = record
             self._save()
+
+    def update_ytmusic_custom_token_metadata(
+        self,
+        owner_sub: str,
+        account_name: Optional[str] = None,
+        channel_handle: Optional[str] = None,
+    ) -> None:
+        """Update account_name or channel_handle for an already saved custom token."""
+        with self._lock:
+            subject = _require_subject(owner_sub)
+            record = self._find_record("ytmusic_custom_token", subject)
+            if isinstance(record, dict):
+                if account_name is not None:
+                    record["account_name"] = account_name
+                if channel_handle is not None:
+                    record["channel_handle"] = channel_handle
+                self._save()
 
     def get_ytmusic_custom_token(self, owner_sub: str) -> Optional[str]:
         """Retrieve and decrypt custom YouTube Music token if present."""

@@ -66,6 +66,7 @@ class SortApplyInput(BaseModel):
     sorted_item_ids: Optional[list[str]] = None
     language: Optional[str] = None
     location: Optional[str] = None
+    allow_quota_fallback: bool = False
 
 
 @router.get("/playlists")
@@ -209,6 +210,8 @@ async def apply_sort(
             sort_keys_dict = [{"field": k.field, "direction": k.direction} for k in input_data.sort_keys]
             sorted_items = sort_items(original_items, sort_keys_dict)
 
+        has_custom_token = bool(credential_store.get_ytmusic_custom_token(context.owner_sub))
+        effective_fallback = input_data.allow_quota_fallback or (not has_custom_token)
         preview = build_sort_preview(original_items, sorted_items)
 
         result = apply_sort_to_playlist(
@@ -221,6 +224,7 @@ async def apply_sort(
             use_youtube_api=input_data.use_youtube_api,
             language=input_data.language,
             location=input_data.location,
+            allow_quota_fallback=effective_fallback,
         )
         return result
     except YouTubeQuotaUnavailable as exc:
@@ -229,4 +233,11 @@ async def apply_sort(
         raise
     except Exception as e:
         logger.exception("Error applying sort: %s", e)
+        has_custom = bool(credential_store.get_ytmusic_custom_token(context.owner_sub))
+        if has_custom and not input_data.use_youtube_api and not input_data.allow_quota_fallback:
+            raise http_error(
+                401,
+                "TOKEN_FALLBACK_BLOCKED",
+                f"YouTube Music Token 執行失敗（{e}）。已啟動嚴格防禦保護，阻止自動降級至 Google API 配額模式（避免無預警消耗配額）。請更新 Token 或確認以 Google API 配額繼續。",
+            ) from e
         raise http_error(500, "APPLY_FAILED", str(e)) from e

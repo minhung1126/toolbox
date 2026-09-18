@@ -200,6 +200,9 @@ def _build_service_authorization_status(
         "scopes": sorted(getattr(creds, "scopes", None) or public_record.get("scopes") or []),
         "token_status": public_record.get("status", "active" if connected else "not_connected"),
         "token_expires_at": public_record.get("token_expires_at"),
+        "token_updated_at": public_record.get("token_updated_at"),
+        "account_name": public_record.get("token_account_name"),
+        "channel_handle": public_record.get("token_channel_handle"),
         "last_refreshed_at": public_record.get("last_refreshed_at"),
         "last_refresh_error": public_record.get("last_refresh_error"),
         "has_custom_token": has_custom,
@@ -357,6 +360,12 @@ def validate_ytmusic_token(payload: YtmusicTokenValidateInput, request: Request)
 
     try:
         result = validate_ytmusic_custom_token(token_str)
+        if result.get("valid"):
+            credential_store.update_ytmusic_custom_token_metadata(
+                auth_session.subject,
+                account_name=result.get("account_name"),
+                channel_handle=result.get("channel_handle"),
+            )
         return {"status": "success", **result}
     except Exception as exc:
         raise http_error(400, "token_invalid", str(exc)) from exc

@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Globe,
   GripVertical,
+  Key,
   ListMusic,
   Loader2,
   Pin,
@@ -26,6 +27,7 @@ import { api } from '../services/api';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { StatusMessage } from '../components/StatusMessage';
+import QuickTokenDrawer from '../components/QuickTokenDrawer';
 import { useOAuthConnect } from '../hooks/useOAuthConnect';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { PATHS } from '../routes/paths';
@@ -923,7 +925,16 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
 
   const ytmusicAuth = authUser?.authorizations?.ytmusic;
   const isYtmusicConnected = Boolean(ytmusicAuth?.connected);
+  const hasCustomToken = Boolean(ytmusicAuth?.has_custom_token);
+  const tokenAccountName = ytmusicAuth?.account_name || '';
+  const tokenChannelHandle = ytmusicAuth?.channel_handle || '';
+  const tokenUpdatedAt = ytmusicAuth?.token_updated_at || '';
   const activeYoutubeConnected = Boolean(authUser?.youtube?.slots?.primary?.authenticated);
+
+  // In-place token drawer & defense prompt states
+  const [showTokenDrawer, setShowTokenDrawer] = useState(false);
+  const [strictFallbackPrompt, setStrictFallbackPrompt] = useState(null);
+  const [quotaExceededRecovery, setQuotaExceededRecovery] = useState(null);
 
   // Playlist selection
   const [playlists, setPlaylists] = useState([]);
@@ -1216,11 +1227,31 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         toast.success(`預覽完成：${moved} 首需移動 / 共 ${total} 首（已啟用即時動態模擬）`);
       }
     } catch (err) {
+      if (err.status === 429 || err.code === 'quota_unavailable' || err.code === 'YOUTUBE_QUOTA_UNAVAILABLE') {
+        setQuotaExceededRecovery({
+          message: err.message || 'Google YouTube Data API 配額已達每日上限。',
+        });
+      }
       toast.error(`預覽失敗：${err.message || '未知錯誤'}`);
     } finally {
       setPreviewing(false);
     }
   }, [selectedPlaylistId, activeSortKeys, activeLanguage, activeLocation, toast]);
+
+  const handleTokenSaved = useCallback(async () => {
+    await refreshAuthUser?.();
+    setShowTokenDrawer(false);
+    if (selectedPlaylistId) {
+      handlePreview();
+    }
+  }, [refreshAuthUser, selectedPlaylistId, handlePreview]);
+
+  const handleTokenCleared = useCallback(async () => {
+    await refreshAuthUser?.();
+    if (selectedPlaylistId) {
+      handlePreview();
+    }
+  }, [refreshAuthUser, selectedPlaylistId, handlePreview]);
 
   // Handle reordering tracks manually via drag-and-drop in the right preview list
   const handleReorderTracks = useCallback((sourceIdx, targetIdx) => {
@@ -1253,7 +1284,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     setShowConfirm(true);
   }, [previewData, applyMode, toast]);
 
-  const handleApplyConfirm = useCallback(async () => {
+  const handleApplyConfirm = useCallback(async (options = {}) => {
+    const { forceAllowQuotaFallback = false } = options;
     setShowConfirm(false);
     setApplying(true);
     try {
@@ -1264,6 +1296,9 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         language: activeLanguage,
         location: activeLocation,
       };
+      if (forceAllowQuotaFallback) {
+        payload.allowQuotaFallback = true;
+      }
       if (applyMode === 'new_playlist') {
         payload.mode = 'new_playlist';
         payload.newPlaylistTitle = newPlaylistTitle;
@@ -1288,11 +1323,24 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
       setCachedOriginalTracks(null);
       setIsManuallyAdjusted(false);
     } catch (err) {
+      const errCode = err.code || err.detail?.code;
+      if (errCode === 'TOKEN_FALLBACK_BLOCKED' || err.status === 401) {
+        setStrictFallbackPrompt({
+          message: err.message || err.detail?.message || 'YouTube Music Token 認證失效或已過期。',
+          quotaUnits: quotaEstimate?.total_units || (previewData?.moved_count || 0) * 50,
+        });
+        return;
+      }
+      if (err.status === 429 || err.code === 'quota_unavailable' || err.code === 'YOUTUBE_QUOTA_UNAVAILABLE') {
+        setQuotaExceededRecovery({
+          message: err.message || 'Google YouTube Data API 配額已達每日上限。',
+        });
+      }
       toast.error(`套用排序失敗：${err.message || '未知錯誤'}`);
     } finally {
       setApplying(false);
     }
-  }, [selectedPlaylistId, activeSortKeys, previewToken, applyMode, newPlaylistTitle, previewData, activeLanguage, activeLocation, toast]);
+  }, [selectedPlaylistId, activeSortKeys, previewToken, applyMode, newPlaylistTitle, previewData, activeLanguage, activeLocation, quotaEstimate, toast]);
 
   // Drag & drop handlers for sort rule keys
   const handleRuleDragStart = (e, index) => {
@@ -1375,9 +1423,15 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <strong style={{ fontSize: '1rem' }}>YouTube Music 連線模式</strong>
-                {isYtmusicConnected ? (
-                  <span className="badge badge-connected"><CheckCircle2 size={12} /> 專屬帳號 / Token 已連線</span>
+                <strong style={{ fontSize: '1rem' }}>YouTube Music 運作模式</strong>
+                {hasCustomToken ? (
+                  <span className="badge badge-connected" data-testid="badge-ytm-zero-quota">
+                    <CheckCircle2 size={12} /> ⚡ 0 配額模式（瀏覽器 Token 已啟用）
+                  </span>
+                ) : isYtmusicConnected ? (
+                  <span className="badge badge-warning" style={{ background: 'rgba(234, 179, 8, 0.15)', color: '#facc15', border: '1px solid rgba(234, 179, 8, 0.3)' }}>
+                    <AlertTriangle size={12} /> Google API 配額模式
+                  </span>
                 ) : activeYoutubeConnected ? (
                   <span className="badge badge-info">共用 YouTube 頻道授權</span>
                 ) : (
@@ -1385,15 +1439,36 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                 )}
               </div>
               <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)' }}>
-                {isYtmusicConnected
-                  ? `已連結 YouTube Music：${ytmusicAuth?.user?.email || (ytmusicAuth?.has_custom_token ? '自訂瀏覽器 Token' : '已授權')}。排序作業採用 YouTube Music 協定，不消耗 Google API 配額。`
+                {hasCustomToken
+                  ? `已啟用 YouTube Music 瀏覽器 Token${tokenAccountName ? `（${tokenAccountName}${tokenChannelHandle ? ` / ${tokenChannelHandle}` : ''}）` : ''}。排序作業採用內部協定，消耗 0 Google API 配額。`
+                  : isYtmusicConnected
+                  ? `目前使用 Google YouTube Data API（每次移動消耗 50 點配額）。建議展開下方快速面板貼上 Token 享受 0 配額免扣點。`
                   : activeYoutubeConnected
-                  ? `目前沿用主要 YouTube 頻道（${authUser?.youtube?.slots?.primary?.channel_title || '品牌頻道'}）授權。若要使用個人日常音樂帳號，建議至設定頁連結 YouTube Music 專屬帳號。`
+                  ? `目前沿用主要 YouTube 頻道（${authUser?.youtube?.slots?.primary?.channel_title || '品牌頻道'}）授權。若要使用個人日常音樂帳號，建議連結專屬帳號或展開面板貼上 Token。`
                   : '尚未連結 YouTube 或 YouTube Music 帳號，請先完成授權以載入個人播放清單。'}
               </p>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {hasCustomToken ? (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowTokenDrawer(!showTokenDrawer)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <Key size={14} /> {showTokenDrawer ? '收合 Token 面板' : '更換 / 管理 Token'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => setShowTokenDrawer(!showTokenDrawer)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <Key size={14} /> ⚡ 貼上 Token 啟用 0 配額
+              </button>
+            )}
             <Link
               to={PATHS.ytmusicSettings}
               className="btn btn-secondary btn-sm"
@@ -1435,6 +1510,18 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             )}
           </div>
         </div>
+
+        {/* In-place Quick Token Collapsible Drawer */}
+        <QuickTokenDrawer
+          isOpen={showTokenDrawer}
+          onClose={() => setShowTokenDrawer(false)}
+          hasCustomToken={hasCustomToken}
+          tokenAccountName={tokenAccountName}
+          tokenChannelHandle={tokenChannelHandle}
+          tokenUpdatedAt={tokenUpdatedAt}
+          onTokenSaved={handleTokenSaved}
+          onTokenCleared={handleTokenCleared}
+        />
       </section>
 
       {/* Step 1: Select Playlist */}
@@ -1782,17 +1869,29 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                 }}>
                   <CheckCircle2 size={18} />
                   <span>
-                    <strong>YouTube Music Token 協定運作中</strong>：本次操作預計移動 {previewData.moved_count} 首歌曲，
+                    <strong>YouTube Music Token 協定運作中（0 配額）</strong>：本次操作預計移動 {previewData.moved_count} 首歌曲，
                     <strong>消耗 0 Google API 配額點數</strong>。
                   </span>
                 </div>
               ) : (
                 <StatusMessage tone="warning" title="API 配額消耗預估">
-                  <span>
-                    本次排序將移動 <strong>{previewData.moved_count}</strong> 首歌曲，
-                    預估消耗 <strong>{quotaEstimate.total_units?.toLocaleString()}</strong> API 配額點數
-                    （每次移動 {quotaEstimate.units_per_move} 點）。
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                    <span>
+                      本次排序將移動 <strong>{previewData.moved_count}</strong> 首歌曲，
+                      預估消耗 <strong>{quotaEstimate.total_units?.toLocaleString()}</strong> API 配額點數
+                      （每次移動 {quotaEstimate.units_per_move} 點）。
+                    </span>
+                    {!hasCustomToken && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setShowTokenDrawer(true)}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#facc15' }}
+                      >
+                        <Key size={13} /> 展開面板配置 Token 免消耗配額
+                      </button>
+                    )}
+                  </div>
                 </StatusMessage>
               )}
             </div>
@@ -1933,6 +2032,62 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         onConfirm={ytmusicOAuth.handleConfirmDisconnect}
         onCancel={() => ytmusicOAuth.setConfirmDisconnect(false)}
       />
+
+      {/* Strict Defense Dialog against Silent Fallback */}
+      <ConfirmDialog
+        open={Boolean(strictFallbackPrompt)}
+        title="⚠️ YouTube Music Token 認證失效（嚴格防禦保護）"
+        confirmText={`以 Google API 配額繼續（消耗 ${strictFallbackPrompt?.quotaUnits || 0} 點）`}
+        cancelText="立即更新 Token（維持 0 配額）"
+        variant="warning"
+        busy={applying}
+        onConfirm={() => {
+          setStrictFallbackPrompt(null);
+          handleApplyConfirm({ forceAllowQuotaFallback: true });
+        }}
+        onCancel={() => {
+          setStrictFallbackPrompt(null);
+          setShowTokenDrawer(true);
+        }}
+      >
+        <div>
+          <p style={{ color: '#f87171', fontWeight: 600 }}>
+            {strictFallbackPrompt?.message}
+          </p>
+          <p>
+            系統已依「<strong>嚴格防禦政策</strong>」攔截自動降級，以避免在未經確認的情況下無預警消耗 <strong>{strictFallbackPrompt?.quotaUnits}</strong> 點 Google Cloud API 配額。
+          </p>
+          <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>
+            💡 <strong>推薦作法</strong>：點擊「立即更新 Token」，展開上方快速面板貼上新的 cURL / Cookie，即可繼續以 0 配額完成排序。
+          </p>
+        </div>
+      </ConfirmDialog>
+
+      {/* 429 Quota Exceeded Recovery Dialog */}
+      <ConfirmDialog
+        open={Boolean(quotaExceededRecovery)}
+        title="Google API 每日配額已用盡"
+        confirmText="⚡ 展開 Token 面板啟用 0 配額救援"
+        cancelText="關閉"
+        onConfirm={() => {
+          setQuotaExceededRecovery(null);
+          setShowTokenDrawer(true);
+        }}
+        onCancel={() => setQuotaExceededRecovery(null)}
+      >
+        <div>
+          <p style={{ color: '#f87171' }}>
+            {quotaExceededRecovery?.message}
+          </p>
+          <p>
+            Google YouTube Data API 每日配額已達上限（將於每日太平洋時間午夜重置）。
+          </p>
+          <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', color: '#38bdf8', fontSize: 13, marginTop: 10 }}>
+            💡 <strong>即刻救援方案</strong>：
+            只要貼上 YouTube Music 瀏覽器 Token，即可完全繞過 Google API 配額限制，<strong>立刻以 0 配額完成排序</strong>！
+          </div>
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }
