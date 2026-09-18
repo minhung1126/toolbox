@@ -195,16 +195,23 @@ def require_drive_credentials(
     return creds
 
 
+async def _safe_read_request_json(request: Request) -> dict[str, Any]:
+    if request.method in {"GET", "HEAD", "OPTIONS"}:
+        return {}
+    try:
+        data = await request.json()
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
 async def require_youtube_context(request: Request) -> YouTubeRequestContext:
     """Resolve one quota-aware YouTube slot once at request start."""
     auth_session = get_authenticated_session(request)
     session_id = auth_session.session_id
     owner_sub = auth_session.subject
 
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
+    body = await _safe_read_request_json(request)
     default_playlist_id = get_account_setting(owner_sub, "default_playlist_id", "")
     slot_hint = _get_preview_slot_hint(request.url.path, body)
     estimated_units = estimate_youtube_request_units(
@@ -248,10 +255,7 @@ async def require_ytmusic_context(request: Request) -> YouTubeRequestContext:
         channel_id = ytmusic_public.get("channel_id")
         limiter = get_youtube_quota_tracker("primary")
 
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
+        body = await _safe_read_request_json(request)
 
         estimated_units = estimate_youtube_request_units(
             request.url.path,

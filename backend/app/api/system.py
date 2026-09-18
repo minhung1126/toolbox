@@ -277,3 +277,11 @@ def update_allow_new_users(
         "allow_new_users": settings.allow_new_users,
         "message": "已更新新增使用者帳號設定。",
     }
+
+
+@router.get("/health")
+def get_system_health():
+    """System health check endpoint aligned with plugin route metadata."""
+    from backend.app.main import health_check
+
+    return health_check()

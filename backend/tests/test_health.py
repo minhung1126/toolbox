@@ -33,3 +33,12 @@ def test_health_explains_why_login_is_not_ready(monkeypatch):
     assert result["configuration"]["google_oauth_ready"] is False
     assert result["configuration"]["access_allowlist_ready"] is False
     assert len(result["warnings"]) == 2
+
+
+def test_system_health_endpoint_matches():
+    from fastapi.testclient import TestClient
+
+    client = TestClient(main.app)
+    response = client.get("/api/v1/system/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "healthy"

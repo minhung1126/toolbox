@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import YtmusicSettingsPage from './YtmusicSettingsPage';
@@ -101,7 +101,7 @@ describe('YtmusicSettingsPage', () => {
     expect(screen.getByRole('button', { name: /解除專屬授權/ })).toBeInTheDocument();
   });
 
-  it('allows changing the default sort preset', () => {
+  it('allows changing the default sort preset', async () => {
     render(
       <MemoryRouter>
         <YtmusicSettingsPage
@@ -116,7 +116,9 @@ describe('YtmusicSettingsPage', () => {
     const select = screen.getByLabelText('預設排序規則');
     expect(select.value).toBe('title-asc');
 
-    fireEvent.change(select, { target: { value: 'artist-desc' } });
+    await act(async () => {
+      fireEvent.change(select, { target: { value: 'artist-desc' } });
+    });
     expect(select.value).toBe('artist-desc');
   });
 
@@ -193,7 +195,9 @@ describe('YtmusicSettingsPage', () => {
     );
 
     const regionSelect = screen.getByLabelText('顯示地區與語言偏好');
-    fireEvent.change(regionSelect, { target: { value: 'custom' } });
+    await act(async () => {
+      fireEvent.change(regionSelect, { target: { value: 'custom' } });
+    });
 
     expect(screen.getByLabelText('語言代碼 (Language)')).toBeInTheDocument();
     expect(screen.getByLabelText('地區縮寫 (Location / Country)')).toBeInTheDocument();
@@ -201,14 +205,18 @@ describe('YtmusicSettingsPage', () => {
     const langInput = screen.getByLabelText('語言代碼 (Language)');
     const locInput = screen.getByLabelText('地區縮寫 (Location / Country)');
 
-    fireEvent.change(langInput, { target: { value: 'fr' } });
-    fireEvent.change(locInput, { target: { value: 'fr' } });
+    await act(async () => {
+      fireEvent.change(langInput, { target: { value: 'fr' } });
+      fireEvent.change(locInput, { target: { value: 'fr' } });
+    });
 
     expect(langInput.value).toBe('fr');
     expect(locInput.value).toBe('FR');
 
     const saveBtn = screen.getByRole('button', { name: /儲存偏好設定/ });
-    fireEvent.click(saveBtn);
+    await act(async () => {
+      fireEvent.click(saveBtn);
+    });
   });
 
   it('triggers connect flow when clicking connect', async () => {

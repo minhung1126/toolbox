@@ -58,7 +58,25 @@ class CreatorToolsPlugin(ToolPlugin):
 
     async def on_startup(self, app: FastAPI) -> None:
         """Creator tools plugin startup hook."""
-        pass
+        from backend.app.core.account_state_store import account_state_store
+
+        account_state_store.register_setting_keys(
+            [
+                "default_playlist_id",
+                "youtube_active_slot",
+                "youtube_routing_mode",
+                "youtube_draft_video_config",
+                "youtube_draft_shorts_config",
+                "shared_team_person_filter",
+            ]
+        )
+        account_state_store.register_work_state_keys(
+            [
+                "youtube_publish_cleaner",
+                "youtube_draft_video",
+                "youtube_draft_shorts",
+            ]
+        )
 
     async def on_shutdown(self, app: FastAPI) -> None:
         """Creator tools plugin shutdown hook."""

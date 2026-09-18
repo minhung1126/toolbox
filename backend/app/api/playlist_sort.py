@@ -5,6 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.core.credential_store import credential_store
 from backend.app.core.dependencies import require_ytmusic_context
@@ -76,7 +77,7 @@ async def get_playlists(
     location: Optional[str] = None,
 ):
     try:
-        playlists = fetch_user_playlists(context, language=language, location=location)
+        playlists = await run_in_threadpool(fetch_user_playlists, context, language=language, location=location)
         return {"playlists": playlists}
     except YouTubeQuotaUnavailable as exc:
         raise _quota_http_exception(exc) from exc
@@ -84,7 +85,7 @@ async def get_playlists(
         raise
     except Exception as e:
         logger.exception("Error fetching playlists: %s", e)
-        raise http_error(500, "FETCH_FAILED", str(e)) from e
+        raise http_error(500, "playlist_fetch_failed", str(e)) from e
 
 
 @router.post("/preview")
@@ -99,7 +100,8 @@ async def preview_sort(
         needs_year_fallback = any(
             k.field in ("year", "release_year", "release_date", "album") for k in input_data.sort_keys
         )
-        original_items = fetch_playlist_items_for_sort(
+        original_items = await run_in_threadpool(
+            fetch_playlist_items_for_sort,
             context,
             input_data.playlist_id,
             fetch_album_details=input_data.fetch_album_details,
@@ -176,7 +178,8 @@ async def apply_sort(
         )
         fetch_album = needs_album if not has_full_sorted_ids else False
 
-        original_items = fetch_playlist_items_for_sort(
+        original_items = await run_in_threadpool(
+            fetch_playlist_items_for_sort,
             context,
             input_data.playlist_id,
             fetch_album_details=fetch_album,
@@ -214,7 +217,8 @@ async def apply_sort(
         effective_fallback = input_data.allow_quota_fallback or (not has_custom_token)
         preview = build_sort_preview(original_items, sorted_items)
 
-        result = apply_sort_to_playlist(
+        result = await run_in_threadpool(
+            apply_sort_to_playlist,
             context,
             input_data.playlist_id,
             preview["items"],

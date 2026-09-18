@@ -67,24 +67,10 @@ class NotesStore:
             ]
 
         # Pinned notes first, then ordered by updated_at descending
-        def sort_key(note: dict[str, Any]) -> tuple[int, str]:
-            is_pinned = 0 if note.get("pinned", False) else 1
-            updated_at = str(note.get("updated_at") or note.get("created_at") or "")
-            return (is_pinned, -1 if not updated_at else 0)
-
-        # Sort descending by updated_at within pinned / unpinned buckets
-        user_notes.sort(
-            key=lambda n: (
-                0 if n.get("pinned") else 1,
-                str(n.get("updated_at") or ""),
-            ),
-            reverse=False,
-        )
-        # To get updated_at descending within each bucket:
         pinned = [n for n in user_notes if n.get("pinned")]
         unpinned = [n for n in user_notes if not n.get("pinned")]
-        pinned.sort(key=lambda n: str(n.get("updated_at") or ""), reverse=True)
-        unpinned.sort(key=lambda n: str(n.get("updated_at") or ""), reverse=True)
+        pinned.sort(key=lambda n: str(n.get("updated_at") or n.get("created_at") or ""), reverse=True)
+        unpinned.sort(key=lambda n: str(n.get("updated_at") or n.get("created_at") or ""), reverse=True)
 
         return [copy.deepcopy(n) for n in (pinned + unpinned)]
 

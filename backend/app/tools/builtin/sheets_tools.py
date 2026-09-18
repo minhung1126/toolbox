@@ -51,7 +51,10 @@ class SheetsToolsPlugin(ToolPlugin):
         return self._router
 
     async def on_startup(self, app: FastAPI) -> None:
-        pass
+        from backend.app.core.account_state_store import account_state_store
+
+        account_state_store.register_setting_keys(["default_spreadsheet_id"])
+        account_state_store.register_work_state_keys(["sheet_copy"])
 
     async def on_shutdown(self, app: FastAPI) -> None:
         pass

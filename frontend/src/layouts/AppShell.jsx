@@ -63,7 +63,9 @@ export default function AppShell({
               {settingsStatus.details.length > 0 && <small>{settingsStatus.details.join('；')}</small>}
             </StatusMessage>
           )}
-          <Outlet />
+          <React.Suspense fallback={<div className="loading-center">載入中…</div>}>
+            <Outlet />
+          </React.Suspense>
         </main>
       </div>
     </AccountWorkStateProvider>
