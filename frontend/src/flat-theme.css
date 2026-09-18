@@ -356,6 +356,9 @@ h3 {
   flex-direction: column;
   gap: 6px;
   transition: all 0.18s ease;
+  width: 100%;
+  align-items: stretch;
+  box-sizing: border-box;
 }
 
 .account-header-row {
@@ -363,6 +366,7 @@ h3 {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
+  width: 100%;
   min-width: 0;
 }
 
@@ -372,6 +376,7 @@ h3 {
   gap: 7px;
   min-width: 0;
   flex: 1;
+  overflow: hidden;
 }
 
 .account-avatar {
@@ -420,6 +425,8 @@ h3 {
 }
 
 .logout-button {
+  min-height: unset;
+  line-height: 1.2;
   padding: 3px 7px;
   border: 1px solid rgba(244, 63, 94, 0.2);
   border-radius: var(--radius-xs);
