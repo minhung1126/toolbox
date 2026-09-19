@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import FfmpegGeneratorPage from './FfmpegGeneratorPage';
 import { copyToClipboard } from '../utils/clipboard';
@@ -20,17 +20,13 @@ vi.mock('../utils/clipboard', () => ({
 describe('FfmpegGeneratorPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    window.URL.createObjectURL = vi.fn(() => 'blob:mock-video-url');
-    window.URL.revokeObjectURL = vi.fn();
-    window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
-    window.HTMLMediaElement.prototype.pause = vi.fn();
   });
 
-  it('renders workbench title, dropzone, and default command output', () => {
+  it('renders workbench title, preset pills, and default command output', () => {
     render(<FfmpegGeneratorPage />);
 
     expect(screen.getByRole('heading', { level: 1, name: 'FFmpeg 命令行生成器' })).toBeInTheDocument();
-    expect(screen.getByText('點擊或拖曳本機影片至此處')).toBeInTheDocument();
+    expect(screen.getByText('常用預設範本')).toBeInTheDocument();
     expect(screen.getByText('極速無損剪切')).toBeInTheDocument();
 
     // Default command block should include ffmpeg and -c copy
@@ -86,59 +82,37 @@ describe('FfmpegGeneratorPage', () => {
     render(<FfmpegGeneratorPage />);
 
     const copyBtn = screen.getByRole('button', { name: /一鍵複製命令行/ });
-    await fireEvent.click(copyBtn);
+    await act(async () => {
+      fireEvent.click(copyBtn);
+    });
 
     expect(copyToClipboard).toHaveBeenCalledWith(expect.stringContaining('ffmpeg'));
     expect(await screen.findByText('已複製指令！')).toBeInTheDocument();
   });
 
-  it('loads demo video and displays preview player with timeline cut indicators', async () => {
+  it('updates command when changing input and output filenames', () => {
     render(<FfmpegGeneratorPage />);
 
-    const demoBtn = screen.getByRole('button', { name: /載入示範預覽影片/ });
-    fireEvent.click(demoBtn);
+    const inputNameField = screen.getByPlaceholderText('input.mp4');
+    fireEvent.change(inputNameField, { target: { value: 'source_video.mkv' } });
 
-    expect(await screen.findByText('更換影片')).toBeInTheDocument();
-    expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('已載入示範影片'));
-    expect(screen.getByText('範例影片')).toBeInTheDocument();
+    const outputNameField = screen.getByPlaceholderText('output.mp4');
+    fireEvent.change(outputNameField, { target: { value: 'result_clip.mp4' } });
 
-    // The timeline track with cut range highlight should be rendered
-    const slider = screen.getByLabelText('影片時間軸滑桿');
-    expect(slider).toBeInTheDocument();
-
-    // The preview button should be available
-    const previewBtn = screen.getByRole('button', { name: /預覽選取片段/ });
-    expect(previewBtn).toBeInTheDocument();
+    const codeEl = screen.getByText((content) =>
+      content.includes('source_video.mkv') && content.includes('result_clip.mp4')
+    );
+    expect(codeEl).toBeInTheDocument();
   });
 
-  it('accepts video files by extension even when mime type is empty', () => {
-    const { container } = render(<FfmpegGeneratorPage />);
-
-    const mkvFile = new File(['dummy-content'], 'holiday_clip.mkv', { type: '' });
-    const fileInput = container.querySelector('input[type="file"]');
-    expect(fileInput).not.toBeNull();
-
-    fireEvent.change(fileInput, { target: { files: [mkvFile] } });
-
-    expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('holiday_clip.mkv'));
-    expect(screen.getByText('更換影片')).toBeInTheDocument();
-  });
-
-  it('toggles trimmed preview playback state when clicking preview segment button', async () => {
+  it('toggles start cut and end cut checkboxes', () => {
     render(<FfmpegGeneratorPage />);
 
-    const demoBtn = screen.getByRole('button', { name: /載入示範預覽影片/ });
-    fireEvent.click(demoBtn);
+    const startCheckbox = screen.getByRole('checkbox', { name: /Cut 前/ });
+    fireEvent.click(startCheckbox);
 
-    const previewBtn = await screen.findByRole('button', { name: /預覽選取片段/ });
-    fireEvent.click(previewBtn);
-
-    // Should switch to stop button and show trimmed preview badge
-    expect(screen.getByText('停止片段預覽')).toBeInTheDocument();
-    expect(screen.getByText('正在預覽 Cut 選取片段')).toBeInTheDocument();
-
-    // Click again to stop
-    fireEvent.click(screen.getByRole('button', { name: /停止預覽片段/ }));
-    expect(screen.getByText('預覽選取片段')).toBeInTheDocument();
+    // When disabled, -ss should not be in command
+    const codeEl = screen.getByText((content) => !content.includes('-ss ') && content.includes('ffmpeg'));
+    expect(codeEl).toBeInTheDocument();
   });
 });

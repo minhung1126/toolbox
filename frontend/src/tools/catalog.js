@@ -205,7 +205,7 @@ export const TOOL_MODULES = Object.freeze([
     id: 'ffmpeg-generator',
     name: 'FFmpeg Generator',
     title: 'FFmpeg 命令行生成器',
-    description: '視覺化影片時間軸預覽與剪輯，支援毫秒級 Cut 前後定位、無損流複製、編碼參數調校與一鍵複製指令。',
+    description: '視覺化 Cut 起訖定位與無損流複製，支援常用預設範本、編碼參數調校與一鍵複製指令。',
     category: '影音創作',
     icon: Video,
     badge: '剪輯工具',
@@ -225,7 +225,7 @@ export const TOOL_MODULES = Object.freeze([
       {
         id: 'ffmpeg_generator_card',
         title: 'FFmpeg 命令行生成器',
-        description: '本機即時預覽影片，視覺化設定 Cut 起訖點與無損流複製，快速生成標準指令。',
+        description: '快速設定 Cut 起訖點與無損流複製，彈性配置編碼參數並生成標準指令。',
         to: PATHS.ffmpegGenerator,
         actionLabel: '進入生成器',
         icon: Video,

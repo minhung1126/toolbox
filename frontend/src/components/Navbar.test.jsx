@@ -98,5 +98,16 @@ describe('Navbar', () => {
     expect(sortLink).toHaveAttribute('aria-current', 'page');
     expect(sortLink).toHaveClass('active');
   });
+
+  it('exposes FFmpeg generator in navigation with active state', () => {
+    window.localStorage.clear();
+    render(<NavbarHarness initialEntry={PATHS.ffmpegGenerator} />);
+
+    const ffmpegLink = screen.getByRole('link', { name: 'FFmpeg 生成器' });
+    expect(ffmpegLink).toBeVisible();
+    expect(ffmpegLink).toHaveAttribute('href', PATHS.ffmpegGenerator);
+    expect(ffmpegLink).toHaveAttribute('aria-current', 'page');
+    expect(ffmpegLink).toHaveClass('active');
+  });
 });
 

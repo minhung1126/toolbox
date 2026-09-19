@@ -31,7 +31,7 @@ Toolbox 是一個高擴充性的多功能模組化工具箱平台，採用 FastA
 
 ## 2. 撰寫新工具的方法 (How to Develop a New Tool)
 
-在 Toolbox 平台開發一個新工具模組，需遵循「全端自包含外掛」架構，完整流程包含後端外掛宣告、路由自動掛載、資料持久化、前端路徑與目錄登記、UI 頁面開發與測試。
+在 Toolbox 平台開發一個新工具模組，需遵循「全端自包含外掛」架構，完整流程包含後端外掛宣告、路由自動掛載、資料持久化、前端路徑與模組目錄登記、UI 頁面開發、側邊導覽選單（目錄）註冊與全端測試。
 
 ### 步驟 1：建立後端外掛模組 (`ToolPlugin`)
 
@@ -212,7 +212,32 @@ import { PATHS } from '../routes/paths';
 ```
 
 - **儀表板連動**：`DashboardPage` 會自動透過 `getDashboardFeatureCards()` 讀取並渲染卡片，無需手動修改儀表板代碼。
-- **側邊選單連動**：若工具需常駐側邊導覽列，確認 `Navbar.jsx` 的導覽群組或獨立項目渲染邏輯。
+
+### 步驟 8：註冊側邊導覽選單／目錄 (`frontend/src/components/Navbar.jsx`)
+
+若新工具需要常駐顯示於左側主選單（側邊導覽目錄），**必須**在 `frontend/src/components/Navbar.jsx` 進行登記：
+
+1. **提取選單項目**：從 `toolNavGroups` 取得工具外掛定義的導覽群組與項目：
+   ```javascript
+   const myToolGroup = toolNavGroups.find((g) => g.id === 'my_tool_nav') || { items: [] };
+   const myToolItem = myToolGroup.items?.[0] || {
+     id: 'my_tool_workbench',
+     to: PATHS.myTool,
+     label: '我的工具',
+     icon: Wrench,
+   };
+   ```
+2. **掛載於側邊導覽列**：在 `<nav className="sidebar-nav">` 內適當位置渲染：
+   ```jsx
+   {item({
+     id: myToolItem.id,
+     to: myToolItem.to || PATHS.myTool,
+     label: myToolItem.label || '我的工具',
+     icon: myToolItem.icon || Wrench,
+   })}
+   ```
+   *(若為多子項目的功能群組，則使用 `{group(...)}` 結構渲染)*
+3. **單元測試**：在 `frontend/src/components/Navbar.test.jsx` 補齊導覽選單渲染與 active 狀態測試。
 
 ---
 
@@ -242,4 +267,4 @@ import { PATHS } from '../routes/paths';
   ```
 - **單元測試規範**：
   - 新增後端工具時，需於 `backend/tests/` 新增 `test_<tool_name>.py` 測試主要路由與例外情境。
-  - 新增前端模組時，需確認 `frontend/src/tools/catalog.test.js` 與頁面渲染測試均正常通過。
+  - 新增前端模組時，需確認 `frontend/src/tools/catalog.test.js`、`frontend/src/components/Navbar.test.jsx` 與頁面渲染測試均正常通過。

@@ -22,6 +22,13 @@ const photoCuratorItem = photoCuratorGroup.items?.[0] || {
   label: 'Instagram 排版',
   icon: Instagram,
 };
+const ffmpegGroup = toolNavGroups.find((g) => g.id === 'ffmpeg_nav') || { items: [] };
+const ffmpegItem = ffmpegGroup.items?.[0] || {
+  id: 'ffmpeg_generator_workbench',
+  to: PATHS.ffmpegGenerator,
+  label: 'FFmpeg 生成器',
+  icon: Video,
+};
 const ytmusicItems = ytmusicGroup.items;
 const youtubeItems = youtubeGroup.items;
 const sheetItems = sheetGroup.items;
@@ -150,6 +157,12 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
           to: photoCuratorItem.to || PATHS.photoCurator,
           label: photoCuratorGroup.label || photoCuratorItem.label || 'Instagram 排版',
           icon: photoCuratorGroup.icon || photoCuratorItem.icon || Instagram,
+        })}
+        {item({
+          id: ffmpegItem.id,
+          to: ffmpegItem.to || PATHS.ffmpegGenerator,
+          label: ffmpegItem.label || 'FFmpeg 生成器',
+          icon: ffmpegItem.icon || Video,
         })}
         {item({ id: 'notes', to: PATHS.notes, label: '便利貼', icon: StickyNote })}
         {group('system', '系統管理', systemGroup.icon, systemOpen, setSystemOpen, systemItems, systemActive)}
