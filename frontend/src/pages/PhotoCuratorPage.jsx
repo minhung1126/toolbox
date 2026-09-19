@@ -21,106 +21,20 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
-import JSZip from 'jszip';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Dialog from '../components/Dialog';
 import { api } from '../services/api';
 import { copyToClipboard } from '../utils/clipboard';
+import { exportCuratedZip, generateChecklistText } from '../utils/curatorZip';
+import CuratorThumbnail from '../components/curator/CuratorThumbnail';
+import IgSlotImage from '../components/curator/IgSlotImage';
 
 const INITIAL_POSTS = [
   { id: 'post-1', title: 'Post 1', photoIds: [] },
   { id: 'post-2', title: 'Post 2', photoIds: [] },
   { id: 'post-3', title: 'Post 3', photoIds: [] },
 ];
-
-function CuratorThumbnail({ photo, onZoom }) {
-  const [loadError, setLoadError] = useState(false);
-
-  useEffect(() => {
-    setLoadError(false);
-  }, [photo?.previewUrl]);
-
-  return (
-    <div className="photo-card-thumb-wrap">
-      {loadError ? (
-        <div className="photo-card-thumb-fallback" title="無法載入縮圖">
-          <ImageIcon size={18} className="text-dim" aria-hidden="true" />
-          <span>無法顯示</span>
-        </div>
-      ) : (
-        <img
-          src={photo.previewUrl}
-          alt={photo.name}
-          className="photo-card-thumb"
-          draggable={false}
-          referrerPolicy="no-referrer"
-          onError={() => setLoadError(true)}
-        />
-      )}
-      {!loadError && onZoom && (
-        <button
-          type="button"
-          className="photo-zoom-btn"
-          onClick={() => onZoom(photo)}
-          title="查看大圖"
-          aria-label={`查看 ${photo.name} 大圖`}
-        >
-          <Eye size={13} />
-        </button>
-      )}
-    </div>
-  );
-}
-
-function IgSlotImage({ cover, onZoom, idx }) {
-  const [loadError, setLoadError] = useState(false);
-
-  useEffect(() => {
-    setLoadError(false);
-  }, [cover?.previewUrl]);
-
-  if (!cover) {
-    return (
-      <div className="ig-slot-empty">
-        <ImageIcon size={28} className="text-dim" aria-hidden="true" />
-        <span>尚未設定首圖</span>
-        <small>從下方貼文點選「設為封面」</small>
-      </div>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <div className="ig-slot-empty ig-slot-error">
-        <ImageIcon size={28} className="text-danger" aria-hidden="true" />
-        <span>縮圖載入失敗</span>
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <img
-        src={cover.previewUrl}
-        alt={`Post ${idx + 1} 封面`}
-        className="ig-slot-img"
-        draggable={false}
-        referrerPolicy="no-referrer"
-        onError={() => setLoadError(true)}
-      />
-      <button
-        type="button"
-        className="ig-preview-zoom-btn"
-        onClick={() => onZoom(cover)}
-        title="查看大圖"
-        aria-label={`查看 Post ${idx + 1} 封面大圖`}
-      >
-        <Eye size={14} />
-      </button>
-    </>
-  );
-}
 
 export default function PhotoCuratorPage() {
   const toast = useToast();
@@ -321,43 +235,13 @@ export default function PhotoCuratorPage() {
   };
 
   // Generate posting checklist text
-  const generateChecklistText = useCallback(() => {
-    const lines = [
-      '# Instagram 貼文三部曲發布對照表',
-      `匯出時間：${new Date().toLocaleString()}`,
-      `總照片數：${photos.length} 張`,
-      '',
-    ];
-
-    posts.forEach((post, pIdx) => {
-      const postPhotos = post.photoIds.map((id) => photoMap.get(id)).filter(Boolean);
-      lines.push(`========================================`);
-      lines.push(`【Post ${pIdx + 1}】${post.title}（共 ${postPhotos.length} 張）`);
-      lines.push(`========================================`);
-      postPhotos.forEach((p, idx) => {
-        const coverTag = idx === 0 ? ' [★ 首圖 Cover]' : '';
-        const orderNum = String(idx + 1).padStart(2, '0');
-        lines.push(`  ${orderNum}. ${p.name}${coverTag}`);
-      });
-      lines.push(`建議 Hashtags: #Part${pIdx + 1} #Instagram #Daily #Story`);
-      lines.push('');
-    });
-
-    if (unassignedIds.length > 0) {
-      lines.push(`未分配備忘照片（共 ${unassignedIds.length} 張）：`);
-      unassignedIds.forEach((id) => {
-        const p = photoMap.get(id);
-        if (p) lines.push(`  - ${p.name}`);
-      });
-      lines.push('');
-    }
-
-    return lines.join('\n');
-  }, [photoMap, photos.length, posts, unassignedIds]);
+  const getChecklistText = useCallback(() => {
+    return generateChecklistText({ photos, posts, photoMap, unassignedIds });
+  }, [photoMap, photos, posts, unassignedIds]);
 
   // Copy checklist
   const handleCopyChecklist = async () => {
-    const text = generateChecklistText();
+    const text = getChecklistText();
     const success = await copyToClipboard(text);
     if (success) {
       toast.success('已複製發布對照清單至剪貼簿！');
@@ -376,46 +260,10 @@ export default function PhotoCuratorPage() {
 
     setExporting(true);
     try {
-      const zip = new JSZip();
-
-      // Add each post directory
-      for (let pIdx = 0; pIdx < posts.length; pIdx += 1) {
-        const post = posts[pIdx];
-        const postIndex = pIdx + 1;
-        const cleanTitle = post.title.replace(/[\\/:*?"<>|]/g, '_').trim();
-        const folderName = `Post_${postIndex}_${cleanTitle}`;
-        const folder = zip.folder(folderName);
-
-        for (let i = 0; i < post.photoIds.length; i += 1) {
-          const photo = photoMap.get(post.photoIds[i]);
-          if (!photo || !photo.file) continue;
-
-          const seq = String(i + 1).padStart(2, '0');
-          const isCover = i === 0 ? '01_COVER_' : `${seq}_`;
-          const fileName = `${isCover}${photo.name}`;
-
-          folder.file(fileName, photo.file);
-        }
-      }
-
-      // Add checklist text file
-      const checklistContent = generateChecklistText();
-      zip.file('貼文發布對照清單_Checklist.txt', checklistContent);
-
-      const content = await zip.generateAsync({ type: 'blob' });
-      const downloadUrl = URL.createObjectURL(content);
-      const anchor = document.createElement('a');
-      anchor.href = downloadUrl;
-      const timestamp = new Date().toISOString().slice(0, 10);
-      anchor.download = `Instagram_三部曲貼文_${timestamp}.zip`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
-
+      const checklistContent = getChecklistText();
+      await exportCuratedZip({ posts, photoMap, checklistContent });
       toast.success('已成功打包下載 ZIP，包含分組資料夾與發布對照清單！');
     } catch (err) {
-      console.error('Failed to export zip:', err);
       toast.error(`打包失敗：${err.message || '未知錯誤'}`);
     } finally {
       setExporting(false);
