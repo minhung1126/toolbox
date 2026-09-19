@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   Check,
@@ -6,25 +6,63 @@ import {
   ChevronUp,
   Clapperboard,
   Clock,
+  Code2,
   Copy,
+  FastForward,
+  FileVideo,
   HelpCircle,
+  Maximize2,
+  Minimize2,
+  Music,
+  Pause,
+  Play,
+  RotateCcw,
   Scissors,
   Sliders,
+  Sparkles,
   Terminal,
+  Upload,
+  Video,
+  Volume2,
+  VolumeX,
   X,
   Zap,
 } from 'lucide-react';
 import { useToast } from '../components/Toast';
 import { copyToClipboard } from '../utils/clipboard';
+import { api } from '../services/api';
 
 import {
   PRESET_LIST,
   buildFfmpegCommand,
   buildTrimSummary,
+  formatFileSize,
+  parseHmsToSeconds,
+  secondsToHms,
 } from '../utils/ffmpegCommand';
+
+export const isVideoFile = (file) => {
+  if (!file) return false;
+  if (file.type && file.type.startsWith('video/')) return true;
+  return /\.(mp4|webm|mov|mkv|avi|ts|flv|wmv|m4v|3gp|ogv|m2ts|mts)$/i.test(file.name || '');
+};
 
 export default function FfmpegGeneratorPage() {
   const toast = useToast();
+  const videoRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  // Video State
+  const [videoFile, setVideoFile] = useState(null);
+  const [videoUrl, setVideoUrl] = useState('');
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [videoMeta, setVideoMeta] = useState({ width: 0, height: 0, size: 0, name: '' });
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [videoError, setVideoError] = useState(null);
 
   // Cut Options
   const [enableStartCut, setEnableStartCut] = useState(true);
@@ -57,6 +95,157 @@ export default function FfmpegGeneratorPage() {
   // UI helpers
   const [showHelp, setShowHelp] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isPlayingTrimmed, setIsPlayingTrimmed] = useState(false);
+
+  // Cleanup object url on change/unmount
+  useEffect(() => {
+    return () => {
+      if (videoUrl) {
+        URL.revokeObjectURL(videoUrl);
+      }
+    };
+  }, [videoUrl]);
+
+  // Load video file
+  const handleSelectFile = useCallback((file) => {
+    if (!isVideoFile(file)) {
+      toast.error('請選擇有效的影片檔案 (MP4, WebM, MOV, MKV, AVI 等)');
+      return;
+    }
+    setVideoError(null);
+    if (videoUrl) {
+      URL.revokeObjectURL(videoUrl);
+    }
+    const url = URL.createObjectURL(file);
+    setVideoFile(file);
+    setVideoUrl(url);
+    setInputName(file.name);
+
+    // Suggest output filename
+    const dotIdx = file.name.lastIndexOf('.');
+    const base = dotIdx > 0 ? file.name.substring(0, dotIdx) : file.name;
+    const ext = dotIdx > 0 ? file.name.substring(dotIdx) : '.mp4';
+    setOutputName(`${base}_cut${ext}`);
+
+    toast.success(`已載入影片：${file.name}`);
+  }, [videoUrl, toast]);
+
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleSelectFile(e.dataTransfer.files[0]);
+    }
+  }, [handleSelectFile]);
+
+  // Video element event handlers
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) {
+      const vid = videoRef.current;
+      const dur = vid.duration || 0;
+      setDuration(dur);
+      setVideoMeta({
+        width: vid.videoWidth || 0,
+        height: vid.videoHeight || 0,
+        size: videoFile?.size || 0,
+        name: videoFile?.name || '',
+      });
+
+      // Default trim endpoints
+      setStartTime('00:00:00.000');
+      const endSec = dur > 0 ? dur : 10;
+      setEndTime(secondsToHms(endSec));
+      setDurationCut(secondsToHms(endSec));
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      const cur = videoRef.current.currentTime;
+      setCurrentTime(cur);
+
+      // If in "play trimmed preview" mode, auto pause when reaching end cut
+      if (isPlayingTrimmed && enableEndCut) {
+        let stopSec = duration;
+        if (cutMode === 'to') {
+          stopSec = parseHmsToSeconds(endTime);
+        } else {
+          const startSec = enableStartCut ? parseHmsToSeconds(startTime) : 0;
+          stopSec = startSec + parseHmsToSeconds(durationCut);
+        }
+        if (cur >= stopSec) {
+          videoRef.current.pause();
+          setIsPlaying(false);
+          setIsPlayingTrimmed(false);
+        }
+      }
+    }
+  };
+
+  const togglePlay = () => {
+    if (!videoRef.current) return;
+    if (videoRef.current.paused) {
+      videoRef.current.play();
+      setIsPlaying(true);
+    } else {
+      videoRef.current.pause();
+      setIsPlaying(false);
+      setIsPlayingTrimmed(false);
+    }
+  };
+
+  const seekRelative = (offsetSec) => {
+    if (!videoRef.current) return;
+    const target = Math.max(0, Math.min(duration || 3600, videoRef.current.currentTime + offsetSec));
+    videoRef.current.currentTime = target;
+    setCurrentTime(target);
+  };
+
+  const seekTo = (sec) => {
+    if (!videoRef.current) return;
+    const target = Math.max(0, Math.min(duration || 3600, sec));
+    videoRef.current.currentTime = target;
+    setCurrentTime(target);
+  };
+
+  const setPlaybackSpeed = (rate) => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = rate;
+    }
+    setPlaybackRate(rate);
+  };
+
+  // Trimming Helpers
+  const handleSetStartTimeToCurrent = () => {
+    const formatted = secondsToHms(currentTime);
+    setStartTime(formatted);
+    toast.success(`已將 Cut 前起點設為 ${formatted}`);
+  };
+
+  const handleSetEndTimeToCurrent = () => {
+    const formatted = secondsToHms(currentTime);
+    if (cutMode === 'to') {
+      setEndTime(formatted);
+      toast.success(`已將 Cut 後終點設為 ${formatted}`);
+    } else {
+      const startSec = enableStartCut ? parseHmsToSeconds(startTime) : 0;
+      const durSec = Math.max(0, currentTime - startSec);
+      const durFmt = secondsToHms(durSec);
+      setDurationCut(durFmt);
+      toast.success(`已將剪輯長度設為 ${durFmt}`);
+    }
+  };
+
+  const handlePlayTrimmedSegment = () => {
+    if (!videoRef.current) return;
+    const startSec = enableStartCut ? parseHmsToSeconds(startTime) : 0;
+    videoRef.current.currentTime = startSec;
+    setIsPlayingTrimmed(true);
+    videoRef.current.play();
+    setIsPlaying(true);
+  };
 
   // Preset Selection
   const applyPreset = (preset) => {
@@ -87,22 +276,37 @@ export default function FfmpegGeneratorPage() {
       cutMode,
       endTime,
       durationCut,
-      duration: 0,
+      duration,
     });
-  }, [
-    enableStartCut,
-    startTime,
-    enableEndCut,
-    cutMode,
-    endTime,
-    durationCut,
-  ]);
+  }, [enableStartCut, startTime, enableEndCut, cutMode, endTime, durationCut, duration]);
 
-  // Generated FFmpeg command
+  const cutStartSec = useMemo(() => {
+    return enableStartCut ? Math.min(duration || 3600, parseHmsToSeconds(startTime)) : 0;
+  }, [enableStartCut, startTime, duration]);
+
+  const cutEndSec = useMemo(() => {
+    if (!enableEndCut) return duration || 0;
+    if (cutMode === 'to') {
+      return Math.min(duration || 3600, parseHmsToSeconds(endTime));
+    }
+    return Math.min(duration || 3600, cutStartSec + parseHmsToSeconds(durationCut));
+  }, [enableEndCut, cutMode, endTime, durationCut, cutStartSec, duration]);
+
+  const startPercent = useMemo(() => {
+    if (!duration || duration <= 0) return 0;
+    return Math.min(100, Math.max(0, (cutStartSec / duration) * 100));
+  }, [cutStartSec, duration]);
+
+  const endPercent = useMemo(() => {
+    if (!duration || duration <= 0) return 100;
+    return Math.min(100, Math.max(0, (cutEndSec / duration) * 100));
+  }, [cutEndSec, duration]);
+
+  // Command Generation
   const generatedCommand = useMemo(() => {
     return buildFfmpegCommand({
-      inputName: inputName.trim() || 'input.mp4',
-      outputName: outputName.trim() || 'output_cut.mp4',
+      inputName,
+      outputName,
       enableStartCut,
       startTime,
       seekMode,
@@ -112,12 +316,12 @@ export default function FfmpegGeneratorPage() {
       durationCut,
       transcodeMode,
       videoCodec,
+      audioCodec,
       crf,
       encoderPreset,
       resolution,
       fps,
       customFilters,
-      audioCodec,
       audioBitrate,
       audioVolume,
       shellFormat,
@@ -167,7 +371,7 @@ export default function FfmpegGeneratorPage() {
           <div>
             <h1>FFmpeg 命令行生成器</h1>
             <p className="section-desc">
-              視覺化設定 Cut 起訖點與進階編碼選項，提供極速無損複製（<code>-c copy</code>）與多種平台 Shell 格式，一鍵快速生成跨平台 FFmpeg 命令行指令。
+              本地即時影片預覽，視覺化定位 Cut 起訖點與微調影格，提供極速無損複製（<code>-c copy</code>）與進階編碼選項，一鍵複製跨平台 FFmpeg 指令。
             </p>
           </div>
           <button
@@ -197,292 +401,594 @@ export default function FfmpegGeneratorPage() {
                 <strong>Cut 前快速 vs 精確</strong>：置於 <code>-i</code> 前利用關鍵影格（Keyframe）快速尋找，剪輯大檔秒級跳轉；置於 <code>-i</code> 後逐幀解碼，定位最精確。
               </li>
               <li>
-                <strong>跨平台終端格式</strong>：支援單行指令、Bash ( \ )、PowerShell ( ` ) 與 CMD ( ^ ) 換行語法，複製即可直接在終端執行。
+                <strong>隱私安全</strong>：本地播放器直接透過瀏覽器解碼，影片<strong>絕對不會</strong>上傳到伺服器，安全零流量。
               </li>
             </ul>
           </div>
         )}
       </header>
 
-      {/* Section 1: Presets, Cut Range, and Encoding Settings */}
-      <section className="glass-panel card-padding ffmpeg-controls-panel" aria-label="剪輯起訖與編碼設定">
-        {/* Presets Bar */}
-        <div className="section-block">
-          <label className="field-label">常用預設範本</label>
-          <div className="preset-pill-grid">
-            {PRESET_LIST.map((preset) => {
-              const Icon = preset.icon;
-              const isSelected = activePreset === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  className={`preset-pill ${isSelected ? 'active' : ''}`}
-                  onClick={() => applyPreset(preset)}
-                  title={preset.desc}
-                >
-                  <Icon size={14} className="preset-pill-icon" />
-                  <span>{preset.name}</span>
-                  {preset.badge && <span className="preset-pill-badge">{preset.badge}</span>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Cut Start / End Section */}
-        <div className="section-block cut-section-grid">
-          {/* Cut 前 (Start Time) */}
-          <div className="cut-card glass-panel">
-            <div className="cut-card-header">
-              <div className="checkbox-row">
-                <input
-                  type="checkbox"
-                  id="enableStartCut"
-                  checked={enableStartCut}
-                  onChange={(e) => setEnableStartCut(e.target.checked)}
-                />
-                <label htmlFor="enableStartCut" className="cut-card-title">
-                  <Scissors size={15} className="rotate-180" /> Cut 前（起始時間 -ss）
-                </label>
-              </div>
+      {/* Main Grid: Video Player + Cut Workspace */}
+      <div className="ffmpeg-workbench-layout">
+        {/* Left / Top: Video Player & Local Loader */}
+        <section className="glass-panel card-padding ffmpeg-player-panel" aria-label="影片預覽播放器">
+          <div className="panel-title-row">
+            <div className="title-with-icon">
+              <Video size={18} className="text-primary" />
+              <h2>影片預覽與時間軸</h2>
             </div>
-
-            <div className="cut-card-body">
-              <div className="input-with-action">
-                <input
-                  type="text"
-                  className="input-field"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  disabled={!enableStartCut}
-                  placeholder="00:00:00.000"
-                  aria-label="剪輯起始時間"
-                />
-              </div>
-
-              {/* Seeking Mode */}
-              <div className="seek-mode-row">
-                <span className="text-muted text-xs">定位策略：</span>
-                <label className="radio-label">
-                  <input
-                    type="radio"
-                    name="seekMode"
-                    value="fast"
-                    checked={seekMode === 'fast'}
-                    onChange={() => setSeekMode('fast')}
-                  />
-                  快速跳轉 (前置 -ss)
-                </label>
-                <label className="radio-label">
-                  <input
-                    type="radio"
-                    name="seekMode"
-                    value="accurate"
-                    checked={seekMode === 'accurate'}
-                    onChange={() => setSeekMode('accurate')}
-                  />
-                  精準逐幀 (後置 -ss)
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* Cut 後 (End Time) */}
-          <div className="cut-card glass-panel">
-            <div className="cut-card-header">
-              <div className="checkbox-row">
-                <input
-                  type="checkbox"
-                  id="enableEndCut"
-                  checked={enableEndCut}
-                  onChange={(e) => setEnableEndCut(e.target.checked)}
-                />
-                <label htmlFor="enableEndCut" className="cut-card-title">
-                  <Scissors size={15} /> Cut 後（結束或長度）
-                </label>
-              </div>
-            </div>
-
-            <div className="cut-card-body">
-              <div className="cut-mode-toggle">
+            {videoFile && (
+              <div className="player-top-actions">
                 <button
                   type="button"
-                  className={`btn btn-xs ${cutMode === 'to' ? 'btn-primary' : 'btn-secondary'}`}
-                  onClick={() => setCutMode('to')}
-                >
-                  結束時間 (-to)
-                </button>
-                <button
-                  type="button"
-                  className={`btn btn-xs ${cutMode === 'duration' ? 'btn-primary' : 'btn-secondary'}`}
-                  onClick={() => setCutMode('duration')}
-                >
-                  剪輯長度 (-t)
-                </button>
-              </div>
-
-              <div className="input-with-action">
-                <input
-                  type="text"
-                  className="input-field"
-                  value={cutMode === 'to' ? endTime : durationCut}
-                  onChange={(e) => {
-                    if (cutMode === 'to') setEndTime(e.target.value);
-                    else setDurationCut(e.target.value);
+                  className="btn btn-secondary btn-xs"
+                  onClick={() => {
+                    if (videoUrl) URL.revokeObjectURL(videoUrl);
+                    setVideoFile(null);
+                    setVideoUrl('');
+                    setVideoError(null);
                   }}
-                  disabled={!enableEndCut}
-                  placeholder="00:00:10.000"
-                  aria-label="剪輯結束時間或長度"
-                />
+                >
+                  更換影片
+                </button>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Trim Status Summary Bar */}
-        <div className="trim-summary-bar">
-          <div className="summary-left">
-            <span className="summary-tag">
-              <Clock size={13} /> 剪輯後長度: <strong>{trimSummary.formattedDuration}</strong> ({trimSummary.clipDurationSec.toFixed(2)} 秒)
-            </span>
-            {trimSummary.isInvalid && (
-              <span className="summary-error">
-                <AlertCircle size={14} /> 起始時間不能大於結束時間！
-              </span>
             )}
           </div>
-        </div>
 
-        {/* Codec & Stream Copy Options */}
-        <div className="section-block">
-          <div className="mode-tab-row">
-            <button
-              type="button"
-              className={`mode-tab ${transcodeMode === 'copy' ? 'active' : ''}`}
-              onClick={() => {
-                setTranscodeMode('copy');
-                setVideoCodec('copy');
-                setAudioCodec('copy');
+          {!videoUrl ? (
+            /* Dropzone */
+            <div
+              className={`ffmpeg-dropzone ${isDragging ? 'drag-over' : ''}`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
               }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
             >
-              <Zap size={14} /> 快速無損流複製 (-c copy)
-            </button>
-            <button
-              type="button"
-              className={`mode-tab ${transcodeMode === 'reencode' ? 'active' : ''}`}
-              onClick={() => {
-                setTranscodeMode('reencode');
-                setVideoCodec('libx264');
-                setAudioCodec('aac');
-              }}
-            >
-              <Sliders size={14} /> 重新編碼／自訂格式
-            </button>
-          </div>
-
-          {transcodeMode === 'copy' ? (
-            <div className="info-banner glass-panel">
-              <p className="text-muted text-sm">
-                ⚡ <strong>無損複製模式已啟用</strong>：跳過耗時的 CPU/GPU 轉檔，直接將封裝流剪輯輸出，100% 維持原始畫質與聲音，耗時極短（通常數秒內完成）。
-              </p>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="video/*,.mp4,.webm,.mov,.mkv,.avi,.ts,.flv,.wmv,.m4v,.m2ts"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    handleSelectFile(e.target.files[0]);
+                  }
+                }}
+              />
+              <div className="dropzone-inner">
+                <Upload size={40} className="dropzone-icon" />
+                <h3>點擊或拖曳本機影片至此處</h3>
+                <p className="text-muted">支援 MP4, WebM, MOV, MKV, AVI 等常見影片格式</p>
+                <div className="dropzone-note">
+                  <span>🔒 本機極速即時預覽，影片資料不耗費流量上傳至伺服器</span>
+                </div>
+              </div>
             </div>
           ) : (
-            /* Re-encode detailed options */
-            <div className="reencode-options-grid glass-panel card-padding">
-              <div className="field-group">
-                <label className="field-label">視訊編碼器 (-c:v)</label>
-                <select
-                  className="select-field"
-                  value={videoCodec}
-                  onChange={(e) => setVideoCodec(e.target.value)}
-                >
-                  <option value="libx264">H.264 (libx264 - 最相容推薦)</option>
-                  <option value="libx265">H.265 / HEVC (libx265 - 高壓縮率)</option>
-                  <option value="libvpx-vp9">VP9 (libvpx-vp9 - WebM 推薦)</option>
-                  <option value="libsvtav1">AV1 (libsvtav1 - 新世代高效)</option>
-                  <option value="copy">Stream Copy (保留視訊流複製)</option>
-                  <option value="none">無 (移除視訊 / 僅音訊)</option>
-                </select>
-              </div>
-
-              <div className="field-group">
-                <label className="field-label">
-                  畫質係數 CRF (目前: {crf})
-                  <span className="text-dim text-xs ml-2">
-                    {crf <= 19 ? '超高畫質' : crf <= 24 ? '畫質平衡' : '高壓縮小檔'}
-                  </span>
-                </label>
-                <input
-                  type="range"
-                  min={16}
-                  max={32}
-                  value={crf}
-                  onChange={(e) => setCrf(parseInt(e.target.value, 10))}
-                  className="range-field"
+            /* Video Player */
+            <div className="ffmpeg-player-wrapper">
+              <div className="video-container">
+                <video
+                  ref={videoRef}
+                  src={videoUrl}
+                  preload="auto"
+                  onLoadedMetadata={handleLoadedMetadata}
+                  onTimeUpdate={handleTimeUpdate}
+                  onError={() => {
+                    setVideoError('瀏覽器無法直接解碼此影片格式（如特定 MKV/AVI/HEVC 編碼）。您仍可手動設定起訖時間，FFmpeg 命令行依舊完全可用。');
+                  }}
+                  onEnded={() => {
+                    setIsPlaying(false);
+                    setIsPlayingTrimmed(false);
+                  }}
+                  playsInline
+                  onClick={togglePlay}
                 />
+                {isPlayingTrimmed && (
+                  <div className="trimmed-preview-badge">
+                    <Sparkles size={13} /> 正在預覽 Cut 選取片段
+                  </div>
+                )}
               </div>
 
-              <div className="field-group">
-                <label className="field-label">解析度縮放</label>
-                <select
-                  className="select-field"
-                  value={resolution}
-                  onChange={(e) => setResolution(e.target.value)}
-                >
-                  <option value="original">維持原始解析度</option>
-                  <option value="1080p">1080p FHD (1920x1080)</option>
-                  <option value="720p">720p HD (1280x720)</option>
-                  <option value="4k">4K UHD (3840x2160)</option>
-                  <option value="shorts_9_16">直式 9:16 Shorts/Reels (1080x1920 居中補黑邊)</option>
-                </select>
+              {/* Video Info Bar */}
+              <div className="video-meta-bar">
+                <span className="meta-item">
+                  <FileVideo size={14} /> {videoMeta.name}
+                </span>
+                {videoMeta.width > 0 && (
+                  <span className="meta-item">
+                    {videoMeta.width} × {videoMeta.height}
+                  </span>
+                )}
+                {videoMeta.size > 0 && (
+                  <span className="meta-item">{formatFileSize(videoMeta.size)}</span>
+                )}
+                <span className="meta-item">
+                  <Clock size={14} /> 總長度: {secondsToHms(duration)}
+                </span>
               </div>
 
-              <div className="field-group">
-                <label className="field-label">影格率 (FPS)</label>
-                <select className="select-field" value={fps} onChange={(e) => setFps(e.target.value)}>
-                  <option value="original">維持原始幀率</option>
-                  <option value="24">24 fps (電影感)</option>
-                  <option value="30">30 fps (標準影片)</option>
-                  <option value="60">60 fps (流暢遊戲/動作)</option>
-                </select>
-              </div>
+              {videoError && (
+                <div className="video-error-banner glass-panel">
+                  <AlertCircle size={16} className="text-warning" />
+                  <div className="error-text">
+                    <strong>影片預覽提示：</strong>
+                    <span>{videoError}</span>
+                  </div>
+                </div>
+              )}
 
-              <div className="field-group">
-                <label className="field-label">音訊編碼器 (-c:a)</label>
-                <select
-                  className="select-field"
-                  value={audioCodec}
-                  onChange={(e) => setAudioCodec(e.target.value)}
-                >
-                  <option value="aac">AAC (最通用推薦)</option>
-                  <option value="libmp3lame">MP3 (libmp3lame)</option>
-                  <option value="libopus">Opus (libopus - 高品質壓縮)</option>
-                  <option value="copy">Stream Copy (保留音訊原樣)</option>
-                  <option value="none">無 (完全靜音 / 移除音軌)</option>
-                </select>
-              </div>
+              {/* Player Controls */}
+              <div className="player-controls-container">
+                {/* Timeline Slider with Cut Indicator */}
+                <div className="timeline-slider-wrapper">
+                  <div className="timeline-track-container">
+                    {duration > 0 && (
+                      <div
+                        className="timeline-cut-range-highlight"
+                        style={{
+                          left: `${startPercent}%`,
+                          width: `${Math.max(0, endPercent - startPercent)}%`,
+                        }}
+                        title={`Cut 範圍: ${secondsToHms(cutStartSec)} ~ ${secondsToHms(cutEndSec)}`}
+                      />
+                    )}
+                    {duration > 0 && enableStartCut && (
+                      <div
+                        className="timeline-pin timeline-pin-start"
+                        style={{ left: `${startPercent}%` }}
+                        title={`起點: ${secondsToHms(cutStartSec)}`}
+                      />
+                    )}
+                    {duration > 0 && enableEndCut && (
+                      <div
+                        className="timeline-pin timeline-pin-end"
+                        style={{ left: `${endPercent}%` }}
+                        title={`終點: ${secondsToHms(cutEndSec)}`}
+                      />
+                    )}
+                    <input
+                      type="range"
+                      className="timeline-slider"
+                      min={0}
+                      max={duration || 100}
+                      step={0.01}
+                      value={currentTime}
+                      onChange={(e) => seekTo(parseFloat(e.target.value))}
+                      aria-label="影片時間軸滑桿"
+                    />
+                  </div>
+                  <div className="timeline-time-display">
+                    <span className="current-time">{secondsToHms(currentTime)}</span>
+                    <div className="cut-indicator-badges">
+                      {enableStartCut && (
+                        <span className="badge-cut-start" title="起始點">
+                          始: {startTime}
+                        </span>
+                      )}
+                      {enableEndCut && (
+                        <span className="badge-cut-end" title="結束點">
+                          止: {cutMode === 'to' ? endTime : secondsToHms(cutEndSec)}
+                        </span>
+                      )}
+                    </div>
+                    <span className="total-duration">/ {secondsToHms(duration)}</span>
+                  </div>
+                </div>
 
-              <div className="field-group">
-                <label className="field-label">音訊碼率 (-b:a)</label>
-                <select
-                  className="select-field"
-                  value={audioBitrate}
-                  onChange={(e) => setAudioBitrate(e.target.value)}
-                  disabled={audioCodec === 'none' || audioCodec === 'copy'}
-                >
-                  <option value="128k">128 kbps (標準)</option>
-                  <option value="192k">192 kbps (高品質推薦)</option>
-                  <option value="256k">256 kbps (發燒音質)</option>
-                  <option value="320k">320 kbps (無損感知)</option>
-                </select>
+                {/* Primary Button Bar */}
+                <div className="player-btn-bar">
+                  <div className="playback-group">
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-icon"
+                      onClick={togglePlay}
+                      aria-label={isPlaying ? '暫停' : '播放'}
+                    >
+                      {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+                    </button>
+
+                    {/* Step buttons */}
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => seekRelative(-1)}
+                      title="後退 1 秒"
+                    >
+                      -1s
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => seekRelative(-0.1)}
+                      title="後退 0.1 秒（逐影格微調）"
+                    >
+                      -0.1s
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => seekRelative(0.1)}
+                      title="前進 0.1 秒（逐影格微調）"
+                    >
+                      +0.1s
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => seekRelative(1)}
+                      title="前進 1 秒"
+                    >
+                      +1s
+                    </button>
+                  </div>
+
+                  {/* Playback speed */}
+                  <div className="speed-group">
+                    <span className="speed-label">倍速:</span>
+                    {[0.5, 1, 1.5, 2].map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        className={`btn btn-xs ${playbackRate === rate ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setPlaybackSpeed(rate)}
+                      >
+                        {rate}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
-        </div>
-      </section>
+        </section>
 
-      {/* Section 2: Command Output & Copy Section */}
+        {/* Right / Bottom: Cut & Preset Workbench */}
+        <section className="glass-panel card-padding ffmpeg-controls-panel" aria-label="剪輯起訖與編碼設定">
+          {/* Presets Bar */}
+          <div className="section-block">
+            <label className="field-label">常用預設範本</label>
+            <div className="preset-pill-grid">
+              {PRESET_LIST.map((preset) => {
+                const Icon = preset.icon;
+                const isSelected = activePreset === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`preset-pill ${isSelected ? 'active' : ''}`}
+                    onClick={() => applyPreset(preset)}
+                    title={preset.desc}
+                  >
+                    <Icon size={14} className="preset-pill-icon" />
+                    <span>{preset.name}</span>
+                    {preset.badge && <span className="preset-pill-badge">{preset.badge}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Cut Start / End Section */}
+          <div className="section-block cut-section-grid">
+            {/* Cut 前 (Start Time) */}
+            <div className="cut-card glass-panel">
+              <div className="cut-card-header">
+                <div className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    id="enableStartCut"
+                    checked={enableStartCut}
+                    onChange={(e) => setEnableStartCut(e.target.checked)}
+                  />
+                  <label htmlFor="enableStartCut" className="cut-card-title">
+                    <Scissors size={15} className="rotate-180" /> Cut 前（起始時間 -ss）
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-xs"
+                  onClick={handleSetStartTimeToCurrent}
+                  disabled={!enableStartCut || !videoUrl}
+                  title="將目前播放進度設為起點"
+                >
+                  設為目前進度
+                </button>
+              </div>
+
+              <div className="cut-card-body">
+                <div className="input-with-action">
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    disabled={!enableStartCut}
+                    placeholder="00:00:00.000"
+                    aria-label="剪輯起始時間"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => seekTo(parseHmsToSeconds(startTime))}
+                    disabled={!enableStartCut || !videoUrl}
+                    title="跳至起點影格預覽"
+                  >
+                    跳至起點
+                  </button>
+                </div>
+
+                {/* Seeking Mode */}
+                <div className="seek-mode-row">
+                  <span className="text-muted text-xs">定位策略：</span>
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="seekMode"
+                      value="fast"
+                      checked={seekMode === 'fast'}
+                      onChange={() => setSeekMode('fast')}
+                    />
+                    快速跳轉 (前置 -ss)
+                  </label>
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="seekMode"
+                      value="accurate"
+                      checked={seekMode === 'accurate'}
+                      onChange={() => setSeekMode('accurate')}
+                    />
+                    精準逐幀 (後置 -ss)
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Cut 後 (End Time) */}
+            <div className="cut-card glass-panel">
+              <div className="cut-card-header">
+                <div className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    id="enableEndCut"
+                    checked={enableEndCut}
+                    onChange={(e) => setEnableEndCut(e.target.checked)}
+                  />
+                  <label htmlFor="enableEndCut" className="cut-card-title">
+                    <Scissors size={15} /> Cut 後（結束或長度）
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-xs"
+                  onClick={handleSetEndTimeToCurrent}
+                  disabled={!enableEndCut || !videoUrl}
+                  title="將目前播放進度設為結束點"
+                >
+                  設為目前進度
+                </button>
+              </div>
+
+              <div className="cut-card-body">
+                <div className="cut-mode-toggle">
+                  <button
+                    type="button"
+                    className={`btn btn-xs ${cutMode === 'to' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setCutMode('to')}
+                  >
+                    結束時間 (-to)
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-xs ${cutMode === 'duration' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setCutMode('duration')}
+                  >
+                    剪輯長度 (-t)
+                  </button>
+                </div>
+
+                <div className="input-with-action">
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={cutMode === 'to' ? endTime : durationCut}
+                    onChange={(e) => {
+                      if (cutMode === 'to') setEndTime(e.target.value);
+                      else setDurationCut(e.target.value);
+                    }}
+                    disabled={!enableEndCut}
+                    placeholder="00:00:10.000"
+                    aria-label="剪輯結束時間或長度"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      if (cutMode === 'to') seekTo(parseHmsToSeconds(endTime));
+                      else {
+                        const start = enableStartCut ? parseHmsToSeconds(startTime) : 0;
+                        seekTo(start + parseHmsToSeconds(durationCut));
+                      }
+                    }}
+                    disabled={!enableEndCut || !videoUrl}
+                    title="跳至終點影格預覽"
+                  >
+                    跳至終點
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Trim Status Summary Bar */}
+          <div className="trim-summary-bar">
+            <div className="summary-left">
+              <span className="summary-tag">
+                <Clock size={13} /> 剪輯後長度: <strong>{trimSummary.formattedDuration}</strong> ({trimSummary.clipDurationSec.toFixed(2)} 秒)
+              </span>
+              {trimSummary.isInvalid && (
+                <span className="summary-error">
+                  <AlertCircle size={14} /> 起始時間不能大於結束時間！
+                </span>
+              )}
+            </div>
+            {videoUrl && (
+              <button
+                type="button"
+                className={`btn ${isPlayingTrimmed ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+                onClick={
+                  isPlayingTrimmed
+                    ? () => {
+                        if (videoRef.current) videoRef.current.pause();
+                        setIsPlaying(false);
+                        setIsPlayingTrimmed(false);
+                      }
+                    : handlePlayTrimmedSegment
+                }
+                disabled={trimSummary.isInvalid}
+                aria-label={isPlayingTrimmed ? '停止預覽片段' : '預覽選取片段'}
+              >
+                {isPlayingTrimmed ? <Pause size={14} /> : <Play size={14} />}
+                <span>{isPlayingTrimmed ? '停止片段預覽' : '預覽選取片段'}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Codec & Stream Copy Options */}
+          <div className="section-block">
+            <div className="mode-tab-row">
+              <button
+                type="button"
+                className={`mode-tab ${transcodeMode === 'copy' ? 'active' : ''}`}
+                onClick={() => {
+                  setTranscodeMode('copy');
+                  setVideoCodec('copy');
+                  setAudioCodec('copy');
+                }}
+              >
+                <Zap size={14} /> 快速無損流複製 (-c copy)
+              </button>
+              <button
+                type="button"
+                className={`mode-tab ${transcodeMode === 'reencode' ? 'active' : ''}`}
+                onClick={() => {
+                  setTranscodeMode('reencode');
+                  setVideoCodec('libx264');
+                  setAudioCodec('aac');
+                }}
+              >
+                <Sliders size={14} /> 重新編碼／自訂格式
+              </button>
+            </div>
+
+            {transcodeMode === 'copy' ? (
+              <div className="info-banner glass-panel">
+                <p className="text-muted text-sm">
+                  ⚡ <strong>無損複製模式已啟用</strong>：跳過耗時的 CPU/GPU 轉檔，直接將封裝流剪輯輸出，100% 維持原始畫質與聲音，耗時極短（通常數秒內完成）。
+                </p>
+              </div>
+            ) : (
+              /* Re-encode detailed options */
+              <div className="reencode-options-grid glass-panel card-padding">
+                <div className="field-group">
+                  <label className="field-label">視訊編碼器 (-c:v)</label>
+                  <select
+                    className="select-field"
+                    value={videoCodec}
+                    onChange={(e) => setVideoCodec(e.target.value)}
+                  >
+                    <option value="libx264">H.264 (libx264 - 最相容推薦)</option>
+                    <option value="libx265">H.265 / HEVC (libx265 - 高壓縮率)</option>
+                    <option value="libvpx-vp9">VP9 (libvpx-vp9 - WebM 推薦)</option>
+                    <option value="libsvtav1">AV1 (libsvtav1 - 新世代高效)</option>
+                    <option value="copy">Stream Copy (保留視訊流複製)</option>
+                    <option value="none">無 (移除視訊 / 僅音訊)</option>
+                  </select>
+                </div>
+
+                <div className="field-group">
+                  <label className="field-label">
+                    畫質係數 CRF (目前: {crf})
+                    <span className="text-dim text-xs ml-2">
+                      {crf <= 19 ? '超高畫質' : crf <= 24 ? '畫質平衡' : '高壓縮小檔'}
+                    </span>
+                  </label>
+                  <input
+                    type="range"
+                    min={16}
+                    max={32}
+                    value={crf}
+                    onChange={(e) => setCrf(parseInt(e.target.value, 10))}
+                    className="range-field"
+                  />
+                </div>
+
+                <div className="field-group">
+                  <label className="field-label">解析度縮放</label>
+                  <select
+                    className="select-field"
+                    value={resolution}
+                    onChange={(e) => setResolution(e.target.value)}
+                  >
+                    <option value="original">維持原始解析度</option>
+                    <option value="1080p">1080p FHD (1920x1080)</option>
+                    <option value="720p">720p HD (1280x720)</option>
+                    <option value="4k">4K UHD (3840x2160)</option>
+                    <option value="shorts_9_16">直式 9:16 Shorts/Reels (1080x1920 居中補黑邊)</option>
+                  </select>
+                </div>
+
+                <div className="field-group">
+                  <label className="field-label">影格率 (FPS)</label>
+                  <select className="select-field" value={fps} onChange={(e) => setFps(e.target.value)}>
+                    <option value="original">維持原始幀率</option>
+                    <option value="24">24 fps (電影感)</option>
+                    <option value="30">30 fps (標準影片)</option>
+                    <option value="60">60 fps (流暢遊戲/動作)</option>
+                  </select>
+                </div>
+
+                <div className="field-group">
+                  <label className="field-label">音訊編碼器 (-c:a)</label>
+                  <select
+                    className="select-field"
+                    value={audioCodec}
+                    onChange={(e) => setAudioCodec(e.target.value)}
+                  >
+                    <option value="aac">AAC (最通用推薦)</option>
+                    <option value="libmp3lame">MP3 (libmp3lame)</option>
+                    <option value="libopus">Opus (libopus - 高品質壓縮)</option>
+                    <option value="copy">Stream Copy (保留音訊原樣)</option>
+                    <option value="none">無 (完全靜音 / 移除音軌)</option>
+                  </select>
+                </div>
+
+                <div className="field-group">
+                  <label className="field-label">音訊碼率 (-b:a)</label>
+                  <select
+                    className="select-field"
+                    value={audioBitrate}
+                    onChange={(e) => setAudioBitrate(e.target.value)}
+                    disabled={audioCodec === 'none' || audioCodec === 'copy'}
+                  >
+                    <option value="128k">128 kbps (標準)</option>
+                    <option value="192k">192 kbps (高品質推薦)</option>
+                    <option value="256k">256 kbps (發燒音質)</option>
+                    <option value="320k">320 kbps (無損感知)</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* Command Output & Copy Section */}
       <section className="glass-panel card-padding ffmpeg-output-section" aria-label="FFmpeg 命令行與複製">
         <div className="output-header-row">
           <div className="title-with-icon">
