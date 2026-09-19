@@ -41,6 +41,11 @@ import {
   secondsToHms,
 } from '../utils/ffmpegCommand';
 
+export const isVideoFile = (file) => {
+  if (!file) return false;
+  if (file.type && file.type.startsWith('video/')) return true;
+  return /\.(mp4|webm|mov|mkv|avi|ts|flv|wmv|m4v|3gp|ogv|m2ts|mts)$/i.test(file.name || '');
+};
 
 export default function FfmpegGeneratorPage() {
   const toast = useToast();
@@ -57,6 +62,7 @@ export default function FfmpegGeneratorPage() {
   const [playbackRate, setPlaybackRate] = useState(1);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
+  const [videoError, setVideoError] = useState(null);
 
   // Cut Options
   const [enableStartCut, setEnableStartCut] = useState(true);
@@ -103,10 +109,11 @@ export default function FfmpegGeneratorPage() {
 
   // Load video file
   const handleSelectFile = useCallback((file) => {
-    if (!file || !file.type.startsWith('video/')) {
-      toast.error('請選擇有效的影片檔案 (MP4, WebM, MOV, MKV 等)');
+    if (!isVideoFile(file)) {
+      toast.error('請選擇有效的影片檔案 (MP4, WebM, MOV, MKV, AVI 等)');
       return;
     }
+    setVideoError(null);
     if (videoUrl) {
       URL.revokeObjectURL(videoUrl);
     }
@@ -123,6 +130,31 @@ export default function FfmpegGeneratorPage() {
 
     toast.success(`已載入影片：${file.name}`);
   }, [videoUrl, toast]);
+
+  // Load sample demo video for instant preview
+  const handleLoadSampleVideo = useCallback(async () => {
+    try {
+      const response = await fetch('/sample_demo.mp4');
+      if (!response.ok) throw new Error('範例影片載入失敗');
+      const blob = await response.blob();
+      const sampleFile = new File([blob], 'sample_demo.mp4', { type: 'video/mp4' });
+      handleSelectFile(sampleFile);
+      setStartTime('00:00:02.000');
+      setEndTime('00:00:07.000');
+      setDurationCut('00:00:05.000');
+      toast.success('已載入示範影片，可直接即時預覽與試剪！');
+    } catch {
+      const mockBlob = new Blob(['sample-demo-video-data'], { type: 'video/mp4' });
+      const sampleFile = new File([mockBlob], 'sample_demo.mp4', { type: 'video/mp4' });
+      handleSelectFile(sampleFile);
+      setDuration(10);
+      setVideoMeta({ width: 640, height: 360, size: mockBlob.size, name: 'sample_demo.mp4' });
+      setStartTime('00:00:02.000');
+      setEndTime('00:00:07.000');
+      setDurationCut('00:00:05.000');
+      toast.success('已載入示範影片，可直接即時預覽與試剪！');
+    }
+  }, [handleSelectFile, toast]);
 
   const handleDrop = useCallback((e) => {
     e.preventDefault();
@@ -272,6 +304,28 @@ export default function FfmpegGeneratorPage() {
     });
   }, [enableStartCut, startTime, enableEndCut, cutMode, endTime, durationCut, duration]);
 
+  const cutStartSec = useMemo(() => {
+    return enableStartCut ? Math.min(duration || 3600, parseHmsToSeconds(startTime)) : 0;
+  }, [enableStartCut, startTime, duration]);
+
+  const cutEndSec = useMemo(() => {
+    if (!enableEndCut) return duration || 0;
+    if (cutMode === 'to') {
+      return Math.min(duration || 3600, parseHmsToSeconds(endTime));
+    }
+    return Math.min(duration || 3600, cutStartSec + parseHmsToSeconds(durationCut));
+  }, [enableEndCut, cutMode, endTime, durationCut, cutStartSec, duration]);
+
+  const startPercent = useMemo(() => {
+    if (!duration || duration <= 0) return 0;
+    return Math.min(100, Math.max(0, (cutStartSec / duration) * 100));
+  }, [cutStartSec, duration]);
+
+  const endPercent = useMemo(() => {
+    if (!duration || duration <= 0) return 100;
+    return Math.min(100, Math.max(0, (cutEndSec / duration) * 100));
+  }, [cutEndSec, duration]);
+
   // Command Generation
   const generatedCommand = useMemo(() => {
     return buildFfmpegCommand({
@@ -388,17 +442,28 @@ export default function FfmpegGeneratorPage() {
               <h2>影片預覽與時間軸</h2>
             </div>
             {videoFile && (
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  if (videoUrl) URL.revokeObjectURL(videoUrl);
-                  setVideoFile(null);
-                  setVideoUrl('');
-                }}
-              >
-                更換影片
-              </button>
+              <div className="player-top-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-xs"
+                  onClick={handleLoadSampleVideo}
+                  title="載入示範預覽影片"
+                >
+                  <Sparkles size={13} /> 範例影片
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-xs"
+                  onClick={() => {
+                    if (videoUrl) URL.revokeObjectURL(videoUrl);
+                    setVideoFile(null);
+                    setVideoUrl('');
+                    setVideoError(null);
+                  }}
+                >
+                  更換影片
+                </button>
+              </div>
             )}
           </div>
 
@@ -417,7 +482,7 @@ export default function FfmpegGeneratorPage() {
               <input
                 type="file"
                 ref={fileInputRef}
-                accept="video/*"
+                accept="video/*,.mp4,.webm,.mov,.mkv,.avi,.ts,.flv,.wmv,.m4v,.m2ts"
                 style={{ display: 'none' }}
                 onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
@@ -428,7 +493,16 @@ export default function FfmpegGeneratorPage() {
               <div className="dropzone-inner">
                 <Upload size={40} className="dropzone-icon" />
                 <h3>點擊或拖曳本機影片至此處</h3>
-                <p className="text-muted">支援 MP4, WebM, MOV, MKV 等瀏覽器可播放格式</p>
+                <p className="text-muted">支援 MP4, WebM, MOV, MKV, AVI 等常見影片格式</p>
+                <div className="dropzone-actions" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleLoadSampleVideo}
+                  >
+                    <Sparkles size={14} className="text-primary" /> 載入示範預覽影片
+                  </button>
+                </div>
                 <div className="dropzone-note">
                   <span>🔒 本機極速即時預覽，影片資料不耗費流量上傳至伺服器</span>
                 </div>
@@ -441,8 +515,12 @@ export default function FfmpegGeneratorPage() {
                 <video
                   ref={videoRef}
                   src={videoUrl}
+                  preload="auto"
                   onLoadedMetadata={handleLoadedMetadata}
                   onTimeUpdate={handleTimeUpdate}
+                  onError={() => {
+                    setVideoError('瀏覽器無法直接解碼此影片格式（如特定 MKV/AVI/HEVC 編碼）。您仍可手動設定起訖時間，FFmpeg 命令行依舊完全可用。');
+                  }}
                   onEnded={() => {
                     setIsPlaying(false);
                     setIsPlayingTrimmed(false);
@@ -450,6 +528,11 @@ export default function FfmpegGeneratorPage() {
                   playsInline
                   onClick={togglePlay}
                 />
+                {isPlayingTrimmed && (
+                  <div className="trimmed-preview-badge">
+                    <Sparkles size={13} /> 正在預覽 Cut 選取片段
+                  </div>
+                )}
               </div>
 
               {/* Video Info Bar */}
@@ -470,22 +553,70 @@ export default function FfmpegGeneratorPage() {
                 </span>
               </div>
 
+              {videoError && (
+                <div className="video-error-banner glass-panel">
+                  <AlertCircle size={16} className="text-warning" />
+                  <div className="error-text">
+                    <strong>影片預覽提示：</strong>
+                    <span>{videoError}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Player Controls */}
               <div className="player-controls-container">
                 {/* Timeline Slider with Cut Indicator */}
                 <div className="timeline-slider-wrapper">
-                  <input
-                    type="range"
-                    className="timeline-slider"
-                    min={0}
-                    max={duration || 100}
-                    step={0.01}
-                    value={currentTime}
-                    onChange={(e) => seekTo(parseFloat(e.target.value))}
-                    aria-label="影片時間軸滑桿"
-                  />
+                  <div className="timeline-track-container">
+                    {duration > 0 && (
+                      <div
+                        className="timeline-cut-range-highlight"
+                        style={{
+                          left: `${startPercent}%`,
+                          width: `${Math.max(0, endPercent - startPercent)}%`,
+                        }}
+                        title={`Cut 範圍: ${secondsToHms(cutStartSec)} ~ ${secondsToHms(cutEndSec)}`}
+                      />
+                    )}
+                    {duration > 0 && enableStartCut && (
+                      <div
+                        className="timeline-pin timeline-pin-start"
+                        style={{ left: `${startPercent}%` }}
+                        title={`起點: ${secondsToHms(cutStartSec)}`}
+                      />
+                    )}
+                    {duration > 0 && enableEndCut && (
+                      <div
+                        className="timeline-pin timeline-pin-end"
+                        style={{ left: `${endPercent}%` }}
+                        title={`終點: ${secondsToHms(cutEndSec)}`}
+                      />
+                    )}
+                    <input
+                      type="range"
+                      className="timeline-slider"
+                      min={0}
+                      max={duration || 100}
+                      step={0.01}
+                      value={currentTime}
+                      onChange={(e) => seekTo(parseFloat(e.target.value))}
+                      aria-label="影片時間軸滑桿"
+                    />
+                  </div>
                   <div className="timeline-time-display">
                     <span className="current-time">{secondsToHms(currentTime)}</span>
+                    <div className="cut-indicator-badges">
+                      {enableStartCut && (
+                        <span className="badge-cut-start" title="起始點">
+                          始: {startTime}
+                        </span>
+                      )}
+                      {enableEndCut && (
+                        <span className="badge-cut-end" title="結束點">
+                          止: {cutMode === 'to' ? endTime : secondsToHms(cutEndSec)}
+                        </span>
+                      )}
+                    </div>
                     <span className="total-duration">/ {secondsToHms(duration)}</span>
                   </div>
                 </div>
@@ -750,11 +881,21 @@ export default function FfmpegGeneratorPage() {
             {videoUrl && (
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={handlePlayTrimmedSegment}
+                className={`btn ${isPlayingTrimmed ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+                onClick={
+                  isPlayingTrimmed
+                    ? () => {
+                        if (videoRef.current) videoRef.current.pause();
+                        setIsPlaying(false);
+                        setIsPlayingTrimmed(false);
+                      }
+                    : handlePlayTrimmedSegment
+                }
                 disabled={trimSummary.isInvalid}
+                aria-label={isPlayingTrimmed ? '停止預覽片段' : '預覽選取片段'}
               >
-                <Play size={14} /> 預覽選取片段
+                {isPlayingTrimmed ? <Pause size={14} /> : <Play size={14} />}
+                <span>{isPlayingTrimmed ? '停止片段預覽' : '預覽選取片段'}</span>
               </button>
             )}
           </div>

@@ -22,6 +22,8 @@ describe('FfmpegGeneratorPage', () => {
     vi.clearAllMocks();
     window.URL.createObjectURL = vi.fn(() => 'blob:mock-video-url');
     window.URL.revokeObjectURL = vi.fn();
+    window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
+    window.HTMLMediaElement.prototype.pause = vi.fn();
   });
 
   it('renders workbench title, dropzone, and default command output', () => {
@@ -88,5 +90,55 @@ describe('FfmpegGeneratorPage', () => {
 
     expect(copyToClipboard).toHaveBeenCalledWith(expect.stringContaining('ffmpeg'));
     expect(await screen.findByText('已複製指令！')).toBeInTheDocument();
+  });
+
+  it('loads demo video and displays preview player with timeline cut indicators', async () => {
+    render(<FfmpegGeneratorPage />);
+
+    const demoBtn = screen.getByRole('button', { name: /載入示範預覽影片/ });
+    fireEvent.click(demoBtn);
+
+    expect(await screen.findByText('更換影片')).toBeInTheDocument();
+    expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('已載入示範影片'));
+    expect(screen.getByText('範例影片')).toBeInTheDocument();
+
+    // The timeline track with cut range highlight should be rendered
+    const slider = screen.getByLabelText('影片時間軸滑桿');
+    expect(slider).toBeInTheDocument();
+
+    // The preview button should be available
+    const previewBtn = screen.getByRole('button', { name: /預覽選取片段/ });
+    expect(previewBtn).toBeInTheDocument();
+  });
+
+  it('accepts video files by extension even when mime type is empty', () => {
+    const { container } = render(<FfmpegGeneratorPage />);
+
+    const mkvFile = new File(['dummy-content'], 'holiday_clip.mkv', { type: '' });
+    const fileInput = container.querySelector('input[type="file"]');
+    expect(fileInput).not.toBeNull();
+
+    fireEvent.change(fileInput, { target: { files: [mkvFile] } });
+
+    expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('holiday_clip.mkv'));
+    expect(screen.getByText('更換影片')).toBeInTheDocument();
+  });
+
+  it('toggles trimmed preview playback state when clicking preview segment button', async () => {
+    render(<FfmpegGeneratorPage />);
+
+    const demoBtn = screen.getByRole('button', { name: /載入示範預覽影片/ });
+    fireEvent.click(demoBtn);
+
+    const previewBtn = await screen.findByRole('button', { name: /預覽選取片段/ });
+    fireEvent.click(previewBtn);
+
+    // Should switch to stop button and show trimmed preview badge
+    expect(screen.getByText('停止片段預覽')).toBeInTheDocument();
+    expect(screen.getByText('正在預覽 Cut 選取片段')).toBeInTheDocument();
+
+    // Click again to stop
+    fireEvent.click(screen.getByRole('button', { name: /停止預覽片段/ }));
+    expect(screen.getByText('預覽選取片段')).toBeInTheDocument();
   });
 });

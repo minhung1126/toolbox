@@ -138,6 +138,7 @@ async def security_headers(request, call_next):
         "Content-Security-Policy",
         "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; "
         "form-action 'self'; connect-src 'self'; img-src 'self' data: https: blob:; "
+        "media-src 'self' data: blob:; "
         "style-src 'self' 'unsafe-inline'; script-src 'self'",
     )
     if settings.is_production:
