@@ -4,7 +4,7 @@ import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -14,7 +14,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend.app.api.router import api_router
 from backend.app.core.config import settings
-from backend.app.core.error_contract import normalize_http_detail, validation_field_errors
+from backend.app.core.error_contract import http_error, normalize_http_detail, validation_field_errors
 from backend.app.tools.builtin import register_builtin_tools
 from backend.app.tools.registry import tool_registry
 
@@ -195,7 +195,7 @@ def resolve_frontend_path(full_path: str) -> Path:
     try:
         requested_path.relative_to(frontend_dist)
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail="找不到前端資源。") from exc
+        raise http_error(404, "not_found", "找不到前端資源。") from exc
     return requested_path
 
 
@@ -207,7 +207,7 @@ if frontend_dist.is_dir():
     @app.get("/{full_path:path}")
     def serve_frontend(full_path: str):
         if full_path.startswith("api/"):
-            raise HTTPException(status_code=404, detail="找不到 API 端點。")
+            raise http_error(404, "not_found", "找不到 API 端點。")
         requested_path = resolve_frontend_path(full_path)
         if requested_path.is_file():
             return FileResponse(str(requested_path))

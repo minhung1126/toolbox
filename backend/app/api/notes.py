@@ -16,13 +16,13 @@ router = APIRouter(prefix="/notes", tags=["Sticky Notes"])
 
 
 class CreateNoteRequest(BaseModel):
-    content: str = Field(default="", max_length=100000)
+    content: str = Field(default="", max_length=20000)
     remark: str = Field(default="", max_length=200)
     pinned: bool = Field(default=False)
 
 
 class UpdateNoteRequest(BaseModel):
-    content: Optional[str] = Field(default=None, max_length=100000)
+    content: Optional[str] = Field(default=None, max_length=20000)
     remark: Optional[str] = Field(default=None, max_length=200)
     pinned: Optional[bool] = Field(default=None)
 

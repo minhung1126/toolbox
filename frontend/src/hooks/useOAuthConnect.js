@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useToast } from '../components/Toast';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
@@ -15,6 +15,14 @@ export function useOAuthConnect({
   const location = useLocation();
   const [connecting, setConnecting] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const handleConnect = useCallback(async () => {
     setConnecting(true);
@@ -25,11 +33,11 @@ export function useOAuthConnect({
         window.location.href = res.auth_url;
       } else {
         toast.error(`無法取得 ${serviceLabel} 網址。`);
-        setConnecting(false);
+        if (isMountedRef.current) setConnecting(false);
       }
     } catch (error) {
       toast.error(`取得 ${serviceLabel} 網址失敗：${error.message}`);
-      setConnecting(false);
+      if (isMountedRef.current) setConnecting(false);
     }
   }, [serviceName, location.pathname, location.search, getAuthUrl, serviceLabel, toast]);
 

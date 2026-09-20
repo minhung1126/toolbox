@@ -176,6 +176,17 @@ async function request(endpoint, options = {}) {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, ...fetchOptions } = options;
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  let callerAbortListener = null;
+  if (fetchOptions.signal) {
+    if (fetchOptions.signal.aborted) {
+      controller.abort(fetchOptions.signal.reason);
+    } else {
+      callerAbortListener = () => controller.abort(fetchOptions.signal.reason);
+      fetchOptions.signal.addEventListener('abort', callerAbortListener, { once: true });
+    }
+  }
+
   const config = {
     ...fetchOptions,
     headers: { 'Content-Type': 'application/json', ...fetchOptions.headers },
@@ -186,11 +197,17 @@ async function request(endpoint, options = {}) {
     response = await fetch(`${API_BASE}${endpoint}`, config);
   } catch (error) {
     if (error?.name === 'AbortError') {
+      if (fetchOptions.signal?.aborted) {
+        throw error;
+      }
       throw new ApiError('連線逾時，請確認網路後按「重試」。', { code: 'timeout' });
     }
     throw new ApiError('目前無法連線到 Toolbox，請確認服務與網路後重試。', { code: 'network_error' });
   } finally {
     window.clearTimeout(timeout);
+    if (callerAbortListener && fetchOptions.signal) {
+      fetchOptions.signal.removeEventListener('abort', callerAbortListener);
+    }
   }
   const data = await readResponseData(response);
   if (!response.ok) {

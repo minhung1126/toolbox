@@ -213,13 +213,14 @@ def parse_time(req: ParseTimeRequest) -> ParseTimeResponse:
 
 
 def safe_quote_filename(name: str) -> str:
-    """Ensure filenames are safely wrapped in double quotes for CLI execution."""
+    """Ensure filenames are safely wrapped in double quotes for CLI execution, escaping quotes."""
     cleaned = (name or "").strip()
     if not cleaned:
         return '""'
     if cleaned.startswith('"') and cleaned.endswith('"') and len(cleaned) >= 2:
-        return cleaned
-    return f'"{cleaned}"'
+        cleaned = cleaned[1:-1]
+    escaped = cleaned.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 @router.post("/build", response_model=BuildCommandResponse)
@@ -351,7 +352,8 @@ def build_command(req: BuildCommandRequest) -> BuildCommandResponse:
             v_filters.append(f"fps={req.fps}")
 
         if req.custom_filters:
-            v_filters.append(req.custom_filters.strip())
+            clean_filter = req.custom_filters.strip().replace('"', '\\"')
+            v_filters.append(clean_filter)
 
         if v_filters:
             combined_vf = ",".join(v_filters)
@@ -384,10 +386,11 @@ def build_command(req: BuildCommandRequest) -> BuildCommandResponse:
                 )
 
         if req.volume and req.volume != "100%":
-            args.extend(["-af", f'"volume={req.volume}"'])
+            clean_vol = req.volume.strip().replace('"', "").replace("'", "")
+            args.extend(["-af", f'"volume={clean_vol}"'])
             breakdown.append(
                 CommandParamExplanation(
-                    param=f'-af "volume={req.volume}"', explanation=f"音訊濾鏡：音量調整為 {req.volume}"
+                    param=f'-af "volume={clean_vol}"', explanation=f"音訊濾鏡：音量調整為 {clean_vol}"
                 )
             )
 

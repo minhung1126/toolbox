@@ -149,12 +149,13 @@ export function buildTrimSummary({
 
 export function quoteFilename(name) {
   if (!name || typeof name !== 'string') return '""';
-  const trimmed = name.trim();
+  let trimmed = name.trim();
   if (!trimmed) return '""';
   if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
-    return trimmed;
+    trimmed = trimmed.slice(1, -1);
   }
-  return `"${trimmed}"`;
+  const escaped = trimmed.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `"${escaped}"`;
 }
 
 export function buildFfmpegCommand({
@@ -272,7 +273,7 @@ export function buildFfmpegCommand({
       vFilters.push(`fps=${fps}`);
     }
     if (customFilters.trim()) {
-      vFilters.push(customFilters.trim());
+      vFilters.push(customFilters.trim().replace(/"/g, '\\"'));
     }
 
     if (vFilters.length > 0) {
@@ -298,8 +299,9 @@ export function buildFfmpegCommand({
     }
 
     if (audioVolume !== '100%') {
-      args.push('-af', `"volume=${audioVolume}"`);
-      breakdown.push({ flag: `-af "volume=${audioVolume}"`, label: `音量調整為 ${audioVolume}` });
+      const safeVolume = String(audioVolume).replace(/["']/g, '');
+      args.push('-af', `"volume=${safeVolume}"`);
+      breakdown.push({ flag: `-af "volume=${safeVolume}"`, label: `音量調整為 ${safeVolume}` });
     }
   }
 

@@ -47,6 +47,14 @@ class _SlidingWindowLimiter:
                 ]
                 for event_key in stale_keys[:1024]:
                     self._events.pop(event_key, None)
+                # If still over threshold (e.g. distributed burst), evict the oldest entries.
+                if len(self._events) > 4096:
+                    sorted_keys = sorted(
+                        self._events.keys(),
+                        key=lambda k: self._events[k][-1] if self._events[k] else 0,
+                    )
+                    for event_key in sorted_keys[:1024]:
+                        self._events.pop(event_key, None)
 
 
 _limiter = _SlidingWindowLimiter()

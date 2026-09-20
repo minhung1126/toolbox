@@ -125,6 +125,11 @@ def get_preset_templates() -> List[PresetTemplate]:
     return PRESET_TEMPLATES
 
 
+def _sanitize_md(val: str) -> str:
+    """Sanitize text embedded within markdown code blocks or titles."""
+    return str(val or "").replace("`", "'").strip()
+
+
 @router.post("/checklist", response_model=ChecklistResponse)
 def generate_checklist(req: ChecklistRequest) -> ChecklistResponse:
     """Generate a clean markdown posting checklist for 3-part posts."""
@@ -135,21 +140,22 @@ def generate_checklist(req: ChecklistRequest) -> ChecklistResponse:
         "",
     ]
     for item in req.posts:
-        lines.append(f"## 【Post {item.post_index}】{item.title}（共 {item.photo_count} 張）")
+        clean_title = _sanitize_md(item.title)
+        lines.append(f"## 【Post {item.post_index}】{clean_title}（共 {item.photo_count} 張）")
         if item.cover_filename:
-            lines.append(f"- **★ 首圖 (Cover)**：`{item.cover_filename}`")
+            lines.append(f"- **★ 首圖 (Cover)**：`{_sanitize_md(item.cover_filename)}`")
         if item.photo_filenames:
             lines.append("- **輪播照片清單**：")
             for idx, fn in enumerate(item.photo_filenames, start=1):
                 is_cover = " (★ 封面)" if idx == 1 else ""
-                lines.append(f"  {idx}. `{fn}`{is_cover}")
+                lines.append(f"  {idx}. `{_sanitize_md(fn)}`{is_cover}")
         lines.append(f"- **建議標籤**：`#Part{item.post_index}` `#Instagram`")
         lines.append("")
 
     if req.unassigned_filenames:
         lines.append(f"## 未分配備忘照片（共 {len(req.unassigned_filenames)} 張）")
         for fn in req.unassigned_filenames:
-            lines.append(f"- `{fn}`")
+            lines.append(f"- `{_sanitize_md(fn)}`")
         lines.append("")
 
     if req.notes:

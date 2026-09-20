@@ -28,6 +28,10 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+MAX_NOTE_CONTENT_LENGTH = 20_000
+MAX_NOTE_REMARK_LENGTH = 200
+
+
 class NotesStore:
     """Thread-safe persistent store for user sticky notes."""
 
@@ -102,8 +106,8 @@ class NotesStore:
         now = _now_iso()
         note = {
             "id": uuid.uuid4().hex,
-            "content": content or "",
-            "remark": remark or "",
+            "content": (content or "")[:MAX_NOTE_CONTENT_LENGTH],
+            "remark": (remark or "")[:MAX_NOTE_REMARK_LENGTH],
             "pinned": bool(pinned),
             "created_at": now,
             "updated_at": now,
@@ -144,12 +148,16 @@ class NotesStore:
                 return None
 
             changed = False
-            if content is not None and target.get("content") != content:
-                target["content"] = content
-                changed = True
-            if remark is not None and target.get("remark") != remark:
-                target["remark"] = remark
-                changed = True
+            if content is not None:
+                safe_content = content[:MAX_NOTE_CONTENT_LENGTH]
+                if target.get("content") != safe_content:
+                    target["content"] = safe_content
+                    changed = True
+            if remark is not None:
+                safe_remark = remark[:MAX_NOTE_REMARK_LENGTH]
+                if target.get("remark") != safe_remark:
+                    target["remark"] = safe_remark
+                    changed = True
             if pinned is not None and target.get("pinned") != pinned:
                 target["pinned"] = bool(pinned)
                 changed = True

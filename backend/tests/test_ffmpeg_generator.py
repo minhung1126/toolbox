@@ -36,6 +36,8 @@ def test_safe_quote_filename():
     assert safe_quote_filename('"video.mp4"') == '"video.mp4"'
     assert safe_quote_filename('"my video.mp4"') == '"my video.mp4"'
     assert safe_quote_filename("video [1080p] (cut).mp4") == '"video [1080p] (cut).mp4"'
+    assert safe_quote_filename('my "special" video.mp4') == r'"my \"special\" video.mp4"'
+    assert safe_quote_filename(r"path\to\file.mp4") == r'"path\\to\\file.mp4"'
     assert safe_quote_filename("") == '""'
     assert safe_quote_filename("   ") == '""'
 

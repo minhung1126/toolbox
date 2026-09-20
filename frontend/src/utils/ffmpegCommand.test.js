@@ -80,6 +80,11 @@ describe('ffmpegCommand utils', () => {
       expect(quoteFilename('"my video.mp4"')).toBe('"my video.mp4"');
     });
 
+    it('escapes internal double quotes and backslashes', () => {
+      expect(quoteFilename('my "special" video.mp4')).toBe('"my \\"special\\" video.mp4"');
+      expect(quoteFilename('path\\to\\file.mp4')).toBe('"path\\\\to\\\\file.mp4"');
+    });
+
     it('returns empty quotes for falsy or empty inputs', () => {
       expect(quoteFilename('')).toBe('""');
       expect(quoteFilename('   ')).toBe('""');

@@ -508,6 +508,9 @@ def google_oauth_callback(
         # Keep login OAuth secrets in the encrypted persistent store. The
         # browser session only carries the account identity and a random id.
         credential_store.save_google_connection(token_dict, owner_sub=subject)
+        existing_session_id = request.cookies.get(SESSION_COOKIE)
+        if existing_session_id:
+            session_store.delete(existing_session_id)
         session_id = session_store.create(
             {
                 "credential_provider": "google_login",
