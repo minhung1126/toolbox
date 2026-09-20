@@ -212,18 +212,24 @@ def parse_time(req: ParseTimeRequest) -> ParseTimeResponse:
     raise http_error(400, "invalid_time_format", "無法解析提供的時間格式。請使用 hh:mm:ss.mmm 或秒數。")
 
 
+def safe_quote_filename(name: str) -> str:
+    """Ensure filenames are safely wrapped in double quotes for CLI execution."""
+    cleaned = (name or "").strip()
+    if not cleaned:
+        return '""'
+    if cleaned.startswith('"') and cleaned.endswith('"') and len(cleaned) >= 2:
+        return cleaned
+    return f'"{cleaned}"'
+
+
 @router.post("/build", response_model=BuildCommandResponse)
 def build_command(req: BuildCommandRequest) -> BuildCommandResponse:
     """Generate the FFmpeg command line and breakdown."""
     input_file = req.input_file.strip() or "input.mp4"
     output_file = req.output_file.strip() or "output.mp4"
 
-    # Quote filename if contains spaces
-    def safe_name(name: str) -> str:
-        return f'"{name}"' if " " in name and not (name.startswith('"') and name.endswith('"')) else name
-
-    in_safe = safe_name(input_file)
-    out_safe = safe_name(output_file)
+    in_safe = safe_quote_filename(input_file)
+    out_safe = safe_quote_filename(output_file)
 
     breakdown: List[CommandParamExplanation] = []
     args: List[str] = ["ffmpeg"]

@@ -147,6 +147,16 @@ export function buildTrimSummary({
   };
 }
 
+export function quoteFilename(name) {
+  if (!name || typeof name !== 'string') return '""';
+  const trimmed = name.trim();
+  if (!trimmed) return '""';
+  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
+    return trimmed;
+  }
+  return `"${trimmed}"`;
+}
+
 export function buildFfmpegCommand({
   inputName,
   outputName,
@@ -172,8 +182,8 @@ export function buildFfmpegCommand({
   const args = ['ffmpeg'];
   const breakdown = [{ flag: 'ffmpeg', label: '呼叫 FFmpeg 核心引擎' }];
 
-  const safeIn = inputName.includes(' ') && !inputName.startsWith('"') ? `"${inputName}"` : inputName;
-  const safeOut = outputName.includes(' ') && !outputName.startsWith('"') ? `"${outputName}"` : outputName;
+  const safeIn = quoteFilename(inputName);
+  const safeOut = quoteFilename(outputName);
 
   const startSec = enableStartCut ? parseHmsToSeconds(startTime) : 0;
   const hasStart = enableStartCut && startSec > 0;

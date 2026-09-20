@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from backend.app.api.ffmpeg_generator import (
     parse_time_string,
+    safe_quote_filename,
     seconds_to_hhmmss,
 )
 from backend.app.main import app
@@ -27,6 +28,16 @@ def test_seconds_to_hhmmss_and_parse():
     assert parse_time_string("01:01:01") == 3661.0
     assert parse_time_string("45.2") == 45.2
     assert parse_time_string("invalid") is None
+
+
+def test_safe_quote_filename():
+    assert safe_quote_filename("video.mp4") == '"video.mp4"'
+    assert safe_quote_filename("my video.mp4") == '"my video.mp4"'
+    assert safe_quote_filename('"video.mp4"') == '"video.mp4"'
+    assert safe_quote_filename('"my video.mp4"') == '"my video.mp4"'
+    assert safe_quote_filename("video [1080p] (cut).mp4") == '"video [1080p] (cut).mp4"'
+    assert safe_quote_filename("") == '""'
+    assert safe_quote_filename("   ") == '""'
 
 
 def test_ffmpeg_presets_api():
@@ -98,7 +109,7 @@ def test_ffmpeg_build_command_stream_copy():
 
     cmd = res["command_single"]
     assert 'ffmpeg -ss 00:00:10.000 -i "my test video.mp4" -to 00:00:35.000' in cmd
-    assert "-c:v copy -c:a copy output.mp4" in cmd
+    assert '-c:v copy -c:a copy "output.mp4"' in cmd
     assert "`" in res["command_multi"]
     assert len(res["breakdown"]) >= 5
 
@@ -131,10 +142,11 @@ def test_ffmpeg_build_command_reencode():
     res = resp.json()
 
     cmd = res["command_single"]
-    assert "ffmpeg -i clip.mp4 -ss 00:00:05.000 -t 00:00:20.000" in cmd
+    assert 'ffmpeg -i "clip.mp4" -ss 00:00:05.000 -t 00:00:20.000' in cmd
     assert "-c:v libx264 -crf 21 -preset slow" in cmd
     assert "-c:a aac -b:a 256k" in cmd
     assert "-vf" in cmd
     assert "scale=1920:1080" in cmd
     assert "fps=60" in cmd
+    assert '"encoded.mp4"' in cmd
     assert "\\" in res["command_multi"]

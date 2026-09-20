@@ -5,6 +5,7 @@ import {
   buildTrimSummary,
   formatFileSize,
   parseHmsToSeconds,
+  quoteFilename,
   secondsToHms,
 } from './ffmpegCommand';
 
@@ -67,8 +68,27 @@ describe('ffmpegCommand utils', () => {
     });
   });
 
+  describe('quoteFilename', () => {
+    it('wraps plain filenames in double quotes', () => {
+      expect(quoteFilename('video.mp4')).toBe('"video.mp4"');
+      expect(quoteFilename('my video.mp4')).toBe('"my video.mp4"');
+      expect(quoteFilename('clip [1080p] (cut).mp4')).toBe('"clip [1080p] (cut).mp4"');
+    });
+
+    it('preserves double quotes if already quoted', () => {
+      expect(quoteFilename('"video.mp4"')).toBe('"video.mp4"');
+      expect(quoteFilename('"my video.mp4"')).toBe('"my video.mp4"');
+    });
+
+    it('returns empty quotes for falsy or empty inputs', () => {
+      expect(quoteFilename('')).toBe('""');
+      expect(quoteFilename('   ')).toBe('""');
+      expect(quoteFilename(null)).toBe('""');
+    });
+  });
+
   describe('buildFfmpegCommand', () => {
-    it('generates lossless trim copy command by default', () => {
+    it('generates lossless trim copy command by default with double quotes', () => {
       const cmd = buildFfmpegCommand({
         inputName: 'video.mp4',
         outputName: 'video_cut.mp4',
@@ -89,14 +109,14 @@ describe('ffmpegCommand utils', () => {
         shellFormat: 'bash',
       });
 
-      expect(cmd.singleLine).toContain('ffmpeg -ss 00:00:05.000 -i video.mp4 -to 00:00:20.000 -c copy video_cut.mp4');
+      expect(cmd.singleLine).toContain('ffmpeg -ss 00:00:05.000 -i "video.mp4" -to 00:00:20.000 -c copy "video_cut.mp4"');
       expect(cmd.breakdown.length).toBeGreaterThan(3);
     });
 
-    it('quotes files with spaces', () => {
+    it('quotes files with spaces and retains quotes when already present', () => {
       const cmd = buildFfmpegCommand({
         inputName: 'my input video.mp4',
-        outputName: 'my output.mp4',
+        outputName: '"already_quoted.mp4"',
         enableStartCut: false,
         startTime: '00:00:00.000',
         seekMode: 'fast',
@@ -115,7 +135,8 @@ describe('ffmpegCommand utils', () => {
       });
 
       expect(cmd.singleLine).toContain('"my input video.mp4"');
-      expect(cmd.singleLine).toContain('"my output.mp4"');
+      expect(cmd.singleLine).toContain('"already_quoted.mp4"');
+      expect(cmd.singleLine).not.toContain('""already_quoted.mp4""');
     });
   });
 

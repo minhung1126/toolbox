@@ -401,6 +401,9 @@ export default function FfmpegGeneratorPage() {
                 <strong>Cut 前快速 vs 精確</strong>：置於 <code>-i</code> 前利用關鍵影格（Keyframe）快速尋找，剪輯大檔秒級跳轉；置於 <code>-i</code> 後逐幀解碼，定位最精確。
               </li>
               <li>
+                <strong>自動雙引號防護</strong>：生成的所有檔名與路徑一律自動套用雙引號（<code>&quot;...&quot;</code>），完美防範檔名空白、括號 <code>()</code>、括弧 <code>[]</code> 與特殊符號（如 <code>&amp;</code>），確保跨平台 Shell 執行零出錯。
+              </li>
+              <li>
                 <strong>隱私安全</strong>：本地播放器直接透過瀏覽器解碼，影片<strong>絕對不會</strong>上傳到伺服器，安全零流量。
               </li>
             </ul>
@@ -1032,7 +1035,10 @@ export default function FfmpegGeneratorPage() {
         {/* Filename Inputs */}
         <div className="filename-inputs-grid">
           <div className="field-group">
-            <label className="field-label">輸入檔名 (Input File)</label>
+            <label className="field-label">
+              輸入檔名 (Input File)
+              <span className="text-dim text-xs ml-2">自動雙引號防護</span>
+            </label>
             <input
               type="text"
               className="input-field"
@@ -1042,7 +1048,10 @@ export default function FfmpegGeneratorPage() {
             />
           </div>
           <div className="field-group">
-            <label className="field-label">輸出檔名 (Output File)</label>
+            <label className="field-label">
+              輸出檔名 (Output File)
+              <span className="text-dim text-xs ml-2">自動雙引號防護</span>
+            </label>
             <input
               type="text"
               className="input-field"
