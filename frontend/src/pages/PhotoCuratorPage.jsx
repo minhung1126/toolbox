@@ -26,6 +26,7 @@ import Dialog from '../components/Dialog';
 import CuratorThumbnail from '../components/curator/CuratorThumbnail';
 import IgSlotImage from '../components/curator/IgSlotImage';
 import { usePhotoCuratorWorkflow } from '../features/photo-curator/hooks/usePhotoCuratorWorkflow';
+import '../features/photo-curator/photo-curator.css';
 
 export default function PhotoCuratorPage() {
   const toast = useToast();
