@@ -10,7 +10,7 @@
 
 本分支已完成可靠性修正、五個主要前端工作流程的邏輯抽離、YouTube 批次使用案例服務、第一批共用 UI 與前端品質門檻。以下只將有程式碼及測試證據的工作列為完成；整份路線圖仍有明確未完成項目。
 
-最新完整驗證：前端 63 個 Vitest 檔案、306 項通過；ESLint、TypeScript `typecheck`、Stylelint、Prettier 檢查與 production build 通過。後端隔離副本 226 項 pytest 通過，Ruff lint／format 通過；新工具目錄契約、Weverse interrupted 工作對帳、多程序更新及 YouTube workflow FastAPI dependency 注入測試亦通過。Playwright 在本機 Edge 上於 390／768／1440 px 驗證共用元件展示、Sheet Copy、Sticky Notes、Photo Curator、FFmpeg、Publish Cleaner、YouTube Batch 與 Weverse 資料夾選擇區的樣式和版面，包含拖曳狀態、手動路徑斷點及水平溢位斷言，8 項 E2E 均通過。CI 會安裝 Chromium 執行相同測試，但此環境尚未執行 GitHub Actions。環境未安裝 Docker／actionlint；未使用真實 Google／YouTube 帳號驗收。
+最新完整驗證：前端 63 個 Vitest 檔案、307 項通過；ESLint、TypeScript `typecheck`、Stylelint、Prettier 檢查與 production build 通過。後端隔離副本 226 項 pytest 通過，Ruff lint／format 通過；新工具目錄契約、Weverse interrupted 工作對帳、多程序更新及 YouTube workflow FastAPI dependency 注入測試亦通過。Playwright 在本機 Edge 上於 390／768／1440 px 驗證共用元件展示、Sheet Copy、Sticky Notes、Photo Curator、FFmpeg、Publish Cleaner、YouTube Batch 與 Weverse 資料夾選擇和手動掃描至複查流程；另以 provider fake 驗證 Weverse 掃描、確認、上傳請求 payload、任務輪詢至完成畫面，9 項 E2E 均通過。CI 會安裝 Chromium 執行相同測試；本地完整驗收不替代 GitHub Actions 結果。環境未安裝 Docker／actionlint；未使用真實 Google／YouTube 帳號驗收。
 
 已完成：
 
@@ -18,16 +18,16 @@
 - Plugin 啟動失敗反映在工具健康與 API readiness；Weverse executor 延遲建立並納入停機生命週期。重啟時將 pending／上傳中工作標示 interrupted 並提示先查 YouTube Studio，不自動重送。
 - `youtube.py` 的批次預覽、批次 metadata 更新及發布清理協調移至 `YoutubeWorkflowService`，保留 router 與既有 API 契約。
 - YouTube 批次 workflow service 改由 FastAPI dependency 提供，允許 endpoint 層替換 service，並以 HTTP 測試驗證 override 能確實注入；目前 adapter 仍從 router 模組組裝，settings、repository 與 provider client 的 app factory 注入仍待完成。
-- Playlist Sort、Weverse 上傳、FFmpeg 影片與命令流程、Photo Curator 分配／匯出、Batch Update 的狀態與使用案例邏輯抽至 feature hook；Weverse hook 已移入 feature 目錄，Weverse、YouTube Batch 與 Sheet Copy 增加 feature API 邊界，Playlist Sort 保留型別化 API。Sheet Copy 的 metadata／表格回應以 TypeScript contract 描述並做執行期格式驗證，格式錯誤會進入頁面既有錯誤處理，不會先寫入畫面狀態。Weverse 歷史及既有 batch 預覽內容使用獨立元件。既有頁面互動測試維持通過。
+- Playlist Sort、Weverse 上傳、FFmpeg 影片與命令流程、Photo Curator 分配／匯出、Batch Update 的狀態與使用案例邏輯抽至 feature hook；Weverse hook 已移入 feature 目錄，Weverse、YouTube Batch 與 Sheet Copy 增加 feature API 邊界，Playlist Sort 保留型別化 API。Sheet Copy 的 metadata／表格回應以 TypeScript contract 描述並做執行期格式驗證，格式錯誤會進入頁面既有錯誤處理，不會先寫入畫面狀態。Weverse 歷史及既有 batch 預覽內容使用獨立元件。Weverse 兩個確認對話框修正為共用元件實際支援的 `confirmText` prop；端到端測試由此發現舊 prop 名稱造成的錯誤按鈕文案。
 - Dashboard、系統資訊、系統設定與便利貼頁開始採用共用 PageHeader、Button、Badge、EmptyState 與 LoadingState；新增可存取元件狀態展示頁。Sheet Copy、YouTube 批次更新、Publish Cleaner、Sticky Notes、Photo Curator 與 FFmpeg 的專屬樣式已移入各自 feature；批次更新預覽成功狀態的 CSS class 也統一為 kebab-case。Weverse 資料夾選擇與路徑輸入版型已移入頁面 CSS，移除該區固定 inline layout，手機版改為垂直操作列，拖曳中樣式使用共用主色 token。跨頁說明面板標題移入 shared UI，並移除 Sheet Copy 重複主題覆寫、未使用便利貼 icon 樣式及 Photo Curator 的無必要 `!important`。FFmpeg 在 390／768 px 下改用單欄工作區並讓 shell 選項換行，E2E 因此發現且修正原有 390 px／768 px 橫向溢位。feature CSS 拆分後，主樣式 chunk 由 90.65 kB／gzip 16.55 kB 降至 59.59 kB／gzip 10.99 kB。其餘全域舊樣式仍待逐頁清理。根 token／基礎樣式已集中，新增 Prettier、ESLint 未使用變數與 Hooks 錯誤門檻、Stylelint 及漸進 TypeScript 檢查。
 - 各工具的前端 manifest 已拆到 feature 目錄，彙整工具 metadata、導覽、dashboard cards 與受保護 routes；catalog 啟動時拒絕重複 ID／路由及不在 PATHS 的 destination，AppRoutes 由 registry 組裝 feature routes。
-- Playwright 增加 390／768／1440 px 共用元件展示溢位與截圖測試，並驗證七個工具頁的樣式載入、多尺寸版面及 Weverse 資料夾拖曳狀態。前後端工具 ID 與路由契約測試發現並修正 `youtube-integrations`／`integrations-quota` 漂移。
+- Playwright 增加 390／768／1440 px 共用元件展示溢位與截圖測試，並驗證七個工具頁的樣式載入、多尺寸版面、Weverse 資料夾拖曳／掃描／複查，以及 fake provider 的上傳至完成流程。前後端工具 ID 與路由契約測試發現並修正 `youtube-integrations`／`integrations-quota` 漂移。
 - 發布 workflow 只會發布已通過驗證的同一個 main SHA；README 的支援平台與前端路徑已修正。
 
 尚待完成：
 
 - 共用 UI 尚未逐頁遷移；大量舊 CSS 與固定 inline layout 仍保留。Stylelint 對 `.stylelintignore` 列出的既有全域樣式設有過渡例外，需以逐檔遷移方式移除。
-- Feature hook 已從頁面抽離，但其他 feature 的 API/model 邊界及較完整的 TS 型別尚未完成；E2E 目前驗證共用元件展示、feature 樣式載入及多尺寸版面，尚未完整驗證排序、OAuth、批次更新執行、Weverse 上傳及媒體匯出流程。
+- Feature hook 已從頁面抽離，但其他 feature 的 API/model 邊界及較完整的 TS 型別尚未完成；E2E 目前驗證共用元件展示、feature 樣式、多尺寸版面及使用 provider fake 的 Weverse 上傳生命週期，尚未完整驗證 OAuth、排序、批次更新執行及媒體匯出流程；Weverse 尚無真實 provider smoke test。
 - YouTube service 已由 FastAPI dependency 注入，但 adapter 仍由 router 模組函式組裝；settings、repository 與外部 client 的 app factory/dependency 注入尚未完成。
 - Weverse sidecar lock 只承諾在支援作業系統檔案鎖定語意的本機檔案系統上協調合作程序；NFS／網路檔案系統或跨主機多實例仍需驗證鎖語意，或改採資料庫／外部鎖服務。沒有真實 provider smoke test，也未演練 Docker 部署回退。
 - `npm install` 顯示 9 項安全公告；本機 npm audit registry 請求逾時，尚未取得可驗證的 advisory 清單，因此沒有執行盲目升級或宣稱已修復。

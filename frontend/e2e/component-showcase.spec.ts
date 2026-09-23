@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-async function mockAuthenticatedBackend(page) {
+async function mockAuthenticatedBackend(page, responseOverrides: Record<string, unknown> = {}) {
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     const responses: Record<string, unknown> = {
@@ -21,6 +21,31 @@ async function mockAuthenticatedBackend(page) {
       '/api/v1/settings/team-person-filter': {},
       '/api/v1/settings/work-state': { state: {} },
       '/api/v1/health': { commit_sha: 'development' },
+      '/api/v1/weverse-uploader/scan': {
+        packages: [
+          {
+            package_id: 'sample-live',
+            suggested_title: 'Sample Live',
+            video: {
+              filename: 'sample-live.mp4',
+              full_path: 'C:\\weverse\\sample-live.mp4',
+              size_formatted: '1 MB',
+            },
+            subtitles: [
+              {
+                id: 'sample-subtitle',
+                filename: 'sample-live.zh_TW.vtt',
+                full_path: 'C:\\weverse\\sample-live.zh_TW.vtt',
+                raw_lang: 'zh_TW',
+                bcp47: 'zh-TW',
+                label: '繁體中文',
+                size_formatted: '1 KB',
+              },
+            ],
+          },
+        ],
+      },
+      ...responseOverrides,
     };
 
     await route.fulfill({
@@ -196,7 +221,66 @@ test('Weverse folder picker styles stay usable across viewport widths', async ({
       .evaluate((element) => getComputedStyle(element).flexDirection);
     expect(pathDirection, `manual path controls did not adapt at ${width}px`).toBe(width <= 640 ? 'column' : 'row');
 
+    await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
+    await page.getByRole('button', { name: '掃描並辨識' }).click();
+    await expect(page.getByRole('heading', { level: 3, name: /步驟二：辨識結果複查與編輯/ })).toBeVisible();
+    await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Sample Live');
+
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
   }
+});
+
+test('Weverse upload posts the reviewed package and reaches completed state with a provider fake', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/auth/user': {
+      authenticated: true,
+      user: { sub: 'weverse-upload-e2e', email: 'weverse-upload@example.test' },
+      authorizations: {
+        sheets: { connected: false },
+        ytmusic: { connected: false },
+        video_uploader: {
+          connected: true,
+          account_name: 'uploader@example.test',
+          channel_title: 'Uploader Channel',
+        },
+      },
+      google_scopes: {},
+      youtube: { slots: {} },
+    },
+    '/api/v1/weverse-uploader/upload-from-path': { task_id: 'e2e-task-1' },
+    '/api/v1/weverse-uploader/tasks/e2e-task-1': {
+      task: {
+        task_id: 'e2e-task-1',
+        title: 'Sample Live',
+        status: 'completed',
+        progress_percent: 100,
+        video_url: 'https://youtube.example/watch?v=e2e-video',
+        studio_url: 'https://studio.youtube.example/video/e2e-video',
+      },
+    },
+  });
+
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await page.goto('/weverse-uploader');
+  await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
+  await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
+  await page.getByRole('button', { name: '掃描並辨識' }).click();
+  await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Sample Live');
+
+  const uploadRequestPromise = page.waitForRequest((request) =>
+    request.url().includes('/api/v1/weverse-uploader/upload-from-path')
+  );
+  await page.getByRole('button', { name: '確認並開始上傳至 YouTube' }).click();
+  await page.getByRole('button', { name: '立即上傳' }).click();
+
+  const uploadRequest = await uploadRequestPromise;
+  const payload = uploadRequest.postDataJSON();
+  expect(payload.video_path).toBe('C:\\weverse\\sample-live.mp4');
+  expect(payload.title).toBe('Sample Live');
+  expect(payload.subtitles).toHaveLength(1);
+  await expect(page.getByRole('heading', { level: 2, name: '上傳成功！' })).toBeVisible({ timeout: 8000 });
+
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
 });

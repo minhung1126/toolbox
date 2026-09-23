@@ -111,7 +111,7 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
         open={confirmDisconnect}
         title="確認斷開影片上傳頻道？"
         message="斷開後將無法上傳新影片至此 YouTube 頻道，但已上傳的影片與設定不會受影響。"
-        confirmLabel="確認斷開"
+        confirmText="確認斷開"
         onConfirm={handleConfirmDisconnect}
         onCancel={() => setConfirmDisconnect(false)}
       />
@@ -553,7 +553,7 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
         open={uploadConfirmOpen}
         title="確認開始發布至 YouTube？"
         message={`即將上傳影片「${metadata.title}」並掛載 ${enabledSubsCount} 語系字幕，預估消耗 ${estimatedQuota.toLocaleString()} 單位 YouTube 配額。`}
-        confirmLabel="立即上傳"
+        confirmText="立即上傳"
         onConfirm={handleStartUpload}
         onCancel={() => setUploadConfirmOpen(false)}
       />

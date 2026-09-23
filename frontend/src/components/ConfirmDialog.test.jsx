@@ -4,6 +4,12 @@ import { vi } from 'vitest';
 import ConfirmDialog from './ConfirmDialog';
 
 describe('ConfirmDialog accessibility behavior', () => {
+  it('uses the caller-provided confirmation text', () => {
+    render(<ConfirmDialog open title="確認發布" confirmText="立即上傳" onConfirm={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: '立即上傳' })).toBeInTheDocument();
+  });
+
   it('traps focus, locks the background, restores focus, and prevents duplicate confirmation', async () => {
     const trigger = document.createElement('button');
     trigger.type = 'button';
