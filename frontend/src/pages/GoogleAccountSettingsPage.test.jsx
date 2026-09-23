@@ -1,9 +1,11 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import GoogleAccountSettingsPage from './GoogleAccountSettingsPage';
 import { api } from '../services/api';
+
+vi.mock('../utils/navigation', () => ({ redirectToAuth: vi.fn() }));
 
 vi.mock('../services/api', () => ({
   api: {

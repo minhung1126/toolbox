@@ -159,6 +159,10 @@ def health_check():
     youtube_secondary_ready = youtube_secondary.configured
     access_allowlist_ready = bool(settings.allowed_google_emails) or not settings.allowlist_required
     warnings = []
+    tool_health = tool_registry.health_check()
+    failed_tools = [tool_id for tool_id, state in tool_health.items() if state.get("status") != "ok"]
+    if failed_tools:
+        warnings.append("部分工具模組未能初始化")
     if not google_oauth_ready:
         warnings.append("尚未設定 Google OAuth 憑證")
     if not access_allowlist_ready:
@@ -166,8 +170,8 @@ def health_check():
     if google_oauth_ready and not youtube_primary_ready:
         warnings.append("尚未設定 YouTube primary OAuth 憑證")
     return {
-        "status": "healthy",
-        "ready": google_oauth_ready and youtube_primary_ready and access_allowlist_ready,
+        "status": "degraded" if failed_tools else "healthy",
+        "ready": google_oauth_ready and youtube_primary_ready and access_allowlist_ready and not failed_tools,
         "service": "Toolbox Backend",
         "host": settings.base_url,
         "redirect_uri": settings.get_redirect_uri(),
@@ -181,6 +185,7 @@ def health_check():
             "secondary_configured": youtube_secondary_ready,
             "secondary_enabled": youtube_secondary.enabled,
         },
+        "tools": tool_health,
         "warnings": warnings,
         "commit_sha": os.getenv("APP_COMMIT_SHA", "development"),
     }

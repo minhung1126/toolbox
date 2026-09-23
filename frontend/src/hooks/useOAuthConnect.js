@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useToast } from '../components/Toast';
+import { redirectToAuth } from '../utils/navigation';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
 
 export function useOAuthConnect({
@@ -10,6 +11,7 @@ export function useOAuthConnect({
   onAfterDisconnect,
   serviceLabel = '授權',
   successMessage,
+  navigateToAuth = redirectToAuth,
 }) {
   const toast = useToast();
   const location = useLocation();
@@ -30,7 +32,7 @@ export function useOAuthConnect({
       saveOAuthReturnPath(serviceName, `${location.pathname}${location.search}`);
       const res = await getAuthUrl();
       if (res?.auth_url) {
-        window.location.href = res.auth_url;
+        navigateToAuth(res.auth_url);
       } else {
         toast.error(`無法取得 ${serviceLabel} 網址。`);
         if (isMountedRef.current) setConnecting(false);
@@ -39,7 +41,7 @@ export function useOAuthConnect({
       toast.error(`取得 ${serviceLabel} 網址失敗：${error.message}`);
       if (isMountedRef.current) setConnecting(false);
     }
-  }, [serviceName, location.pathname, location.search, getAuthUrl, serviceLabel, toast]);
+  }, [serviceName, location.pathname, location.search, getAuthUrl, navigateToAuth, serviceLabel, toast]);
 
   const handleConfirmDisconnect = useCallback(async () => {
     setConfirmDisconnect(false);

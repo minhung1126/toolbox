@@ -41,6 +41,10 @@ describe('curatorZip utils', () => {
     it('creates zip blob and triggers anchor download', async () => {
       global.URL.createObjectURL = vi.fn(() => 'blob:mock-download-url');
       global.URL.revokeObjectURL = vi.fn();
+      let downloadedAnchor;
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function recordDownloadClick() {
+        downloadedAnchor = this;
+      });
 
       const dummyFile = new Blob(['hello'], { type: 'image/jpeg' });
       const photoMap = new Map([
@@ -51,6 +55,8 @@ describe('curatorZip utils', () => {
       await exportCuratedZip({ posts, photoMap, checklistContent: 'test checklist' });
 
       expect(global.URL.createObjectURL).toHaveBeenCalled();
+      expect(downloadedAnchor).toHaveAttribute('href', 'blob:mock-download-url');
+      expect(downloadedAnchor).toHaveAttribute('download', expect.stringMatching(/\.zip$/));
     });
   });
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowUpDown, CheckCircle2, ChevronDown, Disc3, Instagram, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, StickyNote, UploadCloud, Video, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Disc3, Instagram, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, StickyNote, UploadCloud, Video, X } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { youtubeIsConnected } from '../utils/youtubeRouting';

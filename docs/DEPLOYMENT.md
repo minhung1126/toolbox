@@ -138,7 +138,7 @@ foreach ($asset in $assets) {
 
 ## 健康檢查與資料保存
 
-- Health endpoint：`/api/v1/health`。部署後可確認 HTTP 200 與 JSON 的 `ready` 為 `true`。
+- Health endpoint：`/api/v1/health`。部署後可確認 HTTP 200 與 JSON 的 `ready` 為 `true`；若 plugin 初始化失敗，response 會列出非敏感的 `tools` 狀態並將 readiness 設為 `false`。
 - OAuth callback：`/api/v1/auth/callback`。
 - `data/` 包含加密憑證、session、帳號工作狀態、runtime 設定與兩個 YouTube 配額 ledger。服務重建或搬遷時必須保留整個 volume。
 - 不要提交 `.env`、`data/` 或任何 client secret。修改 `.env` 後要重新建立或重啟容器。

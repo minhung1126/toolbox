@@ -35,6 +35,25 @@ def test_health_explains_why_login_is_not_ready(monkeypatch):
     assert len(result["warnings"]) == 2
 
 
+def test_health_marks_failed_active_tool_not_ready(monkeypatch):
+    monkeypatch.setattr(main.settings, "GOOGLE_CLIENT_ID", "configured-client")
+    monkeypatch.setattr(main.settings, "GOOGLE_CLIENT_SECRET", "configured-secret")
+    monkeypatch.setattr(main.settings, "YOUTUBE_OAUTH_PRIMARY_CLIENT_ID", "configured-youtube-client")
+    monkeypatch.setattr(main.settings, "YOUTUBE_OAUTH_PRIMARY_CLIENT_SECRET", "configured-youtube-secret")
+    monkeypatch.setattr(
+        main.tool_registry,
+        "health_check",
+        lambda: {"weverse-uploader": {"status": "error", "error": "RuntimeError"}},
+    )
+
+    result = main.health_check()
+
+    assert result["status"] == "degraded"
+    assert result["ready"] is False
+    assert "部分工具模組未能初始化" in result["warnings"]
+    assert "weverse-uploader" in result["tools"]
+
+
 def test_system_health_endpoint_matches():
     from fastapi.testclient import TestClient
 

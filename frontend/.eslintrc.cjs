@@ -7,10 +7,10 @@ module.exports = {
   settings: { react: { version: 'detect' } },
   globals: { describe: 'readonly', it: 'readonly', expect: 'readonly' },
   rules: {
-    'no-unused-vars': 'off',
+    'no-unused-vars': ['error', { ignoreRestSiblings: true }],
     'no-undef': 'error',
     'react/prop-types': 'off',
     'react/react-in-jsx-scope': 'off',
-    'react-hooks/exhaustive-deps': 'warn',
+    'react-hooks/exhaustive-deps': 'error',
   },
 };

@@ -156,7 +156,7 @@ def parse_custom_token_input(
     language: str = DEFAULT_YTMUSIC_LANGUAGE,
     location: str = DEFAULT_YTMUSIC_LOCATION,
 ) -> dict[str, Any]:
-    """Parse raw custom token input into a valid format accepted by YTMusic().
+    """Parse raw custom token input into headers accepted by YTMusic().
 
     Supports:
     1. JSON headers dict (e.g. {"Cookie": "...", "User-Agent": "..."})
@@ -258,23 +258,12 @@ def parse_custom_token_input(
         "en": "en-US,en;q=0.9",
     }
     resolved_lang = language or DEFAULT_YTMUSIC_LANGUAGE
-    resolved_loc = location or DEFAULT_YTMUSIC_LOCATION
     user_headers["accept-language"] = accept_lang_map.get(
         resolved_lang, f"{resolved_lang.replace('_', '-')},{resolved_lang[:2]};q=0.9,en;q=0.8"
     )
 
     final_headers = dict(initialize_headers())
     final_headers.update(user_headers)
-
-    # Validate that YTMusic accepts these headers as AuthType.BROWSER
-    try:
-        yt_test = YTMusic(auth=final_headers, language=resolved_lang, location=resolved_loc)
-        if getattr(yt_test, "auth_type", None) != AuthType.BROWSER:
-            raise ValueError("未能成功識別為 YouTube Music 瀏覽器憑證 (AuthType.BROWSER)。")
-    except Exception as exc:
-        logger.debug("YTMusic initialization validation failed: %s", exc)
-        raise ValueError(f"YouTube Music 憑證無效或無法通過驗證：{exc}") from exc
-
     return final_headers
 
 

@@ -6,31 +6,22 @@ import {
   ChevronUp,
   Clapperboard,
   Clock,
-  Code2,
   Copy,
-  FastForward,
   FileVideo,
   HelpCircle,
-  Maximize2,
-  Minimize2,
-  Music,
   Pause,
   Play,
-  RotateCcw,
   Scissors,
   Sliders,
   Sparkles,
   Terminal,
   Upload,
   Video,
-  Volume2,
-  VolumeX,
   X,
   Zap,
 } from 'lucide-react';
 import { useToast } from '../components/Toast';
 import { copyToClipboard } from '../utils/clipboard';
-import { api } from '../services/api';
 
 import {
   PRESET_LIST,
@@ -60,8 +51,6 @@ export default function FfmpegGeneratorPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoMeta, setVideoMeta] = useState({ width: 0, height: 0, size: 0, name: '' });
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [volume, setVolume] = useState(1);
-  const [isMuted, setIsMuted] = useState(false);
   const [videoError, setVideoError] = useState(null);
 
   // Cut Options
@@ -83,8 +72,8 @@ export default function FfmpegGeneratorPage() {
   const [resolution, setResolution] = useState('original');
   const [fps, setFps] = useState('original');
   const [audioBitrate, setAudioBitrate] = useState('192k');
-  const [audioVolume, setAudioVolume] = useState('100%');
-  const [customFilters, setCustomFilters] = useState('');
+  const audioVolume = '100%';
+  const customFilters = '';
 
   // Filenames & Shell format
   const [inputName, setInputName] = useState('input.mp4');

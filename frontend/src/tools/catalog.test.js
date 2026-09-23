@@ -6,11 +6,16 @@ import {
   getToolById,
   getToolNavGroups,
 } from './catalog';
+import { PATHS } from '../routes/paths';
+
+function expectUniqueIds(items) {
+  const ids = items.map((item) => item.id);
+  expect(new Set(ids).size).toBe(ids.length);
+}
 
 describe('Toolbox Frontend Tool Catalog', () => {
   it('returns registered tools with metadata', () => {
     const tools = getAllTools();
-    expect(tools.length).toBe(9);
     const ids = tools.map((t) => t.id);
     expect(ids).toContain('creator-tools');
     expect(ids).toContain('youtube-music');
@@ -21,6 +26,27 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(ids).toContain('weverse-uploader');
     expect(ids).toContain('integrations-quota');
     expect(ids).toContain('system-utility');
+  });
+
+  it('keeps tool, navigation, card identifiers and destinations consistent', () => {
+    const tools = getAllTools();
+    const groups = getToolNavGroups();
+    const navItems = groups.flatMap((group) => group.items || []);
+    const cards = getDashboardFeatureCards();
+    const knownPaths = new Set(Object.values(PATHS));
+
+    expectUniqueIds(tools);
+    expectUniqueIds(groups);
+    expectUniqueIds(navItems);
+    expectUniqueIds(cards);
+
+    for (const path of [
+      ...tools.map((tool) => tool.entryUrl),
+      ...navItems.map((item) => item.to),
+      ...cards.map((card) => card.to),
+    ]) {
+      expect(knownPaths.has(path), `Unknown catalog destination: ${path}`).toBe(true);
+    }
   });
 
   it('finds tool by id', () => {

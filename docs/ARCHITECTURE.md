@@ -47,7 +47,7 @@ Toolbox 採用 **「平台核心 (Platform Core) + 工具外掛 (Tool Plugins)�
   - `ToolMetadata`: 定義工具的識別碼 (`id`)、名稱 (`name` / `title`)、圖示 (`icon`)、分類 (`category`)、入口與子路由清單 (`routes`)，以及所需 OAuth Scopes。
   - `ToolPlugin`: 抽象基礎類別，支援宣告 `metadata`、`router`、`on_startup` 與 `on_shutdown` 生命週期勾子。
 - **`registry.py`**:
-  - `ToolRegistry`: 集中管理所有已安裝工具，負責自動掛載路由、統一執行生命週期勾子（如背景上傳 Worker）與健康度彙整。
+  - `ToolRegistry`: 集中管理所有已安裝工具，拒絕重複工具 ID，負責掛載路由、執行生命週期勾子（如背景上傳 Worker）與彙整健康度。外掛啟動失敗會出現在 `/api/v1/health` 的 `tools` 欄位，並使 `ready` 回傳 `false`。
 - **`builtin/`**:
   - `creator_tools.py`: 創作者工具模組（封裝 YouTube、Google Sheets、Google Drive 批次上傳）。
   - `playlist_sorter.py`: YouTube Music 專屬音樂工具箱模組（支援 YouTube Music 獨立帳號授權、智慧多重排序、清單名稱即時搜尋篩選、雙欄模擬預覽與一鍵套用）。
@@ -119,9 +119,12 @@ tool_registry.register(MyToolPlugin())
 
 ### 步驟 3：在前端註冊工具導覽與路由
 
-在 `frontend/src/tools/catalog.js` 中新增工具條目：
+先在 `frontend/src/routes/paths.js` 增加唯一的 canonical URL，再在 `frontend/src/tools/catalog.js` 登錄導覽與 dashboard card。這個 catalog 的測試會檢查重複 ID 與未登記網址：
 
 ```javascript
+import { Wrench } from 'lucide-react';
+import { PATHS } from '../routes/paths';
+
 {
   id: 'my-tool',
   name: 'My Tool',
@@ -131,16 +134,23 @@ tool_registry.register(MyToolPlugin())
   icon: Wrench,
   badge: '新功能',
   status: 'active',
-  entryUrl: '/my-tool',
-  navItems: [
-    { id: 'my_tool_home', to: '/my-tool', label: '工具首頁', icon: Wrench },
+  entryUrl: PATHS.myTool,
+  navGroups: [
+    {
+      id: 'my-tool',
+      label: 'My Tool',
+      icon: Wrench,
+      items: [
+        { id: 'my_tool_home', to: PATHS.myTool, label: '工具首頁', icon: Wrench },
+      ],
+    },
   ],
   featureCards: [
     {
       id: 'my_tool_card',
       title: '我的新工具',
       description: '點擊立即使用新工具功能。',
-      to: '/my-tool',
+      to: PATHS.myTool,
       actionLabel: '進入工具',
       icon: Wrench,
       colorTheme: 'accent',
@@ -149,7 +159,9 @@ tool_registry.register(MyToolPlugin())
 }
 ```
 
-在 `frontend/src/routes/AppRoutes.jsx` 中掛載前端頁面元件即可。導覽列 (`Navbar`) 與儀表板 (`DashboardPage`) 將會自動感應用戶介面。
+並在 `PATHS` 常數物件中加入 `myTool: '/my-tool'`。
+
+在 `frontend/src/routes/AppRoutes.jsx` 中將 `PATHS.myTool` 對應到新頁面。路徑請集中維護於 `paths.js`，catalog 的 destination 必須使用已知 `PATHS`，並為新 route 補上路由測試；導覽列 (`Navbar`) 與儀表板 (`DashboardPage`) 會從 catalog 讀取資料。
 
 ---
 

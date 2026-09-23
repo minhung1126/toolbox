@@ -3,7 +3,8 @@
 import logging
 import os
 import shutil
-from concurrent.futures import ThreadPoolExecutor
+import threading
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -14,8 +15,10 @@ from backend.app.core.weverse_upload_store import weverse_upload_store
 
 logger = logging.getLogger(__name__)
 
-# Dedicated background executor for uploads
-_upload_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="weverse_upload_worker")
+# Create the upload worker only when the first task is submitted, so importing
+# API modules does not start a background thread.
+_upload_executor: ThreadPoolExecutor | None = None
+_upload_executor_lock = threading.Lock()
 
 
 def _get_youtube_service(credentials):
@@ -217,20 +220,33 @@ def enqueue_upload_task(
     category_id: str = "22",
     default_language: str = "ko",
     temp_dir_to_clean: Optional[str] = None,
-) -> None:
+) -> Future:
     """Submit the upload task to the thread pool."""
-    _upload_executor.submit(
-        execute_upload_task,
-        owner_sub=owner_sub,
-        task_id=task_id,
-        credentials=credentials,
-        video_path=video_path,
-        title=title,
-        description=description,
-        privacy_status=privacy_status,
-        subtitles=subtitles,
-        tags=tags,
-        category_id=category_id,
-        default_language=default_language,
-        temp_dir_to_clean=temp_dir_to_clean,
-    )
+    global _upload_executor
+    with _upload_executor_lock:
+        if _upload_executor is None:
+            _upload_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="weverse_upload_worker")
+        return _upload_executor.submit(
+            execute_upload_task,
+            owner_sub=owner_sub,
+            task_id=task_id,
+            credentials=credentials,
+            video_path=video_path,
+            title=title,
+            description=description,
+            privacy_status=privacy_status,
+            subtitles=subtitles,
+            tags=tags,
+            category_id=category_id,
+            default_language=default_language,
+            temp_dir_to_clean=temp_dir_to_clean,
+        )
+
+
+def shutdown_upload_executor() -> None:
+    """Drain upload workers during application shutdown."""
+    global _upload_executor
+    with _upload_executor_lock:
+        executor, _upload_executor = _upload_executor, None
+        if executor is not None:
+            executor.shutdown(wait=True, cancel_futures=False)

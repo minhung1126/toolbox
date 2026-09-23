@@ -3,13 +3,15 @@
 from pathlib import Path
 
 import pytest
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
 from backend.app.api import auth
+from backend.app.api import weverse_uploader as weverse_api
 from backend.app.core.security import GOOGLE_OAUTH_STATE_SALT, sign_timed_data
-from backend.app.core.weverse_upload_store import WeverseUploadStore
+from backend.app.core.weverse_upload_store import WeverseUploadStore, WeverseUploadStoreError
 from backend.app.main import app
+from backend.app.services import weverse_uploader_service as upload_service
 from backend.app.services.weverse_scanner import (
     clean_default_title,
     map_language,
@@ -160,6 +162,105 @@ def test_weverse_upload_store(tmp_path: Path):
     store.record_recent_path(user_sub, "C:\\downloads\\weverse")
     paths = store.get_recent_paths(user_sub)
     assert "C:\\downloads\\weverse" in paths
+
+
+def test_weverse_upload_store_preserves_corrupted_data_and_fails_closed(tmp_path: Path):
+    data_file = tmp_path / "corrupted_uploads.json"
+    original = "{not valid JSON"
+    data_file.write_text(original, encoding="utf-8")
+    store = WeverseUploadStore(data_file)
+
+    with pytest.raises(WeverseUploadStoreError, match="無法讀取"):
+        store.create_task("test-user", {"task_id": "must-not-be-saved"})
+
+    assert data_file.read_text(encoding="utf-8") == original
+
+
+def test_weverse_upload_store_propagates_write_failure(tmp_path: Path, monkeypatch):
+    from backend.app.core import weverse_upload_store as module
+
+    store = WeverseUploadStore(tmp_path / "uploads.json")
+
+    def fail_write(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(module, "atomic_write_json", fail_write)
+    with pytest.raises(WeverseUploadStoreError, match="無法儲存"):
+        store.create_task("test-user", {"task_id": "unsaved"})
+    assert store.data_file.read_text(encoding="utf-8") == "{}"
+
+
+def test_weverse_queue_failure_marks_task_failed_and_removes_uploaded_files(tmp_path: Path, monkeypatch):
+    store = WeverseUploadStore(tmp_path / "queue_failure.json")
+    task_id = "queue-failure"
+    owner_sub = "test-user"
+    store.create_task(owner_sub, {"task_id": task_id, "status": "pending"})
+    upload_dir = tmp_path / "uploaded-files"
+    upload_dir.mkdir()
+    (upload_dir / "video.mp4").write_bytes(b"video")
+
+    def reject_upload(**_kwargs):
+        raise RuntimeError("executor is closed")
+
+    monkeypatch.setattr(weverse_api, "weverse_upload_store", store)
+    monkeypatch.setattr(weverse_api, "enqueue_upload_task", reject_upload)
+
+    with pytest.raises(HTTPException) as error:
+        weverse_api._enqueue_persisted_upload(
+            owner_sub,
+            task_id,
+            credentials=object(),
+            video_path=str(upload_dir / "video.mp4"),
+            title="Test",
+            description="",
+            privacy_status="private",
+            subtitles=[],
+            temp_dir_to_clean=str(upload_dir),
+        )
+
+    assert error.value.status_code == 503
+    assert error.value.detail["code"] == "upload_queue_unavailable"
+    assert store.get_task(owner_sub, task_id)["status"] == "failed"
+    assert not upload_dir.exists()
+
+
+def test_upload_worker_is_created_on_demand_and_drained_by_plugin_shutdown(monkeypatch):
+    import asyncio
+
+    submitted = []
+    shutdown = []
+
+    class ExecutorStub:
+        def __init__(self, **kwargs):
+            self.options = kwargs
+
+        def submit(self, function, **kwargs):
+            submitted.append((function, kwargs))
+            return "submitted"
+
+        def shutdown(self, *, wait, cancel_futures):
+            shutdown.append((wait, cancel_futures))
+
+    monkeypatch.setattr(upload_service, "_upload_executor", None)
+    monkeypatch.setattr(upload_service, "ThreadPoolExecutor", ExecutorStub)
+
+    result = upload_service.enqueue_upload_task(
+        owner_sub="test-user",
+        task_id="task-1",
+        credentials=object(),
+        video_path="video.mp4",
+        title="Test",
+        description="",
+        privacy_status="private",
+        subtitles=[],
+    )
+
+    asyncio.run(WeverseUploaderPlugin().on_shutdown(None))
+
+    assert result == "submitted"
+    assert len(submitted) == 1
+    assert shutdown == [(True, False)]
+    assert upload_service._upload_executor is None
 
 
 def test_unauthorized_upload_access():

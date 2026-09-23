@@ -1,0 +1,84 @@
+/* Shared, semantic design tokens. Keep product-specific CSS in feature styles. */
+:root {
+  color-scheme: dark;
+
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans TC', system-ui, sans-serif;
+  --content-max-width: 1440px;
+
+  /* Layout and spacing */
+  --page-padding: clamp(1.25rem, 3.5vw, 3rem);
+  --section-gap: 2rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 76px;
+  --app-bar-height: 64px;
+  --mobile-shell-offset: calc(var(--app-bar-height) + env(safe-area-inset-top));
+
+  /* Canvas and surfaces */
+  --bg-canvas: #121316;
+  --bg-primary: #121316;
+  --bg-secondary: #181a1f;
+  --bg-card: #1c1e24;
+  --bg-card-hover: #242730;
+  --surface-inset: #14151a;
+  --surface-raised: #262a34;
+  --surface-overlay: rgba(18, 19, 22, 0.88);
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-color: rgba(255, 255, 255, 0.09);
+  --border-hover: rgba(255, 255, 255, 0.16);
+  --border-glow: transparent;
+
+  /* Accent */
+  --primary: #6366f1;
+  --primary-hover: #4f46e5;
+  --primary-active: #4338ca;
+  --primary-glow: rgba(99, 102, 241, 0.22);
+  --primary-subtle: rgba(99, 102, 241, 0.12);
+  --primary-border: rgba(99, 102, 241, 0.35);
+  --accent: var(--primary);
+  --accent-hover: var(--primary-hover);
+  --accent-glow: rgba(99, 102, 241, 0.2);
+  --secondary: #ec4899;
+
+  /* Text and semantic status */
+  --text-main: #f3f4f6;
+  --text-muted: #9ca3af;
+  --text-dim: #6b7280;
+  --success: #10b981;
+  --success-bg: rgba(16, 185, 129, 0.12);
+  --success-border: rgba(16, 185, 129, 0.28);
+  --success-text: #34d399;
+  --warning: #f59e0b;
+  --warning-bg: rgba(245, 158, 11, 0.12);
+  --warning-border: rgba(245, 158, 11, 0.28);
+  --warning-text: #fbbf24;
+  --danger: #f43f5e;
+  --danger-bg: rgba(244, 63, 94, 0.12);
+  --danger-border: rgba(244, 63, 94, 0.28);
+  --danger-text: #fb7185;
+  --info: #38bdf8;
+  --info-bg: rgba(56, 189, 248, 0.12);
+  --info-border: rgba(56, 189, 248, 0.28);
+  --info-text: #38bdf8;
+
+  /* Geometry and elevation */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 20px -2px rgba(0, 0, 0, 0.4), 0 2px 6px -1px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 12px 36px -4px rgba(0, 0, 0, 0.55), 0 4px 14px -2px rgba(0, 0, 0, 0.3);
+  --shadow-modal: 0 25px 60px -12px rgba(0, 0, 0, 0.75);
+}

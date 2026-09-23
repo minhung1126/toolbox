@@ -9,7 +9,7 @@ import YouTubeVideoEditDialog from '../components/YouTubeVideoEditDialog';
 import ResultStatus from '../components/ResultStatus';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { sortVideosByUploadTime } from '../utils/videoOrder';
-import { getYoutubeAuthContext, youtubeIsConnected, youtubePreferredUiSlot, youtubeRoutingMode, youtubeRoutingReasonLabel } from '../utils/youtubeRouting';
+import { getYoutubeAuthContext, youtubeRoutingMode, youtubeRoutingReasonLabel } from '../utils/youtubeRouting';
 import {
   YOUTUBE_COPY,
   formatQuotaUnits,
@@ -30,7 +30,6 @@ import {
   RefreshCw,
   Send,
   Trash2,
-  XCircle,
 } from 'lucide-react';
 
 function youtubeVideoUrl(videoId) {

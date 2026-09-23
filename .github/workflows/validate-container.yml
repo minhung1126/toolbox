@@ -1,6 +1,7 @@
 name: Validate container
 
 on:
+  workflow_call:
   pull_request:
     branches: [main]
     paths:
@@ -9,15 +10,18 @@ on:
       - backend/**
       - frontend/**
       - pyproject.toml
+      - README.md
+      - docs/**
       - docker-compose.yml
       - .env.example
       - .github/workflows/validate-container.yml
+      - .github/workflows/publish-container.yml
 
 permissions:
   contents: read
 
 concurrency:
-  group: validate-container-${{ github.event.pull_request.number }}
+  group: validate-container-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -28,8 +32,8 @@ jobs:
       - name: Check out PR branch
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
           persist-credentials: false
 

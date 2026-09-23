@@ -16,7 +16,6 @@ import {
   RefreshCw,
   Save,
   ShieldCheck,
-  Sliders,
   Sparkles,
   Trash2,
 } from 'lucide-react';

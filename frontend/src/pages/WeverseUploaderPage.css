@@ -1,0 +1,47 @@
+.weverse-page-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+}
+
+.weverse-file-input {
+  display: none;
+}
+
+.weverse-folder-picker-panel {
+  padding: 1.75rem;
+}
+
+.weverse-folder-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: 1.25rem;
+}
+
+.weverse-folder-picker-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.weverse-folder-picker-title svg {
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+
+.weverse-folder-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+@media (max-width: 640px) {
+  .weverse-folder-picker-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

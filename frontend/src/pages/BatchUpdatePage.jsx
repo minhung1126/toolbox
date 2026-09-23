@@ -11,12 +11,11 @@ import SourceLinkInput from '../components/SourceLinkInput';
 import TeamPersonFilterPanel from '../components/TeamPersonFilterPanel';
 import useTeamPersonFilter from '../hooks/useTeamPersonFilter';
 import useSharedTeamPersonFilterPersistence from '../hooks/useSharedTeamPersonFilterPersistence';
-import { normalizeTeamPersonFilter, readSharedTeamPersonFilter } from '../utils/teamPersonFilterStorage';
+import { readSharedTeamPersonFilter } from '../utils/teamPersonFilterStorage';
 import { sortVideosByUploadTime } from '../utils/videoOrder';
 import { getYoutubeAuthorizationFingerprint, youtubeIsConnected, youtubePreferredUiSlot, youtubeRoutingReasonLabel } from '../utils/youtubeRouting';
 import {
   YOUTUBE_COPY,
-  formatQuotaUnits,
   formatResultCounts,
   formatVideoCount,
   formatVideoId,
@@ -91,9 +90,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
   const [columns, setColumns] = useState([]);
   const [titleColumn, setTitleColumn] = useState(initial.titleColumn);
   const [descriptionColumn, setDescriptionColumn] = useState(initial.descriptionColumn);
-  const [configDirty, setConfigDirty] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
-  const [configSaved, setConfigSaved] = useState(false);
   const [randomPreview, setRandomPreview] = useState(null);
   const [randomPreviewLoading, setRandomPreviewLoading] = useState(false);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -176,7 +173,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     assignments,
   }), [appliedSpreadsheetId, assignments, authorizationKey, descriptionColumn, playlistId, playlistSource, selectedTeam, titleColumn, videoType, videos, worksheetName]);
 
-  const sharedFilterPersistence = useSharedTeamPersonFilterPersistence({
+  useSharedTeamPersonFilterPersistence({
     team: selectedTeam,
     selectedPeople,
     ready: filterPersistenceReady,
@@ -205,9 +202,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     restoreVideoOptionsRef.current = false;
   }, []);
 
-  const markConfigDirty = useCallback(() => {
-    setConfigDirty(true);
-    setConfigSaved(false);
+  const clearConfigSaveError = useCallback(() => {
     setConfigSaveError('');
   }, []);
 
@@ -230,8 +225,6 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
           description_column: nextDescriptionColumn,
           playlist_id: nextPlaylistId.trim(),
         });
-        setConfigDirty(false);
-        setConfigSaved(true);
         setDraftAutosaveStatus('saved');
       } catch (error) {
         setDraftAutosaveStatus('error');
@@ -274,8 +267,6 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
         description_column: descriptionColumn,
         playlist_id: playlistId.trim(),
       });
-      setConfigDirty(false);
-      setConfigSaved(true);
       setDraftAutosaveStatus('saved');
       toast.success('YouTube 草稿設定已儲存');
     } catch (error) {
@@ -310,8 +301,6 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     let cancelled = false;
     const fallbackConfig = normalizeConfig({}, defaults, persistedDefaults, sharedFilter);
     setHydrated(false);
-    setConfigDirty(false);
-    setConfigSaved(false);
     setWorksheets([]);
     setColumns([]);
     setSourceReady(false);
@@ -458,7 +447,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
         setRandomPreview(null);
         setPreviewError('');
         invalidateLoadedVideos();
-        if (worksheetChanged) markConfigDirty();
+        if (worksheetChanged) clearConfigSaveError();
       }
       setAppliedSpreadsheetId(nextSource);
       setWorksheetName(nextWorksheet);
@@ -472,7 +461,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     } finally {
       if (requestId === sheetRequestRef.current) setLoadingSheet(false);
     }
-  }, [appliedSpreadsheetId, defaults.worksheet, invalidateLoadedVideos, markConfigDirty, spreadsheetId, toast, worksheetName]);
+  }, [appliedSpreadsheetId, defaults.worksheet, invalidateLoadedVideos, clearConfigSaveError, spreadsheetId, toast, worksheetName]);
 
   useEffect(() => {
     if (hydrated && authUser && appliedSpreadsheetId && !initialLoadRequestedRef.current) {
@@ -486,7 +475,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     sheetRequestRef.current += 1;
     setSpreadsheetId(nextValue);
     setLoadingSheet(false);
-    markConfigDirty();
+    clearConfigSaveError();
     if (nextValue.trim() !== appliedSpreadsheetId.trim()) invalidateLoadedVideos();
     setSourceError('');
     scheduleDraftSave({ spreadsheetId: nextValue });
@@ -495,7 +484,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
   const handleWorksheetChange = (nextWorksheet) => {
     sheetRequestRef.current += 1;
     setWorksheetName(nextWorksheet);
-    markConfigDirty();
+    clearConfigSaveError();
     setSelectedTeam('');
     setSelectedPeople([]);
     setRandomPreview(null);
@@ -506,7 +495,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
 
   const handlePlaylistChange = (nextPlaylist) => {
     setPlaylistId(nextPlaylist);
-    markConfigDirty();
+    clearConfigSaveError();
     invalidateLoadedVideos();
     schedulePlaylistSave(nextPlaylist);
   };
@@ -766,8 +755,8 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
         error={sourceError}
         autosaveStatus={draftAutosaveStatus}
       >
-        <div className="form-group"><label className="form-label" htmlFor="batch-title-column">標題套用欄位</label><select id="batch-title-column" className="form-select" value={titleColumn} onChange={(e) => { setTitleColumn(e.target.value); markConfigDirty(); scheduleDraftSave({ titleColumn: e.target.value }); }}>{columns.map((column) => <option key={column} value={column}>{column}</option>)}</select></div>
-        <div className="form-group"><label className="form-label" htmlFor="batch-description-column">描述套用欄位</label><select id="batch-description-column" className="form-select" value={descriptionColumn} onChange={(e) => { setDescriptionColumn(e.target.value); markConfigDirty(); scheduleDraftSave({ descriptionColumn: e.target.value }); }}>{columns.map((column) => <option key={column} value={column}>{column}</option>)}</select></div>
+        <div className="form-group"><label className="form-label" htmlFor="batch-title-column">標題套用欄位</label><select id="batch-title-column" className="form-select" value={titleColumn} onChange={(e) => { setTitleColumn(e.target.value); clearConfigSaveError(); scheduleDraftSave({ titleColumn: e.target.value }); }}>{columns.map((column) => <option key={column} value={column}>{column}</option>)}</select></div>
+        <div className="form-group"><label className="form-label" htmlFor="batch-description-column">描述套用欄位</label><select id="batch-description-column" className="form-select" value={descriptionColumn} onChange={(e) => { setDescriptionColumn(e.target.value); clearConfigSaveError(); scheduleDraftSave({ descriptionColumn: e.target.value }); }}>{columns.map((column) => <option key={column} value={column}>{column}</option>)}</select></div>
         <div className="info-banner filter-panel-full-width"><Info size={14} color="var(--primary)" /><span>Video / Shorts 各自保存工作表、欄位與工作流資源；Sheet 內容複製、Video、Shorts 共用目前帳號的團體與人物篩選。未指定的資源會使用目前帳號的預設 Google Sheet 或 YouTube 播放清單。</span></div>
         <div className="page-actions settings-card-actions" style={{ marginTop: '0.75rem' }}>
           <button type="button" className="btn btn-secondary" onClick={saveDraftConfig} disabled={configSaving}>

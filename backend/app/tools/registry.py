@@ -20,17 +20,20 @@ class ToolRegistry:
 
     def __init__(self) -> None:
         self._plugins: Dict[str, ToolPlugin] = {}
+        self._startup_errors: Dict[str, str] = {}
 
     def register(self, plugin: ToolPlugin) -> None:
         """Register a new tool plugin into the platform."""
         tool_id = plugin.metadata.id
         if tool_id in self._plugins:
-            logger.warning("ToolPlugin '%s' is already registered; replacing with new instance.", tool_id)
+            raise ValueError(f"ToolPlugin '{tool_id}' is already registered.")
+        self._startup_errors.pop(tool_id, None)
         self._plugins[tool_id] = plugin
         logger.info("Registered Toolbox plugin: %s (%s)", plugin.metadata.name, tool_id)
 
     def unregister(self, tool_id: str) -> Optional[ToolPlugin]:
         """Unregister a tool plugin by its ID."""
+        self._startup_errors.pop(tool_id, None)
         return self._plugins.pop(tool_id, None)
 
     def get(self, tool_id: str) -> Optional[ToolPlugin]:
@@ -71,8 +74,10 @@ class ToolRegistry:
                 res = plugin.on_startup(app)
                 if inspect.isawaitable(res):
                     await res
+                self._startup_errors.pop(tool_id, None)
                 logger.info("Initialized tool plugin: %s", tool_id)
             except Exception as exc:
+                self._startup_errors[tool_id] = type(exc).__name__
                 logger.error("Failed to initialize tool plugin %s: %s", tool_id, exc, exc_info=True)
 
     async def run_shutdown(self, app: FastAPI) -> None:
@@ -90,10 +95,13 @@ class ToolRegistry:
         """Collect health status across all registered plugins."""
         results = {}
         for tool_id, plugin in self._plugins.items():
+            if tool_id in self._startup_errors:
+                results[tool_id] = {"status": "error", "error": self._startup_errors[tool_id]}
+                continue
             try:
                 results[tool_id] = plugin.health_check()
             except Exception as exc:
-                results[tool_id] = {"status": "error", "error": str(exc)}
+                results[tool_id] = {"status": "error", "error": type(exc).__name__}
         return results
 
 

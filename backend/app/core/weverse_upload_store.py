@@ -7,7 +7,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from backend.app.core.persistence import atomic_write_json
+
 logger = logging.getLogger(__name__)
+
+
+class WeverseUploadStoreError(RuntimeError):
+    """Raised when durable Weverse upload state cannot be read or written."""
 
 
 def _utc_now_iso() -> str:
@@ -37,23 +43,24 @@ class WeverseUploadStore:
             logger.error("Failed to initialize Weverse upload store: %s", exc)
 
     def _load_all(self) -> Dict[str, Any]:
-        try:
-            if not self.data_file.exists():
-                return {}
-            with open(self.data_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as exc:
-            logger.warning("Error reading Weverse upload store: %s", exc)
+        if not self.data_file.exists():
             return {}
+        try:
+            with self.data_file.open("r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, ValueError, UnicodeDecodeError) as exc:
+            logger.error("Failed to read Weverse upload store %s", self.data_file, exc_info=True)
+            raise WeverseUploadStoreError("無法讀取 Weverse 上傳工作紀錄。") from exc
+        if not isinstance(data, dict):
+            raise WeverseUploadStoreError("Weverse 上傳工作紀錄格式無效。")
+        return data
 
     def _save_all(self, data: Dict[str, Any]) -> None:
         try:
-            temp_file = self.data_file.with_suffix(".tmp")
-            with open(temp_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            temp_file.replace(self.data_file)
+            atomic_write_json(self.data_file, data)
         except Exception as exc:
-            logger.error("Error writing Weverse upload store: %s", exc)
+            logger.error("Failed to persist Weverse upload store %s", self.data_file, exc_info=True)
+            raise WeverseUploadStoreError("無法儲存 Weverse 上傳工作紀錄。") from exc
 
     def create_task(self, owner_sub: str, task: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new upload task."""

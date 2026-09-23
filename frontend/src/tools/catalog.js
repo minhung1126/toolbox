@@ -18,8 +18,6 @@ import {
   Info,
   Instagram,
   Key,
-  LayoutGrid,
-  ListMusic,
   Send,
   Settings,
   Shield,

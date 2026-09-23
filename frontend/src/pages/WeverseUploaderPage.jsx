@@ -2,24 +2,19 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronDown,
   Clock,
   ExternalLink,
   FileText,
   Folder,
   FolderOpen,
   FolderUp,
-  HelpCircle,
   Loader2,
   RefreshCw,
-  Send,
-  Trash2,
-  Upload,
   UploadCloud,
   Video,
-  XCircle,
 } from 'lucide-react';
 import { api } from '../services/api';
+import './WeverseUploaderPage.css';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ServiceAuthCard from '../components/ServiceAuthCard';
@@ -103,7 +98,6 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
 
   // Review package data
   const [packageSource, setPackageSource] = useState('path'); // 'path' | 'browser_files'
-  const [packageId, setPackageId] = useState('');
   const [videoInfo, setVideoInfo] = useState(null);
   const [subtitles, setSubtitles] = useState([]);
 
@@ -194,7 +188,6 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
     }
 
     setPackageSource(source);
-    setPackageId(pkg.package_id || pkg.folder_name || 'package');
     setVideoInfo(pkg.video);
 
     // Initial subtitle items
@@ -497,7 +490,7 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
     <div className="section-gap weverse-uploader-container">
       {/* Page Header */}
       <header className="page-header">
-        <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', margin: '0 0 0.5rem 0' }}>
+        <h1 className="weverse-page-title">
           <FolderUp size={28} color="var(--primary)" /> Weverse 影片與字幕上傳
         </h1>
         <p className="section-desc">
@@ -534,12 +527,12 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
 
       {/* 2. Step: Pick / Drop Folder */}
       {viewStep === 'pick' && (
-        <div className="glass-panel" style={{ padding: '1.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div className="glass-panel weverse-folder-picker-panel">
+          <div className="weverse-folder-picker-header">
+            <h3 className="weverse-folder-picker-title">
               <FolderOpen size={20} color="var(--accent)" /> 步驟一：選擇或拖曳本機資料夾
             </h3>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div className="weverse-folder-picker-actions">
               <button
                 type="button"
                 className={`btn btn-sm ${pathInputMode === 'folder_picker' ? 'btn-primary' : 'btn-secondary'}`}
@@ -565,7 +558,7 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
                 type="file"
                 webkitdirectory=""
                 multiple
-                style={{ display: 'none' }}
+                className="weverse-file-input"
                 onChange={handleFolderInputChange}
               />
 

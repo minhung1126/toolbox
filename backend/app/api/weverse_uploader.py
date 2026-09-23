@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import shutil
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -55,6 +56,40 @@ class UploadFromPathRequest(BaseModel):
     category_id: str = Field(default="22", max_length=10)
     default_language: str = Field(default="ko", max_length=20)
     subtitles: List[SubtitleConfig] = Field(default_factory=list)
+
+
+def _enqueue_persisted_upload(owner_sub: str, task_id: str, *, temp_dir_to_clean: str | None = None, **options) -> None:
+    """Queue a task only after its initial durable record has been written."""
+    try:
+        enqueue_upload_task(
+            owner_sub=owner_sub,
+            task_id=task_id,
+            temp_dir_to_clean=temp_dir_to_clean,
+            **options,
+        )
+    except Exception as exc:
+        try:
+            weverse_upload_store.update_task(
+                owner_sub,
+                task_id,
+                {
+                    "status": "failed",
+                    "error_message": "上傳佇列暫時無法接收此工作。",
+                    "current_step": "上傳佇列目前無法接收新工作，請稍後重試。",
+                },
+            )
+        except Exception:
+            logger.exception("Could not persist queue failure for Weverse upload %s", task_id)
+
+        if temp_dir_to_clean:
+            shutil.rmtree(temp_dir_to_clean, ignore_errors=True)
+        logger.exception("Could not enqueue Weverse upload task %s", task_id)
+        raise http_error(
+            503,
+            "upload_queue_unavailable",
+            "上傳佇列目前無法接收新工作，請稍後重試。",
+            retryable=True,
+        ) from exc
 
 
 @router.post("/scan")
@@ -120,7 +155,7 @@ def start_upload_from_path(
 
     weverse_upload_store.create_task(context.owner_sub, task_record)
 
-    enqueue_upload_task(
+    _enqueue_persisted_upload(
         owner_sub=context.owner_sub,
         task_id=task_id,
         credentials=context.credentials,
@@ -132,7 +167,6 @@ def start_upload_from_path(
         tags=payload.tags,
         category_id=payload.category_id,
         default_language=payload.default_language,
-        temp_dir_to_clean=None,
     )
 
     logger.info("Enqueued upload task %s for user %s", task_id, context.owner_sub)
@@ -208,7 +242,7 @@ async def start_upload_files(
 
     weverse_upload_store.create_task(context.owner_sub, task_record)
 
-    enqueue_upload_task(
+    _enqueue_persisted_upload(
         owner_sub=context.owner_sub,
         task_id=task_id,
         credentials=context.credentials,

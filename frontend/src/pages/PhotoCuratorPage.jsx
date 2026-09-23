@@ -5,7 +5,6 @@ import {
   Clock,
   Copy,
   Download,
-  Eye,
   Grid3X3,
   HelpCircle,
   Image as ImageIcon,
@@ -24,7 +23,6 @@ import {
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Dialog from '../components/Dialog';
-import { api } from '../services/api';
 import { copyToClipboard } from '../utils/clipboard';
 import { exportCuratedZip, generateChecklistText } from '../utils/curatorZip';
 import CuratorThumbnail from '../components/curator/CuratorThumbnail';

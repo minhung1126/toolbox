@@ -1,3 +1,6 @@
+import asyncio
+
+import pytest
 from fastapi import APIRouter
 from fastapi.testclient import TestClient
 
@@ -71,6 +74,8 @@ def test_custom_tool_registration_and_lifecycle():
 
     plugin = DemoPlugin()
     registry.register(plugin)
+    with pytest.raises(ValueError, match="already registered"):
+        registry.register(DemoPlugin())
 
     assert registry.get("demo-plugin") is plugin
     meta = registry.get_metadata("demo-plugin")
@@ -95,6 +100,30 @@ def test_custom_tool_registration_and_lifecycle():
     unregistered = registry.unregister("demo-plugin")
     assert unregistered is plugin
     assert registry.get("demo-plugin") is None
+
+
+def test_plugin_startup_failure_is_visible_in_health_without_leaking_exception():
+    registry = ToolRegistry()
+
+    class FailingPlugin(ToolPlugin):
+        @property
+        def metadata(self) -> ToolMetadata:
+            return ToolMetadata(
+                id="failing-plugin",
+                name="Failing Plugin",
+                title="失敗外掛",
+                description="Startup failure test",
+                entry_url="/failing",
+            )
+
+        async def on_startup(self, app):
+            del app
+            raise RuntimeError("refresh_token=secret")
+
+    registry.register(FailingPlugin())
+    asyncio.run(registry.run_startup(main.FastAPI()))
+
+    assert registry.health_check()["failing-plugin"] == {"status": "error", "error": "RuntimeError"}
 
 
 def test_tools_catalog_api():

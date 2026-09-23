@@ -5,6 +5,8 @@ import { MemoryRouter } from 'react-router-dom';
 import YtmusicSettingsPage from './YtmusicSettingsPage';
 import { api } from '../services/api';
 
+vi.mock('../utils/navigation', () => ({ redirectToAuth: vi.fn() }));
+
 vi.mock('../services/api', () => ({
   api: {
     getYtmusicAuthUrl: vi.fn(),

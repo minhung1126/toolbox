@@ -32,6 +32,8 @@ vi.mock('../pages/GoogleSheetSettingsPage', () => ({ default: () => <div>sheet s
 vi.mock('../pages/SystemSettingsPage', () => ({ default: () => <div>system settings route</div> }));
 vi.mock('../pages/StickyNotesPage', () => ({ default: () => <div>notes route</div> }));
 vi.mock('../pages/PhotoCuratorPage', () => ({ default: () => <div>photo curator route</div> }));
+vi.mock('../pages/FfmpegGeneratorPage', () => ({ default: () => <div>FFmpeg route</div> }));
+vi.mock('../pages/WeverseUploaderPage', () => ({ default: () => <div>Weverse uploader route</div> }));
 vi.mock('../pages/LoginPage', () => ({ default: ({ returnTo }) => <div>login route {returnTo || 'none'}</div> }));
 
 function LocationProbe() {
@@ -82,9 +84,15 @@ describe('AppRoutes', () => {
     [PATHS.systemSettings, 'system settings route'],
     [PATHS.notes, 'notes route'],
     [PATHS.photoCurator, 'photo curator route'],
+    [PATHS.ffmpegGenerator, 'FFmpeg route'],
   ])('renders %s', (path, expected) => {
     renderRoutes(path);
     expect(screen.getByText(expected)).toBeInTheDocument();
+  });
+
+  it('renders the lazy-loaded Weverse uploader route', async () => {
+    renderRoutes(PATHS.weverseUploader);
+    expect(await screen.findByText('Weverse uploader route')).toBeInTheDocument();
   });
 
   it.each([

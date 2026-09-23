@@ -28,12 +28,19 @@ vi.mock('../services/api', () => ({
   },
 }));
 
-function renderPage(props = {}) {
-  return render(
-    <MemoryRouter>
-      <WeverseUploaderPage {...props} />
-    </MemoryRouter>
-  );
+async function renderPage(props = {}) {
+  let rendered;
+  await act(async () => {
+    rendered = render(
+      <MemoryRouter>
+        <WeverseUploaderPage {...props} />
+      </MemoryRouter>
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  return rendered;
 }
 
 describe('WeverseUploaderPage', () => {
@@ -41,14 +48,14 @@ describe('WeverseUploaderPage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders page title, YouTube auth card, and folder picker dropzone', () => {
+  it('renders page title, YouTube auth card, and folder picker dropzone', async () => {
     const authUser = {
       authorizations: {
         video_uploader: { connected: false },
       },
     };
 
-    renderPage({ authUser });
+    await renderPage({ authUser });
 
     expect(screen.getByRole('heading', { level: 1, name: /Weverse 影片與字幕上傳/ })).toBeInTheDocument();
     expect(screen.getByText('影片上傳專屬 YouTube 頻道')).toBeInTheDocument();
@@ -98,7 +105,7 @@ describe('WeverseUploaderPage', () => {
       ],
     });
 
-    renderPage({ authUser });
+    await renderPage({ authUser });
 
     // Switch to manual path mode
     fireEvent.click(screen.getByRole('button', { name: '直接輸入本機路徑' }));
@@ -146,7 +153,7 @@ describe('WeverseUploaderPage', () => {
       ],
     });
 
-    renderPage({ authUser });
+    await renderPage({ authUser });
 
     fireEvent.click(screen.getByRole('button', { name: '直接輸入本機路徑' }));
     fireEvent.change(screen.getByPlaceholderText(/例如：D:\\Weverse/), { target: { value: 'C:\\test' } });
