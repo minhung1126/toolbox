@@ -170,3 +170,33 @@ test('YouTube batch feature styles load without viewport overflow', async ({ pag
     expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
   }
 });
+
+test('Weverse folder picker styles stay usable across viewport widths', async ({ page }) => {
+  await mockAuthenticatedBackend(page);
+
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/weverse-uploader');
+    await expect(page.getByRole('heading', { level: 1, name: /Weverse 影片與字幕上傳/ })).toBeVisible();
+
+    const dropzonePadding = await page
+      .locator('.weverse-dropzone')
+      .evaluate((element) => getComputedStyle(element).padding);
+    expect(dropzonePadding, `Weverse styles did not load at ${width}px`).toBe(width <= 640 ? '32px 16px' : '48px 32px');
+
+    const dropzone = page.locator('.weverse-dropzone');
+    await dropzone.dispatchEvent('dragover');
+    await expect(dropzone).toHaveClass(/is-dragging/);
+    await expect(dropzone).toHaveCSS('border-color', 'rgb(99, 102, 241)');
+    await dropzone.dispatchEvent('dragleave');
+
+    await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
+    const pathDirection = await page
+      .locator('.weverse-manual-path-row')
+      .evaluate((element) => getComputedStyle(element).flexDirection);
+    expect(pathDirection, `manual path controls did not adapt at ${width}px`).toBe(width <= 640 ? 'column' : 'row');
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+  }
+});

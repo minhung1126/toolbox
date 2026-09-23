@@ -155,32 +155,21 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
 
               {/* Drag and drop zone */}
               <div
-                className={`dropzone-panel ${isDragging ? 'is-dragging' : ''}`}
+                className={`dropzone-panel weverse-dropzone ${isDragging ? 'is-dragging' : ''}`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 onClick={() => folderInputRef.current?.click()}
-                style={{
-                  border: isDragging ? '2px dashed var(--primary)' : '2px dashed rgba(255, 255, 255, 0.2)',
-                  borderRadius: '12px',
-                  padding: '3rem 2rem',
-                  textAlign: 'center',
-                  background: isDragging ? 'rgba(var(--primary-rgb), 0.08)' : 'rgba(0, 0, 0, 0.2)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
               >
                 <FolderUp
                   size={54}
                   color={isDragging ? 'var(--primary)' : 'var(--text-muted)'}
-                  style={{ margin: '0 auto 1rem' }}
+                  className="weverse-dropzone-icon"
                 />
-                <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.15rem' }}>
-                  按一下選擇資料夾，或將資料夾直接拖曳至此處
-                </h4>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0 0 1.25rem 0' }}>
-                  支援包含 <code style={{ color: 'var(--accent)' }}>.mp4</code> 影片與多國語系{' '}
-                  <code style={{ color: 'var(--accent)' }}>.vtt</code> 字幕檔的 Weverse 資料夾
+                <h4 className="weverse-dropzone-title">按一下選擇資料夾，或將資料夾直接拖曳至此處</h4>
+                <p className="weverse-dropzone-description">
+                  支援包含 <code className="weverse-dropzone-extension">.mp4</code> 影片與多國語系{' '}
+                  <code className="weverse-dropzone-extension">.vtt</code> 字幕檔的 Weverse 資料夾
                 </p>
                 <button
                   type="button"
@@ -203,17 +192,16 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
             </div>
           ) : (
             <div>
-              <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
+              <div className="weverse-manual-path-row">
                 <input
                   type="text"
-                  className="input-field"
                   placeholder="例如：D:\Weverse\20260923_Artist_Live_3-241665049"
                   value={localPath}
                   onChange={(e) => setLocalPath(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleScanPath();
                   }}
-                  style={{ flex: 1 }}
+                  className="input-field weverse-manual-path-input"
                 />
                 <button
                   type="button"
@@ -232,23 +220,20 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
               </div>
 
               {recentPaths.length > 0 && (
-                <div style={{ marginTop: '0.75rem' }}>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginRight: '0.5rem' }}>
-                    最近掃描路徑：
-                  </span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.4rem' }}>
+                <div className="weverse-recent-paths">
+                  <span className="weverse-recent-paths-label">最近掃描路徑：</span>
+                  <div className="weverse-recent-path-list">
                     {recentPaths.map((p) => (
                       <button
                         key={p}
                         type="button"
-                        className="btn btn-sm btn-secondary"
-                        style={{ fontSize: '0.8rem', padding: '0.2rem 0.6rem' }}
+                        className="btn btn-sm btn-secondary weverse-recent-path"
                         onClick={() => {
                           setLocalPath(p);
                           handleScanPath(p);
                         }}
                       >
-                        <Folder size={12} style={{ marginRight: '4px' }} /> {p}
+                        <Folder size={12} className="weverse-recent-path-icon" /> {p}
                       </button>
                     ))}
                   </div>

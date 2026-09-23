@@ -39,9 +39,92 @@
   gap: var(--space-2);
 }
 
+.weverse-dropzone {
+  border: 2px dashed rgb(255 255 255 / 20%);
+  border-radius: 12px;
+  padding: 3rem 2rem;
+  background: rgb(0 0 0 / 20%);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.weverse-dropzone.is-dragging {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+}
+
+.weverse-dropzone-icon {
+  margin: 0 auto 1rem;
+}
+
+.weverse-dropzone-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+}
+
+.weverse-dropzone-description {
+  margin: 0 0 1.25rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.weverse-dropzone-extension {
+  color: var(--accent);
+}
+
+.weverse-manual-path-row {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.weverse-manual-path-input {
+  min-width: 0;
+  flex: 1;
+}
+
+.weverse-recent-paths {
+  margin-top: 0.75rem;
+}
+
+.weverse-recent-paths-label {
+  margin-right: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.weverse-recent-path-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.weverse-recent-path {
+  max-width: 100%;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.weverse-recent-path-icon {
+  margin-right: 4px;
+  flex: 0 0 auto;
+}
+
 @media (max-width: 640px) {
   .weverse-folder-picker-header {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .weverse-dropzone {
+    padding: 2rem 1rem;
+  }
+
+  .weverse-manual-path-row {
     flex-direction: column;
   }
 }
