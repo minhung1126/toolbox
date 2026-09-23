@@ -10,7 +10,7 @@
 
 本分支已完成可靠性修正、五個主要前端工作流程的邏輯抽離、YouTube 批次使用案例服務、第一批共用 UI 與前端品質門檻。以下只將有程式碼及測試證據的工作列為完成；整份路線圖仍有明確未完成項目。
 
-最新完整驗證：前端 63 個 Vitest 檔案、305 項通過；ESLint、TypeScript `typecheck`、Stylelint、Prettier 檢查與 production build 通過。後端隔離副本 226 項 pytest 通過，Ruff lint／format 通過；新工具目錄契約、Weverse interrupted 工作對帳、多程序更新及 YouTube workflow FastAPI dependency 注入測試亦通過。Playwright 在本機 Edge 上於 390／768／1440 px 驗證共用元件展示與 Sheet Copy feature 樣式載入，版面溢位斷言通過並生成截圖，`npm run test:e2e -- --workers=1` 正常結束（2 項通過）。CI 會安裝 Chromium 執行相同測試，但此環境尚未執行 GitHub Actions。環境未安裝 Docker／actionlint；未使用真實 Google／YouTube 帳號驗收。
+最新完整驗證：前端 63 個 Vitest 檔案、305 項通過；ESLint、TypeScript `typecheck`、Stylelint、Prettier 檢查與 production build 通過。後端隔離副本 226 項 pytest 通過，Ruff lint／format 通過；新工具目錄契約、Weverse interrupted 工作對帳、多程序更新及 YouTube workflow FastAPI dependency 注入測試亦通過。Playwright 在本機 Edge 上於 390／768／1440 px 驗證共用元件展示、Sheet Copy 與 Sticky Notes feature 樣式載入，版面溢位斷言通過並生成截圖，`npm run test:e2e -- --workers=1` 正常結束（3 項通過）。CI 會安裝 Chromium 執行相同測試，但此環境尚未執行 GitHub Actions。環境未安裝 Docker／actionlint；未使用真實 Google／YouTube 帳號驗收。
 
 已完成：
 
@@ -19,7 +19,7 @@
 - `youtube.py` 的批次預覽、批次 metadata 更新及發布清理協調移至 `YoutubeWorkflowService`，保留 router 與既有 API 契約。
 - YouTube 批次 workflow service 改由 FastAPI dependency 提供，允許 endpoint 層替換 service，並以 HTTP 測試驗證 override 能確實注入；目前 adapter 仍從 router 模組組裝，settings、repository 與 provider client 的 app factory 注入仍待完成。
 - Playlist Sort、Weverse 上傳、FFmpeg 影片與命令流程、Photo Curator 分配／匯出、Batch Update 的狀態與使用案例邏輯抽至 feature hook；Weverse hook 已移入 feature 目錄，Weverse、YouTube Batch 與 Sheet Copy 增加 feature API 邊界，Playlist Sort 保留型別化 API。Sheet Copy 的 metadata／表格回應以 TypeScript contract 描述並做執行期格式驗證，格式錯誤會進入頁面既有錯誤處理，不會先寫入畫面狀態。Weverse 歷史及既有 batch 預覽內容使用獨立元件。既有頁面互動測試維持通過。
-- Dashboard、系統資訊、系統設定與便利貼頁開始採用共用 PageHeader、Button、Badge、EmptyState 與 LoadingState；新增可存取元件狀態展示頁。Sheet Copy 與 YouTube 批次面板的專屬樣式已從主入口／全域主題搬入各自 feature，合併重複主題覆寫並移除對應 Stylelint 忽略項；其餘全域舊樣式仍待逐頁清理。根 token／基礎樣式已集中，新增 Prettier、ESLint 未使用變數與 Hooks 錯誤門檻、Stylelint 及漸進 TypeScript 檢查。
+- Dashboard、系統資訊、系統設定與便利貼頁開始採用共用 PageHeader、Button、Badge、EmptyState 與 LoadingState；新增可存取元件狀態展示頁。Sheet Copy、YouTube 批次面板與 Sticky Notes 的專屬樣式已移入各自 feature，移除 Sheet Copy 重複主題覆寫及未使用便利貼 icon 樣式；其餘全域舊樣式仍待逐頁清理。根 token／基礎樣式已集中，新增 Prettier、ESLint 未使用變數與 Hooks 錯誤門檻、Stylelint 及漸進 TypeScript 檢查。
 - 各工具的前端 manifest 已拆到 feature 目錄，彙整工具 metadata、導覽、dashboard cards 與受保護 routes；catalog 啟動時拒絕重複 ID／路由及不在 PATHS 的 destination，AppRoutes 由 registry 組裝 feature routes。
 - Playwright 增加 390／768／1440 px 展示頁溢位與截圖測試。前後端工具 ID 與路由契約測試發現並修正 `youtube-integrations`／`integrations-quota` 漂移。
 - 發布 workflow 只會發布已通過驗證的同一個 main SHA；README 的支援平台與前端路徑已修正。

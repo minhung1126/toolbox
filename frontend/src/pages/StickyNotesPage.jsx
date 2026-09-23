@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import StickyNoteCard from '../components/StickyNoteCard';
 import { useToast } from '../components/Toast';
 import { Badge, Button, EmptyState, LoadingState, PageHeader } from '../shared/ui';
+import '../features/notes/notes.css';
 
 export default function StickyNotesPage() {
   const toast = useToast();

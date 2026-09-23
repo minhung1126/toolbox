@@ -69,3 +69,21 @@ test('sheet copy feature styles load and stay within supported viewport widths',
     expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
   }
 });
+
+test('sticky notes feature styles load without viewport overflow', async ({ page }) => {
+  await mockAuthenticatedBackend(page);
+
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/notes');
+    await expect(page.getByRole('heading', { level: 1, name: '便利貼備忘錄' })).toBeVisible();
+
+    const searchInput = page.getByRole('textbox', { name: '搜尋便利貼' });
+    await expect(searchInput).toBeVisible();
+    const padding = await searchInput.evaluate((element) => getComputedStyle(element).padding);
+    expect(padding, `feature styles did not load at ${width}px`).toBe('8.8px 32px 8.8px 35.2px');
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+  }
+});
