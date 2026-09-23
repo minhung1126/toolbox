@@ -3,8 +3,11 @@
 from pathlib import Path
 
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 
+from backend.app.api import auth
+from backend.app.core.security import GOOGLE_OAUTH_STATE_SALT, sign_timed_data
 from backend.app.core.weverse_upload_store import WeverseUploadStore
 from backend.app.main import app
 from backend.app.services.weverse_scanner import (
@@ -175,3 +178,67 @@ def test_unauthorized_upload_access():
         headers=headers,
     )
     assert upload_resp.status_code == 401
+
+
+def test_video_uploader_oauth_callback_success(monkeypatch):
+    payload = sign_timed_data(
+        {
+            "flow_type": auth.VIDEO_UPLOADER_FLOW,
+            "state": "test-state",
+            "code_verifier": "test-verifier",
+            "session_id": "sess-video-1",
+        },
+        salt=GOOGLE_OAUTH_STATE_SALT,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/auth/callback",
+            "headers": [(b"cookie", f"{auth.OAUTH_FLOW_COOKIE}={payload}".encode())],
+            "query_string": b"code=test-code&state=test-state",
+            "server": ("testserver", 80),
+        }
+    )
+    monkeypatch.setattr(auth, "_validate_callback_session", lambda req, state: "owner-video-sub")
+    saved_conns = []
+    monkeypatch.setattr(
+        auth.credential_store,
+        "save_video_uploader_connection",
+        lambda token_dict, owner_sub: saved_conns.append((token_dict, owner_sub)),
+    )
+    monkeypatch.setattr(
+        auth,
+        "exchange_code_for_tokens",
+        lambda **kwargs: {"token": "uploader-token", "user": {"email": "artist@weverse.io"}},
+    )
+    response = auth.google_oauth_callback(request, code="test-code", state="test-state")
+    assert response.status_code == 307
+    assert "#video_uploader_auth_success=1" in response.headers["location"]
+    assert len(saved_conns) == 1
+    assert saved_conns[0][1] == "owner-video-sub"
+
+
+def test_video_uploader_oauth_callback_error():
+    payload = sign_timed_data(
+        {
+            "flow_type": auth.VIDEO_UPLOADER_FLOW,
+            "state": "test-state",
+            "code_verifier": "test-verifier",
+            "session_id": "sess-video-1",
+        },
+        salt=GOOGLE_OAUTH_STATE_SALT,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/auth/callback",
+            "headers": [(b"cookie", f"{auth.OAUTH_FLOW_COOKIE}={payload}".encode())],
+            "query_string": b"error=access_denied",
+            "server": ("testserver", 80),
+        }
+    )
+    response = auth.google_oauth_callback(request, error="access_denied")
+    assert response.status_code == 307
+    assert "video_uploader_auth_error=" in response.headers["location"]

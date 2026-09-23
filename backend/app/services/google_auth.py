@@ -341,7 +341,7 @@ def _refresh_credentials(
         else:
             latest = credential_store.get_google_credentials(owner_sub)
         active_dict = latest or token_dict
-        purpose = "youtube" if credential_key in ("youtube", "video_uploader") else "login"
+        purpose = "youtube" if credential_key == "youtube" else "login"
         credentials = _build_credentials(active_dict, purpose=purpose, slot=slot)
         if not _needs_refresh(credentials):
             return credentials
@@ -435,7 +435,7 @@ def build_credentials_from_dict(
     slot: str = "primary",
 ) -> Credentials:
     """Reconstruct credentials and proactively refresh them before expiry."""
-    purpose = "youtube" if credential_key in ("youtube", "video_uploader") else "login"
+    purpose = "youtube" if credential_key == "youtube" else "login"
     credentials = _build_credentials(token_dict, purpose=purpose, slot=slot)
     if _needs_refresh(credentials):
         return _refresh_credentials(

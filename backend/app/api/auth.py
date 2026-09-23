@@ -429,7 +429,14 @@ def google_oauth_callback(
         else None
     )
     flow_type = (flow_state or {}).get("flow_type", LOGIN_FLOW)
-    if flow_type not in {LOGIN_FLOW, SHEETS_FLOW, DRIVE_FLOW, YOUTUBE_FLOW, YTMUSIC_FLOW}:
+    if flow_type not in {
+        LOGIN_FLOW,
+        SHEETS_FLOW,
+        DRIVE_FLOW,
+        YOUTUBE_FLOW,
+        YTMUSIC_FLOW,
+        VIDEO_UPLOADER_FLOW,
+    }:
         flow_type = LOGIN_FLOW
     flow_slot = "primary"
     if flow_type == YOUTUBE_FLOW:
@@ -445,6 +452,8 @@ def google_oauth_callback(
             message = "YouTube 頻道 Google 授權遭拒，請重新嘗試。"
         elif flow_type == YTMUSIC_FLOW:
             message = "YouTube Music 授權遭拒，請重新嘗試。"
+        elif flow_type == VIDEO_UPLOADER_FLOW:
+            message = "影片上傳 YouTube 授權遭拒，請重新嘗試。"
         elif flow_type == SHEETS_FLOW:
             message = "Google 試算表授權遭拒，請重新嘗試。"
         elif flow_type == DRIVE_FLOW:
@@ -565,6 +574,8 @@ def google_oauth_callback(
         logger.error("OAuth callback error (%s/%s): %s", flow_type, flow_slot, type(exc).__name__)
         if flow_type == YOUTUBE_FLOW:
             message = "YouTube 頻道 Google 授權失敗，請重新嘗試。"
+        elif flow_type == YTMUSIC_FLOW:
+            message = "YouTube Music 授權失敗，請重新嘗試。"
         elif flow_type == VIDEO_UPLOADER_FLOW:
             message = "影片上傳 YouTube 頻道授權失敗，請重新嘗試。"
         elif flow_type == SHEETS_FLOW:

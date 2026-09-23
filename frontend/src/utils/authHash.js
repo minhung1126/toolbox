@@ -9,6 +9,8 @@ const AUTH_HASH_KEYS = [
   ['youtube_auth_error', 'youtube_error'],
   ['ytmusic_auth_success', 'ytmusic_success'],
   ['ytmusic_auth_error', 'ytmusic_error'],
+  ['video_uploader_auth_success', 'video_uploader_success'],
+  ['video_uploader_auth_error', 'video_uploader_error'],
 ];
 
 export function parseAuthHash(hash = window.location.hash) {

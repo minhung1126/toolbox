@@ -5,6 +5,7 @@ export const OAUTH_RETURN_KEYS = Object.freeze({
   sheets: 'creator-tools:oauth-return-to:sheets',
   drive: 'creator-tools:oauth-return-to:drive',
   youtube: 'creator-tools:oauth-return-to:youtube',
+  ytmusic: 'creator-tools:oauth-return-to:ytmusic',
   video_uploader: 'creator-tools:oauth-return-to:video-uploader',
 });
 

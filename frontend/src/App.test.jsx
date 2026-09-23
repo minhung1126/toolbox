@@ -28,6 +28,9 @@ vi.mock('./pages/ApiHealthPage', () => ({ default: () => <div>api health</div> }
 vi.mock('./pages/LoginPage', () => ({
   default: ({ initialError }) => <div data-testid="login-page">{initialError || '登入頁'}</div>,
 }));
+vi.mock('./pages/WeverseUploaderPage', () => ({
+  default: () => <div data-testid="weverse-uploader-page">weverse uploader</div>,
+}));
 vi.mock('./hooks/useAccountWorkState', () => ({
   AccountWorkStateProvider: ({ children }) => <>{children}</>,
 }));
@@ -182,6 +185,14 @@ describe('App recovery state', () => {
     expect(hasVersionMismatch('sha-a', 'sha-b')).toBe(true);
     expect(hasVersionMismatch('sha-a', 'sha-a')).toBe(false);
     expect(hasVersionMismatch('', 'sha-a')).toBe(false);
+  });
+
+  it('handles video uploader OAuth callback and routes to Weverse Uploader', async () => {
+    window.location.hash = '#video_uploader_auth_success=1';
+    api.getUserStatus.mockResolvedValue(userResponse);
+    render(<App />);
+    expect(await screen.findByTestId('weverse-uploader-page')).toBeInTheDocument();
+    expect(window.location.hash).toBe('');
   });
 });
 
