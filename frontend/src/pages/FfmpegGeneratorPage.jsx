@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   AlertCircle,
   Check,
@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../components/Toast';
 import { copyToClipboard } from '../utils/clipboard';
+import { useFfmpegVideo } from '../hooks/useFfmpegVideo';
 
 import {
   PRESET_LIST,
@@ -32,26 +33,10 @@ import {
   secondsToHms,
 } from '../utils/ffmpegCommand';
 
-export const isVideoFile = (file) => {
-  if (!file) return false;
-  if (file.type && file.type.startsWith('video/')) return true;
-  return /\.(mp4|webm|mov|mkv|avi|ts|flv|wmv|m4v|3gp|ogv|m2ts|mts)$/i.test(file.name || '');
-};
+export { isVideoFile } from '../hooks/useFfmpegVideo';
 
 export default function FfmpegGeneratorPage() {
   const toast = useToast();
-  const videoRef = useRef(null);
-  const fileInputRef = useRef(null);
-
-  // Video State
-  const [videoFile, setVideoFile] = useState(null);
-  const [videoUrl, setVideoUrl] = useState('');
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [videoMeta, setVideoMeta] = useState({ width: 0, height: 0, size: 0, name: '' });
-  const [playbackRate, setPlaybackRate] = useState(1);
-  const [videoError, setVideoError] = useState(null);
 
   // Cut Options
   const [enableStartCut, setEnableStartCut] = useState(true);
@@ -85,126 +70,59 @@ export default function FfmpegGeneratorPage() {
   const [showHelp, setShowHelp] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [isPlayingTrimmed, setIsPlayingTrimmed] = useState(false);
-
-  // Cleanup object url on change/unmount
-  useEffect(() => {
-    return () => {
-      if (videoUrl) {
-        URL.revokeObjectURL(videoUrl);
-      }
-    };
-  }, [videoUrl]);
-
-  // Load video file
-  const handleSelectFile = useCallback((file) => {
-    if (!isVideoFile(file)) {
-      toast.error('請選擇有效的影片檔案 (MP4, WebM, MOV, MKV, AVI 等)');
-      return;
-    }
-    setVideoError(null);
-    if (videoUrl) {
-      URL.revokeObjectURL(videoUrl);
-    }
-    const url = URL.createObjectURL(file);
-    setVideoFile(file);
-    setVideoUrl(url);
+  const handleFileSelected = useCallback((file) => {
     setInputName(file.name);
+    const dotIndex = file.name.lastIndexOf('.');
+    const base = dotIndex > 0 ? file.name.substring(0, dotIndex) : file.name;
+    const extension = dotIndex > 0 ? file.name.substring(dotIndex) : '.mp4';
+    setOutputName(`${base}_cut${extension}`);
+  }, []);
 
-    // Suggest output filename
-    const dotIdx = file.name.lastIndexOf('.');
-    const base = dotIdx > 0 ? file.name.substring(0, dotIdx) : file.name;
-    const ext = dotIdx > 0 ? file.name.substring(dotIdx) : '.mp4';
-    setOutputName(`${base}_cut${ext}`);
+  const handleVideoMetadataLoaded = useCallback((nextDuration) => {
+    setStartTime('00:00:00.000');
+    const endSeconds = nextDuration > 0 ? nextDuration : 10;
+    setEndTime(secondsToHms(endSeconds));
+    setDurationCut(secondsToHms(endSeconds));
+  }, []);
 
-    toast.success(`已載入影片：${file.name}`);
-  }, [videoUrl, toast]);
-
-
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleSelectFile(e.dataTransfer.files[0]);
-    }
-  }, [handleSelectFile]);
-
-  // Video element event handlers
-  const handleLoadedMetadata = () => {
-    if (videoRef.current) {
-      const vid = videoRef.current;
-      const dur = vid.duration || 0;
-      setDuration(dur);
-      setVideoMeta({
-        width: vid.videoWidth || 0,
-        height: vid.videoHeight || 0,
-        size: videoFile?.size || 0,
-        name: videoFile?.name || '',
-      });
-
-      // Default trim endpoints
-      setStartTime('00:00:00.000');
-      const endSec = dur > 0 ? dur : 10;
-      setEndTime(secondsToHms(endSec));
-      setDurationCut(secondsToHms(endSec));
-    }
-  };
-
-  const handleTimeUpdate = () => {
-    if (videoRef.current) {
-      const cur = videoRef.current.currentTime;
-      setCurrentTime(cur);
-
-      // If in "play trimmed preview" mode, auto pause when reaching end cut
-      if (isPlayingTrimmed && enableEndCut) {
-        let stopSec = duration;
-        if (cutMode === 'to') {
-          stopSec = parseHmsToSeconds(endTime);
-        } else {
-          const startSec = enableStartCut ? parseHmsToSeconds(startTime) : 0;
-          stopSec = startSec + parseHmsToSeconds(durationCut);
-        }
-        if (cur >= stopSec) {
-          videoRef.current.pause();
-          setIsPlaying(false);
-          setIsPlayingTrimmed(false);
-        }
-      }
-    }
-  };
-
-  const togglePlay = () => {
-    if (!videoRef.current) return;
-    if (videoRef.current.paused) {
-      videoRef.current.play();
-      setIsPlaying(true);
-    } else {
-      videoRef.current.pause();
-      setIsPlaying(false);
-      setIsPlayingTrimmed(false);
-    }
-  };
-
-  const seekRelative = (offsetSec) => {
-    if (!videoRef.current) return;
-    const target = Math.max(0, Math.min(duration || 3600, videoRef.current.currentTime + offsetSec));
-    videoRef.current.currentTime = target;
-    setCurrentTime(target);
-  };
-
-  const seekTo = (sec) => {
-    if (!videoRef.current) return;
-    const target = Math.max(0, Math.min(duration || 3600, sec));
-    videoRef.current.currentTime = target;
-    setCurrentTime(target);
-  };
-
-  const setPlaybackSpeed = (rate) => {
-    if (videoRef.current) {
-      videoRef.current.playbackRate = rate;
-    }
-    setPlaybackRate(rate);
-  };
+  const {
+    videoRef,
+    fileInputRef,
+    videoFile,
+    setVideoFile,
+    videoUrl,
+    setVideoUrl,
+    duration,
+    currentTime,
+    setIsPlaying,
+    isPlaying,
+    isPlayingTrimmed,
+    setIsPlayingTrimmed,
+    videoMeta,
+    playbackRate,
+    videoError,
+    setVideoError,
+    handleSelectFile,
+    handleDrop,
+    handleLoadedMetadata,
+    handleTimeUpdate,
+    togglePlay,
+    seekTo,
+    seekRelative,
+    setPlaybackSpeed,
+    playTrimmedSegment,
+  } = useFfmpegVideo({
+    toast,
+    onFileSelected: handleFileSelected,
+    onMetadataLoaded: handleVideoMetadataLoaded,
+    setIsDragging,
+    enableStartCut,
+    enableEndCut,
+    cutMode,
+    startTime,
+    endTime,
+    durationCut,
+  });
 
   // Trimming Helpers
   const handleSetStartTimeToCurrent = () => {
@@ -225,15 +143,6 @@ export default function FfmpegGeneratorPage() {
       setDurationCut(durFmt);
       toast.success(`已將剪輯長度設為 ${durFmt}`);
     }
-  };
-
-  const handlePlayTrimmedSegment = () => {
-    if (!videoRef.current) return;
-    const startSec = enableStartCut ? parseHmsToSeconds(startTime) : 0;
-    videoRef.current.currentTime = startSec;
-    setIsPlayingTrimmed(true);
-    videoRef.current.play();
-    setIsPlaying(true);
   };
 
   // Preset Selection
@@ -415,7 +324,6 @@ export default function FfmpegGeneratorPage() {
                   type="button"
                   className="btn btn-secondary btn-xs"
                   onClick={() => {
-                    if (videoUrl) URL.revokeObjectURL(videoUrl);
                     setVideoFile(null);
                     setVideoUrl('');
                     setVideoError(null);
@@ -840,7 +748,7 @@ export default function FfmpegGeneratorPage() {
                         setIsPlaying(false);
                         setIsPlayingTrimmed(false);
                       }
-                    : handlePlayTrimmedSegment
+                    : playTrimmedSegment
                 }
                 disabled={trimSummary.isInvalid}
                 aria-label={isPlayingTrimmed ? '停止預覽片段' : '預覽選取片段'}
