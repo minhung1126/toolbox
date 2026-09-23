@@ -7,6 +7,7 @@ from backend.app.tools.builtin.playlist_sorter import PlaylistSorterPlugin, YouT
 from backend.app.tools.builtin.sheets_tools import SheetsToolsPlugin
 from backend.app.tools.builtin.sticky_notes import StickyNotesPlugin
 from backend.app.tools.builtin.system_utility import SystemUtilityPlugin
+from backend.app.tools.builtin.weverse_uploader import WeverseUploaderPlugin
 from backend.app.tools.builtin.youtube_integrations import YouTubeIntegrationsPlugin
 from backend.app.tools.registry import tool_registry
 
@@ -18,6 +19,7 @@ __all__ = [
     "SheetsToolsPlugin",
     "StickyNotesPlugin",
     "SystemUtilityPlugin",
+    "WeverseUploaderPlugin",
     "YouTubeIntegrationsPlugin",
     "YouTubeMusicPlugin",
     "register_builtin_tools",
@@ -35,6 +37,7 @@ def register_builtin_tools() -> None:
         StickyNotesPlugin,
         YouTubeIntegrationsPlugin,
         SystemUtilityPlugin,
+        WeverseUploaderPlugin,
     ]
     for plugin_cls in plugins:
         plugin = plugin_cls()

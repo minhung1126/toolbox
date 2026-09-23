@@ -187,9 +187,14 @@ async function request(endpoint, options = {}) {
     }
   }
 
+  const headers = { ...fetchOptions.headers };
+  if (!(fetchOptions.body instanceof FormData) && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   const config = {
     ...fetchOptions,
-    headers: { 'Content-Type': 'application/json', ...fetchOptions.headers },
+    headers,
     signal: controller.signal,
   };
   let response;
@@ -410,4 +415,26 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(token ? { token } : {}),
   }),
+  getVideoUploaderAuthUrl: () => request('/auth/video-uploader/url'),
+  disconnectVideoUploader: () => request('/auth/video-uploader/disconnect', { method: 'POST' }),
+  scanWeverseFolder: (folderPath) => request('/weverse-uploader/scan', {
+    method: 'POST',
+    body: JSON.stringify({ folder_path: folderPath }),
+  }),
+  parseWeverseFiles: (files) => request('/weverse-uploader/parse-files', {
+    method: 'POST',
+    body: JSON.stringify({ files }),
+  }),
+  uploadWeverseFromPath: (payload) => request('/weverse-uploader/upload-from-path', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }),
+  uploadWeverseFiles: (formData) => request('/weverse-uploader/upload-files', {
+    method: 'POST',
+    timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+    body: formData,
+  }),
+  getWeverseUploadTask: (taskId) => request(`/weverse-uploader/tasks/${taskId}`),
+  getWeverseUploadHistory: (limit = 20) => request(`/weverse-uploader/history?limit=${limit}`),
+  getWeverseRecentPaths: () => request('/weverse-uploader/recent-paths'),
 };

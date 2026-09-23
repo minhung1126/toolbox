@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowUpDown, CheckCircle2, ChevronDown, Disc3, Instagram, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, StickyNote, Video, X } from 'lucide-react';
+import { ArrowUpDown, CheckCircle2, ChevronDown, Disc3, Instagram, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, StickyNote, UploadCloud, Video, X } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { youtubeIsConnected } from '../utils/youtubeRouting';
@@ -28,6 +28,13 @@ const ffmpegItem = ffmpegGroup.items?.[0] || {
   to: PATHS.ffmpegGenerator,
   label: 'FFmpeg 生成器',
   icon: Video,
+};
+const weverseGroup = toolNavGroups.find((g) => g.id === 'weverse_uploader_nav') || { items: [] };
+const weverseItem = weverseGroup.items?.[0] || {
+  id: 'weverse_uploader_workbench',
+  to: PATHS.weverseUploader,
+  label: 'Weverse 影片上傳',
+  icon: UploadCloud,
 };
 const ytmusicItems = ytmusicGroup.items;
 const youtubeItems = youtubeGroup.items;
@@ -164,6 +171,12 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
           label: ffmpegItem.label || 'FFmpeg 生成器',
           icon: ffmpegItem.icon || Video,
         })}
+        {item({
+          id: weverseItem.id,
+          to: weverseItem.to || PATHS.weverseUploader,
+          label: weverseItem.label || 'Weverse 影片上傳',
+          icon: weverseItem.icon || UploadCloud,
+        })}
         {item({ id: 'notes', to: PATHS.notes, label: '便利貼', icon: StickyNote })}
         {group('system', '系統管理', systemGroup.icon, systemOpen, setSystemOpen, systemItems, systemActive)}
         {item({ id: 'settings', to: PATHS.googleSettings, label: '控制台帳號', icon: Settings, activePrefix: '/settings' })}
@@ -196,6 +209,9 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
             </span>
             <span className={`badge ${authUser?.authorizations?.ytmusic?.connected ? 'badge-connected' : 'badge-disconnected'}`}>
               {authUser?.authorizations?.ytmusic?.connected ? 'YT Music' : 'YT Music 未連結'}
+            </span>
+            <span className={`badge ${authUser?.authorizations?.video_uploader?.connected ? 'badge-connected' : 'badge-disconnected'}`}>
+              {authUser?.authorizations?.video_uploader?.connected ? '影片上傳' : '影片頻道未連結'}
             </span>
           </div>
         </div>

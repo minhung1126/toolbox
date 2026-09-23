@@ -23,6 +23,7 @@ from backend.app.services.google_auth import (
     get_drive_credentials,
     get_login_credentials,
     get_sheets_credentials,
+    get_video_uploader_credentials,
     get_ytmusic_credentials,
     has_drive_read_scope,
     has_sheets_scope,
@@ -292,6 +293,55 @@ async def require_ytmusic_context(request: Request) -> YouTubeRequestContext:
         )
 
 
+async def require_video_uploader_context(request: Request) -> YouTubeRequestContext:
+    """Resolve dedicated Video Uploader YouTube credentials and context.
+
+    Requires dedicated Video Uploader YouTube channel authorization.
+    Raises 403 if not authorized.
+    """
+    auth_session = get_authenticated_session(request)
+    session_id = auth_session.session_id
+    owner_sub = auth_session.subject
+
+    video_creds = get_video_uploader_credentials(session_id=session_id, owner_sub=owner_sub)
+    if not video_creds or not video_creds.valid or not has_youtube_scope(video_creds):
+        logger.warning("Video Uploader access attempted without authorization (sub=%s)", owner_sub)
+        raise http_error(
+            403,
+            "video_uploader_scope_required",
+            "影片上傳 YouTube 頻道尚未授權或已失效，請先授權專屬 YouTube 頻道。",
+            reauthorization_required=True,
+        )
+
+    public_record = credential_store.get_video_uploader_public(owner_sub) or {}
+    channel_id = public_record.get("channel_id")
+    limiter = get_youtube_quota_tracker("primary")
+
+    body = await _safe_read_request_json(request)
+    estimated_units = estimate_youtube_request_units(
+        request.url.path,
+        body if isinstance(body, dict) else {},
+    )
+
+    logger.info(
+        "Video Uploader request routed with dedicated credentials (channel=%s, estimated_units=%s)",
+        channel_id,
+        estimated_units,
+    )
+    return YouTubeRequestContext(
+        slot="primary",
+        credentials=video_creds,
+        quota_limiter=limiter,
+        owner_sub=owner_sub,
+        channel_id=channel_id,
+        routing_mode="video_uploader_dedicated",
+        selection_reason="video_uploader_oauth_connection",
+        estimated_units=estimated_units,
+        preferred_slot="primary",
+        session_id=session_id,
+    )
+
+
 __all__ = [
     "AuthenticatedSession",
     "create_youtube_request_context",
@@ -301,6 +351,7 @@ __all__ = [
     "require_drive_credentials",
     "require_login_credentials",
     "require_sheets_credentials",
+    "require_video_uploader_context",
     "require_youtube_context",
     "require_ytmusic_context",
 ]

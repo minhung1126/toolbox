@@ -109,5 +109,16 @@ describe('Navbar', () => {
     expect(ffmpegLink).toHaveAttribute('aria-current', 'page');
     expect(ffmpegLink).toHaveClass('active');
   });
+
+  it('exposes Weverse Uploader in navigation with active state', () => {
+    window.localStorage.clear();
+    render(<NavbarHarness initialEntry={PATHS.weverseUploader} />);
+
+    const weverseLink = screen.getByRole('link', { name: 'Weverse 影片上傳' });
+    expect(weverseLink).toBeVisible();
+    expect(weverseLink).toHaveAttribute('href', PATHS.weverseUploader);
+    expect(weverseLink).toHaveAttribute('aria-current', 'page');
+    expect(weverseLink).toHaveClass('active');
+  });
 });
 

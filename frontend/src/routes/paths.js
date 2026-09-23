@@ -7,6 +7,7 @@ export const PATHS = Object.freeze({
   notes: '/notes',
   photoCurator: '/photo-curator',
   ffmpegGenerator: '/ffmpeg-generator',
+  weverseUploader: '/weverse-uploader',
 
   youtubeVideoDrafts: '/youtube/drafts/videos',
   youtubeShortsDrafts: '/youtube/drafts/shorts',
@@ -42,6 +43,7 @@ const STATIC_RETURN_PATHS = new Set([
   PATHS.notes,
   PATHS.photoCurator,
   PATHS.ffmpegGenerator,
+  PATHS.weverseUploader,
   PATHS.systemHealth,
   PATHS.systemInfo,
   PATHS.youtubeVideoDrafts,

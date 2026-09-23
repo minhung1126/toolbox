@@ -200,10 +200,10 @@ class CredentialStore:
                 "last_refresh_error": None,
                 "status": "active",
             }
-            if slot_name or key == "ytmusic":
+            if slot_name or key in ("ytmusic", "video_uploader"):
                 record.update(
                     {
-                        "slot": slot_name or "ytmusic",
+                        "slot": slot_name or key,
                         "client_fingerprint": client_fingerprint,
                         "channel_id": str(token_dict.get("channel_id") or "").strip() or None,
                         "channel_title": str(token_dict.get("channel_title") or "").strip() or None,
@@ -229,6 +229,10 @@ class CredentialStore:
         """Persist a dedicated YouTube Music connection for one OIDC subject."""
         return self._save_connection("ytmusic", token_dict, owner_sub)
 
+    def save_video_uploader_connection(self, token_dict: Dict[str, Any], owner_sub: str) -> Dict[str, Any]:
+        """Persist a dedicated Video Uploader YouTube connection for one OIDC subject."""
+        return self._save_connection("video_uploader", token_dict, owner_sub)
+
     def save_youtube_connection(
         self, token_dict: Dict[str, Any], owner_sub: str, slot: str = "primary"
     ) -> Dict[str, Any]:
@@ -252,6 +256,9 @@ class CredentialStore:
 
     def get_ytmusic_credentials(self, owner_sub: str) -> Optional[Dict[str, Any]]:
         return self._get_credentials("ytmusic", owner_sub)
+
+    def get_video_uploader_credentials(self, owner_sub: str) -> Optional[Dict[str, Any]]:
+        return self._get_credentials("video_uploader", owner_sub)
 
     def get_youtube_credentials(self, owner_sub: str, slot: str = "primary") -> Optional[Dict[str, Any]]:
         slot_name = normalize_youtube_slot(slot)
@@ -309,6 +316,9 @@ class CredentialStore:
     def get_drive_public(self, owner_sub: str) -> Optional[Dict[str, Any]]:
         return self._get_public("drive", owner_sub)
 
+    def get_video_uploader_public(self, owner_sub: str) -> Optional[Dict[str, Any]]:
+        return self._get_public("video_uploader", owner_sub)
+
     def get_youtube_public(self, owner_sub: str, slot: str = "primary") -> Optional[Dict[str, Any]]:
         slot_name = normalize_youtube_slot(slot)
         return self._get_public(f"youtube_{slot_name}", owner_sub)
@@ -361,6 +371,13 @@ class CredentialStore:
     ) -> None:
         self._mark_refresh_failed(
             "ytmusic", message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
+        )
+
+    def mark_video_uploader_refresh_failed(
+        self, message: str, *, owner_sub: str, requires_reauthorization: bool = False
+    ) -> None:
+        self._mark_refresh_failed(
+            "video_uploader", message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
         )
 
     def mark_youtube_refresh_failed(
@@ -456,6 +473,9 @@ class CredentialStore:
     def clear_ytmusic(self, owner_sub: str) -> None:
         self._clear("ytmusic", owner_sub)
         self.clear_ytmusic_custom_token(owner_sub)
+
+    def clear_video_uploader(self, owner_sub: str) -> None:
+        self._clear("video_uploader", owner_sub)
 
     def clear_youtube(self, owner_sub: str, slot: str = "primary") -> None:
         self._clear(f"youtube_{normalize_youtube_slot(slot)}", owner_sub)

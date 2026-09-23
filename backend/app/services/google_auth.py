@@ -114,7 +114,7 @@ def get_client_config(purpose: str = "login", slot: str = "primary") -> dict:
         youtube_slot = settings.youtube_oauth_slot(normalize_youtube_slot(slot))
         client_id = youtube_slot.client_id
         client_secret = youtube_slot.client_secret
-    elif purpose in ("login", "sheets", "drive", "ytmusic"):
+    elif purpose in ("login", "sheets", "drive", "ytmusic", "video_uploader"):
         client_id = settings.GOOGLE_CLIENT_ID
         client_secret = settings.GOOGLE_CLIENT_SECRET
     else:
@@ -132,7 +132,7 @@ def get_client_config(purpose: str = "login", slot: str = "primary") -> dict:
 
 
 def _scopes_for(purpose: str) -> list[str]:
-    if purpose in ("youtube", "ytmusic"):
+    if purpose in ("youtube", "ytmusic", "video_uploader"):
         return YOUTUBE_SCOPES
     if purpose == "login":
         return LOGIN_SCOPES
@@ -168,7 +168,11 @@ def get_auth_url(purpose: str = "login", slot: str = "primary") -> tuple[str, st
     """Generate a Google OAuth URL and return its PKCE state."""
     slot_name = normalize_youtube_slot(slot) if purpose == "youtube" else "primary"
     flow = create_oauth_flow(purpose=purpose, slot=slot_name)
-    prompt = "consent select_account" if purpose in ("youtube", "ytmusic", "sheets", "drive") else "consent"
+    prompt = (
+        "consent select_account"
+        if purpose in ("youtube", "ytmusic", "video_uploader", "sheets", "drive")
+        else "consent"
+    )
     auth_url, state = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
@@ -213,7 +217,7 @@ def exchange_code_for_tokens(
                 "channel_title": channel.get("channel_title") or "",
             }
         )
-    elif purpose == "ytmusic":
+    elif purpose in ("ytmusic", "video_uploader"):
         try:
             channel = get_youtube_channel_info(creds, slot="primary")
             token_dict.update(
@@ -223,7 +227,7 @@ def exchange_code_for_tokens(
                 }
             )
         except Exception:
-            logger.info("No explicit YouTube channel found for ytmusic, using profile info")
+            logger.info("No explicit YouTube channel found for %s, using profile info", purpose)
 
     return token_dict
 
@@ -324,6 +328,8 @@ def _refresh_credentials(
             latest = credential_store.get_youtube_credentials(owner_sub, slot=slot)
         elif credential_key == "ytmusic":
             latest = credential_store.get_ytmusic_credentials(owner_sub)
+        elif credential_key == "video_uploader":
+            latest = credential_store.get_video_uploader_credentials(owner_sub)
         elif credential_key == "sheets":
             latest = credential_store.get_sheets_credentials(owner_sub) or credential_store.get_google_credentials(
                 owner_sub
@@ -335,7 +341,7 @@ def _refresh_credentials(
         else:
             latest = credential_store.get_google_credentials(owner_sub)
         active_dict = latest or token_dict
-        purpose = "youtube" if credential_key == "youtube" else "login"
+        purpose = "youtube" if credential_key in ("youtube", "video_uploader") else "login"
         credentials = _build_credentials(active_dict, purpose=purpose, slot=slot)
         if not _needs_refresh(credentials):
             return credentials
@@ -350,6 +356,8 @@ def _refresh_credentials(
                 credential_store.save_youtube_connection(refreshed, owner_sub=owner_sub, slot=slot)
             elif credential_key == "ytmusic":
                 credential_store.save_ytmusic_connection(refreshed, owner_sub=owner_sub)
+            elif credential_key == "video_uploader":
+                credential_store.save_video_uploader_connection(refreshed, owner_sub=owner_sub)
             elif credential_key == "sheets":
                 if credential_store.get_sheets_credentials(owner_sub):
                     credential_store.save_sheets_connection(refreshed, owner_sub=owner_sub)
@@ -383,6 +391,12 @@ def _refresh_credentials(
                 )
             elif credential_key == "ytmusic":
                 credential_store.mark_ytmusic_refresh_failed(
+                    message,
+                    owner_sub=owner_sub,
+                    requires_reauthorization=requires_reauthorization,
+                )
+            elif credential_key == "video_uploader":
+                credential_store.mark_video_uploader_refresh_failed(
                     message,
                     owner_sub=owner_sub,
                     requires_reauthorization=requires_reauthorization,
@@ -421,7 +435,7 @@ def build_credentials_from_dict(
     slot: str = "primary",
 ) -> Credentials:
     """Reconstruct credentials and proactively refresh them before expiry."""
-    purpose = "youtube" if credential_key == "youtube" else "login"
+    purpose = "youtube" if credential_key in ("youtube", "video_uploader") else "login"
     credentials = _build_credentials(token_dict, purpose=purpose, slot=slot)
     if _needs_refresh(credentials):
         return _refresh_credentials(
@@ -498,11 +512,12 @@ def _get_scoped_service_credentials(
                 return creds
 
     # 3. Fallback to legacy google login connection if it includes required scope
-    legacy_dict = credential_store.get_google_credentials(sub)
-    if legacy_dict and legacy_dict.get("token"):
-        creds = build_credentials_from_dict(legacy_dict, credential_key="google", owner_sub=sub)
-        if creds and creds.valid and scope_checker(creds):
-            return creds
+    if credential_key != "video_uploader":
+        legacy_dict = credential_store.get_google_credentials(sub)
+        if legacy_dict and legacy_dict.get("token"):
+            creds = build_credentials_from_dict(legacy_dict, credential_key="google", owner_sub=sub)
+            if creds and creds.valid and scope_checker(creds):
+                return creds
 
     return None
 
@@ -537,6 +552,19 @@ def get_ytmusic_credentials(session_id: Optional[str] = None, owner_sub: Optiona
         credential_key="ytmusic",
         scope_checker=has_youtube_scope,
         dedicated_getter=credential_store.get_ytmusic_credentials,
+    )
+
+
+def get_video_uploader_credentials(
+    session_id: Optional[str] = None, owner_sub: Optional[str] = None
+) -> Optional[Credentials]:
+    """Load dedicated Video Uploader YouTube credentials for an authenticated user session or subject."""
+    return _get_scoped_service_credentials(
+        session_id=session_id,
+        owner_sub=owner_sub,
+        credential_key="video_uploader",
+        scope_checker=has_youtube_scope,
+        dedicated_getter=credential_store.get_video_uploader_credentials,
     )
 
 

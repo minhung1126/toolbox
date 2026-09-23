@@ -28,6 +28,7 @@ import { getSafeReturnPath, PATHS } from './paths';
 
 const PlaylistSortPage = React.lazy(() => import('../pages/PlaylistSortPage'));
 const YtmusicSettingsPage = React.lazy(() => import('../pages/YtmusicSettingsPage'));
+const WeverseUploaderPage = React.lazy(() => import('../pages/WeverseUploaderPage'));
 
 function LoginRoute({ initialError }) {
   const location = useLocation();
@@ -100,6 +101,7 @@ export default function AppRoutes({
           <Route path="notes" element={<StickyNotesPage {...pageProps} />} />
           <Route path="photo-curator" element={<PhotoCuratorPage {...pageProps} />} />
           <Route path="ffmpeg-generator" element={<FfmpegGeneratorPage {...pageProps} />} />
+          <Route path="weverse-uploader" element={<React.Suspense fallback={<div className="loading-center">載入中…</div>}><WeverseUploaderPage {...pageProps} /></React.Suspense>} />
           <Route path="system/health" element={<ApiHealthPage authUser={authUser} />} />
           <Route path="system/info" element={<SystemInfoPage sysSettings={sysSettings} />} />
           <Route path="system/settings" element={<SystemSettingsPage {...pageProps} />} />

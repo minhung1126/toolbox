@@ -10,7 +10,7 @@ import {
 describe('Toolbox Frontend Tool Catalog', () => {
   it('returns registered tools with metadata', () => {
     const tools = getAllTools();
-    expect(tools.length).toBe(8);
+    expect(tools.length).toBe(9);
     const ids = tools.map((t) => t.id);
     expect(ids).toContain('creator-tools');
     expect(ids).toContain('youtube-music');
@@ -18,6 +18,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(ids).toContain('sticky-notes');
     expect(ids).toContain('photo-curator');
     expect(ids).toContain('ffmpeg-generator');
+    expect(ids).toContain('weverse-uploader');
     expect(ids).toContain('integrations-quota');
     expect(ids).toContain('system-utility');
   });
@@ -55,6 +56,11 @@ describe('Toolbox Frontend Tool Catalog', () => {
     const ffmpegTool = getToolById('ffmpeg-generator');
     expect(ffmpegTool).not.toBeNull();
     expect(ffmpegTool.name).toBe('FFmpeg Generator');
+
+    const weverseTool = getToolById('weverse-uploader');
+    expect(weverseTool).not.toBeNull();
+    expect(weverseTool.name).toBe('Weverse Uploader');
+    expect(weverseTool.title).toBe('Weverse 影片上傳');
   });
 
   it('aggregates navigation groups and system items', () => {
@@ -67,6 +73,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(groupIds).toContain('notes');
     expect(groupIds).toContain('photo_curator_nav');
     expect(groupIds).toContain('ffmpeg_nav');
+    expect(groupIds).toContain('weverse_uploader_nav');
     expect(groupIds).toContain('integrations');
 
     const systemItems = getSystemNavItems();
@@ -78,7 +85,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
 
   it('provides dashboard feature cards', () => {
     const cards = getDashboardFeatureCards();
-    expect(cards.length).toBeGreaterThanOrEqual(7);
+    expect(cards.length).toBeGreaterThanOrEqual(8);
     const cardIds = cards.map((c) => c.id);
     expect(cardIds).toContain('video_drafts');
     expect(cardIds).toContain('shorts_drafts');
@@ -90,6 +97,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(cardIds).toContain('system_settings_card');
     expect(cardIds).toContain('sticky_notes_card');
     expect(cardIds).toContain('photo_curator_card');
+    expect(cardIds).toContain('weverse_uploader_card');
   });
 });
 
