@@ -5,6 +5,7 @@ import PreviewComparisonField from './PreviewComparisonField';
 
 export default function BatchPreviewItem({ item, index }) {
   const previewStatus = getBatchPreviewStatus(item);
+  const previewStatusClass = previewStatus.key === 'willUpdate' ? 'will-update' : previewStatus.key;
   const videoId = item.videoId || item.video_id;
   const currentTitle = item.currentTitle || '';
   const currentDescription = item.currentDescription || '';
@@ -12,7 +13,7 @@ export default function BatchPreviewItem({ item, index }) {
   const nextDescription = item.newDescription || '';
   const nextEmptyLabel = previewStatus.key === 'willUpdate' ? '（空白）' : '（未套用）';
   return (
-    <article className={`batch-preview-item batch-preview-item-${previewStatus.key}`}>
+    <article className={`batch-preview-item batch-preview-item-${previewStatusClass}`}>
       <div className="batch-preview-item-heading">
         <div className="batch-preview-item-title">
           <span className="batch-preview-item-index">#{index + 1}</span>

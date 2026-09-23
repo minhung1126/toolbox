@@ -2,6 +2,26 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BatchUpdatePage, { buildBatchPreview } from './BatchUpdatePage';
+import BatchPreviewItem from '../components/batch/BatchPreviewItem';
+
+describe('BatchPreviewItem', () => {
+  it('uses the kebab-case class for items that will be updated', () => {
+    const { container } = render(
+      <BatchPreviewItem
+        item={{
+          videoId: 'video-1',
+          currentTitle: '舊標題',
+          newTitle: '新標題',
+          status: 'ready',
+          willUpdate: true,
+        }}
+        index={0}
+      />
+    );
+
+    expect(container.querySelector('article')).toHaveClass('batch-preview-item-will-update');
+  });
+});
 
 const mocks = vi.hoisted(() => ({
   api: {
