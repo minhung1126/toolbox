@@ -37,25 +37,31 @@ export function useFfmpegVideo({
     };
   }, [videoUrl]);
 
-  const handleSelectFile = useCallback((file) => {
-    if (!isVideoFile(file)) {
-      toast.error('請選擇有效的影片檔案 (MP4, WebM, MOV, MKV, AVI 等)');
-      return;
-    }
+  const handleSelectFile = useCallback(
+    (file) => {
+      if (!isVideoFile(file)) {
+        toast.error('請選擇有效的影片檔案 (MP4, WebM, MOV, MKV, AVI 等)');
+        return;
+      }
 
-    setVideoError(null);
-    setVideoFile(file);
-    setVideoUrl(URL.createObjectURL(file));
-    onFileSelected?.(file);
-    toast.success(`已載入影片：${file.name}`);
-  }, [onFileSelected, toast]);
+      setVideoError(null);
+      setVideoFile(file);
+      setVideoUrl(URL.createObjectURL(file));
+      onFileSelected?.(file);
+      toast.success(`已載入影片：${file.name}`);
+    },
+    [onFileSelected, toast]
+  );
 
-  const handleDrop = useCallback((event) => {
-    event.preventDefault();
-    setIsDragging(false);
-    const file = event.dataTransfer?.files?.[0];
-    if (file) handleSelectFile(file);
-  }, [handleSelectFile, setIsDragging]);
+  const handleDrop = useCallback(
+    (event) => {
+      event.preventDefault();
+      setIsDragging(false);
+      const file = event.dataTransfer?.files?.[0];
+      if (file) handleSelectFile(file);
+    },
+    [handleSelectFile, setIsDragging]
+  );
 
   const handleLoadedMetadata = useCallback(() => {
     if (!videoRef.current) return;
@@ -78,9 +84,7 @@ export function useFfmpegVideo({
 
     if (isPlayingTrimmed && enableEndCut) {
       const startSeconds = enableStartCut ? parseHmsToSeconds(startTime) : 0;
-      const stopSeconds = cutMode === 'to'
-        ? parseHmsToSeconds(endTime)
-        : startSeconds + parseHmsToSeconds(durationCut);
+      const stopSeconds = cutMode === 'to' ? parseHmsToSeconds(endTime) : startSeconds + parseHmsToSeconds(durationCut);
       if (time >= stopSeconds) {
         videoRef.current.pause();
         setIsPlaying(false);
@@ -101,17 +105,23 @@ export function useFfmpegVideo({
     }
   }, []);
 
-  const seekTo = useCallback((seconds) => {
-    if (!videoRef.current) return;
-    const target = Math.max(0, Math.min(duration || 3600, seconds));
-    videoRef.current.currentTime = target;
-    setCurrentTime(target);
-  }, [duration]);
+  const seekTo = useCallback(
+    (seconds) => {
+      if (!videoRef.current) return;
+      const target = Math.max(0, Math.min(duration || 3600, seconds));
+      videoRef.current.currentTime = target;
+      setCurrentTime(target);
+    },
+    [duration]
+  );
 
-  const seekRelative = useCallback((offsetSeconds) => {
-    if (!videoRef.current) return;
-    seekTo(videoRef.current.currentTime + offsetSeconds);
-  }, [seekTo]);
+  const seekRelative = useCallback(
+    (offsetSeconds) => {
+      if (!videoRef.current) return;
+      seekTo(videoRef.current.currentTime + offsetSeconds);
+    },
+    [seekTo]
+  );
 
   const setPlaybackSpeed = useCallback((rate) => {
     if (videoRef.current) videoRef.current.playbackRate = rate;

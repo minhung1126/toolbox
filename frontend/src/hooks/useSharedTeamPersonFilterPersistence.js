@@ -89,24 +89,27 @@ export default function useSharedTeamPersonFilterPersistence({
     return request;
   }, [updateStatus]);
 
-  const scheduleSave = useCallback((delay = 500) => {
-    const record = recordRef.current;
-    if (record.timer) {
-      window.clearTimeout(record.timer);
-      record.timer = null;
-      record.timerResolve?.(null);
-      record.timerResolve = null;
-    }
-    if (delay <= 0) return flushSave();
-    return new Promise((resolve) => {
-      record.timerResolve = resolve;
-      record.timer = window.setTimeout(() => {
+  const scheduleSave = useCallback(
+    (delay = 500) => {
+      const record = recordRef.current;
+      if (record.timer) {
+        window.clearTimeout(record.timer);
         record.timer = null;
+        record.timerResolve?.(null);
         record.timerResolve = null;
-        flushSave().then(resolve);
-      }, delay);
-    });
-  }, [flushSave]);
+      }
+      if (delay <= 0) return flushSave();
+      return new Promise((resolve) => {
+        record.timerResolve = resolve;
+        record.timer = window.setTimeout(() => {
+          record.timer = null;
+          record.timerResolve = null;
+          flushSave().then(resolve);
+        }, delay);
+      });
+    },
+    [flushSave]
+  );
 
   const retry = useCallback(() => {
     const record = recordRef.current;

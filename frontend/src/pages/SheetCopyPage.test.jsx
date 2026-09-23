@@ -16,8 +16,16 @@ vi.mock('../services/api', () => ({
 vi.mock('../components/SheetDataSourcePanel', () => ({
   default: ({ onRefresh, onWorksheetChange }) => (
     <div data-testid="sheet-source">
-      {onRefresh && <button type="button" onClick={onRefresh}>MockRefresh</button>}
-      {onWorksheetChange && <button type="button" onClick={() => onWorksheetChange('工作表2')}>MockChangeSheet</button>}
+      {onRefresh && (
+        <button type="button" onClick={onRefresh}>
+          MockRefresh
+        </button>
+      )}
+      {onWorksheetChange && (
+        <button type="button" onClick={() => onWorksheetChange('工作表2')}>
+          MockChangeSheet
+        </button>
+      )}
     </div>
   ),
 }));
@@ -42,7 +50,7 @@ function renderPage(initialState) {
   return render(
     <AccountWorkStateProvider initialState={initialState}>
       <SheetCopyPage sysSettings={{ shared_team_person_filter: {} }} />
-    </AccountWorkStateProvider>,
+    </AccountWorkStateProvider>
   );
 }
 
@@ -173,4 +181,3 @@ describe('SheetCopyPage row dismissal and restoration', () => {
     expect(screen.queryByText('（已隱藏 1 列）')).not.toBeInTheDocument();
   });
 });
-

@@ -19,14 +19,15 @@ export default function YouTubeSettingsLayout() {
       </header>
       <nav className="settings-subnav" aria-label="YouTube 設定子導覽">
         {items.map(([to, label]) => {
-          const isCurrentTabActive = to === PATHS.youtubeRouting
-            ? (location.pathname === PATHS.youtubeRouting || location.pathname === PATHS.youtubeQuota)
-            : location.pathname === to;
+          const isCurrentTabActive =
+            to === PATHS.youtubeRouting
+              ? location.pathname === PATHS.youtubeRouting || location.pathname === PATHS.youtubeQuota
+              : location.pathname === to;
           return (
             <NavLink
               key={to}
               to={to}
-              className={({ isActive }) => `settings-subnav-link${(isActive || isCurrentTabActive) ? ' active' : ''}`}
+              className={({ isActive }) => `settings-subnav-link${isActive || isCurrentTabActive ? ' active' : ''}`}
             >
               {label}
             </NavLink>

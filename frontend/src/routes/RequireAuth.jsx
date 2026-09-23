@@ -10,4 +10,3 @@ export default function RequireAuth({ authStatus, authUser, children }) {
   const requestedPath = getCurrentPath(location);
   return <Navigate replace to={buildLoginPath(requestedPath) || PATHS.login} />;
 }
-

@@ -8,10 +8,11 @@ export const DEFAULT_COLUMNS = {
 export const TEAM_OPTION_SUFFIX = '（全隊）';
 
 export function resolveDraftConfig(serverConfig, cached) {
-  const hasServerConfig = serverConfig
-    && typeof serverConfig === 'object'
-    && !Array.isArray(serverConfig)
-    && Object.keys(serverConfig).length > 0;
+  const hasServerConfig =
+    serverConfig &&
+    typeof serverConfig === 'object' &&
+    !Array.isArray(serverConfig) &&
+    Object.keys(serverConfig).length > 0;
   return hasServerConfig ? serverConfig : cached;
 }
 
@@ -64,9 +65,7 @@ export function buildBatchPreview({
     const matches = sheetRows.filter((row) => {
       if (String(row?.team || '').trim() !== String(team || '').trim()) return false;
       const rowPerson = String(row?.person || '').trim();
-      return person.endsWith(TEAM_OPTION_SUFFIX)
-        ? !rowPerson
-        : rowPerson === person;
+      return person.endsWith(TEAM_OPTION_SUFFIX) ? !rowPerson : rowPerson === person;
     });
     if (!matches.length) return { ...base, reason: `找不到團體 ${team} 的選項 ${person} 資料` };
 
@@ -144,8 +143,10 @@ export function getBatchPreviewStatus(item) {
   if (item?.willUpdate || ['ready', 'will_update', 'to_update'].includes(status)) {
     return { key: 'willUpdate', label: '將更新', tone: 'success' };
   }
-  if (['unchanged', 'no_change', 'no-change', 'not_changed'].includes(status)
-    || /沒有變更|無變更/.test(String(item?.reason || ''))) {
+  if (
+    ['unchanged', 'no_change', 'no-change', 'not_changed'].includes(status) ||
+    /沒有變更|無變更/.test(String(item?.reason || ''))
+  ) {
     return { key: 'unchanged', label: '沒有變更', tone: 'neutral' };
   }
   if (['failed', 'error'].includes(status)) return { key: 'failed', label: '失敗', tone: 'error' };

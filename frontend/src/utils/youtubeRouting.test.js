@@ -18,14 +18,18 @@ describe('YouTube routing helpers', () => {
   });
 
   it('prefers an authenticated primary slot and falls back to secondary', () => {
-    expect(youtubePreferredUiSlot({
-      active_slot: 'secondary',
-      slots: { primary: { authenticated: true }, secondary: { authenticated: true } },
-    })).toBe('primary');
-    expect(youtubePreferredUiSlot({
-      active_slot: 'primary',
-      slots: { primary: { authenticated: false }, secondary: { authenticated: true } },
-    })).toBe('secondary');
+    expect(
+      youtubePreferredUiSlot({
+        active_slot: 'secondary',
+        slots: { primary: { authenticated: true }, secondary: { authenticated: true } },
+      })
+    ).toBe('primary');
+    expect(
+      youtubePreferredUiSlot({
+        active_slot: 'primary',
+        slots: { primary: { authenticated: false }, secondary: { authenticated: true } },
+      })
+    ).toBe('secondary');
     expect(youtubePreferredUiSlot({ active_slot: 'secondary', slots: {} })).toBe('secondary');
   });
 

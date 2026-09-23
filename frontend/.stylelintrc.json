@@ -1,0 +1,12 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "rules": {
+    "declaration-no-important": true,
+    "no-duplicate-selectors": true,
+    "selector-max-id": 0,
+    "selector-max-type": [0, { "ignore": ["descendant"] }],
+    "selector-max-universal": 0,
+    "media-feature-range-notation": "prefix",
+    "value-keyword-case": null
+  }
+}

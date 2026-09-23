@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import PlaylistSortPage, {
@@ -178,6 +178,33 @@ describe('PlaylistSortPage', () => {
       expect(screen.getByText(/共 3 首/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /套用排序/ })).toBeInTheDocument();
     });
+  });
+
+  it('ignores a preview response after the selected playlist changes', async () => {
+    api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: mockPlaylists });
+    let resolvePreview;
+    api.previewPlaylistSort.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePreview = resolve;
+      })
+    );
+
+    renderWithRouter(<PlaylistSortPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('我的最愛音樂 (3 首)')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /模擬預覽/ }));
+    await waitFor(() => expect(api.previewPlaylistSort).toHaveBeenCalledOnce());
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'pl-2' } });
+
+    await act(async () => {
+      resolvePreview({ preview: mockPreview, preview_token: 'stale-token' });
+    });
+
+    expect(screen.queryByRole('button', { name: /套用排序/ })).not.toBeInTheDocument();
+    expect(mockToast.success).not.toHaveBeenCalledWith(expect.stringContaining('預覽完成'));
   });
 
   it('applies sort after confirmation in dialog', async () => {
@@ -537,9 +564,23 @@ describe('PlaylistSortPage', () => {
   it('groups Artist and Artist - Topic together and sorts chronologically', () => {
     const tracks = [
       { title: '2024 Single', artist: 'QWER', album: '單曲', release_date: '2024-02-08', year: 2024 },
-      { title: '2023 Album Track', artist: 'QWER - Topic', album: 'Harmony from Discord', release_date: '2023-10-18', year: 2023, track_number: 1 },
+      {
+        title: '2023 Album Track',
+        artist: 'QWER - Topic',
+        album: 'Harmony from Discord',
+        release_date: '2023-10-18',
+        year: 2023,
+        track_number: 1,
+      },
       { title: '2023 Single', artist: 'QWER', album: '單曲', release_date: '2023-11-09', year: 2023 },
-      { title: '2024 Album Track', artist: 'QWER - 主題', album: 'MANITO', release_date: '2024-04-01', year: 2024, track_number: 1 },
+      {
+        title: '2024 Album Track',
+        artist: 'QWER - 主題',
+        album: 'MANITO',
+        release_date: '2024-04-01',
+        year: 2024,
+        track_number: 1,
+      },
     ];
 
     const sorted = sortTracksLocally(tracks, [
@@ -547,12 +588,7 @@ describe('PlaylistSortPage', () => {
       { field: 'album', direction: 'asc' },
     ]);
 
-    expect(sorted.map((t) => t.title)).toEqual([
-      '2023 Album Track',
-      '2023 Single',
-      '2024 Single',
-      '2024 Album Track',
-    ]);
+    expect(sorted.map((t) => t.title)).toEqual(['2023 Album Track', '2023 Single', '2024 Single', '2024 Album Track']);
   });
 
   it('renders TrackSubtitle with normalized artist name stripping - Topic', () => {

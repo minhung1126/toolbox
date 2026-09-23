@@ -26,19 +26,29 @@ describe('ApiHealthPage visibility polling', () => {
     render(<ApiHealthPage authUser={{ youtube: {} }} />);
     expect(screen.getByTestId('quota-refresh-key')).toHaveTextContent('0');
 
-    await act(async () => { vi.advanceTimersByTime(30000); });
+    await act(async () => {
+      vi.advanceTimersByTime(30000);
+    });
     expect(screen.getByTestId('quota-refresh-key')).toHaveTextContent('1');
 
     setDocumentHidden(true);
-    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
-    await act(async () => { vi.advanceTimersByTime(90000); });
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(90000);
+    });
     expect(screen.getByTestId('quota-refresh-key')).toHaveTextContent('1');
 
     setDocumentHidden(false);
-    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
     expect(screen.getByTestId('quota-refresh-key')).toHaveTextContent('2');
 
-    await act(async () => { vi.advanceTimersByTime(30000); });
+    await act(async () => {
+      vi.advanceTimersByTime(30000);
+    });
     expect(screen.getByTestId('quota-refresh-key')).toHaveTextContent('3');
   });
 });

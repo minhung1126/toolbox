@@ -310,7 +310,9 @@ describe('YtmusicSettingsPage', () => {
     fireEvent.click(validateBtn);
 
     await waitFor(() => {
-      expect(api.validateYtmusicCustomToken).toHaveBeenCalledWith('curl "https://music.youtube.com" -H "cookie: invalid"');
+      expect(api.validateYtmusicCustomToken).toHaveBeenCalledWith(
+        'curl "https://music.youtube.com" -H "cookie: invalid"'
+      );
     });
 
     expect(await screen.findByText('Token 驗證失敗')).toBeInTheDocument();

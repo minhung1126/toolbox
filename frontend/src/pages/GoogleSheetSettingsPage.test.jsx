@@ -61,7 +61,11 @@ describe('GoogleSheetSettingsPage autosave lifecycle', () => {
 
   it('does not duplicate an autosave already queued before unmount', async () => {
     let resolveSave;
-    api.updateSharedSettings.mockReturnValue(new Promise((resolve) => { resolveSave = resolve; }));
+    api.updateSharedSettings.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      })
+    );
     const { unmount } = renderPage();
 
     fireEvent.change(screen.getByLabelText('Google Sheet'), { target: { value: 'queued-sheet' } });

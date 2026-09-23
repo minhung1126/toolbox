@@ -19,7 +19,7 @@ describe('YouTubeVideoEditDialog', () => {
     expect(screen.getByLabelText('描述')).toHaveValue('原本描述');
     expect(screen.getByRole('link', { name: /在 YouTube 查看影片/ })).toHaveAttribute(
       'href',
-      'https://www.youtube.com/watch?v=abc123',
+      'https://www.youtube.com/watch?v=abc123'
     );
 
     fireEvent.change(screen.getByLabelText('標題'), { target: { value: '更新後標題' } });

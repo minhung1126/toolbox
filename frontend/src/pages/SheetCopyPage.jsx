@@ -10,12 +10,24 @@ import { readSharedTeamPersonFilter } from '../utils/teamPersonFilterStorage';
 import { copyToClipboard } from '../utils/clipboard';
 
 export default function SheetCopyPage({ sysSettings }) {
-  const { value: savedState, error: workStateError, saving: workStateSaving, saved: workStateSaved, save: saveWorkState } = useAccountWorkState('sheet_copy', {});
+  const {
+    value: savedState,
+    error: workStateError,
+    saving: workStateSaving,
+    saved: workStateSaved,
+    save: saveWorkState,
+  } = useAccountWorkState('sheet_copy', {});
   const saved = savedState && typeof savedState === 'object' ? savedState : {};
-  const sheetCopyAutosaveStatus = workStateSaving ? 'saving' : workStateSaved ? 'saved' : workStateError ? 'error' : null;
+  const sheetCopyAutosaveStatus = workStateSaving
+    ? 'saving'
+    : workStateSaved
+      ? 'saved'
+      : workStateError
+        ? 'error'
+        : null;
   const sharedFilter = useMemo(
     () => readSharedTeamPersonFilter(sysSettings.shared_team_person_filter),
-    [sysSettings.shared_team_person_filter],
+    [sysSettings.shared_team_person_filter]
   );
   const initialSpreadsheetId = saved.spreadsheetId || sysSettings.default_spreadsheet_id || '';
   const [spreadsheetId, setSpreadsheetId] = useState(initialSpreadsheetId);
@@ -86,27 +98,30 @@ export default function SheetCopyPage({ sysSettings }) {
     return () => window.clearTimeout(timer);
   }, [copiedCell]);
 
-  const loadWorksheet = useCallback(async (name, source) => {
-    if (!name || !source) return;
-    const requestId = worksheetRequestRef.current + 1;
-    worksheetRequestRef.current = requestId;
-    setWorksheetName(name);
-    setRows([]);
-    setDismissedRowNumbers([]);
-    setColumns([]);
-    setSourceError('');
-    try {
-      const table = await api.getCopyableSheetTable(source, name);
-      if (worksheetRequestRef.current !== requestId) return;
-      const nextColumns = table.columns || [];
-      const retained = visibleKeys.filter((key) => nextColumns.some((column) => column.key === key));
-      setColumns(nextColumns);
-      setVisibleKeys(retained.length ? retained : nextColumns.map((column) => column.key));
-      setRows(table.rows || []);
-    } catch (err) {
-      if (worksheetRequestRef.current === requestId) setSourceError(`讀取工作表內容失敗：${err.message}`);
-    }
-  }, [visibleKeys]);
+  const loadWorksheet = useCallback(
+    async (name, source) => {
+      if (!name || !source) return;
+      const requestId = worksheetRequestRef.current + 1;
+      worksheetRequestRef.current = requestId;
+      setWorksheetName(name);
+      setRows([]);
+      setDismissedRowNumbers([]);
+      setColumns([]);
+      setSourceError('');
+      try {
+        const table = await api.getCopyableSheetTable(source, name);
+        if (worksheetRequestRef.current !== requestId) return;
+        const nextColumns = table.columns || [];
+        const retained = visibleKeys.filter((key) => nextColumns.some((column) => column.key === key));
+        setColumns(nextColumns);
+        setVisibleKeys(retained.length ? retained : nextColumns.map((column) => column.key));
+        setRows(table.rows || []);
+      } catch (err) {
+        if (worksheetRequestRef.current === requestId) setSourceError(`讀取工作表內容失敗：${err.message}`);
+      }
+    },
+    [visibleKeys]
+  );
 
   const refresh = useCallback(async () => {
     const nextSource = spreadsheetId.trim();
@@ -120,7 +135,9 @@ export default function SheetCopyPage({ sysSettings }) {
     try {
       const metadata = await api.getSpreadsheetMetadata(nextSource);
       const nextWorksheets = metadata.worksheets || [];
-      const nextName = nextWorksheets.some((sheet) => sheet.title === worksheetName) ? worksheetName : nextWorksheets[0]?.title || '';
+      const nextName = nextWorksheets.some((sheet) => sheet.title === worksheetName)
+        ? worksheetName
+        : nextWorksheets[0]?.title || '';
       setAppliedSpreadsheetId(nextSource);
       setWorksheets(nextWorksheets);
       setSourceReady(true);
@@ -162,11 +179,20 @@ export default function SheetCopyPage({ sysSettings }) {
   const visibleColumns = columns.filter((column) => visibleKeys.includes(column.key));
   const keyword = query.trim().toLocaleLowerCase('zh-TW');
   const displayDisabled = sourceStale || !sourceReady || loading;
-  const candidateRows = sourceStale ? [] : rows.filter((row) => {
-    const matchesPeople = !selectedTeam || (row.team === selectedTeam && selectedPeople.includes(row.person_option));
-    const matchesQuery = !keyword || visibleColumns.some((column) => String(row.cells[column.index] ?? '').toLocaleLowerCase('zh-TW').includes(keyword));
-    return matchesPeople && matchesQuery;
-  });
+  const candidateRows = sourceStale
+    ? []
+    : rows.filter((row) => {
+        const matchesPeople =
+          !selectedTeam || (row.team === selectedTeam && selectedPeople.includes(row.person_option));
+        const matchesQuery =
+          !keyword ||
+          visibleColumns.some((column) =>
+            String(row.cells[column.index] ?? '')
+              .toLocaleLowerCase('zh-TW')
+              .includes(keyword)
+          );
+        return matchesPeople && matchesQuery;
+      });
   const filteredRows = candidateRows.filter((row) => !dismissedRowNumbers.includes(row.row_number));
 
   const handleDismissRow = (rowNumber) => {
@@ -201,31 +227,131 @@ export default function SheetCopyPage({ sysSettings }) {
   return (
     <div className="section-gap sheet-copy-page">
       <header className="page-header">
-        <h1 className="sheet-copy-title"><FileSpreadsheet size={28} /> Sheet 內容複製</h1>
-        <p className="section-desc">先確認資料來源與工作表，再選擇團體、人物及要顯示的內容；所有篩選與顯示選項會即時記住，點擊任一儲存格即可原樣複製，包含換行。</p>
+        <h1 className="sheet-copy-title">
+          <FileSpreadsheet size={28} /> Sheet 內容複製
+        </h1>
+        <p className="section-desc">
+          先確認資料來源與工作表，再選擇團體、人物及要顯示的內容；所有篩選與顯示選項會即時記住，點擊任一儲存格即可原樣複製，包含換行。
+        </p>
         <div className="sheet-copy-page-options">
           <label className="sheet-copy-auto-collapse" htmlFor="sheet-copy-auto-collapse">
-            <input id="sheet-copy-auto-collapse" type="checkbox" checked={autoCollapse} onChange={(event) => setAutoCollapse(event.target.checked)} />
+            <input
+              id="sheet-copy-auto-collapse"
+              type="checkbox"
+              checked={autoCollapse}
+              onChange={(event) => setAutoCollapse(event.target.checked)}
+            />
             <span>自動折疊內容格子</span>
           </label>
           <span className="sheet-copy-page-option-hint">勾選後每格只顯示一行，點擊仍會複製完整內容。</span>
         </div>
       </header>
 
-      <SheetDataSourcePanel spreadsheetId={spreadsheetId} onSpreadsheetIdChange={handleSpreadsheetChange} worksheets={worksheets} worksheetName={worksheetName} onWorksheetChange={handleWorksheetChange} onRefresh={refresh} loading={loading} sourceReady={sourceReady} stale={sourceStale} error={sourceError} autosaveStatus={sheetCopyAutosaveStatus} />
+      <SheetDataSourcePanel
+        spreadsheetId={spreadsheetId}
+        onSpreadsheetIdChange={handleSpreadsheetChange}
+        worksheets={worksheets}
+        worksheetName={worksheetName}
+        onWorksheetChange={handleWorksheetChange}
+        onRefresh={refresh}
+        loading={loading}
+        sourceReady={sourceReady}
+        stale={sourceStale}
+        error={sourceError}
+        autosaveStatus={sheetCopyAutosaveStatus}
+      />
 
-      <TeamPersonFilterPanel teams={sourceStale ? [] : teams} selectedTeam={sourceStale ? '' : selectedTeam} onTeamChange={setSelectedTeam} people={sourceStale ? [] : people} selectedPeople={sourceStale ? [] : selectedPeople} onSelectedPeopleChange={setSelectedPeople} loadingTeams={loadingTeams} loadingPeople={loadingPeople} error={teamPersonError} disabled={sourceStale || !sourceReady} teamEmptyLabel="全部團體" peopleDisabledMessage="未選定團體時顯示全部團體；請選擇團體後再篩選人物。" description="未選定團體時顯示全部團體；選定團體後只顯示已勾選的人物。" />
-      {workStateError && <div className="filter-panel-status filter-panel-status-error" role="alert">工作狀態同步失敗：{workStateError}</div>}
-      {sharedFilterSaveError && <div className="filter-panel-status filter-panel-status-error" role="alert">{sharedFilterSaveError}</div>}
+      <TeamPersonFilterPanel
+        teams={sourceStale ? [] : teams}
+        selectedTeam={sourceStale ? '' : selectedTeam}
+        onTeamChange={setSelectedTeam}
+        people={sourceStale ? [] : people}
+        selectedPeople={sourceStale ? [] : selectedPeople}
+        onSelectedPeopleChange={setSelectedPeople}
+        loadingTeams={loadingTeams}
+        loadingPeople={loadingPeople}
+        error={teamPersonError}
+        disabled={sourceStale || !sourceReady}
+        teamEmptyLabel="全部團體"
+        peopleDisabledMessage="未選定團體時顯示全部團體；請選擇團體後再篩選人物。"
+        description="未選定團體時顯示全部團體；選定團體後只顯示已勾選的人物。"
+      />
+      {workStateError && (
+        <div className="filter-panel-status filter-panel-status-error" role="alert">
+          工作狀態同步失敗：{workStateError}
+        </div>
+      )}
+      {sharedFilterSaveError && (
+        <div className="filter-panel-status filter-panel-status-error" role="alert">
+          {sharedFilterSaveError}
+        </div>
+      )}
 
       <section className="glass-panel card-padding sheet-copy-display-panel">
-        <div className="filter-panel-header"><div><strong><Search size={17} aria-hidden="true" />顯示內容</strong><p>搜尋目前顯示欄位，並選擇要保留在資料表中的欄位。</p></div></div>
+        <div className="filter-panel-header">
+          <div>
+            <strong>
+              <Search size={17} aria-hidden="true" />
+              顯示內容
+            </strong>
+            <p>搜尋目前顯示欄位，並選擇要保留在資料表中的欄位。</p>
+          </div>
+        </div>
         <div className="sheet-copy-display-grid">
-          <div className="form-group"><label className="form-label" htmlFor="sheet-copy-query"><Search size={14} />內容搜尋</label><input id="sheet-copy-query" className="form-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋顯示欄位" disabled={displayDisabled} /></div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="sheet-copy-query">
+              <Search size={14} />
+              內容搜尋
+            </label>
+            <input
+              id="sheet-copy-query"
+              className="form-input"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="搜尋顯示欄位"
+              disabled={displayDisabled}
+            />
+          </div>
           <div className="sheet-copy-columns">
-            <div className="sheet-copy-columns-head"><strong>顯示欄位（{visibleKeys.length} / {columns.length}）</strong><span><button type="button" onClick={() => setVisibleKeys(columns.map((column) => column.key))} disabled={displayDisabled}>全選</button><button type="button" onClick={() => setVisibleKeys([])} disabled={displayDisabled}>全不選</button></span></div>
+            <div className="sheet-copy-columns-head">
+              <strong>
+                顯示欄位（{visibleKeys.length} / {columns.length}）
+              </strong>
+              <span>
+                <button
+                  type="button"
+                  onClick={() => setVisibleKeys(columns.map((column) => column.key))}
+                  disabled={displayDisabled}
+                >
+                  全選
+                </button>
+                <button type="button" onClick={() => setVisibleKeys([])} disabled={displayDisabled}>
+                  全不選
+                </button>
+              </span>
+            </div>
             {!columns.length && <p className="filter-panel-status">請先刷新並選擇工作表。</p>}
-            {!!columns.length && <div className="sheet-copy-column-grid">{columns.map((column) => <label key={column.key} className={visibleKeys.includes(column.key) ? 'selected' : ''}><input type="checkbox" checked={visibleKeys.includes(column.key)} disabled={displayDisabled} onChange={() => setVisibleKeys((current) => current.includes(column.key) ? current.filter((key) => key !== column.key) : [...current, column.key])} />{column.label}</label>)}</div>}
+            {!!columns.length && (
+              <div className="sheet-copy-column-grid">
+                {columns.map((column) => (
+                  <label key={column.key} className={visibleKeys.includes(column.key) ? 'selected' : ''}>
+                    <input
+                      type="checkbox"
+                      checked={visibleKeys.includes(column.key)}
+                      disabled={displayDisabled}
+                      onChange={() =>
+                        setVisibleKeys((current) =>
+                          current.includes(column.key)
+                            ? current.filter((key) => key !== column.key)
+                            : [...current, column.key]
+                        )
+                      }
+                    />
+                    {column.label}
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -315,9 +441,7 @@ export default function SheetCopyPage({ sysSettings }) {
                               title={value || '（空白）'}
                               onClick={() => handleCopy(row, column)}
                             >
-                              <span
-                                className={`sheet-copy-cell-content${autoCollapse ? ' is-collapsed' : ''}`}
-                              >
+                              <span className={`sheet-copy-cell-content${autoCollapse ? ' is-collapsed' : ''}`}>
                                 {value || <em>（空白）</em>}
                               </span>
                               <small>

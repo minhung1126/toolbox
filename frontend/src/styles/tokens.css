@@ -29,24 +29,24 @@
   --bg-card-hover: #242730;
   --surface-inset: #14151a;
   --surface-raised: #262a34;
-  --surface-overlay: rgba(18, 19, 22, 0.88);
+  --surface-overlay: rgb(18 19 22 / 88%);
 
   /* Borders */
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-color: rgba(255, 255, 255, 0.09);
-  --border-hover: rgba(255, 255, 255, 0.16);
+  --border-subtle: rgb(255 255 255 / 6%);
+  --border-color: rgb(255 255 255 / 9%);
+  --border-hover: rgb(255 255 255 / 16%);
   --border-glow: transparent;
 
   /* Accent */
   --primary: #6366f1;
   --primary-hover: #4f46e5;
   --primary-active: #4338ca;
-  --primary-glow: rgba(99, 102, 241, 0.22);
-  --primary-subtle: rgba(99, 102, 241, 0.12);
-  --primary-border: rgba(99, 102, 241, 0.35);
+  --primary-glow: rgb(99 102 241 / 22%);
+  --primary-subtle: rgb(99 102 241 / 12%);
+  --primary-border: rgb(99 102 241 / 35%);
   --accent: var(--primary);
   --accent-hover: var(--primary-hover);
-  --accent-glow: rgba(99, 102, 241, 0.2);
+  --accent-glow: rgb(99 102 241 / 20%);
   --secondary: #ec4899;
 
   /* Text and semantic status */
@@ -54,20 +54,20 @@
   --text-muted: #9ca3af;
   --text-dim: #6b7280;
   --success: #10b981;
-  --success-bg: rgba(16, 185, 129, 0.12);
-  --success-border: rgba(16, 185, 129, 0.28);
+  --success-bg: rgb(16 185 129 / 12%);
+  --success-border: rgb(16 185 129 / 28%);
   --success-text: #34d399;
   --warning: #f59e0b;
-  --warning-bg: rgba(245, 158, 11, 0.12);
-  --warning-border: rgba(245, 158, 11, 0.28);
+  --warning-bg: rgb(245 158 11 / 12%);
+  --warning-border: rgb(245 158 11 / 28%);
   --warning-text: #fbbf24;
   --danger: #f43f5e;
-  --danger-bg: rgba(244, 63, 94, 0.12);
-  --danger-border: rgba(244, 63, 94, 0.28);
+  --danger-bg: rgb(244 63 94 / 12%);
+  --danger-border: rgb(244 63 94 / 28%);
   --danger-text: #fb7185;
   --info: #38bdf8;
-  --info-bg: rgba(56, 189, 248, 0.12);
-  --info-border: rgba(56, 189, 248, 0.28);
+  --info-bg: rgb(56 189 248 / 12%);
+  --info-border: rgb(56 189 248 / 28%);
   --info-text: #38bdf8;
 
   /* Geometry and elevation */
@@ -77,8 +77,8 @@
   --radius-lg: 10px;
   --radius-xl: 14px;
   --radius-full: 9999px;
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 20px -2px rgba(0, 0, 0, 0.4), 0 2px 6px -1px rgba(0, 0, 0, 0.25);
-  --shadow-lg: 0 12px 36px -4px rgba(0, 0, 0, 0.55), 0 4px 14px -2px rgba(0, 0, 0, 0.3);
-  --shadow-modal: 0 25px 60px -12px rgba(0, 0, 0, 0.75);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 30%);
+  --shadow-md: 0 4px 20px -2px rgb(0 0 0 / 40%), 0 2px 6px -1px rgb(0 0 0 / 25%);
+  --shadow-lg: 0 12px 36px -4px rgb(0 0 0 / 55%), 0 4px 14px -2px rgb(0 0 0 / 30%);
+  --shadow-modal: 0 25px 60px -12px rgb(0 0 0 / 75%);
 }

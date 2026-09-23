@@ -114,7 +114,9 @@ describe('ffmpegCommand utils', () => {
         shellFormat: 'bash',
       });
 
-      expect(cmd.singleLine).toContain('ffmpeg -ss 00:00:05.000 -i "video.mp4" -to 00:00:20.000 -c copy "video_cut.mp4"');
+      expect(cmd.singleLine).toContain(
+        'ffmpeg -ss 00:00:05.000 -i "video.mp4" -to 00:00:20.000 -c copy "video_cut.mp4"'
+      );
       expect(cmd.breakdown.length).toBeGreaterThan(3);
     });
 

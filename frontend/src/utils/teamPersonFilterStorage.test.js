@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  normalizeTeamPersonFilter,
-  readSharedTeamPersonFilter,
-} from './teamPersonFilterStorage';
+import { normalizeTeamPersonFilter, readSharedTeamPersonFilter } from './teamPersonFilterStorage';
 
 describe('teamPersonFilterStorage', () => {
   it('normalizes the browser and server field names', () => {
@@ -13,11 +10,13 @@ describe('teamPersonFilterStorage', () => {
   });
 
   it('uses the server record when configured', () => {
-    expect(readSharedTeamPersonFilter({ configured: true, team: '伺服器團體', selected_people: ['乙'] })).toMatchObject({
-      team: '伺服器團體',
-      selectedPeople: ['乙'],
-      source: 'server',
-    });
+    expect(readSharedTeamPersonFilter({ configured: true, team: '伺服器團體', selected_people: ['乙'] })).toMatchObject(
+      {
+        team: '伺服器團體',
+        selectedPeople: ['乙'],
+        source: 'server',
+      }
+    );
   });
 
   it('uses an empty default without a server or local record', () => {

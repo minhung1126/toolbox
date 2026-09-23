@@ -12,9 +12,7 @@ describe('curatorZip utils', () => {
         ['ph-1', photos[0]],
         ['ph-2', photos[1]],
       ]);
-      const posts = [
-        { id: 'post-1', title: '首部曲', photoIds: ['ph-1', 'ph-2'] },
-      ];
+      const posts = [{ id: 'post-1', title: '首部曲', photoIds: ['ph-1', 'ph-2'] }];
 
       const text = generateChecklistText({ photos, posts, photoMap, unassignedIds: [] });
       expect(text).toContain('# Instagram 貼文三部曲發布對照表');
@@ -47,9 +45,7 @@ describe('curatorZip utils', () => {
       });
 
       const dummyFile = new Blob(['hello'], { type: 'image/jpeg' });
-      const photoMap = new Map([
-        ['p1', { id: 'p1', name: 'test.jpg', file: dummyFile }],
-      ]);
+      const photoMap = new Map([['p1', { id: 'p1', name: 'test.jpg', file: dummyFile }]]);
       const posts = [{ id: 'post-1', title: 'My Post', photoIds: ['p1'] }];
 
       await exportCuratedZip({ posts, photoMap, checklistContent: 'test checklist' });

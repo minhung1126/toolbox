@@ -31,13 +31,25 @@ vi.mock('../services/api', () => ({
 }));
 
 const primarySlot = {
-  label: 'Primary', configured: true, enabled: true, authenticated: true, can_be_active: true,
-  user: { email: 'creator@example.com' }, channel_id: 'channel-1', channel_title: 'Creator Channel',
-  quota_limit: 10000, safety_buffer_units: 1000,
+  label: 'Primary',
+  configured: true,
+  enabled: true,
+  authenticated: true,
+  can_be_active: true,
+  user: { email: 'creator@example.com' },
+  channel_id: 'channel-1',
+  channel_title: 'Creator Channel',
+  quota_limit: 10000,
+  safety_buffer_units: 1000,
 };
 const secondarySlot = {
-  label: 'Secondary', configured: true, enabled: true, authenticated: false, can_be_active: false,
-  quota_limit: 9000, safety_buffer_units: 900,
+  label: 'Secondary',
+  configured: true,
+  enabled: true,
+  authenticated: false,
+  can_be_active: false,
+  quota_limit: 9000,
+  safety_buffer_units: 900,
 };
 
 function renderPage(overrides = {}) {
@@ -50,7 +62,16 @@ function renderPage(overrides = {}) {
     refreshAuthUser: vi.fn().mockResolvedValue({}),
     ...overrides,
   };
-  return render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }} initialEntries={['/youtube/settings/connections']}><ToastProvider><YouTubeSettingsPage {...props} /></ToastProvider></MemoryRouter>);
+  return render(
+    <MemoryRouter
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      initialEntries={['/youtube/settings/connections']}
+    >
+      <ToastProvider>
+        <YouTubeSettingsPage {...props} />
+      </ToastProvider>
+    </MemoryRouter>
+  );
 }
 
 describe('YouTubeSettingsPage', () => {
@@ -65,11 +86,13 @@ describe('YouTubeSettingsPage', () => {
   });
 
   it('preserves backend channel_mismatch and an explicit can_be_active false', () => {
-    expect(normalizeSlotRecord('secondary', {
-      authenticated: true,
-      can_be_active: false,
-      channel_mismatch: true,
-    })).toMatchObject({
+    expect(
+      normalizeSlotRecord('secondary', {
+        authenticated: true,
+        can_be_active: false,
+        channel_mismatch: true,
+      })
+    ).toMatchObject({
       authenticated: true,
       can_be_active: false,
       channel_mismatch: true,
@@ -85,18 +108,22 @@ describe('YouTubeSettingsPage', () => {
     fireEvent.change(document.getElementById('primary-quota-limit'), { target: { value: '8000' } });
     fireEvent.click(screen.getAllByRole('button', { name: '儲存 slot 設定' })[0]);
 
-    await waitFor(() => expect(api.updateYoutubeQuota).toHaveBeenCalledWith({
-      slot: 'primary',
-      quotaLimit: 8000,
-      safetyBufferUnits: 1000,
-    }));
+    await waitFor(() =>
+      expect(api.updateYoutubeQuota).toHaveBeenCalledWith({
+        slot: 'primary',
+        quotaLimit: 8000,
+        safetyBufferUnits: 1000,
+      })
+    );
     expect(api.updateYoutubePlaylist).not.toHaveBeenCalled();
 
     await waitFor(() => expect(screen.getByRole('button', { name: '儲存預設播放清單' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: '儲存預設播放清單' }));
-    await waitFor(() => expect(api.updateYoutubePlaylist).toHaveBeenCalledWith({
-      playlistId: 'PL_unsaved',
-    }));
+    await waitFor(() =>
+      expect(api.updateYoutubePlaylist).toHaveBeenCalledWith({
+        playlistId: 'PL_unsaved',
+      })
+    );
   });
 
   it('confirms every disconnect and explains the active-slot impact', async () => {
@@ -128,9 +155,11 @@ describe('YouTubeSettingsPage', () => {
 
   it('locks conflicting authorization controls while one OAuth operation is running', async () => {
     let rejectAuth;
-    api.getYoutubeAuthUrl.mockReturnValue(new Promise((resolve, reject) => {
-      rejectAuth = reject;
-    }));
+    api.getYoutubeAuthUrl.mockReturnValue(
+      new Promise((resolve, reject) => {
+        rejectAuth = reject;
+      })
+    );
     renderPage({
       authUser: {
         youtube: {
@@ -158,8 +187,10 @@ describe('YouTubeSettingsPage', () => {
 
     unmount();
 
-    await waitFor(() => expect(api.updateYoutubePlaylist).toHaveBeenCalledWith({
-      playlistId: 'PL_unmount_flush',
-    }));
+    await waitFor(() =>
+      expect(api.updateYoutubePlaylist).toHaveBeenCalledWith({
+        playlistId: 'PL_unmount_flush',
+      })
+    );
   });
 });

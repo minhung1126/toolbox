@@ -250,3 +250,8 @@ def shutdown_upload_executor() -> None:
         executor, _upload_executor = _upload_executor, None
         if executor is not None:
             executor.shutdown(wait=True, cancel_futures=False)
+
+
+def recover_interrupted_upload_tasks() -> int:
+    """Mark active persisted uploads interrupted so startup never blindly retries them."""
+    return weverse_upload_store.mark_active_tasks_interrupted()

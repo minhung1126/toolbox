@@ -19,10 +19,7 @@ function normalizeHttpUrl(value) {
 }
 
 function looksLikeUrl(value) {
-  return HTTP_PROTOCOL.test(value)
-    || OTHER_PROTOCOL.test(value)
-    || DOMAIN_NAME.test(value)
-    || value.includes('/');
+  return HTTP_PROTOCOL.test(value) || OTHER_PROTOCOL.test(value) || DOMAIN_NAME.test(value) || value.includes('/');
 }
 
 export function sourceUrlFromValue(value, sourceType = 'url') {
@@ -64,7 +61,9 @@ export function SourceLinkButton({ value, sourceType = 'url', label = '開啟資
       aria-disabled={disabled}
       title={disabled ? '請先輸入來源網址或 ID' : label}
       tabIndex={disabled ? -1 : 0}
-      onClick={(event) => { if (disabled) event.preventDefault(); }}
+      onClick={(event) => {
+        if (disabled) event.preventDefault();
+      }}
     >
       <ExternalLink size={17} aria-hidden="true" />
     </a>
@@ -81,12 +80,7 @@ export default function SourceLinkInput({
 }) {
   return (
     <div className="source-input-row">
-      <input
-        {...inputProps}
-        className={`form-input ${className}`.trim()}
-        value={value || ''}
-        onChange={onChange}
-      />
+      <input {...inputProps} className={`form-input ${className}`.trim()} value={value || ''} onChange={onChange} />
       <SourceLinkButton value={value} sourceType={sourceType} label={linkLabel} />
     </div>
   );

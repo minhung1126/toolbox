@@ -50,7 +50,13 @@ export const TOOL_MODULES = Object.freeze([
           { id: 'youtube_video_drafts', to: PATHS.youtubeVideoDrafts, label: 'Video 草稿', icon: Clapperboard },
           { id: 'youtube_shorts_drafts', to: PATHS.youtubeShortsDrafts, label: 'Shorts 草稿', icon: Smartphone },
           { id: 'publish_clean', to: PATHS.youtubePublishCleanup, label: '發布草稿', icon: Send },
-          { id: 'youtube_settings', to: PATHS.youtubeConnections, label: 'YouTube 設定', icon: Settings, activePrefix: PATHS.youtubeSettings },
+          {
+            id: 'youtube_settings',
+            to: PATHS.youtubeConnections,
+            label: 'YouTube 設定',
+            icon: Settings,
+            activePrefix: PATHS.youtubeSettings,
+          },
         ],
       },
     ],
@@ -101,7 +107,13 @@ export const TOOL_MODULES = Object.freeze([
         icon: Disc3,
         items: [
           { id: 'ytmusic_playlist_sort', to: PATHS.ytmusicPlaylistSort, label: '播放清單排序', icon: ArrowUpDown },
-          { id: 'ytmusic_settings', to: PATHS.ytmusicSettings, label: 'YouTube Music 設定', icon: Settings, activePrefix: PATHS.ytmusicSettings },
+          {
+            id: 'ytmusic_settings',
+            to: PATHS.ytmusicSettings,
+            label: 'YouTube Music 設定',
+            icon: Settings,
+            activePrefix: PATHS.ytmusicSettings,
+          },
         ],
       },
     ],
@@ -143,7 +155,13 @@ export const TOOL_MODULES = Object.freeze([
         icon: FileSpreadsheet,
         items: [
           { id: 'sheet_copy', to: PATHS.sheetCopy, label: '內容複製', icon: Copy },
-          { id: 'sheet_settings', to: PATHS.sheetSettings, label: 'Sheet 設定', icon: Settings, activePrefix: PATHS.sheetSettings },
+          {
+            id: 'sheet_settings',
+            to: PATHS.sheetSettings,
+            label: 'Sheet 設定',
+            icon: Settings,
+            activePrefix: PATHS.sheetSettings,
+          },
         ],
       },
     ],
@@ -183,9 +201,7 @@ export const TOOL_MODULES = Object.freeze([
         id: 'photo_curator_nav',
         label: 'Instagram 排版',
         icon: Instagram,
-        items: [
-          { id: 'photo_curator_workbench', to: PATHS.photoCurator, label: 'Instagram 排版', icon: Instagram },
-        ],
+        items: [{ id: 'photo_curator_workbench', to: PATHS.photoCurator, label: 'Instagram 排版', icon: Instagram }],
       },
     ],
     featureCards: [
@@ -215,9 +231,7 @@ export const TOOL_MODULES = Object.freeze([
         id: 'ffmpeg_nav',
         label: 'FFmpeg 工具',
         icon: Video,
-        items: [
-          { id: 'ffmpeg_generator_workbench', to: PATHS.ffmpegGenerator, label: 'FFmpeg 生成器', icon: Video },
-        ],
+        items: [{ id: 'ffmpeg_generator_workbench', to: PATHS.ffmpegGenerator, label: 'FFmpeg 生成器', icon: Video }],
       },
     ],
     featureCards: [
@@ -279,9 +293,7 @@ export const TOOL_MODULES = Object.freeze([
         id: 'notes',
         label: '便利貼',
         icon: StickyNote,
-        items: [
-          { id: 'sticky_notes_list', to: PATHS.notes, label: '便利貼備忘錄', icon: StickyNote },
-        ],
+        items: [{ id: 'sticky_notes_list', to: PATHS.notes, label: '便利貼備忘錄', icon: StickyNote }],
       },
     ],
     featureCards: [
@@ -297,7 +309,7 @@ export const TOOL_MODULES = Object.freeze([
     ],
   },
   {
-    id: 'integrations-quota',
+    id: 'youtube-integrations',
     name: 'Integrations & Quota',
     title: 'API 整合與配額控管',
     description: 'YouTube 雙槽位頻道連線、智慧容錯路由分流、即時 API Quota 監控與預設計帳清單。',
@@ -365,14 +377,26 @@ export const TOOL_MODULES = Object.freeze([
         label: '系統管理',
         icon: Shield,
         items: [
-          { id: 'system_settings', to: PATHS.systemSettings, label: '系統設定', icon: Shield, activePrefix: PATHS.systemSettings },
+          {
+            id: 'system_settings',
+            to: PATHS.systemSettings,
+            label: '系統設定',
+            icon: Shield,
+            activePrefix: PATHS.systemSettings,
+          },
           { id: 'system_info', to: PATHS.systemInfo, label: '系統／部署資訊', icon: Info },
           { id: 'api_health', to: PATHS.systemHealth, label: 'API 健康度', icon: Activity },
         ],
       },
     ],
     navItems: [
-      { id: 'system_settings', to: PATHS.systemSettings, label: '系統設定', icon: Shield, activePrefix: PATHS.systemSettings },
+      {
+        id: 'system_settings',
+        to: PATHS.systemSettings,
+        label: '系統設定',
+        icon: Shield,
+        activePrefix: PATHS.systemSettings,
+      },
       { id: 'system_info', to: PATHS.systemInfo, label: '系統／部署資訊', icon: Info },
       { id: 'api_health', to: PATHS.systemHealth, label: 'API 健康度', icon: Activity },
     ],

@@ -48,31 +48,35 @@ export default function ConfirmDialog({
       onBackdropClick={onCancel}
       busy={isBusy}
     >
-        <div className="confirm-header">
-          <AlertTriangle size={22} aria-hidden="true" />
-          <h3 id="confirm-dialog-title" className="confirm-title">{title || '確認操作'}</h3>
+      <div className="confirm-header">
+        <AlertTriangle size={22} aria-hidden="true" />
+        <h3 id="confirm-dialog-title" className="confirm-title">
+          {title || '確認操作'}
+        </h3>
+      </div>
+      {hasStructuredContent ? (
+        <div id="confirm-dialog-message" className="confirm-message confirm-message-structured">
+          {structuredContent}
         </div>
-        {hasStructuredContent ? (
-          <div id="confirm-dialog-message" className="confirm-message confirm-message-structured">
-            {structuredContent}
-          </div>
-        ) : (
-          <p id="confirm-dialog-message" className="confirm-message">{message}</p>
-        )}
-        <div className="confirm-actions">
-          <button ref={cancelRef} type="button" className="btn btn-secondary" onClick={onCancel} disabled={isBusy}>
-            {cancelText || '取消'}
-          </button>
-          <button
-            type="button"
-            className={`btn ${isDestructive ? 'btn-danger' : 'btn-primary'}`}
-            onClick={handleConfirm}
-            disabled={isBusy}
-          >
-            {isBusy && <RefreshCw size={15} className="spin" aria-hidden="true" />}
-            {isBusy ? '處理中…' : (confirmText || '確認')}
-          </button>
-        </div>
+      ) : (
+        <p id="confirm-dialog-message" className="confirm-message">
+          {message}
+        </p>
+      )}
+      <div className="confirm-actions">
+        <button ref={cancelRef} type="button" className="btn btn-secondary" onClick={onCancel} disabled={isBusy}>
+          {cancelText || '取消'}
+        </button>
+        <button
+          type="button"
+          className={`btn ${isDestructive ? 'btn-danger' : 'btn-primary'}`}
+          onClick={handleConfirm}
+          disabled={isBusy}
+        >
+          {isBusy && <RefreshCw size={15} className="spin" aria-hidden="true" />}
+          {isBusy ? '處理中…' : confirmText || '確認'}
+        </button>
+      </div>
     </Dialog>
   );
 }

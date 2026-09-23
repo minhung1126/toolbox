@@ -43,7 +43,8 @@ export default function VideoThumbnail({
     }
   };
 
-  const effectiveSrc = currentSrc || (videoId && fallbackStep.current === 0 ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
+  const effectiveSrc =
+    currentSrc || (videoId && fallbackStep.current === 0 ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
 
   if (failed || !effectiveSrc) {
     return (
@@ -71,12 +72,14 @@ export default function VideoThumbnail({
         type="button"
         className={buttonClassName}
         aria-label={ariaLabel || `放大檢視${alt || '影片'}縮圖`}
-        onClick={() => onPreview({
-          src: effectiveSrc,
-          fallbackSrc: videoId ? `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg` : undefined,
-          videoId,
-          alt: alt || '影片縮圖',
-        })}
+        onClick={() =>
+          onPreview({
+            src: effectiveSrc,
+            fallbackSrc: videoId ? `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg` : undefined,
+            videoId,
+            alt: alt || '影片縮圖',
+          })
+        }
       >
         {imgElement}
       </button>

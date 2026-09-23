@@ -45,9 +45,7 @@ export default function SortKeyRow({
       >
         <GripVertical size={16} />
       </div>
-      <span style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.4)', minWidth: 20 }}>
-        #{index + 1}
-      </span>
+      <span style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.4)', minWidth: 20 }}>#{index + 1}</span>
       <select
         className="form-select"
         value={sortKey.field}
@@ -55,7 +53,9 @@ export default function SortKeyRow({
         style={{ flex: 1, minWidth: 0 }}
       >
         {SORT_FIELDS.map((f) => (
-          <option key={f.value} value={f.value}>{f.label}</option>
+          <option key={f.value} value={f.value}>
+            {f.label}
+          </option>
         ))}
       </select>
       <button

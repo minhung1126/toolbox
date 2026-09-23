@@ -22,7 +22,10 @@ function ToastItem({ toast, onRemove }) {
   };
 
   return (
-    <div className={`toast-item toast-${toast.type} ${exiting ? 'toast-exit' : ''}`} role={toast.type === 'error' ? 'alert' : 'status'}>
+    <div
+      className={`toast-item toast-${toast.type} ${exiting ? 'toast-exit' : ''}`}
+      role={toast.type === 'error' ? 'alert' : 'status'}
+    >
       <Icon size={18} />
       <span className="toast-message">{toast.message}</span>
       <button type="button" className="toast-close" aria-label="關閉通知" onClick={close}>
@@ -51,18 +54,23 @@ export function ToastProvider({ children }) {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
-  const toast = useMemo(() => ({
-    success: (message, duration) => addToast(message, 'success', duration),
-    error: (message, duration) => addToast(message, 'error', duration || 6000),
-    warning: (message, duration) => addToast(message, 'warning', duration),
-    info: (message, duration) => addToast(message, 'info', duration),
-  }), [addToast]);
+  const toast = useMemo(
+    () => ({
+      success: (message, duration) => addToast(message, 'success', duration),
+      error: (message, duration) => addToast(message, 'error', duration || 6000),
+      warning: (message, duration) => addToast(message, 'warning', duration),
+      info: (message, duration) => addToast(message, 'info', duration),
+    }),
+    [addToast]
+  );
 
   return (
     <ToastContext.Provider value={toast}>
       {children}
       <div className="toast-container" aria-live="polite" aria-atomic="false">
-        {toasts.map((item) => <ToastItem key={item.id} toast={item} onRemove={removeToast} />)}
+        {toasts.map((item) => (
+          <ToastItem key={item.id} toast={item} onRemove={removeToast} />
+        ))}
       </div>
     </ToastContext.Provider>
   );

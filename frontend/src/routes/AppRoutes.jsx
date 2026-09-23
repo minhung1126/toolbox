@@ -19,6 +19,7 @@ import GoogleSheetSettingsPage from '../pages/GoogleSheetSettingsPage';
 import SystemSettingsPage from '../pages/SystemSettingsPage';
 import SetupWizardPage from '../pages/SetupWizardPage';
 import SystemInfoPage from '../pages/SystemInfoPage';
+import ComponentShowcasePage from '../pages/ComponentShowcasePage';
 import StickyNotesPage from '../pages/StickyNotesPage';
 import PhotoCuratorPage from '../pages/PhotoCuratorPage';
 import FfmpegGeneratorPage from '../pages/FfmpegGeneratorPage';
@@ -93,24 +94,68 @@ export default function AppRoutes({
       <RouteEffects />
       <OAuthReturnEffect returnPath={oauthReturnPath} clearReturnPath={clearOAuthReturnPath} />
       <Routes>
-        <Route path={PATHS.login} element={authUser ? <AuthenticatedLoginRedirect /> : <LoginRoute initialError={authError} />} />
+        <Route
+          path={PATHS.login}
+          element={authUser ? <AuthenticatedLoginRedirect /> : <LoginRoute initialError={authError} />}
+        />
         <Route path={PATHS.setup} element={<SetupWizardPage />} />
-        <Route element={<RequireAuth authStatus={authStatus} authUser={authUser}><AppShell {...appShellProps} /></RequireAuth>}>
+        <Route
+          element={
+            <RequireAuth authStatus={authStatus} authUser={authUser}>
+              <AppShell {...appShellProps} />
+            </RequireAuth>
+          }
+        >
           <Route index element={<Navigate replace to={PATHS.dashboard} />} />
           <Route path="dashboard" element={<DashboardPage authUser={authUser} sysSettings={sysSettings} />} />
           <Route path="notes" element={<StickyNotesPage {...pageProps} />} />
           <Route path="photo-curator" element={<PhotoCuratorPage {...pageProps} />} />
           <Route path="ffmpeg-generator" element={<FfmpegGeneratorPage {...pageProps} />} />
-          <Route path="weverse-uploader" element={<React.Suspense fallback={<div className="loading-center">載入中…</div>}><WeverseUploaderPage {...pageProps} /></React.Suspense>} />
+          <Route
+            path="weverse-uploader"
+            element={
+              <React.Suspense fallback={<div className="loading-center">載入中…</div>}>
+                <WeverseUploaderPage {...pageProps} />
+              </React.Suspense>
+            }
+          />
           <Route path="system/health" element={<ApiHealthPage authUser={authUser} />} />
           <Route path="system/info" element={<SystemInfoPage sysSettings={sysSettings} />} />
+          <Route path="system/design-system" element={<ComponentShowcasePage />} />
           <Route path="system/settings" element={<SystemSettingsPage {...pageProps} />} />
-          <Route path="youtube/drafts/videos" element={<BatchUpdatePage key="video-drafts" sysSettings={sysSettings} authUser={authUser} videoType="Video" />} />
-          <Route path="youtube/drafts/shorts" element={<BatchUpdatePage key="shorts-drafts" sysSettings={sysSettings} authUser={authUser} videoType="Shorts" />} />
-          <Route path="youtube/publish-cleanup" element={<PublishCleanerPage sysSettings={sysSettings} authUser={authUser} />} />
+          <Route
+            path="youtube/drafts/videos"
+            element={
+              <BatchUpdatePage key="video-drafts" sysSettings={sysSettings} authUser={authUser} videoType="Video" />
+            }
+          />
+          <Route
+            path="youtube/drafts/shorts"
+            element={
+              <BatchUpdatePage key="shorts-drafts" sysSettings={sysSettings} authUser={authUser} videoType="Shorts" />
+            }
+          />
+          <Route
+            path="youtube/publish-cleanup"
+            element={<PublishCleanerPage sysSettings={sysSettings} authUser={authUser} />}
+          />
           <Route path="youtube/playlist-sort" element={<Navigate replace to={PATHS.ytmusicPlaylistSort} />} />
-          <Route path="ytmusic/playlist-sort" element={<React.Suspense fallback={<div className="loading-center">載入中…</div>}><PlaylistSortPage {...pageProps} /></React.Suspense>} />
-          <Route path="ytmusic/settings" element={<React.Suspense fallback={<div className="loading-center">載入中…</div>}><YtmusicSettingsPage {...pageProps} /></React.Suspense>} />
+          <Route
+            path="ytmusic/playlist-sort"
+            element={
+              <React.Suspense fallback={<div className="loading-center">載入中…</div>}>
+                <PlaylistSortPage {...pageProps} />
+              </React.Suspense>
+            }
+          />
+          <Route
+            path="ytmusic/settings"
+            element={
+              <React.Suspense fallback={<div className="loading-center">載入中…</div>}>
+                <YtmusicSettingsPage {...pageProps} />
+              </React.Suspense>
+            }
+          />
           <Route path="sheets/copy" element={<SheetCopyPage sysSettings={sysSettings} />} />
           <Route path="sheets/settings" element={<GoogleSheetSettingsPage {...pageProps} />} />
 

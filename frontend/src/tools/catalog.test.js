@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  getAllTools,
-  getDashboardFeatureCards,
-  getSystemNavItems,
-  getToolById,
-  getToolNavGroups,
-} from './catalog';
+import { getAllTools, getDashboardFeatureCards, getSystemNavItems, getToolById, getToolNavGroups } from './catalog';
 import { PATHS } from '../routes/paths';
 
 function expectUniqueIds(items) {
@@ -24,7 +18,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(ids).toContain('photo-curator');
     expect(ids).toContain('ffmpeg-generator');
     expect(ids).toContain('weverse-uploader');
-    expect(ids).toContain('integrations-quota');
+    expect(ids).toContain('youtube-integrations');
     expect(ids).toContain('system-utility');
   });
 
@@ -67,7 +61,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(sheetsTool).not.toBeNull();
     expect(sheetsTool.name).toBe('Sheets & Data');
 
-    const integrationsTool = getToolById('integrations-quota');
+    const integrationsTool = getToolById('youtube-integrations');
     expect(integrationsTool).not.toBeNull();
     expect(integrationsTool.name).toBe('Integrations & Quota');
 
@@ -126,4 +120,3 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(cardIds).toContain('weverse_uploader_card');
   });
 });
-

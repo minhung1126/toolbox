@@ -24,10 +24,13 @@ describe('useTeamPersonFilter', () => {
     let resolveNew;
     const apiClient = {
       parseSheetOptions: vi.fn().mockResolvedValue({ teams: ['舊團體', '新團體'] }),
-      getTeamPeople: vi.fn((_, __, team) => new Promise((resolve) => {
-        if (team === '舊團體') resolveOld = resolve;
-        else resolveNew = resolve;
-      })),
+      getTeamPeople: vi.fn(
+        (_, __, team) =>
+          new Promise((resolve) => {
+            if (team === '舊團體') resolveOld = resolve;
+            else resolveNew = resolve;
+          })
+      ),
     };
     const { result } = renderHook(() => useTeamPersonFilter({ source: 'sheet', worksheetName: '工作表', apiClient }));
     await waitFor(() => expect(result.current.teams).toHaveLength(2));
@@ -50,10 +53,9 @@ describe('useTeamPersonFilter', () => {
       parseSheetOptions: vi.fn().mockResolvedValue({ teams: ['團體'] }),
       getTeamPeople: vi.fn().mockResolvedValue({ people: ['人物'] }),
     };
-    const { result, rerender } = renderHook(
-      (props) => useTeamPersonFilter({ ...props, apiClient }),
-      { initialProps: { source: 'sheet', worksheetName: '工作表', enabled: true } },
-    );
+    const { result, rerender } = renderHook((props) => useTeamPersonFilter({ ...props, apiClient }), {
+      initialProps: { source: 'sheet', worksheetName: '工作表', enabled: true },
+    });
     await waitFor(() => expect(result.current.teams).toEqual(['團體']));
     act(() => result.current.setSelectedTeam('團體'));
     await waitFor(() => expect(result.current.people).toEqual(['人物']));

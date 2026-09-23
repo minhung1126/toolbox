@@ -1,18 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  AlertCircle,
-  Check,
-  CheckCircle2,
-  Copy,
-  Eye,
-  EyeOff,
-  Key,
-  Lock,
-  RefreshCw,
-  Shield,
-  Video,
-} from 'lucide-react';
+import { AlertCircle, Check, CheckCircle2, Copy, Eye, EyeOff, Key, Lock, RefreshCw, Shield, Video } from 'lucide-react';
 import { api } from '../services/api';
 import { useToast } from '../components/Toast';
 import { PATHS } from '../routes/paths';
@@ -153,18 +141,23 @@ export default function SetupWizardPage() {
         </div>
 
         <p className="login-description" style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>
-          Toolbox 已將所有設定全面轉移至網頁控制台，您無須在伺服器編輯複雜的 <code>.env</code> 檔案。請依下列步驟填入 Google Cloud OAuth 憑證以啟用登入與自動化功能。
+          Toolbox 已將所有設定全面轉移至網頁控制台，您無須在伺服器編輯複雜的 <code>.env</code> 檔案。請依下列步驟填入
+          Google Cloud OAuth 憑證以啟用登入與自動化功能。
         </p>
 
         {/* Step 1: Authorized Redirect URI */}
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.04)',
-          borderRadius: '8px',
-          padding: '1rem',
-          marginBottom: '1.5rem',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+        <div
+          style={{
+            background: 'rgba(255, 255, 255, 0.04)',
+            borderRadius: '8px',
+            padding: '1rem',
+            marginBottom: '1.5rem',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          <div
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}
+          >
             <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>
               步驟 1：Google Cloud 授權的重新導向 URI (Authorized Redirect URI)
             </span>
@@ -178,15 +171,17 @@ export default function SetupWizardPage() {
               {copied ? '已複製' : '複製網址'}
             </button>
           </div>
-          <code style={{
-            display: 'block',
-            background: 'rgba(0, 0, 0, 0.3)',
-            padding: '0.5rem 0.75rem',
-            borderRadius: '6px',
-            fontSize: '0.85rem',
-            wordBreak: 'break-all',
-            color: '#93c5fd',
-          }}>
+          <code
+            style={{
+              display: 'block',
+              background: 'rgba(0, 0, 0, 0.3)',
+              padding: '0.5rem 0.75rem',
+              borderRadius: '6px',
+              fontSize: '0.85rem',
+              wordBreak: 'break-all',
+              color: '#93c5fd',
+            }}
+          >
             {redirectUri}
           </code>
           <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.5rem', margin: '0.5rem 0 0' }}>
@@ -277,13 +272,25 @@ export default function SetupWizardPage() {
           </div>
 
           {setupStatus?.needs_pin && (
-            <div style={{
-              background: 'rgba(239, 68, 68, 0.08)',
-              border: '1px solid rgba(239, 68, 68, 0.2)',
-              borderRadius: '8px',
-              padding: '0.85rem',
-            }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: '#f87171', marginBottom: '0.35rem' }}>
+            <div
+              style={{
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: '8px',
+                padding: '0.85rem',
+              }}
+            >
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  color: '#f87171',
+                  marginBottom: '0.35rem',
+                }}
+              >
                 <Key size={15} /> 伺服器初次安裝安全碼 (PIN) <span style={{ color: '#ef4444' }}>*</span>
               </label>
               <input

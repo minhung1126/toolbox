@@ -1,5 +1,6 @@
 """Unit tests for Weverse Video Uploader plugin, scanner, store, and APIs."""
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ from backend.app.services.weverse_scanner import (
     parse_subtitle_info,
     scan_local_path,
 )
+from backend.app.tools.builtin import weverse_uploader as weverse_plugin_module
 from backend.app.tools.builtin.weverse_uploader import WeverseUploaderPlugin
 from backend.app.tools.registry import tool_registry
 
@@ -162,6 +164,39 @@ def test_weverse_upload_store(tmp_path: Path):
     store.record_recent_path(user_sub, "C:\\downloads\\weverse")
     paths = store.get_recent_paths(user_sub)
     assert "C:\\downloads\\weverse" in paths
+
+
+def test_weverse_upload_store_marks_active_work_interrupted_without_retry(tmp_path: Path):
+    store = WeverseUploadStore(tmp_path / "interrupted_uploads.json")
+    active_statuses = ("pending", "uploading_video", "uploading_captions")
+    for index, status in enumerate(active_statuses):
+        store.create_task("user-one", {"task_id": f"active-{index}", "status": status})
+    store.create_task("user-one", {"task_id": "completed", "status": "completed"})
+    store.create_task("user-two", {"task_id": "failed", "status": "failed"})
+
+    assert store.mark_active_tasks_interrupted() == 3
+
+    for index in range(len(active_statuses)):
+        task = store.get_task("user-one", f"active-{index}")
+        assert task["status"] == "interrupted"
+        assert "檢查 YouTube Studio" in task["current_step"]
+        assert task["error_message"] == task["current_step"]
+    assert store.get_task("user-one", "completed")["status"] == "completed"
+    assert store.get_task("user-two", "failed")["status"] == "failed"
+    assert store.mark_active_tasks_interrupted() == 0
+
+
+def test_weverse_plugin_startup_runs_interrupted_task_reconciliation(monkeypatch):
+    recovered = []
+    monkeypatch.setattr(
+        weverse_plugin_module,
+        "recover_interrupted_upload_tasks",
+        lambda: recovered.append(True) or 2,
+    )
+
+    asyncio.run(WeverseUploaderPlugin().on_startup(None))
+
+    assert recovered == [True]
 
 
 def test_weverse_upload_store_preserves_corrupted_data_and_fails_closed(tmp_path: Path):

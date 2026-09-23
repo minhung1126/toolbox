@@ -50,7 +50,16 @@ export default function InteractivePreviewTable({
 
   return (
     <div style={{ flex: 1, minWidth: 320 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 8,
+          flexWrap: 'wrap',
+          gap: 6,
+        }}
+      >
         <h4 style={{ margin: 0, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
           {Icon && <Icon size={14} />}
           {title}
@@ -67,9 +76,7 @@ export default function InteractivePreviewTable({
               <RotateCcw size={12} /> 重設為規則排序
             </button>
           )}
-          <span style={{ fontSize: 11, color: 'var(--primary)' }}>
-            可手動拖曳歌曲
-          </span>
+          <span style={{ fontSize: 11, color: 'var(--primary)' }}>可手動拖曳歌曲</span>
         </div>
       </div>
       <div

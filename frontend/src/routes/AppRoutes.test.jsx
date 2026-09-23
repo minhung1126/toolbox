@@ -20,6 +20,7 @@ vi.mock('../layouts/AccountSettingsLayout', async () => {
 vi.mock('../pages/DashboardPage', () => ({ default: () => <div>dashboard route</div> }));
 vi.mock('../pages/ApiHealthPage', () => ({ default: () => <div>health route</div> }));
 vi.mock('../pages/SystemInfoPage', () => ({ default: () => <div>info route</div> }));
+vi.mock('../pages/ComponentShowcasePage', () => ({ default: () => <div>component showcase route</div> }));
 vi.mock('../pages/PublishCleanerPage', () => ({ default: () => <div>publish route</div> }));
 vi.mock('../pages/SheetCopyPage', () => ({ default: () => <div>sheet route</div> }));
 vi.mock('../pages/BatchUpdatePage', () => ({ default: ({ videoType }) => <div>{videoType} batch route</div> }));
@@ -38,32 +39,39 @@ vi.mock('../pages/LoginPage', () => ({ default: ({ returnTo }) => <div>login rou
 
 function LocationProbe() {
   const location = useLocation();
-  return <output data-testid="location">{location.pathname}{location.search}</output>;
+  return (
+    <output data-testid="location">
+      {location.pathname}
+      {location.search}
+    </output>
+  );
 }
 
 function renderRoutes(initialEntry, overrides = {}) {
-  return render(<MemoryRouter initialEntries={[initialEntry]}>
-    <AppRoutes
-      authStatus="authenticated"
-      authUser={{ sub: 'user-1', email: 'creator@example.com' }}
-      authError={null}
-      workState={{}}
-      updateAvailable={false}
-      settingsStatus={null}
-      settingsRefreshing={false}
-      fetchSettings={vi.fn()}
-      fetchUser={vi.fn()}
-      pageResume={{ retryNow: vi.fn(), isResuming: false }}
-      onLogout={vi.fn()}
-      sidebarCollapsed={false}
-      setSidebarCollapsed={vi.fn()}
-      oauthReturnPath={null}
-      clearOAuthReturnPath={vi.fn()}
-      sysSettings={{}}
-      {...overrides}
-    />
-    <LocationProbe />
-  </MemoryRouter>);
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <AppRoutes
+        authStatus="authenticated"
+        authUser={{ sub: 'user-1', email: 'creator@example.com' }}
+        authError={null}
+        workState={{}}
+        updateAvailable={false}
+        settingsStatus={null}
+        settingsRefreshing={false}
+        fetchSettings={vi.fn()}
+        fetchUser={vi.fn()}
+        pageResume={{ retryNow: vi.fn(), isResuming: false }}
+        onLogout={vi.fn()}
+        sidebarCollapsed={false}
+        setSidebarCollapsed={vi.fn()}
+        oauthReturnPath={null}
+        clearOAuthReturnPath={vi.fn()}
+        sysSettings={{}}
+        {...overrides}
+      />
+      <LocationProbe />
+    </MemoryRouter>
+  );
 }
 
 describe('AppRoutes', () => {
@@ -71,6 +79,7 @@ describe('AppRoutes', () => {
     [PATHS.dashboard, 'dashboard route'],
     [PATHS.systemHealth, 'health route'],
     [PATHS.systemInfo, 'info route'],
+    [PATHS.componentShowcase, 'component showcase route'],
     [PATHS.youtubeVideoDrafts, 'Video batch route'],
     [PATHS.youtubeShortsDrafts, 'Shorts batch route'],
     [PATHS.youtubePublishCleanup, 'publish route'],
@@ -114,10 +123,13 @@ describe('AppRoutes', () => {
     expect(screen.getByTestId('location')).toHaveTextContent(`/login?returnTo=${encodeURIComponent(canonicalPath)}`);
   });
 
-  it.each(['/youtube/settings/missing', '/settings/missing'])('renders 404 for unknown settings child path %s', (path) => {
-    renderRoutes(path);
-    expect(screen.getByText('找不到頁面')).toBeInTheDocument();
-  });
+  it.each(['/youtube/settings/missing', '/settings/missing'])(
+    'renders 404 for unknown settings child path %s',
+    (path) => {
+      renderRoutes(path);
+      expect(screen.getByText('找不到頁面')).toBeInTheDocument();
+    }
+  );
 
   it('renders a safe 404 for an unknown protected URL', () => {
     renderRoutes('/not-a-real-page');

@@ -21,10 +21,7 @@ const RESUME_RETRY_DELAYS_MS = [0, 1000, 3000];
 const FRONTEND_COMMIT_SHA = import.meta.env.VITE_APP_COMMIT_SHA || 'development';
 
 export function isConnectionFailure(error) {
-  return error?.code === 'network_error'
-    || error?.code === 'timeout'
-    || !error?.status
-    || error?.status >= 500;
+  return error?.code === 'network_error' || error?.code === 'timeout' || !error?.status || error?.status >= 500;
 }
 
 export function hasVersionMismatch(frontendSha, backendSha) {
@@ -105,59 +102,65 @@ export function AppContent() {
     setAuthUser(nextUser);
   }, []);
 
-  const checkAuth = useCallback(async ({ source = 'manual' } = {}) => {
-    if (authRequestRef.current) return authRequestRef.current;
+  const checkAuth = useCallback(
+    async ({ source = 'manual' } = {}) => {
+      if (authRequestRef.current) return authRequestRef.current;
 
-    const request = (async () => {
-      try {
-        const response = await api.getUserStatus();
-        if (response?.authenticated === true) {
-          const user = authUserFromResponse(response);
-          setAuthError(null);
-          updateAuthUser(user);
-          setAuthStatus(AUTH_STATUS.AUTHENTICATED);
-          return { status: AUTH_STATUS.AUTHENTICATED, user, source };
-        }
+      const request = (async () => {
+        try {
+          const response = await api.getUserStatus();
+          if (response?.authenticated === true) {
+            const user = authUserFromResponse(response);
+            setAuthError(null);
+            updateAuthUser(user);
+            setAuthStatus(AUTH_STATUS.AUTHENTICATED);
+            return { status: AUTH_STATUS.AUTHENTICATED, user, source };
+          }
 
-        if (response?.authenticated === false) {
-          setAuthError(null);
-          updateAuthUser(null);
-          setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
-          return { status: AUTH_STATUS.UNAUTHENTICATED, user: null, source };
-        }
+          if (response?.authenticated === false) {
+            setAuthError(null);
+            updateAuthUser(null);
+            setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
+            return { status: AUTH_STATUS.UNAUTHENTICATED, user: null, source };
+          }
 
-        throw new Error('登入狀態回應格式不正確。');
-      } catch (error) {
-        console.error('Failed to fetch user status:', error);
-        const message = publicRequestError(error, '無法確認登入狀態。');
-        if (error?.status === 401 || error?.code === 'session_expired') {
-          updateAuthUser(null);
+          throw new Error('登入狀態回應格式不正確。');
+        } catch (error) {
+          console.error('Failed to fetch user status:', error);
+          const message = publicRequestError(error, '無法確認登入狀態。');
+          if (error?.status === 401 || error?.code === 'session_expired') {
+            updateAuthUser(null);
+            setAuthError(message);
+            setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
+            return { status: AUTH_STATUS.UNAUTHENTICATED, user: null, error, source };
+          }
+
+          // A network/timeout/5xx response must not turn a valid existing
+          // session into a login screen. Preserve the current user and let the
+          // resume flow retry a bounded number of times.
           setAuthError(message);
-          setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
-          return { status: AUTH_STATUS.UNAUTHENTICATED, user: null, error, source };
+          setAuthStatus(AUTH_STATUS.RECONNECTING);
+          return { status: AUTH_STATUS.RECONNECTING, user: authUserRef.current, error, source };
         }
+      })();
 
-        // A network/timeout/5xx response must not turn a valid existing
-        // session into a login screen. Preserve the current user and let the
-        // resume flow retry a bounded number of times.
-        setAuthError(message);
-        setAuthStatus(AUTH_STATUS.RECONNECTING);
-        return { status: AUTH_STATUS.RECONNECTING, user: authUserRef.current, error, source };
+      authRequestRef.current = request;
+      try {
+        return await request;
+      } finally {
+        if (authRequestRef.current === request) authRequestRef.current = null;
       }
-    })();
+    },
+    [setAuthStatus, updateAuthUser]
+  );
 
-    authRequestRef.current = request;
-    try {
-      return await request;
-    } finally {
-      if (authRequestRef.current === request) authRequestRef.current = null;
-    }
-  }, [setAuthStatus, updateAuthUser]);
-
-  const fetchUser = useCallback(async (options = {}) => {
-    const result = await checkAuth(options);
-    return result.user;
-  }, [checkAuth]);
+  const fetchUser = useCallback(
+    async (options = {}) => {
+      const result = await checkAuth(options);
+      return result.user;
+    },
+    [checkAuth]
+  );
 
   const fetchSettings = useCallback(async () => {
     setSettingsRefreshing(true);
@@ -171,7 +174,9 @@ export function AppContent() {
       ];
       const results = await Promise.allSettled(requests);
       const failures = results
-        .map((result, index) => (result.status === 'rejected' ? { label: SETTING_LABELS[index], error: result.reason } : null))
+        .map((result, index) =>
+          result.status === 'rejected' ? { label: SETTING_LABELS[index], error: result.reason } : null
+        )
         .filter(Boolean);
       const value = (result) => (result.status === 'fulfilled' ? result.value : null);
       const system = value(results[0]);
@@ -210,7 +215,11 @@ export function AppContent() {
       return { failures };
     } catch (error) {
       console.error('Failed to fetch system settings:', error);
-      setSettingsStatus({ tone: 'error', message: publicRequestError(error, '目前無法載入設定，請重試。'), details: [] });
+      setSettingsStatus({
+        tone: 'error',
+        message: publicRequestError(error, '目前無法載入設定，請重試。'),
+        details: [],
+      });
       return { failures: [{ label: '設定服務', error }] };
     } finally {
       setSettingsRefreshing(false);
@@ -366,24 +375,26 @@ export function AppContent() {
     return <ReconnectingScreen error={authError} onRetry={pageResume.retryNow} isResuming={pageResume.isResuming} />;
   }
   if (initializing || authStatus === AUTH_STATUS.LOADING) return <div className="loading-center">系統初始化中…</div>;
-  return <AppRoutes
-    authStatus={authStatus}
-    authUser={authUser}
-    authError={authError}
-    workState={workState}
-    updateAvailable={updateAvailable}
-    settingsStatus={settingsStatus}
-    settingsRefreshing={settingsRefreshing}
-    fetchSettings={fetchSettings}
-    fetchUser={fetchUser}
-    pageResume={pageResume}
-    onLogout={handleLogout}
-    sidebarCollapsed={sidebarCollapsed}
-    setSidebarCollapsed={setSidebarCollapsed}
-    oauthReturnPath={oauthReturnPath}
-    clearOAuthReturnPath={() => setOauthReturnPath(null)}
-    sysSettings={sysSettings}
-  />;
+  return (
+    <AppRoutes
+      authStatus={authStatus}
+      authUser={authUser}
+      authError={authError}
+      workState={workState}
+      updateAvailable={updateAvailable}
+      settingsStatus={settingsStatus}
+      settingsRefreshing={settingsRefreshing}
+      fetchSettings={fetchSettings}
+      fetchUser={fetchUser}
+      pageResume={pageResume}
+      onLogout={handleLogout}
+      sidebarCollapsed={sidebarCollapsed}
+      setSidebarCollapsed={setSidebarCollapsed}
+      oauthReturnPath={oauthReturnPath}
+      clearOAuthReturnPath={() => setOauthReturnPath(null)}
+      sysSettings={sysSettings}
+    />
+  );
 }
 
 export class ErrorBoundary extends React.Component {
@@ -404,8 +415,12 @@ export class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       return (
         <div className="loading-center error-state">
-          <StatusMessage tone="error" title="應用程式暫時無法顯示">為保護錯誤內容，詳細資訊不會顯示。請重新開啟本頁。</StatusMessage>
-          <button className="btn btn-primary" type="button" onClick={() => recoverPage()}>重新開啟本頁</button>
+          <StatusMessage tone="error" title="應用程式暫時無法顯示">
+            為保護錯誤內容，詳細資訊不會顯示。請重新開啟本頁。
+          </StatusMessage>
+          <button className="btn btn-primary" type="button" onClick={() => recoverPage()}>
+            重新開啟本頁
+          </button>
         </div>
       );
     }
@@ -414,8 +429,18 @@ export class ErrorBoundary extends React.Component {
 }
 
 export default function App() {
-  const content = <ErrorBoundary><ToastProvider><AppContent /></ToastProvider></ErrorBoundary>;
+  const content = (
+    <ErrorBoundary>
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
+    </ErrorBoundary>
+  );
   // main.jsx owns the production BrowserRouter. Keeping this fallback makes
   // direct App renders in unit tests safe without creating nested routers.
-  return useInRouterContext() ? content : <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>{content}</BrowserRouter>;
+  return useInRouterContext() ? (
+    content
+  ) : (
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>{content}</BrowserRouter>
+  );
 }

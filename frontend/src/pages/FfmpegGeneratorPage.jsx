@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React from 'react';
 import {
   AlertCircle,
   Check,
@@ -21,71 +21,58 @@ import {
   Zap,
 } from 'lucide-react';
 import { useToast } from '../components/Toast';
-import { copyToClipboard } from '../utils/clipboard';
-import { useFfmpegVideo } from '../hooks/useFfmpegVideo';
+import { useFfmpegGeneratorWorkflow } from '../features/ffmpeg/hooks/useFfmpegGeneratorWorkflow';
 
-import {
-  PRESET_LIST,
-  buildFfmpegCommand,
-  buildTrimSummary,
-  formatFileSize,
-  parseHmsToSeconds,
-  secondsToHms,
-} from '../utils/ffmpegCommand';
+import { PRESET_LIST, formatFileSize, parseHmsToSeconds, secondsToHms } from '../utils/ffmpegCommand';
 
 export { isVideoFile } from '../hooks/useFfmpegVideo';
 
 export default function FfmpegGeneratorPage() {
   const toast = useToast();
 
-  // Cut Options
-  const [enableStartCut, setEnableStartCut] = useState(true);
-  const [startTime, setStartTime] = useState('00:00:00.000');
-  const [enableEndCut, setEnableEndCut] = useState(true);
-  const [cutMode, setCutMode] = useState('to'); // 'to' | 'duration'
-  const [endTime, setEndTime] = useState('00:00:10.000');
-  const [durationCut, setDurationCut] = useState('00:00:10.000');
-  const [seekMode, setSeekMode] = useState('fast'); // 'fast' | 'accurate'
-
-  // Encoding & Presets
-  const [activePreset, setActivePreset] = useState('lossless-trim');
-  const [transcodeMode, setTranscodeMode] = useState('copy'); // 'copy' | 'reencode' | 'audio' | 'gif'
-  const [videoCodec, setVideoCodec] = useState('copy');
-  const [audioCodec, setAudioCodec] = useState('copy');
-  const [crf, setCrf] = useState(23);
-  const [encoderPreset, setEncoderPreset] = useState('medium');
-  const [resolution, setResolution] = useState('original');
-  const [fps, setFps] = useState('original');
-  const [audioBitrate, setAudioBitrate] = useState('192k');
-  const audioVolume = '100%';
-  const customFilters = '';
-
-  // Filenames & Shell format
-  const [inputName, setInputName] = useState('input.mp4');
-  const [outputName, setOutputName] = useState('output_cut.mp4');
-  const [shellFormat, setShellFormat] = useState('single'); // 'single' | 'bash' | 'powershell' | 'cmd'
-  const [copied, setCopied] = useState(false);
-
-  // UI helpers
-  const [showHelp, setShowHelp] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const handleFileSelected = useCallback((file) => {
-    setInputName(file.name);
-    const dotIndex = file.name.lastIndexOf('.');
-    const base = dotIndex > 0 ? file.name.substring(0, dotIndex) : file.name;
-    const extension = dotIndex > 0 ? file.name.substring(dotIndex) : '.mp4';
-    setOutputName(`${base}_cut${extension}`);
-  }, []);
-
-  const handleVideoMetadataLoaded = useCallback((nextDuration) => {
-    setStartTime('00:00:00.000');
-    const endSeconds = nextDuration > 0 ? nextDuration : 10;
-    setEndTime(secondsToHms(endSeconds));
-    setDurationCut(secondsToHms(endSeconds));
-  }, []);
-
   const {
+    enableStartCut,
+    setEnableStartCut,
+    startTime,
+    setStartTime,
+    enableEndCut,
+    setEnableEndCut,
+    cutMode,
+    setCutMode,
+    endTime,
+    setEndTime,
+    durationCut,
+    setDurationCut,
+    seekMode,
+    setSeekMode,
+    activePreset,
+    transcodeMode,
+    setTranscodeMode,
+    videoCodec,
+    setVideoCodec,
+    audioCodec,
+    setAudioCodec,
+    crf,
+    setCrf,
+    resolution,
+    setResolution,
+    fps,
+    setFps,
+    audioBitrate,
+    setAudioBitrate,
+    inputName,
+    setInputName,
+    outputName,
+    setOutputName,
+    shellFormat,
+    setShellFormat,
+    copied,
+    showHelp,
+    setShowHelp,
+    showAdvanced,
+    setShowAdvanced,
+    isDragging,
+    setIsDragging,
     videoRef,
     fileInputRef,
     videoFile,
@@ -111,152 +98,17 @@ export default function FfmpegGeneratorPage() {
     seekRelative,
     setPlaybackSpeed,
     playTrimmedSegment,
-  } = useFfmpegVideo({
-    toast,
-    onFileSelected: handleFileSelected,
-    onMetadataLoaded: handleVideoMetadataLoaded,
-    setIsDragging,
-    enableStartCut,
-    enableEndCut,
-    cutMode,
-    startTime,
-    endTime,
-    durationCut,
-  });
-
-  // Trimming Helpers
-  const handleSetStartTimeToCurrent = () => {
-    const formatted = secondsToHms(currentTime);
-    setStartTime(formatted);
-    toast.success(`已將 Cut 前起點設為 ${formatted}`);
-  };
-
-  const handleSetEndTimeToCurrent = () => {
-    const formatted = secondsToHms(currentTime);
-    if (cutMode === 'to') {
-      setEndTime(formatted);
-      toast.success(`已將 Cut 後終點設為 ${formatted}`);
-    } else {
-      const startSec = enableStartCut ? parseHmsToSeconds(startTime) : 0;
-      const durSec = Math.max(0, currentTime - startSec);
-      const durFmt = secondsToHms(durSec);
-      setDurationCut(durFmt);
-      toast.success(`已將剪輯長度設為 ${durFmt}`);
-    }
-  };
-
-  // Preset Selection
-  const applyPreset = (preset) => {
-    setActivePreset(preset.id);
-    setTranscodeMode(preset.mode);
-    if (preset.videoCodec) setVideoCodec(preset.videoCodec);
-    if (preset.audioCodec) setAudioCodec(preset.audioCodec);
-    if (preset.crf !== undefined) setCrf(preset.crf);
-    if (preset.preset) setEncoderPreset(preset.preset);
-    if (preset.resolution) setResolution(preset.resolution);
-    if (preset.audioBitrate) setAudioBitrate(preset.audioBitrate);
-
-    // Adjust output extension if needed
-    if (preset.outputExt) {
-      const dotIdx = outputName.lastIndexOf('.');
-      const base = dotIdx > 0 ? outputName.substring(0, dotIdx) : outputName;
-      setOutputName(`${base}.${preset.outputExt}`);
-    }
-    toast.success(`已套用預設範本：${preset.name}`);
-  };
-
-  // Cut summary
-  const trimSummary = useMemo(() => {
-    return buildTrimSummary({
-      enableStartCut,
-      startTime,
-      enableEndCut,
-      cutMode,
-      endTime,
-      durationCut,
-      duration,
-    });
-  }, [enableStartCut, startTime, enableEndCut, cutMode, endTime, durationCut, duration]);
-
-  const cutStartSec = useMemo(() => {
-    return enableStartCut ? Math.min(duration || 3600, parseHmsToSeconds(startTime)) : 0;
-  }, [enableStartCut, startTime, duration]);
-
-  const cutEndSec = useMemo(() => {
-    if (!enableEndCut) return duration || 0;
-    if (cutMode === 'to') {
-      return Math.min(duration || 3600, parseHmsToSeconds(endTime));
-    }
-    return Math.min(duration || 3600, cutStartSec + parseHmsToSeconds(durationCut));
-  }, [enableEndCut, cutMode, endTime, durationCut, cutStartSec, duration]);
-
-  const startPercent = useMemo(() => {
-    if (!duration || duration <= 0) return 0;
-    return Math.min(100, Math.max(0, (cutStartSec / duration) * 100));
-  }, [cutStartSec, duration]);
-
-  const endPercent = useMemo(() => {
-    if (!duration || duration <= 0) return 100;
-    return Math.min(100, Math.max(0, (cutEndSec / duration) * 100));
-  }, [cutEndSec, duration]);
-
-  // Command Generation
-  const generatedCommand = useMemo(() => {
-    return buildFfmpegCommand({
-      inputName,
-      outputName,
-      enableStartCut,
-      startTime,
-      seekMode,
-      enableEndCut,
-      cutMode,
-      endTime,
-      durationCut,
-      transcodeMode,
-      videoCodec,
-      audioCodec,
-      crf,
-      encoderPreset,
-      resolution,
-      fps,
-      customFilters,
-      audioBitrate,
-      audioVolume,
-      shellFormat,
-    });
-  }, [
-    inputName,
-    outputName,
-    enableStartCut,
-    startTime,
-    seekMode,
-    enableEndCut,
-    cutMode,
-    endTime,
-    durationCut,
-    transcodeMode,
-    videoCodec,
-    crf,
-    encoderPreset,
-    resolution,
-    fps,
-    customFilters,
-    audioCodec,
-    audioBitrate,
-    audioVolume,
-    shellFormat,
-  ]);
-
-  const handleCopyCommand = async () => {
-    try {
-      await copyToClipboard(generatedCommand.activeCommand);
-      setCopied(true);
-      toast.success('FFmpeg 命令行已複製到剪貼簿！');
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      toast.error(`複製失敗：${err.message || '請手動複製'}`);
-    }
-  };
+    handleSetStartTimeToCurrent,
+    handleSetEndTimeToCurrent,
+    applyPreset,
+    trimSummary,
+    cutStartSec,
+    cutEndSec,
+    startPercent,
+    endPercent,
+    generatedCommand,
+    handleCopyCommand,
+  } = useFfmpegGeneratorWorkflow({ toast });
 
   return (
     <div className="section-gap ffmpeg-generator-page">
@@ -269,7 +121,8 @@ export default function FfmpegGeneratorPage() {
           <div>
             <h1>FFmpeg 命令行生成器</h1>
             <p className="section-desc">
-              本地即時影片預覽，視覺化定位 Cut 起訖點與微調影格，提供極速無損複製（<code>-c copy</code>）與進階編碼選項，一鍵複製跨平台 FFmpeg 指令。
+              本地即時影片預覽，視覺化定位 Cut 起訖點與微調影格，提供極速無損複製（<code>-c copy</code>
+              ）與進階編碼選項，一鍵複製跨平台 FFmpeg 指令。
             </p>
           </div>
           <button
@@ -293,16 +146,21 @@ export default function FfmpegGeneratorPage() {
             </div>
             <ul className="ffmpeg-help-list">
               <li>
-                <strong>無損流複製 (-c copy)</strong>：剪輯時最推薦的模式！不經過重編碼，以硬碟讀寫極速瞬間產生影片，保留 100% 原始解析度與音質。
+                <strong>無損流複製 (-c copy)</strong>
+                ：剪輯時最推薦的模式！不經過重編碼，以硬碟讀寫極速瞬間產生影片，保留 100% 原始解析度與音質。
               </li>
               <li>
-                <strong>Cut 前快速 vs 精確</strong>：置於 <code>-i</code> 前利用關鍵影格（Keyframe）快速尋找，剪輯大檔秒級跳轉；置於 <code>-i</code> 後逐幀解碼，定位最精確。
+                <strong>Cut 前快速 vs 精確</strong>：置於 <code>-i</code>{' '}
+                前利用關鍵影格（Keyframe）快速尋找，剪輯大檔秒級跳轉；置於 <code>-i</code> 後逐幀解碼，定位最精確。
               </li>
               <li>
-                <strong>自動雙引號防護</strong>：生成的所有檔名與路徑一律自動套用雙引號（<code>&quot;...&quot;</code>），完美防範檔名空白、括號 <code>()</code>、括弧 <code>[]</code> 與特殊符號（如 <code>&amp;</code>），確保跨平台 Shell 執行零出錯。
+                <strong>自動雙引號防護</strong>：生成的所有檔名與路徑一律自動套用雙引號（<code>&quot;...&quot;</code>
+                ），完美防範檔名空白、括號 <code>()</code>、括弧 <code>[]</code> 與特殊符號（如 <code>&amp;</code>
+                ），確保跨平台 Shell 執行零出錯。
               </li>
               <li>
-                <strong>隱私安全</strong>：本地播放器直接透過瀏覽器解碼，影片<strong>絕對不會</strong>上傳到伺服器，安全零流量。
+                <strong>隱私安全</strong>：本地播放器直接透過瀏覽器解碼，影片<strong>絕對不會</strong>
+                上傳到伺服器，安全零流量。
               </li>
             </ul>
           </div>
@@ -378,7 +236,9 @@ export default function FfmpegGeneratorPage() {
                   onLoadedMetadata={handleLoadedMetadata}
                   onTimeUpdate={handleTimeUpdate}
                   onError={() => {
-                    setVideoError('瀏覽器無法直接解碼此影片格式（如特定 MKV/AVI/HEVC 編碼）。您仍可手動設定起訖時間，FFmpeg 命令行依舊完全可用。');
+                    setVideoError(
+                      '瀏覽器無法直接解碼此影片格式（如特定 MKV/AVI/HEVC 編碼）。您仍可手動設定起訖時間，FFmpeg 命令行依舊完全可用。'
+                    );
                   }}
                   onEnded={() => {
                     setIsPlaying(false);
@@ -404,9 +264,7 @@ export default function FfmpegGeneratorPage() {
                     {videoMeta.width} × {videoMeta.height}
                   </span>
                 )}
-                {videoMeta.size > 0 && (
-                  <span className="meta-item">{formatFileSize(videoMeta.size)}</span>
-                )}
+                {videoMeta.size > 0 && <span className="meta-item">{formatFileSize(videoMeta.size)}</span>}
                 <span className="meta-item">
                   <Clock size={14} /> 總長度: {secondsToHms(duration)}
                 </span>
@@ -729,7 +587,8 @@ export default function FfmpegGeneratorPage() {
           <div className="trim-summary-bar">
             <div className="summary-left">
               <span className="summary-tag">
-                <Clock size={13} /> 剪輯後長度: <strong>{trimSummary.formattedDuration}</strong> ({trimSummary.clipDurationSec.toFixed(2)} 秒)
+                <Clock size={13} /> 剪輯後長度: <strong>{trimSummary.formattedDuration}</strong> (
+                {trimSummary.clipDurationSec.toFixed(2)} 秒)
               </span>
               {trimSummary.isInvalid && (
                 <span className="summary-error">
@@ -789,7 +648,8 @@ export default function FfmpegGeneratorPage() {
             {transcodeMode === 'copy' ? (
               <div className="info-banner glass-panel">
                 <p className="text-muted text-sm">
-                  ⚡ <strong>無損複製模式已啟用</strong>：跳過耗時的 CPU/GPU 轉檔，直接將封裝流剪輯輸出，100% 維持原始畫質與聲音，耗時極短（通常數秒內完成）。
+                  ⚡ <strong>無損複製模式已啟用</strong>：跳過耗時的 CPU/GPU 轉檔，直接將封裝流剪輯輸出，100%
+                  維持原始畫質與聲音，耗時極短（通常數秒內完成）。
                 </p>
               </div>
             ) : (
@@ -797,11 +657,7 @@ export default function FfmpegGeneratorPage() {
               <div className="reencode-options-grid glass-panel card-padding">
                 <div className="field-group">
                   <label className="field-label">視訊編碼器 (-c:v)</label>
-                  <select
-                    className="select-field"
-                    value={videoCodec}
-                    onChange={(e) => setVideoCodec(e.target.value)}
-                  >
+                  <select className="select-field" value={videoCodec} onChange={(e) => setVideoCodec(e.target.value)}>
                     <option value="libx264">H.264 (libx264 - 最相容推薦)</option>
                     <option value="libx265">H.265 / HEVC (libx265 - 高壓縮率)</option>
                     <option value="libvpx-vp9">VP9 (libvpx-vp9 - WebM 推薦)</option>
@@ -830,11 +686,7 @@ export default function FfmpegGeneratorPage() {
 
                 <div className="field-group">
                   <label className="field-label">解析度縮放</label>
-                  <select
-                    className="select-field"
-                    value={resolution}
-                    onChange={(e) => setResolution(e.target.value)}
-                  >
+                  <select className="select-field" value={resolution} onChange={(e) => setResolution(e.target.value)}>
                     <option value="original">維持原始解析度</option>
                     <option value="1080p">1080p FHD (1920x1080)</option>
                     <option value="720p">720p HD (1280x720)</option>
@@ -855,11 +707,7 @@ export default function FfmpegGeneratorPage() {
 
                 <div className="field-group">
                   <label className="field-label">音訊編碼器 (-c:a)</label>
-                  <select
-                    className="select-field"
-                    value={audioCodec}
-                    onChange={(e) => setAudioCodec(e.target.value)}
-                  >
+                  <select className="select-field" value={audioCodec} onChange={(e) => setAudioCodec(e.target.value)}>
                     <option value="aac">AAC (最通用推薦)</option>
                     <option value="libmp3lame">MP3 (libmp3lame)</option>
                     <option value="libopus">Opus (libopus - 高品質壓縮)</option>

@@ -83,11 +83,7 @@ export default function TrackSubtitle({ item, sortKeys = [] }) {
     parts.push({
       key: 'date',
       node: (
-        <span
-          key="date"
-          style={{ color: 'rgba(255,255,255,0.45)' }}
-          title={`發行日期：${dateVal}`}
-        >
+        <span key="date" style={{ color: 'rgba(255,255,255,0.45)' }} title={`發行日期：${dateVal}`}>
           {dateVal}
         </span>
       ),

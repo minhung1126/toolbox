@@ -11,7 +11,11 @@ vi.mock('../services/api', () => ({
 }));
 
 function wrapper({ children }) {
-  return <AccountWorkStateProvider initialState={{ navigation: { sidebarCollapsed: false } }}>{children}</AccountWorkStateProvider>;
+  return (
+    <AccountWorkStateProvider initialState={{ navigation: { sidebarCollapsed: false } }}>
+      {children}
+    </AccountWorkStateProvider>
+  );
 }
 
 describe('useAccountWorkState', () => {
@@ -65,7 +69,12 @@ describe('useAccountWorkState', () => {
   it('persists a newer value after an earlier request is already in flight', async () => {
     let releaseFirst;
     api.updateWorkState
-      .mockImplementationOnce(() => new Promise((resolve) => { releaseFirst = resolve; }))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseFirst = resolve;
+          })
+      )
       .mockResolvedValueOnce({ state: {} });
     const { result } = renderHook(() => useAccountWorkState('navigation'), { wrapper });
 
@@ -94,9 +103,7 @@ describe('useAccountWorkState', () => {
   });
 
   it('exposes a failed save and retries the latest desired value', async () => {
-    api.updateWorkState
-      .mockRejectedValueOnce(new Error('伺服器忙碌'))
-      .mockResolvedValueOnce({ state: {} });
+    api.updateWorkState.mockRejectedValueOnce(new Error('伺服器忙碌')).mockResolvedValueOnce({ state: {} });
     const { result } = renderHook(() => useAccountWorkState('navigation'), { wrapper });
 
     await act(async () => {

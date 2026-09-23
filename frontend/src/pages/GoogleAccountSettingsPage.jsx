@@ -1,5 +1,16 @@
 import React from 'react';
-import { CheckCircle2, Disc3, ExternalLink, FileSpreadsheet, Key, ListVideo, RefreshCw, Settings, Shield, XCircle } from 'lucide-react';
+import {
+  CheckCircle2,
+  Disc3,
+  ExternalLink,
+  FileSpreadsheet,
+  Key,
+  ListVideo,
+  RefreshCw,
+  Settings,
+  Shield,
+  XCircle,
+} from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import { useToast } from '../components/Toast';
@@ -62,27 +73,82 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
     <div className="settings-page-section">
       <div className="info-banner">
         <span>需要申請 API 或部署？</span>
-        <a href={GITHUB_DOCS.google} target="_blank" rel="noreferrer">Google API 教學 <ExternalLink size={14} /></a>
-        <a href={GITHUB_DOCS.deployment} target="_blank" rel="noreferrer">部署教學 <ExternalLink size={14} /></a>
+        <a href={GITHUB_DOCS.google} target="_blank" rel="noreferrer">
+          Google API 教學 <ExternalLink size={14} />
+        </a>
+        <a href={GITHUB_DOCS.deployment} target="_blank" rel="noreferrer">
+          部署教學 <ExternalLink size={14} />
+        </a>
       </div>
 
       {/* 1. 控制台登入帳號 */}
       <div className="glass-panel card-padding settings-card card-stack">
         <div className="card-header">
-          <div className="card-header-title"><Key size={20} color="var(--primary)" /><h2>控制台登入帳號</h2></div>
-          {authUser ? <span className="badge badge-connected"><CheckCircle2 size={14} /> 已登入：{authUser.email}</span> : <span className="badge badge-disconnected"><XCircle size={14} /> 未登入 Google 帳號</span>}
+          <div className="card-header-title">
+            <Key size={20} color="var(--primary)" />
+            <h2>控制台登入帳號</h2>
+          </div>
+          {authUser ? (
+            <span className="badge badge-connected">
+              <CheckCircle2 size={14} /> 已登入：{authUser.email}
+            </span>
+          ) : (
+            <span className="badge badge-disconnected">
+              <XCircle size={14} /> 未登入 Google 帳號
+            </span>
+          )}
         </div>
-        <div className="info-banner"><span>控制台登入採用獨立的 Google OIDC 認證，僅用於身分識別與個人偏好儲存。Google 試算表與 YouTube 權限均為模組化獨立授權。</span></div>
-        <div className="info-banner"><span>Google Client ID 與 Client Secret 由伺服器端 <code>.env</code> 管理。{sysSettings.google_client_configured ? ' ✅ Credentials 已設定。' : ' ⚠️ Credentials 尚未設定。'}</span></div>
-        {authUser && <div className="settings-grid">
-          <div className="glass-panel settings-info-card"><strong>Token 狀態</strong><p>{tokenStatusLabel(authUser.token_status)}</p></div>
-          <div className="glass-panel settings-info-card"><strong>最近更新</strong><p>{formatTokenDate(authUser.last_refreshed_at)}</p></div>
-          <div className="glass-panel settings-info-card"><strong>目前到期時間</strong><p>{formatTokenDate(authUser.token_expires_at)}</p></div>
-        </div>}
-        {authUser?.last_refresh_error && <div className="info-banner"><XCircle size={16} /><span>控制台登入 Token 最近更新未成功；請重新連結控制台 Google 帳號。</span></div>}
-        <p className="section-desc">控制台 Google Access Token 會在到期前 5 分鐘由後端自動更新，Refresh Token 以加密方式保存於 <code>/data</code>，不放在瀏覽器 Cookie 中。</p>
-        {sysSettings.redirect_uri && <div className="settings-code-block"><p><strong>Google Authorized Redirect URI：</strong></p><code>{sysSettings.redirect_uri}</code></div>}
-        <div className="page-actions settings-card-actions"><button className="btn btn-primary" onClick={handleStartLoginOAuth} type="button"><RefreshCw size={16} /> 重新連結控制台 Google 帳號</button></div>
+        <div className="info-banner">
+          <span>
+            控制台登入採用獨立的 Google OIDC 認證，僅用於身分識別與個人偏好儲存。Google 試算表與 YouTube
+            權限均為模組化獨立授權。
+          </span>
+        </div>
+        <div className="info-banner">
+          <span>
+            Google Client ID 與 Client Secret 由伺服器端 <code>.env</code> 管理。
+            {sysSettings.google_client_configured ? ' ✅ Credentials 已設定。' : ' ⚠️ Credentials 尚未設定。'}
+          </span>
+        </div>
+        {authUser && (
+          <div className="settings-grid">
+            <div className="glass-panel settings-info-card">
+              <strong>Token 狀態</strong>
+              <p>{tokenStatusLabel(authUser.token_status)}</p>
+            </div>
+            <div className="glass-panel settings-info-card">
+              <strong>最近更新</strong>
+              <p>{formatTokenDate(authUser.last_refreshed_at)}</p>
+            </div>
+            <div className="glass-panel settings-info-card">
+              <strong>目前到期時間</strong>
+              <p>{formatTokenDate(authUser.token_expires_at)}</p>
+            </div>
+          </div>
+        )}
+        {authUser?.last_refresh_error && (
+          <div className="info-banner">
+            <XCircle size={16} />
+            <span>控制台登入 Token 最近更新未成功；請重新連結控制台 Google 帳號。</span>
+          </div>
+        )}
+        <p className="section-desc">
+          控制台 Google Access Token 會在到期前 5 分鐘由後端自動更新，Refresh Token 以加密方式保存於 <code>/data</code>
+          ，不放在瀏覽器 Cookie 中。
+        </p>
+        {sysSettings.redirect_uri && (
+          <div className="settings-code-block">
+            <p>
+              <strong>Google Authorized Redirect URI：</strong>
+            </p>
+            <code>{sysSettings.redirect_uri}</code>
+          </div>
+        )}
+        <div className="page-actions settings-card-actions">
+          <button className="btn btn-primary" onClick={handleStartLoginOAuth} type="button">
+            <RefreshCw size={16} /> 重新連結控制台 Google 帳號
+          </button>
+        </div>
       </div>
 
       {/* Group 2: 已連線第三方服務授權 */}
@@ -135,7 +201,15 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
         reconnectText="重新授權 YouTube Music"
         disconnectText="解除 YouTube Music 授權"
       />
-      <div style={{ margin: '-0.75rem 0 1rem 0', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>
+      <div
+        style={{
+          margin: '-0.75rem 0 1rem 0',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: '0.5rem',
+          flexWrap: 'wrap',
+        }}
+      >
         <Link className="btn btn-secondary btn-sm" to={PATHS.ytmusicSettings}>
           <Settings size={14} /> YouTube Music 專屬設定
         </Link>
@@ -162,7 +236,8 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
           )}
         </div>
         <p className="section-desc">
-          YouTube Data API 授權獨立管理，支援主要 (Primary) 與次要 (Secondary) 雙槽位配額切換、自動容錯分流與 Quota 安全防護。請至專屬頁面管理各 Slot 頻道授權與連線憑證。
+          YouTube Data API 授權獨立管理，支援主要 (Primary) 與次要 (Secondary) 雙槽位配額切換、自動容錯分流與 Quota
+          安全防護。請至專屬頁面管理各 Slot 頻道授權與連線憑證。
         </p>
         {activeYoutubeEmail && (
           <div className="settings-grid" style={{ marginBottom: '0.5rem' }}>
@@ -192,7 +267,10 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
       {/* 5. 系統安全與白名單 */}
       <div className="glass-panel card-padding settings-card card-stack">
         <div className="card-header">
-          <div className="card-header-title"><Shield size={20} color="#10b981" /><h2>系統設定與安全</h2></div>
+          <div className="card-header-title">
+            <Shield size={20} color="#10b981" />
+            <h2>系統設定與安全</h2>
+          </div>
         </div>
         <p className="section-desc">管理系統安全密鑰狀態、Google OAuth Client 憑證保險庫與控制台存取控制白名單。</p>
         <div className="page-actions settings-card-actions">

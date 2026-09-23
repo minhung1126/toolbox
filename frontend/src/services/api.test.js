@@ -11,11 +11,14 @@ describe('API request recovery', () => {
   it('uses the backend detail and announces an expired session', async () => {
     const expired = vi.fn();
     window.addEventListener('creator-tools:session-expired', expired, { once: true });
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      status: 401,
-      json: async () => ({ detail: '請重新登入' }),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: async () => ({ detail: '請重新登入' }),
+      })
+    );
 
     await expect(api.getSystemInfo()).rejects.toMatchObject({
       name: 'ApiError',
@@ -29,24 +32,34 @@ describe('API request recovery', () => {
   it('turns a network failure into a clear retry message', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
 
-    await expect(api.getSystemInfo()).rejects.toEqual(expect.objectContaining({
-      name: 'ApiError',
-      code: 'network_error',
-      message: expect.stringContaining('確認服務與網路後重試'),
-    }));
+    await expect(api.getSystemInfo()).rejects.toEqual(
+      expect.objectContaining({
+        name: 'ApiError',
+        code: 'network_error',
+        message: expect.stringContaining('確認服務與網路後重試'),
+      })
+    );
   });
 
   it('aborts a request that would otherwise wait forever', async () => {
     vi.useFakeTimers();
-    vi.stubGlobal('fetch', vi.fn((url, options) => new Promise((resolve, reject) => {
-      options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
-    })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (url, options) =>
+          new Promise((resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+          })
+      )
+    );
 
     const request = api.getSystemInfo();
-    const assertion = expect(request).rejects.toEqual(expect.objectContaining({
-      code: 'timeout',
-      message: expect.stringContaining('連線逾時'),
-    }));
+    const assertion = expect(request).rejects.toEqual(
+      expect.objectContaining({
+        code: 'timeout',
+        message: expect.stringContaining('連線逾時'),
+      })
+    );
     await vi.advanceTimersByTimeAsync(45_000);
 
     await assertion;
@@ -54,11 +67,14 @@ describe('API request recovery', () => {
   });
 
   it('keeps structured error detail codes from the backend', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      status: 429,
-      json: async () => ({ detail: { code: 'youtube_quota_exhausted', message: '配額已用完', reset_at: 'reset' } }),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        json: async () => ({ detail: { code: 'youtube_quota_exhausted', message: '配額已用完', reset_at: 'reset' } }),
+      })
+    );
     await expect(api.getYoutubeQuotaUsage()).rejects.toMatchObject({
       status: 429,
       code: 'youtube_quota_exhausted',
@@ -81,18 +97,20 @@ describe('API request recovery', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(api.batchUpdateMetadata({
-      spreadsheetUrlOrId: 'sheet-id',
-      playlistId: 'https://www.youtube.com/playlist?list=PL123_abc-789',
-      videoType: 'Video',
-      worksheetName: 'Youtube Video',
-      titleColumn: 'Youtube Title',
-      descriptionColumn: 'Youtube Description',
-      team: 'Team',
-      assignments: [{ video_id: 'video-1', person: 'Alice' }],
-      previewToken: 'signed-preview-token',
-      previewSnapshot: { playlist_id: 'PL123_abc-789' },
-    })).resolves.toEqual(directResult);
+    await expect(
+      api.batchUpdateMetadata({
+        spreadsheetUrlOrId: 'sheet-id',
+        playlistId: 'https://www.youtube.com/playlist?list=PL123_abc-789',
+        videoType: 'Video',
+        worksheetName: 'Youtube Video',
+        titleColumn: 'Youtube Title',
+        descriptionColumn: 'Youtube Description',
+        team: 'Team',
+        assignments: [{ video_id: 'video-1', person: 'Alice' }],
+        previewToken: 'signed-preview-token',
+        previewSnapshot: { playlist_id: 'PL123_abc-789' },
+      })
+    ).resolves.toEqual(directResult);
 
     const [, options] = fetchMock.mock.calls[0];
     expect(JSON.parse(options.body)).toEqual({
@@ -117,10 +135,12 @@ describe('API request recovery', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(api.publishAndCleanup('https://www.youtube.com/playlist?list=PL123_abc-789', {
-      previewToken: 'signed-preview-token',
-      previewSnapshot: { playlist_id: 'PL123_abc-789', video_ids: ['video-1'] },
-    })).resolves.toEqual({ completed: true });
+    await expect(
+      api.publishAndCleanup('https://www.youtube.com/playlist?list=PL123_abc-789', {
+        previewToken: 'signed-preview-token',
+        previewSnapshot: { playlist_id: 'PL123_abc-789', video_ids: ['video-1'] },
+      })
+    ).resolves.toEqual({ completed: true });
 
     const [url, options] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/v1/youtube/publish-and-cleanup');
@@ -132,12 +152,15 @@ describe('API request recovery', () => {
   });
 
   it('handles non-JSON errors and exposes Retry-After in Traditional Chinese', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      status: 429,
-      text: async () => '<html><body>busy</body></html>',
-      headers: { get: (name) => (name === 'Retry-After' ? '7' : null) },
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        text: async () => '<html><body>busy</body></html>',
+        headers: { get: (name) => (name === 'Retry-After' ? '7' : null) },
+      })
+    );
 
     await expect(api.getYoutubeQuotaUsage()).rejects.toMatchObject({
       status: 429,
@@ -158,30 +181,30 @@ describe('API request recovery', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await Promise.all([
-      api.getSystemInfo().catch(() => null),
-      api.getSharedSettings().catch(() => null),
-    ]);
+    await Promise.all([api.getSystemInfo().catch(() => null), api.getSharedSettings().catch(() => null)]);
 
     expect(expired).toHaveBeenCalledOnce();
     window.removeEventListener('creator-tools:session-expired', expired);
   });
 
   it('keeps the primary quota menu and hides an unavailable secondary slot', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        authenticated: true,
-        youtube: {
-          active_slot: 'primary',
-          slots: {
-            primary: { enabled: true, configured: true },
-            secondary: { enabled: false, configured: false },
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          authenticated: true,
+          youtube: {
+            active_slot: 'primary',
+            slots: {
+              primary: { enabled: true, configured: true },
+              secondary: { enabled: false, configured: false },
+            },
           },
-        },
-      }),
-    }));
+        }),
+      })
+    );
 
     const result = await api.getUserStatus();
     expect(result).toMatchObject({
@@ -199,11 +222,13 @@ describe('API request recovery', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(api.updateYoutubeVideoMetadata({
-      videoId: 'video-1',
-      title: 'New title',
-      description: 'New description',
-    })).resolves.toEqual(updated);
+    await expect(
+      api.updateYoutubeVideoMetadata({
+        videoId: 'video-1',
+        title: 'New title',
+        description: 'New description',
+      })
+    ).resolves.toEqual(updated);
 
     const [url, options] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/v1/youtube/video-metadata');

@@ -9,7 +9,6 @@ import {
   Key,
   Lock,
   Plus,
-  RefreshCw,
   Shield,
   Trash2,
   UserCheck,
@@ -19,6 +18,8 @@ import { api } from '../services/api';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { copyToClipboard } from '../utils/clipboard';
+import { Badge, Button, Card, LoadingState, PageHeader } from '../shared/ui';
+import './SystemSettingsPage.css';
 
 export default function SystemSettingsPage({ sysSettings = {} }) {
   const toast = useToast();
@@ -71,7 +72,8 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
     loadData();
   }, [loadData]);
 
-  const redirectUri = credentials?.redirect_uri || sysSettings?.redirect_uri || `${window.location.origin}/api/v1/auth/callback`;
+  const redirectUri =
+    credentials?.redirect_uri || sysSettings?.redirect_uri || `${window.location.origin}/api/v1/auth/callback`;
 
   const handleCopyRedirectUri = async () => {
     try {
@@ -179,29 +181,30 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
 
   if (loading) {
     return (
-      <div className="section-gap" style={{ textAlign: 'center', padding: '3rem' }}>
-        <RefreshCw size={28} className="spin" style={{ margin: '0 auto 1rem' }} />
-        <p>正在載入系統設定...</p>
+      <div className="section-gap">
+        <LoadingState>正在載入系統設定...</LoadingState>
       </div>
     );
   }
 
   const googleCreds = credentials?.credentials?.google || credentials?.google || {};
-  const isCredentialsDirty = editingCreds && (
-    editClientId.trim() !== (googleCreds.client_id || '') || Boolean(editClientSecret.trim())
-  );
+  const isCredentialsDirty =
+    editingCreds && (editClientId.trim() !== (googleCreds.client_id || '') || Boolean(editClientSecret.trim()));
 
   return (
     <div className="section-gap system-settings-page">
-      <header className="page-header">
-        <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', margin: '0 0 0.5rem 0' }}>
-          <Shield size={26} color="var(--success)" /> 系統設定
-        </h1>
-        <p className="section-desc">管理系統安全密鑰、Google OAuth 憑證配置與控制台存取控制白名單。</p>
-      </header>
+      <PageHeader
+        className="system-settings-header"
+        title={
+          <span className="system-settings-title">
+            <Shield size={26} aria-hidden="true" /> 系統設定
+          </span>
+        }
+        description="管理系統安全密鑰、Google OAuth 憑證配置與控制台存取控制白名單。"
+      />
 
       {/* 1. Security & System Status Banner */}
-      <section className="glass-panel card-padding settings-card card-stack">
+      <Card className="settings-card card-stack">
         <div className="card-header">
           <div className="card-header-title">
             <Shield size={20} color="var(--success)" />
@@ -209,62 +212,69 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
           </div>
         </div>
         <p className="section-desc">
-          Toolbox 已啟用零設定自動金鑰管理。主加密金鑰與工作階段簽名金鑰已自動生成並安全保存在 <code>data/.secrets.json</code>，服務重啟或映像升級皆能持久保留。
+          Toolbox 已啟用零設定自動金鑰管理。主加密金鑰與工作階段簽名金鑰已自動生成並安全保存在{' '}
+          <code>data/.secrets.json</code>，服務重啟或映像升級皆能持久保留。
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
-          <span className="badge badge-connected">
+          <Badge tone="success">
             <CheckCircle2 size={14} /> AES-256 Fernet 憑證保險庫啟用
-          </span>
-          <span className="badge badge-info">
+          </Badge>
+          <Badge tone="info">
             <Lock size={14} /> Session 簽名金鑰持久化
-          </span>
-          <span className="badge badge-info">
+          </Badge>
+          <Badge tone="info">
             公開位址 (.env)：{credentials?.public_base_url || sysSettings.public_base_url || window.location.origin}
-          </span>
+          </Badge>
         </div>
-      </section>
+      </Card>
 
       {/* 2. Google OAuth Credentials Management */}
-      <section className="glass-panel card-padding settings-card card-stack">
+      <Card className="settings-card card-stack">
         <div className="card-header">
           <div className="card-header-title">
             <Key size={20} color="var(--primary)" />
             <h2>Google OAuth 憑證配置</h2>
           </div>
           {!editingCreds && (
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => {
                 setEditingCreds(true);
                 setEditClientId(googleCreds.client_id || '');
               }}
             >
               更新憑證
-            </button>
+            </Button>
           )}
         </div>
 
         <p className="section-desc">
-          用於控制台登入驗證、Google 試算表讀取與 Google 雲端硬碟讀取。所有 Client Secret 皆在後端加密儲存，前端絕不接收明文密鑰。
+          用於控制台登入驗證、Google 試算表讀取與 Google 雲端硬碟讀取。所有 Client Secret
+          皆在後端加密儲存，前端絕不接收明文密鑰。
         </p>
 
         {/* Authorized Redirect URI */}
-        <div className="settings-code-block" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+        <div
+          className="settings-code-block"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1rem',
+            flexWrap: 'wrap',
+          }}
+        >
           <div>
             <span className="form-hint" style={{ display: 'block', marginBottom: '0.25rem' }}>
               Google Cloud 授權的重新導向 URI（依據 .env 的 PUBLIC_BASE_URL 產生）
             </span>
             <code>{redirectUri}</code>
           </div>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={handleCopyRedirectUri}
-          >
+          <Button variant="secondary" size="sm" onClick={handleCopyRedirectUri}>
             {copied ? <Check size={14} color="var(--success)" /> : <Copy size={14} />}
             {copied ? '已複製' : '複製網址'}
-          </button>
+          </Button>
         </div>
 
         {editingCreds ? (
@@ -295,7 +305,9 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
                   className="form-input"
                   value={editClientSecret}
                   onChange={(e) => setEditClientSecret(e.target.value)}
-                  placeholder={googleCreds.has_client_secret ? '••••••••••••••••（已保存，輸入可覆蓋）' : 'GOCSPX-xxxxxxxx'}
+                  placeholder={
+                    googleCreds.has_client_secret ? '••••••••••••••••（已保存，輸入可覆蓋）' : 'GOCSPX-xxxxxxxx'
+                  }
                   style={{ width: '100%', paddingRight: '2.5rem' }}
                 />
                 <button
@@ -321,7 +333,10 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
             {isCredentialsDirty && (
               <div className="info-banner warning-banner">
                 <AlertCircle size={16} />
-                <span>Google OAuth 憑證已修改（尚未保存至保險庫）。為保護金鑰安全並避免頻繁寫入，修改後請記得點擊「儲存憑證」按鈕以套用！</span>
+                <span>
+                  Google OAuth
+                  憑證已修改（尚未保存至保險庫）。為保護金鑰安全並避免頻繁寫入，修改後請記得點擊「儲存憑證」按鈕以套用！
+                </span>
               </div>
             )}
 
@@ -337,11 +352,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
               >
                 取消
               </button>
-              <button
-                type="submit"
-                className="btn btn-primary btn-sm"
-                disabled={savingCreds}
-              >
+              <button type="submit" className="btn btn-primary btn-sm" disabled={savingCreds}>
                 {savingCreds ? '儲存中...' : '儲存憑證'}
               </button>
             </div>
@@ -372,10 +383,10 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
             </div>
           </div>
         )}
-      </section>
+      </Card>
 
       {/* 3. Allowed Google Emails (Access Control) */}
-      <section className="glass-panel card-padding settings-card card-stack">
+      <Card className="settings-card card-stack">
         <div className="card-header">
           <div className="card-header-title">
             <UserCheck size={20} color="var(--success)" />
@@ -429,14 +440,17 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
               disabled={updatingAllowNewUsers}
               style={{ minWidth: '96px', whiteSpace: 'nowrap' }}
             >
-              {updatingAllowNewUsers ? '處理中...' : (allowNewUsers ? '關閉新增' : '開啟新增')}
+              {updatingAllowNewUsers ? '處理中...' : allowNewUsers ? '關閉新增' : '開啟新增'}
             </button>
           </div>
         </div>
 
         {/* Warning Banner if disabled */}
         {!allowNewUsers && (
-          <div className="info-banner warning-banner" style={{ background: 'var(--danger-bg)', borderColor: 'var(--danger-border)', color: 'var(--danger-text)' }}>
+          <div
+            className="info-banner warning-banner"
+            style={{ background: 'var(--danger-bg)', borderColor: 'var(--danger-border)', color: 'var(--danger-text)' }}
+          >
             <AlertCircle size={18} style={{ flexShrink: 0 }} />
             <span>目前已關閉新增使用者帳號功能。如需新增成員，請先點擊上方按鈕開啟新增。</span>
           </div>
@@ -486,11 +500,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                     <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{email}</span>
-                    {isSelf && (
-                      <span className="badge badge-connected">
-                        目前登入身分（您）
-                      </span>
-                    )}
+                    {isSelf && <Badge tone="success">目前登入身分（您）</Badge>}
                   </div>
                   <div>
                     {isSelf ? (
@@ -513,7 +523,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
             })
           )}
         </div>
-      </section>
+      </Card>
 
       {/* Confirm Delete Dialog */}
       <ConfirmDialog

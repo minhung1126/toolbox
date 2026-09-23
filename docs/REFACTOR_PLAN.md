@@ -2,28 +2,35 @@
 
 稽核日期：2026-09-24。基準 commit：`edd1495`。
 
-本計劃以現有程式碼、設定與本機測試結果為依據，目標為行為正確、程式風格一致、視覺一致，以及可持續擴充。此階段僅提出計劃，未修改應用程式行為。
+本計劃以現有程式碼、設定與測試結果為依據，目標為行為正確、程式風格一致、視覺一致，以及可持續擴充。第 1 節記錄初始稽核；實作狀態與驗證數據會在「實作進度」更新。
 
 「沒有錯誤」應落實為可重現的測試、明確的錯誤處理、關鍵流程驗收與可回退發布；測試全綠不能證明不存在所有錯誤。
 
 ## 實作進度（2026-09-24）
 
-本分支完成第一批可靠性修正、Weverse 工作入列與生命週期修正、共用前端 token／基礎樣式整理，以及「同一個 main commit 先驗證、後發布」的 CI 串接。這不是整份多年期路線圖的最終完成狀態；未完成項目列於本節末，不能以本次測試全綠宣稱所有頁面無錯或視覺已全面驗收。
+本分支已完成可靠性修正、五個主要前端工作流程的邏輯抽離、YouTube 批次使用案例服務、第一批共用 UI 與前端品質門檻。以下只將有程式碼及測試證據的工作列為完成；整份路線圖仍有明確未完成項目。
 
-本批驗證結果：前端 59 個測試檔、292 項通過，ESLint 與 production build 通過；後端隔離副本 Ruff format／lint 通過、221 項測試通過（環境套件仍發出 2 項 deprecation warning）；兩份 GitHub Actions YAML 語法解析通過。此環境沒有 Docker／actionlint，因此本機未驗證容器建置與 GitHub Actions 執行；CI 仍會在 release SHA 上做容器檢查。瀏覽器多尺寸截圖和真實 OAuth／YouTube 操作也未做。
+最新本機驗證：前端 62 個 Vitest 檔案、299 項通過；ESLint、TypeScript `typecheck`、Stylelint、Prettier 檢查與 production build 通過。後端隔離副本 224 項 pytest 通過，Ruff lint／format 通過；新工具目錄契約與 Weverse interrupted 工作對帳測試亦通過。Playwright 在本機 Edge 上於 390／768／1440 px 完成版面溢位斷言並生成截圖；測試成功訊息後 runner 未能自行結束，因此本機 E2E 命令退出狀態未確認。CI 會安裝 Playwright Chromium 執行相同測試，但此環境尚未執行 GitHub Actions。環境未安裝 Docker／actionlint；未使用真實 Google／YouTube 帳號驗收。
 
 已完成：
 
-- YTMusic token 字串解析改為純函式；單元測試會阻止解析時建立 client，避免無意外連線。
-- Weverse JSON 損毀與原子寫入失敗會明確回報；先持久化工作再排入 worker，入列失敗時回存失敗狀態並回傳可重試錯誤。
-- Weverse worker 延後到首次使用才建立，停機 hook 會等待已接收工作結束；plugin 啟動錯誤反映至工具健康與 API readiness。
-- 前端 OAuth 導頁可注入以隔離瀏覽器導頁；測試補上 React 更新等待、下載點擊模擬與路由／catalog ID、網址契約。ESLint 已啟用未使用變數與 Hooks 相依錯誤門檻，清除既有死程式碼與未使用匯入。
-- 根 token 移至 `frontend/src/styles/tokens.css`，共用基礎樣式移至 `foundation.css`，原主題整理為 `app-theme.css`；Weverse 標題、資料夾選取面板部分固定樣式改用頁面 CSS。
-- 發布工作重用完整驗證流程；只有驗證通過的 main commit 會進行 image publish。文件已對齊目前支援的平台及實際前端網址。
-- Weverse 上傳歷史拆成獨立元件及頁面樣式；表格改用 token 樣式、窄螢幕容器捲動，並補上空狀態、loading、狀態 badge 與外連測試。
-- FFmpeg 本機影片載入、物件網址清理、播放／定位與選取片段預覽移至 `useFfmpegVideo` hook，頁面仍負責剪輯參數與命令組裝；hook 已有檔案驗證、媒體中繼資料與片段停止測試。
+- YTMusic token 字串解析改為純函式；離線測試會阻止解析時建立 client。Weverse 儲存失敗、損毀 JSON、先保存後入列、入列失敗、關閉時排空及重新啟動時標記未完成工作均有明確錯誤處理及測試。
+- Plugin 啟動失敗反映在工具健康與 API readiness；Weverse executor 延遲建立並納入停機生命週期。重啟時將 pending／上傳中工作標示 interrupted 並提示先查 YouTube Studio，不自動重送。
+- `youtube.py` 的批次預覽、批次 metadata 更新及發布清理協調移至 `YoutubeWorkflowService`，保留 router 與既有 API 契約。
+- Playlist Sort、Weverse 上傳、FFmpeg 影片與命令流程、Photo Curator 分配／匯出、Batch Update 的狀態與使用案例邏輯抽至 feature hook；Weverse 歷史及既有 batch 預覽內容使用獨立元件。既有頁面互動測試維持通過。
+- Dashboard、系統資訊與系統設定開始採用共用 UI；新增可存取元件狀態展示頁。根 token／基礎樣式已集中，新增 Prettier、ESLint 未使用變數與 Hooks 錯誤門檻、Stylelint 及漸進 TypeScript 檢查。
+- Playwright 增加 390／768／1440 px 展示頁溢位與截圖測試。前後端工具 ID 與路由契約測試發現並修正 `youtube-integrations`／`integrations-quota` 漂移。
+- 發布 workflow 只會發布已通過驗證的同一個 main SHA；README 的支援平台與前端路徑已修正。
 
-尚待後續階段：大型 Playlist Sort／FFmpeg／Weverse 頁面拆分、YouTube API router 使用案例拆分、前後端 catalog manifest 完整同步、全頁 inline 樣式遷移、元件展示頁與 390／768／1440 px 瀏覽器視覺驗收、端對端測試、漸進型別與 formatter／CSS lint、Weverse 重啟後工作對帳與程序間寫入策略。故目前完成的是計劃中的可靠性與設計基礎批次，不代表第 2–5 階段全部完成。
+尚待完成：
+
+- 共用 UI 尚未逐頁遷移；大量舊 CSS 與固定 inline layout 仍保留。Stylelint 對 `.stylelintignore` 列出的既有全域樣式設有過渡例外，需以逐檔遷移方式移除。
+- Feature hook 已從頁面抽離，但各 feature 的 API/model 邊界、前端 feature manifest 聚合及較完整的 TS 型別尚未完成；E2E 目前只涵蓋共用元件展示頁，沒有完整驗證排序、OAuth、批次更新、Weverse 上傳及媒體匯出的瀏覽器流程。
+- YouTube service 目前透過 router 提供的依賴 adapter 執行，尚未完成 settings、repository 與外部 client 的 app factory/dependency 注入。
+- Weverse JSON 的原子替換不涵蓋多程序 read-modify-write；多程序／多實例策略仍待設計。沒有真實 provider smoke test，也未演練 Docker 部署回退。
+- `npm install` 顯示 9 項安全公告；本機 npm audit registry 請求逾時，尚未取得可驗證的 advisory 清單，因此沒有執行盲目升級或宣稱已修復。
+
+本輪驗收不代表不存在所有錯誤，也不代表已完成第 2、4、5 階段全部停止條件；應依本節未完成項目繼續分階段交付。
 
 ## 1. 已驗證的基準
 

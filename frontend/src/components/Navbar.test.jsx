@@ -6,12 +6,16 @@ import { PATHS } from '../routes/paths';
 
 function NavbarHarness({ initialEntry = '/dashboard' }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  return <MemoryRouter initialEntries={[initialEntry]}><Navbar
-    authUser={{ email: 'creator@example.com', youtube: { authenticated: false } }}
-    onLogout={() => {}}
-    sidebarCollapsed={sidebarCollapsed}
-    setSidebarCollapsed={setSidebarCollapsed}
-  /></MemoryRouter>;
+  return (
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <Navbar
+        authUser={{ email: 'creator@example.com', youtube: { authenticated: false } }}
+        onLogout={() => {}}
+        sidebarCollapsed={sidebarCollapsed}
+        setSidebarCollapsed={setSidebarCollapsed}
+      />
+    </MemoryRouter>
+  );
 }
 
 describe('Navbar', () => {
@@ -34,12 +38,11 @@ describe('Navbar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'YouTube' }));
     const submenu = document.getElementById('youtube-submenu');
-    expect(within(submenu).getAllByRole('link').map((link) => link.textContent.trim())).toEqual([
-      'Video 草稿',
-      'Shorts 草稿',
-      '發布草稿',
-      'YouTube 設定',
-    ]);
+    expect(
+      within(submenu)
+        .getAllByRole('link')
+        .map((link) => link.textContent.trim())
+    ).toEqual(['Video 草稿', 'Shorts 草稿', '發布草稿', 'YouTube 設定']);
   });
 
   it('lists Sheet workflow pages and settings', () => {
@@ -48,10 +51,11 @@ describe('Navbar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Sheet' }));
     const submenu = document.getElementById('sheet-submenu');
-    expect(within(submenu).getAllByRole('link').map((link) => link.textContent.trim())).toEqual([
-      '內容複製',
-      'Sheet 設定',
-    ]);
+    expect(
+      within(submenu)
+        .getAllByRole('link')
+        .map((link) => link.textContent.trim())
+    ).toEqual(['內容複製', 'Sheet 設定']);
   });
 
   it('exposes system and deployment information next to API health with active state', () => {
@@ -70,11 +74,11 @@ describe('Navbar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '系統管理' }));
     const submenu = document.getElementById('system-submenu');
-    expect(within(submenu).getAllByRole('link').map((link) => link.textContent.trim())).toEqual([
-      '系統設定',
-      '系統／部署資訊',
-      'API 健康度',
-    ]);
+    expect(
+      within(submenu)
+        .getAllByRole('link')
+        .map((link) => link.textContent.trim())
+    ).toEqual(['系統設定', '系統／部署資訊', 'API 健康度']);
   });
 
   it('exposes Instagram curation tool in navigation with active state', () => {
@@ -121,4 +125,3 @@ describe('Navbar', () => {
     expect(weverseLink).toHaveClass('active');
   });
 });
-

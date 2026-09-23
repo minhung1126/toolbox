@@ -82,7 +82,7 @@ npm run dev
 - `/setup`：系統初始化設定精靈（首次啟動時設定 Google OAuth 與管理員信箱）
 - `/login`：Google 控制台登入
 - `/dashboard`：儀表板
-- `/system/health`、`/system/info`：API 健康度與部署資訊
+- `/system/health`、`/system/info`、`/system/design-system`：API 健康度、部署資訊與共用元件展示
 - `/settings/system`：系統安全、Google OAuth 憑證與登入白名單管理
 - `/weverse-uploader`：Weverse 影片上傳工作台
 - `/ffmpeg-generator`、`/photo-curator`、`/notes`：媒體工具與便利貼
@@ -98,9 +98,14 @@ npm run dev
 
 ```powershell
 cd frontend
+npm run format:check
 npm run lint
+npm run lint:styles
+npm run typecheck
 npm test -- --run
 npm run build
+npx playwright install chromium
+npm run test:e2e
 
 cd ..
 python -m ruff format --check backend

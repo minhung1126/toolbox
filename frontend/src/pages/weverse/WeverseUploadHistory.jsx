@@ -4,6 +4,9 @@ import './WeverseUploadHistory.css';
 function uploadStatus(item) {
   if (item.status === 'completed') return <span className="badge badge-connected">已完成</span>;
   if (item.status === 'failed') return <span className="badge badge-disconnected">失敗</span>;
+  if (item.status === 'interrupted') {
+    return <span className="badge badge-warning">已中斷，請確認 YouTube 狀態</span>;
+  }
   if (['pending', 'uploading_video', 'uploading_captions'].includes(item.status)) {
     return <span className="badge badge-warning">上傳中</span>;
   }
@@ -21,12 +24,7 @@ export default function WeverseUploadHistory({ items = [], loading = false, onRe
         <h2 id="weverse-history-title" className="weverse-upload-history-title">
           <Clock size={18} aria-hidden="true" /> 近期上傳紀錄
         </h2>
-        <button
-          type="button"
-          className="btn btn-sm btn-secondary"
-          onClick={onRefresh}
-          disabled={loading}
-        >
+        <button type="button" className="btn btn-sm btn-secondary" onClick={onRefresh} disabled={loading}>
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} aria-hidden="true" />
           重新整理
         </button>
@@ -56,7 +54,9 @@ export default function WeverseUploadHistory({ items = [], loading = false, onRe
                     <div className="weverse-history-video-title">{item.title}</div>
                     <div className="weverse-history-video-filename">{item.video_filename}</div>
                   </td>
-                  <td><span className="badge badge-secondary">{item.privacy_status || 'private'}</span></td>
+                  <td>
+                    <span className="badge badge-secondary">{item.privacy_status || 'private'}</span>
+                  </td>
                   <td>{item.subtitles_count || 0}</td>
                   <td>{uploadStatus(item)}</td>
                   <td className="weverse-history-created-at">{formatCreatedAt(item.created_at)}</td>

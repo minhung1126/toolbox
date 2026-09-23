@@ -5,7 +5,10 @@ from typing import Optional
 from fastapi import APIRouter
 
 from backend.app.api.weverse_uploader import router as weverse_router
-from backend.app.services.weverse_uploader_service import shutdown_upload_executor
+from backend.app.services.weverse_uploader_service import (
+    recover_interrupted_upload_tasks,
+    shutdown_upload_executor,
+)
 from backend.app.tools.base import ToolMetadata, ToolPlugin, ToolRoute
 
 
@@ -42,6 +45,10 @@ class WeverseUploaderPlugin(ToolPlugin):
     @property
     def router(self) -> Optional[APIRouter]:
         return self._router
+
+    async def on_startup(self, app) -> None:
+        del app
+        recover_interrupted_upload_tasks()
 
     async def on_shutdown(self, app) -> None:
         del app

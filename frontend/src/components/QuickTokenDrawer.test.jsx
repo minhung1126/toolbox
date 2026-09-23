@@ -16,13 +16,7 @@ vi.mock('../services/api', () => ({
 function renderDrawer(props = {}) {
   return render(
     <ToastProvider>
-      <QuickTokenDrawer
-        isOpen={true}
-        onClose={vi.fn()}
-        onTokenSaved={vi.fn()}
-        onTokenCleared={vi.fn()}
-        {...props}
-      />
+      <QuickTokenDrawer isOpen={true} onClose={vi.fn()} onTokenSaved={vi.fn()} onTokenCleared={vi.fn()} {...props} />
     </ToastProvider>
   );
 }

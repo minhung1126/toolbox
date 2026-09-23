@@ -49,7 +49,9 @@ function setDocumentHidden(value) {
 async function firePersistedPageShow() {
   const event = new Event('pageshow');
   Object.defineProperty(event, 'persisted', { configurable: true, value: true });
-  await act(async () => { window.dispatchEvent(event); });
+  await act(async () => {
+    window.dispatchEvent(event);
+  });
 }
 
 describe('App recovery state', () => {
@@ -137,25 +139,36 @@ describe('App recovery state', () => {
     vi.useFakeTimers();
     api.getUserStatus.mockResolvedValue(userResponse);
     render(<App />);
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(screen.getByTestId('dashboard-page')).toBeInTheDocument();
     const callsAfterInit = api.getUserStatus.mock.calls.length;
 
     setDocumentHidden(true);
-    await act(async () => { fireEvent(document, new Event('visibilitychange')); });
+    await act(async () => {
+      fireEvent(document, new Event('visibilitychange'));
+    });
     const hiddenStartedAt = Date.now();
     vi.setSystemTime(hiddenStartedAt + 5 * 60 * 1000 + 1);
     setDocumentHidden(false);
-    await act(async () => { fireEvent(document, new Event('visibilitychange')); });
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      fireEvent(document, new Event('visibilitychange'));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(api.getUserStatus).toHaveBeenCalledTimes(callsAfterInit + 1);
   });
 
   it('shares one recovery request across simultaneous resume events', async () => {
     let resolveRecovery;
-    api.getUserStatus.mockResolvedValueOnce(userResponse).mockImplementationOnce(() => new Promise((resolve) => {
-      resolveRecovery = resolve;
-    }));
+    api.getUserStatus.mockResolvedValueOnce(userResponse).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRecovery = resolve;
+        })
+    );
     render(<App />);
     expect(await screen.findByTestId('dashboard-page')).toBeInTheDocument();
     const callsAfterInit = api.getUserStatus.mock.calls.length;
@@ -209,7 +222,7 @@ describe('ErrorBoundary', () => {
     render(
       <ErrorBoundary>
         <BrokenComponent />
-      </ErrorBoundary>,
+      </ErrorBoundary>
     );
 
     expect(screen.getByText('應用程式暫時無法顯示')).toBeInTheDocument();

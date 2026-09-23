@@ -19,16 +19,13 @@ describe('useSharedTeamPersonFilterPersistence', () => {
 
   it('waits for readiness and saves one normalized shared filter', async () => {
     api.updateTeamPersonFilter.mockResolvedValue({ configured: true });
-    const { result, rerender } = renderHook(
-      (props) => useSharedTeamPersonFilterPersistence(props),
-      {
-        initialProps: {
-          team: ' 團體 ',
-          selectedPeople: [' 甲 ', '甲', ''],
-          ready: false,
-        },
+    const { result, rerender } = renderHook((props) => useSharedTeamPersonFilterPersistence(props), {
+      initialProps: {
+        team: ' 團體 ',
+        selectedPeople: [' 甲 ', '甲', ''],
+        ready: false,
       },
-    );
+    });
 
     expect(api.updateTeamPersonFilter).not.toHaveBeenCalled();
     rerender({ team: ' 團體 ', selectedPeople: [' 甲 ', '甲', ''], ready: true });
@@ -44,13 +41,10 @@ describe('useSharedTeamPersonFilterPersistence', () => {
 
   it('reports a failed sync and retries without changing the desired filter', async () => {
     const onError = vi.fn();
-    api.updateTeamPersonFilter
-      .mockRejectedValueOnce(new Error('網路中斷'))
-      .mockResolvedValueOnce({ configured: true });
-    const { result } = renderHook(
-      (props) => useSharedTeamPersonFilterPersistence(props),
-      { initialProps: { team: '團體', selectedPeople: ['甲'], ready: true, onError } },
-    );
+    api.updateTeamPersonFilter.mockRejectedValueOnce(new Error('網路中斷')).mockResolvedValueOnce({ configured: true });
+    const { result } = renderHook((props) => useSharedTeamPersonFilterPersistence(props), {
+      initialProps: { team: '團體', selectedPeople: ['甲'], ready: true, onError },
+    });
 
     await waitFor(() => expect(result.current.error).toBe('帳號隊伍／人物篩選同步失敗：網路中斷'), { timeout: 2000 });
     expect(result.current.error).toBe('帳號隊伍／人物篩選同步失敗：網路中斷');

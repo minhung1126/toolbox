@@ -74,8 +74,18 @@ export default function ThumbnailDialog({ image, onClose }) {
           style={{ transform: `scale(${zoom})` }}
         />
       </div>
-      <button ref={closeRef} type="button" className="thumbnail-dialog-close" aria-label="關閉縮圖預覽" onClick={onClose}><X size={22} /></button>
-      <div className="thumbnail-dialog-hint" aria-live="polite">滾動滑鼠滾輪縮放 · {Math.round(zoom * 100)}%</div>
+      <button
+        ref={closeRef}
+        type="button"
+        className="thumbnail-dialog-close"
+        aria-label="關閉縮圖預覽"
+        onClick={onClose}
+      >
+        <X size={22} />
+      </button>
+      <div className="thumbnail-dialog-hint" aria-live="polite">
+        滾動滑鼠滾輪縮放 · {Math.round(zoom * 100)}%
+      </div>
     </Dialog>
   );
 }

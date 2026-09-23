@@ -42,7 +42,9 @@ describe('YouTubeQuotaBanner', () => {
   it('shows confirmed exhaustion as blocked with zero effective availability', async () => {
     api.getYoutubeQuotaUsage.mockResolvedValue(usage('confirmed_exhausted'));
     render(<YouTubeQuotaBanner />);
-    await waitFor(() => expect(screen.getByText('Google 已確認配額耗盡；系統已停止新的 YouTube 請求，直到官方重設。')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('Google 已確認配額耗盡；系統已停止新的 YouTube 請求，直到官方重設。')).toBeInTheDocument()
+    );
     expect(screen.getByText(/系統可用 0 單位/)).toBeInTheDocument();
   });
 
@@ -55,9 +57,12 @@ describe('YouTubeQuotaBanner', () => {
 
   it('does not show the previous slot while the next slot is loading', async () => {
     let resolveSecondary;
-    api.getYoutubeQuotaUsage
-      .mockResolvedValueOnce(usage())
-      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecondary = resolve; }));
+    api.getYoutubeQuotaUsage.mockResolvedValueOnce(usage()).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSecondary = resolve;
+        })
+    );
     render(<YouTubeQuotaBanner availableSlots={['primary', 'secondary']} />);
     await waitFor(() => expect(screen.getByText(/系統可用 7,180 單位/)).toBeInTheDocument());
 
@@ -70,9 +75,7 @@ describe('YouTubeQuotaBanner', () => {
   });
 
   it('does not reuse the previous slot data after a refresh failure', async () => {
-    api.getYoutubeQuotaUsage
-      .mockResolvedValueOnce(usage())
-      .mockRejectedValueOnce(new Error('暫時無法連線'));
+    api.getYoutubeQuotaUsage.mockResolvedValueOnce(usage()).mockRejectedValueOnce(new Error('暫時無法連線'));
     render(<YouTubeQuotaBanner />);
     await waitFor(() => expect(screen.getByText(/系統可用 7,180 單位/)).toBeInTheDocument());
 

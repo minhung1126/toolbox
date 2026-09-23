@@ -20,7 +20,9 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), padding 0.25s ease;
+  transition:
+    width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.25s ease;
   z-index: 100;
 }
 
@@ -581,7 +583,8 @@
 /* --------------------------------------------------------------------------
    Filter Panels & Chips
    -------------------------------------------------------------------------- */
-.filter-panel, .top-filter-bar {
+.filter-panel,
+.top-filter-bar {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
@@ -917,7 +920,9 @@
 
 .sheet-copy-cell {
   color: var(--text-main);
-  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .sheet-copy-cell:hover,
@@ -963,7 +968,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
   background: rgba(14, 15, 18, 0.78);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);

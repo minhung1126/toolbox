@@ -3,14 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
 import { PATHS } from '../routes/paths';
-import { 
-  Video, 
-  LogIn, 
-  CheckCircle2, 
-  AlertCircle, 
-  Lock,
-  RefreshCw,
-} from 'lucide-react';
+import { Video, LogIn, CheckCircle2, AlertCircle, Lock, RefreshCw } from 'lucide-react';
 
 export default function LoginPage({ initialError, returnTo }) {
   const [loggingIn, setLoggingIn] = useState(false);
@@ -37,7 +30,9 @@ export default function LoginPage({ initialError, returnTo }) {
     }
   }, []);
 
-  useEffect(() => { checkLoginReadiness(); }, [checkLoginReadiness]);
+  useEffect(() => {
+    checkLoginReadiness();
+  }, [checkLoginReadiness]);
 
   const handleGoogleLogin = async () => {
     setLoggingIn(true);
@@ -79,7 +74,8 @@ export default function LoginPage({ initialError, returnTo }) {
 
         {/* Description */}
         <p className="login-description">
-          歡迎使用 Toolbox 控制台。請使用 Google 帳號登入系統；Google 試算表、Google 雲端硬碟與 YouTube 頻道授權皆已獨立拆開，可在登入後於各自對應頁面中依需要授權。
+          歡迎使用 Toolbox 控制台。請使用 Google 帳號登入系統；Google 試算表、Google 雲端硬碟與 YouTube
+          頻道授權皆已獨立拆開，可在登入後於各自對應頁面中依需要授權。
         </p>
 
         {/* Feature List */}
@@ -90,19 +86,23 @@ export default function LoginPage({ initialError, returnTo }) {
           </div>
           <div className="feature-item">
             <CheckCircle2 size={18} className="feature-icon" />
-            <span><strong>模組化權限拆分</strong>：Google 試算表、雲端硬碟、YouTube 頻道分別獨立授權</span>
+            <span>
+              <strong>模組化權限拆分</strong>：Google 試算表、雲端硬碟、YouTube 頻道分別獨立授權
+            </span>
           </div>
           <div className="feature-item">
             <CheckCircle2 size={18} className="feature-icon" />
-            <span>安全的 <strong>Session Cookie</strong> 加密傳輸與憑證管理</span>
+            <span>
+              安全的 <strong>Session Cookie</strong> 加密傳輸與憑證管理
+            </span>
           </div>
         </div>
 
         {/* OAuth callback and readiness errors are kept separate so a readiness refresh cannot hide a failed login. */}
-          {oauthError && (
-            <div className="login-error-alert">
-              <AlertCircle size={18} />
-              <div className="login-error-content">
+        {oauthError && (
+          <div className="login-error-alert">
+            <AlertCircle size={18} />
+            <div className="login-error-content">
               <span>{oauthError}</span>
             </div>
           </div>
@@ -118,7 +118,8 @@ export default function LoginPage({ initialError, returnTo }) {
                     前往初次安裝精靈
                   </Link>
                   <button type="button" className="btn btn-secondary btn-sm" onClick={checkLoginReadiness}>
-                    <RefreshCw size={14} />重新檢查
+                    <RefreshCw size={14} />
+                    重新檢查
                   </button>
                 </div>
               )}
@@ -128,7 +129,7 @@ export default function LoginPage({ initialError, returnTo }) {
 
         {/* Login Action Button */}
         <div className="login-actions">
-          <button 
+          <button
             className="btn btn-primary login-btn"
             onClick={handleGoogleLogin}
             disabled={loggingIn || checkingConfig || !loginReady}
@@ -153,7 +154,8 @@ export default function LoginPage({ initialError, returnTo }) {
         </div>
 
         <p className="login-footer">
-          點擊登入會使用 Google OAuth 2.0 登入控制台；各項工具功能（試算表、雲端硬碟、YouTube 等）可在登入後分別獨立授權。
+          點擊登入會使用 Google OAuth 2.0 登入控制台；各項工具功能（試算表、雲端硬碟、YouTube
+          等）可在登入後分別獨立授權。
         </p>
       </div>
     </div>

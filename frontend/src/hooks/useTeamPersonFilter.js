@@ -71,11 +71,14 @@ export default function useTeamPersonFilter({
     }
   }, []);
 
-  const resetSelection = useCallback(({ team = '', selectedPeople: nextPeople = [] } = {}) => {
-    const normalizedPeople = asList(nextPeople);
-    initialSelectionRef.current = { team: team || '', people: normalizedPeople };
-    selectTeam(team, { preferredPeople: normalizedPeople });
-  }, [selectTeam]);
+  const resetSelection = useCallback(
+    ({ team = '', selectedPeople: nextPeople = [] } = {}) => {
+      const normalizedPeople = asList(nextPeople);
+      initialSelectionRef.current = { team: team || '', people: normalizedPeople };
+      selectTeam(team, { preferredPeople: normalizedPeople });
+    },
+    [selectTeam]
+  );
 
   useEffect(() => {
     const requestId = teamRequestRef.current + 1;
@@ -105,7 +108,8 @@ export default function useTeamPersonFilter({
       selectTeam(preference.team, { preferredPeople: preference.people });
     }
 
-    apiClient.parseSheetOptions(source, worksheetName)
+    apiClient
+      .parseSheetOptions(source, worksheetName)
       .then((result) => {
         if (teamRequestRef.current !== requestId) return;
         const nextTeams = asList(result?.teams);
@@ -153,9 +157,15 @@ export default function useTeamPersonFilter({
     setErrorType('');
     const requestedTeam = selectedTeam;
     const requestedContext = contextKey;
-    apiClient.getTeamPeople(source, worksheetName, requestedTeam)
+    apiClient
+      .getTeamPeople(source, worksheetName, requestedTeam)
       .then((result) => {
-        if (peopleRequestRef.current !== requestId || contextRef.current !== requestedContext || selectedTeamRef.current !== requestedTeam) return;
+        if (
+          peopleRequestRef.current !== requestId ||
+          contextRef.current !== requestedContext ||
+          selectedTeamRef.current !== requestedTeam
+        )
+          return;
         const nextPeople = asList(result?.people);
         setPeople(nextPeople);
         let nextSelectedPeople;
@@ -173,7 +183,12 @@ export default function useTeamPersonFilter({
         setSelectedPeopleState(nextSelectedPeople);
       })
       .catch((requestError) => {
-        if (peopleRequestRef.current !== requestId || contextRef.current !== requestedContext || selectedTeamRef.current !== requestedTeam) return;
+        if (
+          peopleRequestRef.current !== requestId ||
+          contextRef.current !== requestedContext ||
+          selectedTeamRef.current !== requestedTeam
+        )
+          return;
         setPeople([]);
         setSelectedPeopleState([]);
         selectedPeopleRef.current = [];

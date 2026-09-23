@@ -10,12 +10,14 @@ describe('route paths', () => {
     expect(PATHS.youtubeConnections).toBe('/youtube/settings/connections');
     expect(PATHS.sheetSettings).toBe('/sheets/settings');
     expect(PATHS.systemSettings).toBe('/system/settings');
+    expect(PATHS.componentShowcase).toBe('/system/design-system');
     expect(PATHS.photoCurator).toBe('/photo-curator');
     expect(PATHS.ffmpegGenerator).toBe('/ffmpeg-generator');
   });
 
   it('accepts known protected internal paths without hashes', () => {
     expect(getSafeReturnPath('/youtube/drafts/videos')).toBe('/youtube/drafts/videos');
+    expect(getSafeReturnPath(PATHS.componentShowcase)).toBe(PATHS.componentShowcase);
     expect(getSafeReturnPath('/youtube/drafts/shorts?tab=preview')).toBe('/youtube/drafts/shorts?tab=preview');
     expect(getSafeReturnPath('/youtube/drafts/videos#private')).toBeNull();
     expect(buildLoginPath('/youtube/drafts/videos')).toBe('/login?returnTo=%2Fyoutube%2Fdrafts%2Fvideos');

@@ -104,10 +104,7 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted }) {
 
   return (
     <>
-      <div
-        className={`glass-panel sticky-note-card${localNote.pinned ? ' is-pinned' : ''}`}
-        data-note-id={note.id}
-      >
+      <div className={`glass-panel sticky-note-card${localNote.pinned ? ' is-pinned' : ''}`} data-note-id={note.id}>
         <div className="sticky-note-header">
           <div className="sticky-note-remark-wrapper">
             <Tag size={14} className="sticky-note-remark-icon" aria-hidden="true" />

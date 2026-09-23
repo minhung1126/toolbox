@@ -45,9 +45,11 @@ describe('VideoThumbnail', () => {
     render(<VideoThumbnail src="https://example.com/thumb.jpg" alt="可點擊影片" onPreview={onPreview} />);
     const btn = screen.getByRole('button', { name: '放大檢視可點擊影片縮圖' });
     fireEvent.click(btn);
-    expect(onPreview).toHaveBeenCalledWith(expect.objectContaining({
-      src: 'https://example.com/thumb.jpg',
-      alt: '可點擊影片',
-    }));
+    expect(onPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        src: 'https://example.com/thumb.jpg',
+        alt: '可點擊影片',
+      })
+    );
   });
 });

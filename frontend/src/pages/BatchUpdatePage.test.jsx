@@ -63,7 +63,9 @@ vi.mock('../components/SheetDataSourcePanel', () => ({
   default: ({ children }) => <div>{children}</div>,
 }));
 vi.mock('../components/SourceLinkInput', () => ({
-  default: ({ id, value, onChange, sourceType: _sourceType, ...props }) => <input id={id} value={value || ''} onChange={onChange} {...props} />,
+  default: ({ id, value, onChange, sourceType: _sourceType, ...props }) => (
+    <input id={id} value={value || ''} onChange={onChange} {...props} />
+  ),
 }));
 vi.mock('../components/TeamPersonFilterPanel', () => ({ default: () => null }));
 vi.mock('../components/ThumbnailDialog', () => ({ default: () => null }));
@@ -96,7 +98,7 @@ function renderPage() {
       authUser={authUser}
       sysSettings={{ default_spreadsheet_id: 'sheet-a', default_playlist_id: 'playlist-a' }}
       videoType="Video"
-    />,
+    />
   );
 }
 
@@ -155,9 +157,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
   it('keeps the preview builder explicit about unchanged and skipped items', () => {
     const preview = buildBatchPreview({
       videos: [videoOne, videoTwo],
-      sheetRows: [
-        { team: '團體 A', person: '人物甲', cells: ['舊標題一', '舊描述一\n第二行'] },
-      ],
+      sheetRows: [{ team: '團體 A', person: '人物甲', cells: ['舊標題一', '舊描述一\n第二行'] }],
       sheetColumns: [
         { label: '標題', key: 'title', index: 0 },
         { label: '描述', key: 'description', index: 1 },
@@ -197,13 +197,15 @@ describe('BatchUpdatePage preview and confirmation', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: '開始批次更新' }));
     await waitFor(() => expect(mocks.api.batchUpdateMetadata).toHaveBeenCalledTimes(1));
-    expect(mocks.api.batchUpdateMetadata).toHaveBeenCalledWith(expect.objectContaining({
-      previewToken: 'preview-token',
-      assignments: [
-        { video_id: 'video-1', person: '人物甲' },
-        { video_id: 'video-2', person: '不編輯' },
-      ],
-    }));
+    expect(mocks.api.batchUpdateMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({
+        previewToken: 'preview-token',
+        assignments: [
+          { video_id: 'video-1', person: '人物甲' },
+          { video_id: 'video-2', person: '不編輯' },
+        ],
+      })
+    );
   });
 
   it('allows editing the playlist ID and auto-saves draft settings', async () => {
@@ -212,12 +214,19 @@ describe('BatchUpdatePage preview and confirmation', () => {
     expect(playlistInput).toBeInTheDocument();
 
     fireEvent.change(playlistInput, { target: { value: 'PL_new_playlist' } });
-    await waitFor(() => expect(mocks.api.updateYoutubePlaylist).toHaveBeenCalledWith({ playlistId: 'PL_new_playlist' }));
+    await waitFor(() =>
+      expect(mocks.api.updateYoutubePlaylist).toHaveBeenCalledWith({ playlistId: 'PL_new_playlist' })
+    );
 
     const saveButton = screen.getByRole('button', { name: '立即儲存草稿設定' });
     fireEvent.click(saveButton);
-    await waitFor(() => expect(mocks.api.updateYoutubeDraftSettings).toHaveBeenCalledWith('Video', expect.objectContaining({
-      spreadsheet_id: 'sheet-a',
-    })));
+    await waitFor(() =>
+      expect(mocks.api.updateYoutubeDraftSettings).toHaveBeenCalledWith(
+        'Video',
+        expect.objectContaining({
+          spreadsheet_id: 'sheet-a',
+        })
+      )
+    );
   });
 });

@@ -105,6 +105,37 @@ class WeverseUploadStore:
             tasks.sort(key=lambda t: t.get("created_at", ""), reverse=True)
             return tasks[:limit]
 
+    def mark_active_tasks_interrupted(self) -> int:
+        """Mark work left active by a prior process as interrupted without retrying it."""
+        active_statuses = {"pending", "uploading_video", "uploading_captions"}
+        interrupted_step = "服務重新啟動，無法確認 YouTube 上傳結果。為避免重複建立影片，請先檢查 YouTube Studio。"
+        with self._lock:
+            data = self._load_all()
+            now = _utc_now_iso()
+            recovered = 0
+            for user_data in data.values():
+                if not isinstance(user_data, dict):
+                    raise WeverseUploadStoreError("Weverse 上傳工作紀錄格式無效。")
+                tasks = user_data.get("tasks", {})
+                if not isinstance(tasks, dict):
+                    raise WeverseUploadStoreError("Weverse 上傳工作紀錄格式無效。")
+                for task in tasks.values():
+                    if not isinstance(task, dict):
+                        raise WeverseUploadStoreError("Weverse 上傳工作紀錄格式無效。")
+                    if task.get("status") in active_statuses:
+                        task.update(
+                            {
+                                "status": "interrupted",
+                                "current_step": interrupted_step,
+                                "error_message": interrupted_step,
+                                "updated_at": now,
+                            }
+                        )
+                        recovered += 1
+            if recovered:
+                self._save_all(data)
+            return recovered
+
     def record_recent_path(self, owner_sub: str, path: str) -> None:
         """Save a recently scanned folder path."""
         if not path:

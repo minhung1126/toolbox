@@ -30,7 +30,9 @@ export default function BatchPreviewItem({ item, index }) {
           <PreviewComparisonField label="目前標題" value={currentTitle} emptyLabel="（空白）" />
           <PreviewComparisonField label="目前描述" value={currentDescription} emptyLabel="（空白）" multiline />
         </div>
-        <div className="batch-preview-arrow" aria-hidden="true">→</div>
+        <div className="batch-preview-arrow" aria-hidden="true">
+          →
+        </div>
         <div className="batch-preview-column batch-preview-column-next">
           <h4>更新後內容</h4>
           <PreviewComparisonField label="更新後標題" value={nextTitle} emptyLabel={nextEmptyLabel} />

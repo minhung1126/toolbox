@@ -91,4 +91,3 @@ export function getYoutubeAuthContext(authUser, slotOverride = '') {
     authorizationFingerprint: getYoutubeAuthorizationFingerprint(youtube),
   };
 }
-

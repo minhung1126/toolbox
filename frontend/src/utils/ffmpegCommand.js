@@ -1,12 +1,4 @@
-import {
-  Clapperboard,
-  Music,
-  Sliders,
-  Sparkles,
-  Video,
-  VolumeX,
-  Zap,
-} from 'lucide-react';
+import { Clapperboard, Music, Sliders, Sparkles, Video, VolumeX, Zap } from 'lucide-react';
 
 export function secondsToHms(sec) {
   if (!sec || isNaN(sec) || sec < 0) return '00:00:00.000';
@@ -119,15 +111,7 @@ export const PRESET_LIST = [
   },
 ];
 
-export function buildTrimSummary({
-  enableStartCut,
-  startTime,
-  enableEndCut,
-  cutMode,
-  endTime,
-  durationCut,
-  duration,
-}) {
+export function buildTrimSummary({ enableStartCut, startTime, enableEndCut, cutMode, endTime, durationCut, duration }) {
   const startSec = enableStartCut ? parseHmsToSeconds(startTime) : 0;
   let endSec = duration;
   if (enableEndCut) {

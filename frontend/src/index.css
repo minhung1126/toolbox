@@ -50,7 +50,8 @@
   cursor: pointer;
 }
 
-.nav-item:hover, .nav-item.active {
+.nav-item:hover,
+.nav-item.active {
   color: #ffffff;
   background: #292927;
   border-left: 3px solid var(--primary);
@@ -288,7 +289,10 @@
   color: #fff;
   cursor: pointer;
   overflow-wrap: anywhere;
-  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .filter-option:hover {
@@ -566,8 +570,12 @@
 
 /* Spinner animation */
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .spin {
@@ -658,13 +666,25 @@
 }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateX(40px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes toast-out {
-  from { opacity: 1; transform: translateX(0); }
-  to { opacity: 0; transform: translateX(40px); }
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(40px);
+  }
 }
 
 /* Confirm Dialog */
@@ -878,13 +898,23 @@
 }
 
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes dialog-in {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* Result item rows */
@@ -993,7 +1023,9 @@
   text-align: center;
   border-radius: var(--radius-xl);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 24px 64px 0 rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(99, 102, 241, 0.2);
+  box-shadow:
+    0 24px 64px 0 rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(99, 102, 241, 0.2);
   animation: dialog-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -1120,7 +1152,9 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Responsive application shell and shared layout primitives */
@@ -1514,7 +1548,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
   background: rgba(0, 0, 0, 0.68);
   backdrop-filter: blur(4px);
   animation: fade-in 0.2s ease;
@@ -1660,7 +1695,8 @@
 }
 
 .thumbnail-dialog-overlay {
-  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
 }
 
 .thumbnail-dialog-viewport {
@@ -1676,7 +1712,8 @@
 }
 
 .confirm-overlay {
-  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
 }
 
 .confirm-dialog {
@@ -1706,7 +1743,8 @@
 
 .login-container {
   min-height: 100dvh;
-  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
 }
 
 .login-card {
@@ -1894,7 +1932,8 @@
 
   .main-content {
     margin-left: 0;
-    padding: calc(var(--mobile-shell-offset) + var(--page-padding)) var(--page-padding) calc(var(--page-padding) + env(safe-area-inset-bottom));
+    padding: calc(var(--mobile-shell-offset) + var(--page-padding)) var(--page-padding)
+      calc(var(--page-padding) + env(safe-area-inset-bottom));
   }
 
   .page-header-row,
@@ -2319,7 +2358,9 @@
 
 .video-card-selected {
   border-color: var(--primary);
-  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.45), 0 12px 36px rgba(99, 102, 241, 0.14);
+  box-shadow:
+    0 0 0 1px rgba(99, 102, 241, 0.45),
+    0 12px 36px rgba(99, 102, 241, 0.14);
 }
 
 .video-card-copy {
@@ -2716,8 +2757,6 @@
   }
 }
 
-
-
 /* ==========================================================================
    Sticky Notes Module (便利貼備忘錄)
    ========================================================================== */
@@ -2811,7 +2850,9 @@
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
   background: var(--bg-card);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
   position: relative;
 }
 
@@ -3348,7 +3389,9 @@
   flex-direction: column;
   gap: 0.75rem;
   min-height: 480px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .post-column-card.is-drag-over {
@@ -3450,7 +3493,9 @@
   border-radius: var(--radius-md);
   padding: 0.6rem;
   cursor: grab;
-  transition: transform 0.15s, border-color 0.15s;
+  transition:
+    transform 0.15s,
+    border-color 0.15s;
 }
 
 .curator-photo-card:hover {
@@ -4371,4 +4416,3 @@
 .param-desc {
   color: var(--text-main);
 }
-

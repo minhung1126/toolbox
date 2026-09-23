@@ -47,6 +47,8 @@ import TrackSubtitle from '../components/playlist-sort/TrackSubtitle';
 import SortKeyRow from '../components/playlist-sort/SortKeyRow';
 import PreviewTable, { StatusDot } from '../components/playlist-sort/PreviewTable';
 import InteractivePreviewTable from '../components/playlist-sort/InteractivePreviewTable';
+import { usePlaylistSortWorkflow } from '../features/ytmusic/hooks/usePlaylistSortWorkflow';
+import { playlistSortApi } from '../features/ytmusic/api/playlistSortApi';
 
 export {
   getLocaleCollation,
@@ -68,7 +70,6 @@ export {
   PreviewTable,
   InteractivePreviewTable,
 };
-
 
 export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
   const toast = useToast();
@@ -96,9 +97,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     const q = playlistFilterQuery.trim().toLowerCase();
     if (!q) return playlists;
     return playlists.filter(
-      (pl) =>
-        (pl.title || '').toLowerCase().includes(q) ||
-        (pl.description || '').toLowerCase().includes(q)
+      (pl) => (pl.title || '').toLowerCase().includes(q) || (pl.description || '').toLowerCase().includes(q)
     );
   }, [playlists, playlistFilterQuery]);
 
@@ -133,23 +132,26 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
   }, [preferences?.location, preferences?.language]);
 
   // Load playlists
+  const playlistRequestId = useRef(0);
   const fetchPlaylists = useCallback(async () => {
+    const requestId = ++playlistRequestId.current;
     setLoadingPlaylists(true);
     try {
-      const res = await api.getPlaylistSortPlaylists({
+      const res = await playlistSortApi.list({
         language: activeLanguage,
         location: activeLocation,
       });
+      if (requestId !== playlistRequestId.current) return;
       setPlaylists(res.playlists || []);
-      if ((res.playlists || []).length > 0 && !selectedPlaylistId) {
-        setSelectedPlaylistId(res.playlists[0].id);
-      }
+      setSelectedPlaylistId((currentId) => currentId || res.playlists?.[0]?.id || '');
     } catch (err) {
-      toast.error(`載入播放清單失敗：${err.message || '未知錯誤'}`);
+      if (requestId === playlistRequestId.current) {
+        toast.error(`載入播放清單失敗：${err.message || '未知錯誤'}`);
+      }
     } finally {
-      setLoadingPlaylists(false);
+      if (requestId === playlistRequestId.current) setLoadingPlaylists(false);
     }
-  }, [toast, selectedPlaylistId, activeLanguage, activeLocation]);
+  }, [toast, activeLanguage, activeLocation]);
 
   const ytmusicOAuth = useOAuthConnect({
     serviceName: 'ytmusic',
@@ -164,10 +166,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
   });
 
   // Pinned playlists persistence
-  const {
-    value: pinnedConfig,
-    save: savePinnedConfig,
-  } = useAccountWorkState('ytmusic_pinned_playlists', { ids: [] });
+  const { value: pinnedConfig, save: savePinnedConfig } = useAccountWorkState('ytmusic_pinned_playlists', { ids: [] });
 
   const pinnedPlaylistIds = useMemo(() => {
     if (Array.isArray(pinnedConfig?.ids)) return pinnedConfig.ids;
@@ -177,32 +176,33 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
 
   const pinnedPlaylists = useMemo(() => {
     if (!pinnedPlaylistIds.length || !playlists.length) return [];
-    return pinnedPlaylistIds
-      .map((id) => playlists.find((p) => p.id === id))
-      .filter(Boolean);
+    return pinnedPlaylistIds.map((id) => playlists.find((p) => p.id === id)).filter(Boolean);
   }, [pinnedPlaylistIds, playlists]);
 
   const isSelectedPinned = useMemo(() => {
     return selectedPlaylistId ? pinnedPlaylistIds.includes(selectedPlaylistId) : false;
   }, [selectedPlaylistId, pinnedPlaylistIds]);
 
-  const togglePinPlaylist = useCallback((playlistId) => {
-    if (!playlistId) return;
-    const isPinned = pinnedPlaylistIds.includes(playlistId);
-    let next;
-    if (isPinned) {
-      next = pinnedPlaylistIds.filter((id) => id !== playlistId);
-      toast.info('已從常用清單取消釘選');
-    } else {
-      next = [...pinnedPlaylistIds, playlistId];
-      toast.success('已加入常用釘選清單');
-    }
-    savePinnedConfig({ ids: next }, { debounceMs: 0 })?.then((res) => {
-      if (!res) {
-        toast.error('儲存常用釘選清單失敗，請稍後重試。');
+  const togglePinPlaylist = useCallback(
+    (playlistId) => {
+      if (!playlistId) return;
+      const isPinned = pinnedPlaylistIds.includes(playlistId);
+      let next;
+      if (isPinned) {
+        next = pinnedPlaylistIds.filter((id) => id !== playlistId);
+        toast.info('已從常用清單取消釘選');
+      } else {
+        next = [...pinnedPlaylistIds, playlistId];
+        toast.success('已加入常用釘選清單');
       }
-    });
-  }, [pinnedPlaylistIds, savePinnedConfig, toast]);
+      savePinnedConfig({ ids: next }, { debounceMs: 0 })?.then((res) => {
+        if (!res) {
+          toast.error('儲存常用釘選清單失敗，請稍後重試。');
+        }
+      });
+    },
+    [pinnedPlaylistIds, savePinnedConfig, toast]
+  );
 
   // Split filtered playlists into pinned and unpinned
   const { pinnedFiltered, unpinnedFiltered } = useMemo(() => {
@@ -242,15 +242,18 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
   const [applyMode, setApplyMode] = useState(() => sortConfig?.applyMode || 'in_place'); // 'in_place' | 'new_playlist'
 
   // Helper to persist current sorting setup
-  const persistConfig = useCallback((patch = {}) => {
-    saveSortConfig({
-      presetMode,
-      customKeys,
-      applyMode,
-      selectedPlaylistId,
-      ...patch,
-    });
-  }, [presetMode, customKeys, applyMode, selectedPlaylistId, saveSortConfig]);
+  const persistConfig = useCallback(
+    (patch = {}) => {
+      saveSortConfig({
+        presetMode,
+        customKeys,
+        applyMode,
+        selectedPlaylistId,
+        ...patch,
+      });
+    },
+    [presetMode, customKeys, applyMode, selectedPlaylistId, saveSortConfig]
+  );
 
   // Asynchronous restore from persisted sortConfig
   const restoredConfigRef = useRef(false);
@@ -305,8 +308,10 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
 
   useEffect(() => {
     fetchPlaylists();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => {
+      playlistRequestId.current += 1;
+    };
+  }, [fetchPlaylists]);
 
   // Reset preview when selected playlist changes
   useEffect(() => {
@@ -337,160 +342,41 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     setIsManuallyAdjusted(false);
   }, [cachedOriginalTracks, activeSortKeys, activeCollationLocale]);
 
-  const handlePreview = useCallback(async () => {
-    if (!selectedPlaylistId) {
-      toast.warning('請先選擇播放清單');
-      return;
-    }
-    if (activeSortKeys.length === 0) {
-      toast.warning('請至少指定一個排序欄位');
-      return;
-    }
-    setPreviewing(true);
-    setPreviewData(null);
-    setApplyResult(null);
-    try {
-      const res = await api.previewPlaylistSort({
-        playlistId: selectedPlaylistId,
-        sortKeys: activeSortKeys,
-        language: activeLanguage,
-        location: activeLocation,
-      });
-      setPreviewData(res.preview || null);
-      setPreviewToken(res.preview_token || '');
-      setQuotaEstimate(res.quota_estimate || null);
-      setIsManuallyAdjusted(false);
-
-      // Cache original items for instant zero-latency client simulation
-      if (res.preview?.items) {
-        const sortedOriginal = [...res.preview.items].sort(
-          (a, b) => (a.original_position ?? 0) - (b.original_position ?? 0)
-        );
-        setCachedOriginalTracks(sortedOriginal);
-      }
-
-      const moved = res.preview?.moved_count ?? 0;
-      const total = res.preview?.total ?? 0;
-      if (moved === 0) {
-        toast.success(`清單已是正確順序，無需排序（共 ${total} 首）`);
-      } else {
-        toast.success(`預覽完成：${moved} 首需移動 / 共 ${total} 首（已啟用即時動態模擬）`);
-      }
-    } catch (err) {
-      if (err.status === 429 || err.code === 'quota_unavailable' || err.code === 'YOUTUBE_QUOTA_UNAVAILABLE') {
-        setQuotaExceededRecovery({
-          message: err.message || 'Google YouTube Data API 配額已達每日上限。',
-        });
-      }
-      toast.error(`預覽失敗：${err.message || '未知錯誤'}`);
-    } finally {
-      setPreviewing(false);
-    }
-  }, [selectedPlaylistId, activeSortKeys, activeLanguage, activeLocation, toast]);
-
-  const handleTokenSaved = useCallback(async () => {
-    await refreshAuthUser?.();
-    setShowTokenDrawer(false);
-    if (selectedPlaylistId) {
-      handlePreview();
-    }
-  }, [refreshAuthUser, selectedPlaylistId, handlePreview]);
-
-  const handleTokenCleared = useCallback(async () => {
-    await refreshAuthUser?.();
-    if (selectedPlaylistId) {
-      handlePreview();
-    }
-  }, [refreshAuthUser, selectedPlaylistId, handlePreview]);
-
-  // Handle reordering tracks manually via drag-and-drop in the right preview list
-  const handleReorderTracks = useCallback((sourceIdx, targetIdx) => {
-    if (!previewData?.items || !cachedOriginalTracks) return;
-
-    const currentSorted = [...previewData.items];
-    const [dragged] = currentSorted.splice(sourceIdx, 1);
-    currentSorted.splice(targetIdx, 0, dragged);
-
-    const updatedPreview = buildPreviewFromSorted(cachedOriginalTracks, currentSorted);
-    setPreviewData(updatedPreview);
-    setIsManuallyAdjusted(true);
-  }, [previewData, cachedOriginalTracks]);
-
-  // Reset to automated rule order
-  const handleResetToRuleOrder = useCallback(() => {
-    if (!cachedOriginalTracks) return;
-    const locallySorted = sortTracksLocally(cachedOriginalTracks, activeSortKeys, activeCollationLocale);
-    const simulatedPreview = buildPreviewFromSorted(cachedOriginalTracks, locallySorted);
-    setPreviewData(simulatedPreview);
-    setIsManuallyAdjusted(false);
-    toast.info('已重設為目前規則排序');
-  }, [cachedOriginalTracks, activeSortKeys, activeCollationLocale, toast]);
-
-  const handleApplyClick = useCallback(() => {
-    if (!previewData || (applyMode === 'in_place' && previewData.moved_count === 0)) {
-      toast.info('清單順序無需變更');
-      return;
-    }
-    setShowConfirm(true);
-  }, [previewData, applyMode, toast]);
-
-  const handleApplyConfirm = useCallback(async (options = {}) => {
-    const { forceAllowQuotaFallback = false } = options;
-    setShowConfirm(false);
-    setApplying(true);
-    try {
-      const payload = {
-        playlistId: selectedPlaylistId,
-        sortKeys: activeSortKeys,
-        previewToken,
-        language: activeLanguage,
-        location: activeLocation,
-      };
-      if (forceAllowQuotaFallback) {
-        payload.allowQuotaFallback = true;
-      }
-      if (applyMode === 'new_playlist') {
-        payload.mode = 'new_playlist';
-        payload.newPlaylistTitle = newPlaylistTitle;
-      }
-      if (previewData?.items && previewData.items.length > 0) {
-        payload.sortedItemIds = previewData.items.map((it) => it.playlist_item_id);
-      }
-      const res = await api.applyPlaylistSort(payload);
-      setApplyResult(res);
-      const succeeded = res.succeeded ?? 0;
-      const failed = res.failed ?? 0;
-      if (failed > 0) {
-        toast.warning(`排序完成：成功 ${succeeded} / 失敗 ${failed}`);
-      } else if (res.mode === 'new_playlist') {
-        toast.success(`全新已排序清單「${newPlaylistTitle}」已成功建立！`);
-      } else {
-        toast.success(`排序成功套用！已移動 ${succeeded} 首歌曲`);
-      }
-      setPreviewData(null);
-      setPreviewToken('');
-      setQuotaEstimate(null);
-      setCachedOriginalTracks(null);
-      setIsManuallyAdjusted(false);
-    } catch (err) {
-      const errCode = err.code || err.detail?.code;
-      if (errCode === 'TOKEN_FALLBACK_BLOCKED' || err.status === 401) {
-        setStrictFallbackPrompt({
-          message: err.message || err.detail?.message || 'YouTube Music Token 認證失效或已過期。',
-          quotaUnits: quotaEstimate?.total_units || (previewData?.moved_count || 0) * 50,
-        });
-        return;
-      }
-      if (err.status === 429 || err.code === 'quota_unavailable' || err.code === 'YOUTUBE_QUOTA_UNAVAILABLE') {
-        setQuotaExceededRecovery({
-          message: err.message || 'Google YouTube Data API 配額已達每日上限。',
-        });
-      }
-      toast.error(`套用排序失敗：${err.message || '未知錯誤'}`);
-    } finally {
-      setApplying(false);
-    }
-  }, [selectedPlaylistId, activeSortKeys, previewToken, applyMode, newPlaylistTitle, previewData, activeLanguage, activeLocation, quotaEstimate, toast]);
+  const {
+    handleApplyClick,
+    handleApplyConfirm,
+    handlePreview,
+    handleReorderTracks,
+    handleResetToRuleOrder,
+    handleTokenCleared,
+    handleTokenSaved,
+  } = usePlaylistSortWorkflow({
+    activeLanguage,
+    activeLocation,
+    activeSortKeys,
+    activeCollationLocale,
+    applyMode,
+    cachedOriginalTracks,
+    newPlaylistTitle,
+    previewData,
+    previewToken,
+    quotaEstimate,
+    refreshAuthUser,
+    selectedPlaylistId,
+    toast,
+    setApplyResult,
+    setApplying,
+    setCachedOriginalTracks,
+    setIsManuallyAdjusted,
+    setPreviewData,
+    setPreviewToken,
+    setPreviewing,
+    setQuotaEstimate,
+    setQuotaExceededRecovery,
+    setShowConfirm,
+    setShowTokenDrawer,
+    setStrictFallbackPrompt,
+  });
 
   // Drag & drop handlers for sort rule keys
   const handleRuleDragStart = (e, index) => {
@@ -523,17 +409,23 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     setDragOverRuleIdx(null);
   };
 
-  const handleCustomKeyChange = useCallback((index, newKey) => {
-    const next = customKeys.map((k, i) => (i === index ? newKey : k));
-    setCustomKeys(next);
-    persistConfig({ customKeys: next });
-  }, [customKeys, persistConfig]);
+  const handleCustomKeyChange = useCallback(
+    (index, newKey) => {
+      const next = customKeys.map((k, i) => (i === index ? newKey : k));
+      setCustomKeys(next);
+      persistConfig({ customKeys: next });
+    },
+    [customKeys, persistConfig]
+  );
 
-  const handleCustomKeyRemove = useCallback((index) => {
-    const next = customKeys.filter((_, i) => i !== index);
-    setCustomKeys(next);
-    persistConfig({ customKeys: next });
-  }, [customKeys, persistConfig]);
+  const handleCustomKeyRemove = useCallback(
+    (index) => {
+      const next = customKeys.filter((_, i) => i !== index);
+      setCustomKeys(next);
+      persistConfig({ customKeys: next });
+    },
+    [customKeys, persistConfig]
+  );
 
   const handleAddCustomKey = useCallback(() => {
     if (customKeys.length >= 5) return;
@@ -546,8 +438,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
   const originalItems = cachedOriginalTracks
     ? cachedOriginalTracks
     : previewData?.items
-    ? [...previewData.items].sort((a, b) => (a.original_position ?? 0) - (b.original_position ?? 0))
-    : [];
+      ? [...previewData.items].sort((a, b) => (a.original_position ?? 0) - (b.original_position ?? 0))
+      : [];
 
   const sortedItems = previewData?.items || [];
 
@@ -560,15 +452,29 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         </div>
         <h1>YouTube Music 播放清單排序</h1>
         <p className="section-desc">
-          讀取個人 YouTube Music 播放清單，以歌手／藝人、專輯名稱、歌曲曲目順序、歌名等多重規則自訂排序。支援拖曳順序與即時快取動態模擬比對，零配額消耗（0 API Credit）。
+          讀取個人 YouTube Music
+          播放清單，以歌手／藝人、專輯名稱、歌曲曲目順序、歌名等多重規則自訂排序。支援拖曳順序與即時快取動態模擬比對，零配額消耗（0
+          API Credit）。
         </p>
       </header>
 
       {/* YouTube Music In-Place Authorization Status */}
       <section className="glass-panel card-padding">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div className="icon-box icon-box-primary" style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}>
+            <div
+              className="icon-box icon-box-primary"
+              style={{
+                width: 40,
+                height: 40,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 8,
+              }}
+            >
               <Disc3 size={22} />
             </div>
             <div>
@@ -579,23 +485,32 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                     <CheckCircle2 size={12} /> ⚡ 0 配額模式（瀏覽器 Token 已啟用）
                   </span>
                 ) : isYtmusicConnected ? (
-                  <span className="badge badge-warning" style={{ background: 'rgba(234, 179, 8, 0.15)', color: '#facc15', border: '1px solid rgba(234, 179, 8, 0.3)' }}>
+                  <span
+                    className="badge badge-warning"
+                    style={{
+                      background: 'rgba(234, 179, 8, 0.15)',
+                      color: '#facc15',
+                      border: '1px solid rgba(234, 179, 8, 0.3)',
+                    }}
+                  >
                     <AlertTriangle size={12} /> Google API 配額模式
                   </span>
                 ) : activeYoutubeConnected ? (
                   <span className="badge badge-info">共用 YouTube 頻道授權</span>
                 ) : (
-                  <span className="badge badge-disconnected"><AlertTriangle size={12} /> 尚未授權</span>
+                  <span className="badge badge-disconnected">
+                    <AlertTriangle size={12} /> 尚未授權
+                  </span>
                 )}
               </div>
               <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)' }}>
                 {hasCustomToken
                   ? `已啟用 YouTube Music 瀏覽器 Token${tokenAccountName ? `（${tokenAccountName}${tokenChannelHandle ? ` / ${tokenChannelHandle}` : ''}）` : ''}。排序作業採用內部協定，消耗 0 Google API 配額。`
                   : isYtmusicConnected
-                  ? `目前使用 Google YouTube Data API（每次移動消耗 50 點配額）。建議展開下方快速面板貼上 Token 享受 0 配額免扣點。`
-                  : activeYoutubeConnected
-                  ? `目前沿用主要 YouTube 頻道（${authUser?.youtube?.slots?.primary?.channel_title || '品牌頻道'}）授權。若要使用個人日常音樂帳號，建議連結專屬帳號或展開面板貼上 Token。`
-                  : '尚未連結 YouTube 或 YouTube Music 帳號，請先完成授權以載入個人播放清單。'}
+                    ? `目前使用 Google YouTube Data API（每次移動消耗 50 點配額）。建議展開下方快速面板貼上 Token 享受 0 配額免扣點。`
+                    : activeYoutubeConnected
+                      ? `目前沿用主要 YouTube 頻道（${authUser?.youtube?.slots?.primary?.channel_title || '品牌頻道'}）授權。若要使用個人日常音樂帳號，建議連結專屬帳號或展開面板貼上 Token。`
+                      : '尚未連結 YouTube 或 YouTube Music 帳號，請先完成授權以載入個人播放清單。'}
               </p>
             </div>
           </div>
@@ -655,7 +570,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                 onClick={ytmusicOAuth.handleConnect}
                 disabled={ytmusicOAuth.connecting}
               >
-                {ytmusicOAuth.connecting ? <Loader2 size={14} className="spin" /> : <Disc3 size={14} />} 連結 YouTube Music 專屬帳號
+                {ytmusicOAuth.connecting ? <Loader2 size={14} className="spin" /> : <Disc3 size={14} />} 連結 YouTube
+                Music 專屬帳號
               </button>
             )}
           </div>
@@ -676,7 +592,16 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
 
       {/* Step 1: Select Playlist */}
       <section className="glass-panel card-padding">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 12,
+            flexWrap: 'wrap',
+            gap: 8,
+          }}
+        >
           <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
             <ListMusic size={18} /> 選擇播放清單
           </h3>
@@ -737,7 +662,15 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         {/* Pinned Playlists Quick Access Chips */}
         {pinnedPlaylists.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span
+              style={{
+                fontSize: 12,
+                color: 'rgba(255,255,255,0.6)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
               <Pin size={13} style={{ transform: 'rotate(45deg)' }} /> 常用釘選：
             </span>
             {pinnedPlaylists.map((pl) => {
@@ -775,7 +708,13 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                       e.stopPropagation();
                       togglePinPlaylist(pl.id);
                     }}
-                    style={{ marginLeft: 3, opacity: 0.65, cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
+                    style={{
+                      marginLeft: 3,
+                      opacity: 0.65,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                    }}
                     title="取消釘選"
                   >
                     <X size={12} />
@@ -800,9 +739,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             {loadingPlaylists ? (
               <option value="">載入中…</option>
             ) : filteredPlaylists.length === 0 ? (
-              <option value="">
-                {playlists.length === 0 ? '找不到播放清單' : '無符合關鍵字的播放清單'}
-              </option>
+              <option value="">{playlists.length === 0 ? '找不到播放清單' : '無符合關鍵字的播放清單'}</option>
             ) : (
               <>
                 {pinnedFiltered.length > 0 && (
@@ -848,28 +785,51 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         </div>
         {selectedPlaylist && (
           <p style={{ margin: '8px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
-            {selectedPlaylist.description || '無說明'} · {selectedPlaylist.privacy_status === 'private' ? '私人' : selectedPlaylist.privacy_status === 'unlisted' ? '不公開' : '公開'}
+            {selectedPlaylist.description || '無說明'} ·{' '}
+            {selectedPlaylist.privacy_status === 'private'
+              ? '私人'
+              : selectedPlaylist.privacy_status === 'unlisted'
+                ? '不公開'
+                : '公開'}
           </p>
         )}
       </section>
 
       {/* Step 2: Sort Rules */}
       <section className="glass-panel card-padding">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 12,
+            flexWrap: 'wrap',
+            gap: 8,
+          }}
+        >
           <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
             <ArrowUpDown size={18} /> 排序規則
           </h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {savingConfig ? (
-              <span className="badge badge-warning" style={{ fontSize: 11, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span
+                className="badge badge-warning"
+                style={{ fontSize: 11, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
                 <Loader2 size={12} className="spin" /> 儲存設定中…
               </span>
             ) : savedConfig ? (
-              <span className="badge badge-connected" style={{ fontSize: 11, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span
+                className="badge badge-connected"
+                style={{ fontSize: 11, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
                 <CheckCircle2 size={12} /> 排序設定已自動儲存
               </span>
             ) : (
-              <span className="badge badge-info" style={{ fontSize: 11, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span
+                className="badge badge-info"
+                style={{ fontSize: 11, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
                 <CheckCircle2 size={12} /> 自動記憶設定
               </span>
             )}
@@ -893,7 +853,9 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             style={{ maxWidth: 460 }}
           >
             {SORT_PRESETS.map((p) => (
-              <option key={p.id} value={p.id}>{p.label}</option>
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
             ))}
           </select>
         </div>
@@ -960,10 +922,17 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
       {/* Step 3: Side-by-Side Live Preview Results */}
       {previewData && (
         <section className="glass-panel card-padding">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
-            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-              左右比對預覽結果
-            </h3>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 10,
+              flexWrap: 'wrap',
+              gap: 8,
+            }}
+          >
+            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>左右比對預覽結果</h3>
             <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <StatusDot status="unchanged" /> 不變 {previewData.unchanged_count} 首
@@ -971,18 +940,12 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <StatusDot status="moved" /> 移動 {previewData.moved_count} 首
               </span>
-              <span style={{ color: 'rgba(255,255,255,0.5)' }}>
-                共 {previewData.total} 首
-              </span>
+              <span style={{ color: 'rgba(255,255,255,0.5)' }}>共 {previewData.total} 首</span>
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <PreviewTable
-              title="目前原始順序"
-              items={originalItems}
-              sortKeys={activeSortKeys}
-            />
+            <PreviewTable title="目前原始順序" items={originalItems} sortKeys={activeSortKeys} />
             <InteractivePreviewTable
               title="即時排序結果"
               items={sortedItems}
@@ -999,37 +962,46 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
       {/* Step 4: Apply Configuration */}
       {previewData && (previewData.moved_count > 0 || applyMode === 'new_playlist') && !applyResult && (
         <section className="glass-panel card-padding">
-          <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem' }}>
-            套用模式與配額資訊
-          </h3>
+          <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem' }}>套用模式與配額資訊</h3>
 
           {quotaEstimate && (
             <div style={{ marginBottom: 16 }}>
               {quotaEstimate.total_units === 0 ? (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '10px 14px',
-                  borderRadius: 8,
-                  backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                  border: '1px solid rgba(34, 197, 94, 0.25)',
-                  color: '#4ade80',
-                  fontSize: 13,
-                }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '10px 14px',
+                    borderRadius: 8,
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    border: '1px solid rgba(34, 197, 94, 0.25)',
+                    color: '#4ade80',
+                    fontSize: 13,
+                  }}
+                >
                   <CheckCircle2 size={18} />
                   <span>
-                    <strong>YouTube Music Token 協定運作中（0 配額）</strong>：本次操作預計移動 {previewData.moved_count} 首歌曲，
+                    <strong>YouTube Music Token 協定運作中（0 配額）</strong>：本次操作預計移動{' '}
+                    {previewData.moved_count} 首歌曲，
                     <strong>消耗 0 Google API 配額點數</strong>。
                   </span>
                 </div>
               ) : (
                 <StatusMessage tone="warning" title="API 配額消耗預估">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 10,
+                    }}
+                  >
                     <span>
-                      本次排序將移動 <strong>{previewData.moved_count}</strong> 首歌曲，
-                      預估消耗 <strong>{quotaEstimate.total_units?.toLocaleString()}</strong> API 配額點數
-                      （每次移動 {quotaEstimate.units_per_move} 點）。
+                      本次排序將移動 <strong>{previewData.moved_count}</strong> 首歌曲， 預估消耗{' '}
+                      <strong>{quotaEstimate.total_units?.toLocaleString()}</strong> API 配額點數 （每次移動{' '}
+                      {quotaEstimate.units_per_move} 點）。
                     </span>
                     {!hasCustomToken && (
                       <button
@@ -1118,7 +1090,11 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             <div>
               <span>
                 成功移動 <strong>{applyResult.succeeded}</strong> 首，
-                {applyResult.failed > 0 && (<>失敗 <strong>{applyResult.failed}</strong> 首，</>)}
+                {applyResult.failed > 0 && (
+                  <>
+                    失敗 <strong>{applyResult.failed}</strong> 首，
+                  </>
+                )}
                 消耗 <strong>{applyResult.quota_used?.toLocaleString() ?? 0}</strong> API 配額點數。
               </span>
               {applyResult.new_playlist_url && (
@@ -1151,8 +1127,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
       >
         <div>
           <p>
-            即將對播放清單「<strong>{selectedPlaylist?.title || selectedPlaylistId}</strong>」套用排序，
-            將移動 <strong>{previewData?.moved_count || 0}</strong> 首歌曲。
+            即將對播放清單「<strong>{selectedPlaylist?.title || selectedPlaylistId}</strong>」套用排序， 將移動{' '}
+            <strong>{previewData?.moved_count || 0}</strong> 首歌曲。
           </p>
           {applyMode === 'new_playlist' ? (
             <p style={{ color: 'var(--color-success, #22c55e)' }}>
@@ -1162,11 +1138,13 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             <p style={{ color: 'var(--color-success, #22c55e)' }}>
               ✓ 使用 YouTube Music Token 更新，<strong>消耗 0 API 配額點數</strong>。
             </p>
-          ) : quotaEstimate && (
-            <p style={{ color: 'var(--color-warning, #eab308)' }}>
-              ⚠ 預估消耗 <strong>{quotaEstimate.total_units?.toLocaleString()}</strong> API 配額點數。
-              此操作不可自動撤銷。
-            </p>
+          ) : (
+            quotaEstimate && (
+              <p style={{ color: 'var(--color-warning, #eab308)' }}>
+                ⚠ 預估消耗 <strong>{quotaEstimate.total_units?.toLocaleString()}</strong> API 配額點數。
+                此操作不可自動撤銷。
+              </p>
+            )
           )}
           <p>確定要繼續嗎？</p>
         </div>
@@ -1201,14 +1179,14 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         }}
       >
         <div>
-          <p style={{ color: '#f87171', fontWeight: 600 }}>
-            {strictFallbackPrompt?.message}
-          </p>
+          <p style={{ color: '#f87171', fontWeight: 600 }}>{strictFallbackPrompt?.message}</p>
           <p>
-            系統已依「<strong>嚴格防禦政策</strong>」攔截自動降級，以避免在未經確認的情況下無預警消耗 <strong>{strictFallbackPrompt?.quotaUnits}</strong> 點 Google Cloud API 配額。
+            系統已依「<strong>嚴格防禦政策</strong>」攔截自動降級，以避免在未經確認的情況下無預警消耗{' '}
+            <strong>{strictFallbackPrompt?.quotaUnits}</strong> 點 Google Cloud API 配額。
           </p>
           <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>
-            💡 <strong>推薦作法</strong>：點擊「立即更新 Token」，展開上方快速面板貼上新的 cURL / Cookie，即可繼續以 0 配額完成排序。
+            💡 <strong>推薦作法</strong>：點擊「立即更新 Token」，展開上方快速面板貼上新的 cURL / Cookie，即可繼續以 0
+            配額完成排序。
           </p>
         </div>
       </ConfirmDialog>
@@ -1226,15 +1204,21 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         onCancel={() => setQuotaExceededRecovery(null)}
       >
         <div>
-          <p style={{ color: '#f87171' }}>
-            {quotaExceededRecovery?.message}
-          </p>
-          <p>
-            Google YouTube Data API 每日配額已達上限（將於每日太平洋時間午夜重置）。
-          </p>
-          <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', color: '#38bdf8', fontSize: 13, marginTop: 10 }}>
-            💡 <strong>即刻救援方案</strong>：
-            只要貼上 YouTube Music 瀏覽器 Token，即可完全繞過 Google API 配額限制，<strong>立刻以 0 配額完成排序</strong>！
+          <p style={{ color: '#f87171' }}>{quotaExceededRecovery?.message}</p>
+          <p>Google YouTube Data API 每日配額已達上限（將於每日太平洋時間午夜重置）。</p>
+          <div
+            style={{
+              padding: '10px 14px',
+              borderRadius: 8,
+              background: 'rgba(56, 189, 248, 0.1)',
+              border: '1px solid rgba(56, 189, 248, 0.25)',
+              color: '#38bdf8',
+              fontSize: 13,
+              marginTop: 10,
+            }}
+          >
+            💡 <strong>即刻救援方案</strong>： 只要貼上 YouTube Music 瀏覽器 Token，即可完全繞過 Google API 配額限制，
+            <strong>立刻以 0 配額完成排序</strong>！
           </div>
         </div>
       </ConfirmDialog>

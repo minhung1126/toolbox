@@ -111,7 +111,16 @@ export default function QuickTokenDrawer({
       }}
     >
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 10,
+          marginBottom: 12,
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Key size={18} color="var(--primary, #38bdf8)" />
           <strong style={{ fontSize: '0.95rem', color: '#fff' }}>
@@ -147,12 +156,31 @@ export default function QuickTokenDrawer({
 
       {/* Current token metadata pill if active */}
       {hasCustomToken && (
-        <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.2)', fontSize: '0.8rem', color: 'rgba(255,255,255,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div
+          style={{
+            marginBottom: 12,
+            padding: '8px 12px',
+            borderRadius: 6,
+            background: 'rgba(34, 197, 94, 0.08)',
+            border: '1px solid rgba(34, 197, 94, 0.2)',
+            fontSize: '0.8rem',
+            color: 'rgba(255,255,255,0.85)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 8,
+          }}
+        >
           <div>
             <span>目前 Token 綁定帳號：</span>
             <strong style={{ color: '#4ade80' }}>{tokenAccountName || '已配置自訂 Token'}</strong>
             {tokenChannelHandle && <span style={{ opacity: 0.7, marginLeft: 4 }}>({tokenChannelHandle})</span>}
-            {tokenUpdatedAt && <span style={{ opacity: 0.5, marginLeft: 8 }}>（更新於 {new Date(tokenUpdatedAt).toLocaleDateString()}）</span>}
+            {tokenUpdatedAt && (
+              <span style={{ opacity: 0.5, marginLeft: 8 }}>
+                （更新於 {new Date(tokenUpdatedAt).toLocaleDateString()}）
+              </span>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             <button
@@ -170,7 +198,14 @@ export default function QuickTokenDrawer({
               className="btn btn-secondary btn-sm"
               onClick={handleClear}
               disabled={validating || saving}
-              style={{ color: 'var(--color-danger, #ef4444)', padding: '2px 8px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              style={{
+                color: 'var(--color-danger, #ef4444)',
+                padding: '2px 8px',
+                fontSize: '0.75rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
             >
               <Trash2 size={12} /> 清除
             </button>
@@ -180,23 +215,64 @@ export default function QuickTokenDrawer({
 
       {/* DevTools Quick Guide (Collapsible) */}
       {showGuide && (
-        <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: 8, padding: '12px 14px', marginBottom: 12, fontSize: '0.825rem', lineHeight: 1.5 }}>
-          <div style={{ fontWeight: 600, color: 'var(--primary, #38bdf8)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div
+          style={{
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: 8,
+            padding: '12px 14px',
+            marginBottom: 12,
+            fontSize: '0.825rem',
+            lineHeight: 1.5,
+          }}
+        >
+          <div
+            style={{
+              fontWeight: 600,
+              color: 'var(--primary, #38bdf8)',
+              marginBottom: 6,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
             <Code2 size={15} /> 3 步驟快速取得（最推薦 Copy as cURL）
           </div>
           <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
             <li>
               開啟{' '}
-              <a href="https://music.youtube.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary, #38bdf8)', textDecoration: 'underline' }}>
+              <a
+                href="https://music.youtube.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--primary, #38bdf8)', textDecoration: 'underline' }}
+              >
                 music.youtube.com <ExternalLink size={11} style={{ verticalAlign: 'middle' }} />
               </a>{' '}
               並確認已登入 Google 帳號。
             </li>
-            <li>按下鍵盤 <kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: 3, border: '1px solid rgba(255,255,255,0.15)' }}>F12</kbd> 開啟開發者工具 ➔ 切換至 <strong>Network (網路)</strong> 標籤頁。</li>
-            <li>在 YouTube Music 頁面上隨意點任一歌單或歌曲，於 Network 面板任一請求點右鍵 ➔ <strong>Copy</strong> ➔ 選擇 <strong>Copy as cURL (cmd/bash)</strong> 或 <strong>Copy as Node.js fetch</strong>。</li>
+            <li>
+              按下鍵盤{' '}
+              <kbd
+                style={{
+                  background: 'rgba(255,255,255,0.1)',
+                  padding: '1px 5px',
+                  borderRadius: 3,
+                  border: '1px solid rgba(255,255,255,0.15)',
+                }}
+              >
+                F12
+              </kbd>{' '}
+              開啟開發者工具 ➔ 切換至 <strong>Network (網路)</strong> 標籤頁。
+            </li>
+            <li>
+              在 YouTube Music 頁面上隨意點任一歌單或歌曲，於 Network 面板任一請求點右鍵 ➔ <strong>Copy</strong> ➔ 選擇{' '}
+              <strong>Copy as cURL (cmd/bash)</strong> 或 <strong>Copy as Node.js fetch</strong>。
+            </li>
           </ol>
           <div style={{ marginTop: 8, color: '#f87171', fontSize: '0.775rem' }}>
-            ⚠️ 注意：請避免選純前端「Copy as fetch」（瀏覽器會依安全規範剔除 Cookie）。選擇 <strong>Copy as cURL</strong> 可 100% 完整附帶認證。
+            ⚠️ 注意：請避免選純前端「Copy as fetch」（瀏覽器會依安全規範剔除 Cookie）。選擇{' '}
+            <strong>Copy as cURL</strong> 可 100% 完整附帶認證。
           </div>
         </div>
       )}
@@ -217,16 +293,23 @@ export default function QuickTokenDrawer({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {validationResult.valid ? <CheckCircle2 size={16} color="#4ade80" /> : <AlertCircle size={16} color="#f87171" />}
+            {validationResult.valid ? (
+              <CheckCircle2 size={16} color="#4ade80" />
+            ) : (
+              <AlertCircle size={16} color="#f87171" />
+            )}
             <div>
-              <div style={{ fontWeight: 600, fontSize: '0.85rem', color: validationResult.valid ? '#4ade80' : '#f87171' }}>
+              <div
+                style={{ fontWeight: 600, fontSize: '0.85rem', color: validationResult.valid ? '#4ade80' : '#f87171' }}
+              >
                 {validationResult.valid ? 'Token 驗證成功' : 'Token 驗證失敗'}
               </div>
               <div style={{ fontSize: '0.775rem', color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>
                 {validationResult.message}
                 {validationResult.accountName && (
                   <span style={{ marginLeft: 6, opacity: 0.9 }}>
-                    （認證帳號：<strong>{validationResult.accountName}</strong>{validationResult.channelHandle ? ` - ${validationResult.channelHandle}` : ''}）
+                    （認證帳號：<strong>{validationResult.accountName}</strong>
+                    {validationResult.channelHandle ? ` - ${validationResult.channelHandle}` : ''}）
                   </span>
                 )}
               </div>
@@ -235,7 +318,13 @@ export default function QuickTokenDrawer({
           <button
             type="button"
             onClick={() => setValidationResult(null)}
-            style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: 2 }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'rgba(255,255,255,0.5)',
+              cursor: 'pointer',
+              padding: 2,
+            }}
             aria-label="關閉驗證訊息"
           >
             <X size={14} />
@@ -278,12 +367,7 @@ export default function QuickTokenDrawer({
           {validating ? <Loader2 size={13} className="spin" /> : <ShieldCheck size={13} />}
           測試此 Token
         </button>
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm"
-          onClick={onClose}
-          style={{ marginLeft: 'auto' }}
-        >
+        <button type="button" className="btn btn-secondary btn-sm" onClick={onClose} style={{ marginLeft: 'auto' }}>
           取消
         </button>
       </div>

@@ -34,4 +34,3 @@ export function consumeOAuthReturnPath(kind, fallback = PATHS.dashboard) {
   }
   return getSafeReturnPath(stored) || fallback;
 }
-

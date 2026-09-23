@@ -44,9 +44,7 @@ export default function StickyNotesPage() {
   };
 
   const handleNoteUpdated = (updatedNote) => {
-    setNotes((prev) =>
-      prev.map((n) => (n.id === updatedNote.id ? { ...n, ...updatedNote } : n))
-    );
+    setNotes((prev) => prev.map((n) => (n.id === updatedNote.id ? { ...n, ...updatedNote } : n)));
   };
 
   const handleNoteDeleted = (deletedNoteId) => {
@@ -57,9 +55,7 @@ export default function StickyNotesPage() {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return notes;
     return notes.filter(
-      (n) =>
-        (n.content || '').toLowerCase().includes(q) ||
-        (n.remark || '').toLowerCase().includes(q)
+      (n) => (n.content || '').toLowerCase().includes(q) || (n.remark || '').toLowerCase().includes(q)
     );
   }, [notes, searchQuery]);
 
@@ -70,19 +66,12 @@ export default function StickyNotesPage() {
           <Sparkles size={14} aria-hidden="true" /> 生產力工具
         </div>
         <h1>便利貼備忘錄</h1>
-        <p className="section-desc">
-          極簡純文字便利貼，支援多便籤編輯、備註標記、一鍵複製與最後修改時間追蹤。
-        </p>
+        <p className="section-desc">極簡純文字便利貼，支援多便籤編輯、備註標記、一鍵複製與最後修改時間追蹤。</p>
       </header>
 
       <div className="sticky-notes-toolbar">
         <div className="sticky-notes-toolbar-left">
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleCreateNote}
-            disabled={creating}
-          >
+          <button type="button" className="btn btn-primary" onClick={handleCreateNote} disabled={creating}>
             {creating ? (
               <RefreshCw size={16} className="spin" aria-hidden="true" />
             ) : (
@@ -147,12 +136,7 @@ export default function StickyNotesPage() {
           </div>
           <h3>尚未建立任何便利貼</h3>
           <p>點擊「新增便利貼」開始記錄您的日常備忘、草稿或剪貼文字。</p>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleCreateNote}
-            disabled={creating}
-          >
+          <button type="button" className="btn btn-primary" onClick={handleCreateNote} disabled={creating}>
             <Plus size={16} aria-hidden="true" />
             <span>立即新增第一張便利貼</span>
           </button>
@@ -160,23 +144,14 @@ export default function StickyNotesPage() {
       ) : filteredNotes.length === 0 ? (
         <div className="glass-panel sticky-notes-empty">
           <p>找不到符合「{searchQuery}」的便利貼內容或備註。</p>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => setSearchQuery('')}
-          >
+          <button type="button" className="btn btn-secondary" onClick={() => setSearchQuery('')}>
             清除搜尋條件
           </button>
         </div>
       ) : (
         <div className="sticky-notes-grid">
           {filteredNotes.map((note) => (
-            <StickyNoteCard
-              key={note.id}
-              note={note}
-              onUpdated={handleNoteUpdated}
-              onDeleted={handleNoteDeleted}
-            />
+            <StickyNoteCard key={note.id} note={note} onUpdated={handleNoteUpdated} onDeleted={handleNoteDeleted} />
           ))}
         </div>
       )}
