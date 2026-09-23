@@ -101,3 +101,38 @@ test('photo curator feature styles keep the workbench within supported viewport 
     expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
   }
 });
+
+test('FFmpeg feature styles switch to a single-column workbench on narrow screens', async ({ page }) => {
+  await mockAuthenticatedBackend(page);
+
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/ffmpeg-generator');
+    await expect(page.getByRole('heading', { level: 1, name: 'FFmpeg 命令行生成器' })).toBeVisible();
+
+    const gridColumns = await page
+      .locator('.ffmpeg-workbench-layout')
+      .evaluate((element) => getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length);
+    expect(gridColumns, `unexpected workbench column count at ${width}px`).toBe(width <= 1024 ? 1 : 2);
+
+    const layout = await page.evaluate(() => ({
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      elements: Array.from(document.body.querySelectorAll('*'))
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            tag: element.tagName,
+            className: typeof element.className === 'string' ? element.className : '',
+            right: Math.round(rect.right),
+          };
+        })
+        .filter((element) => element.right > window.innerWidth + 1)
+        .sort((left, right) => right.right - left.right)
+        .slice(0, 8),
+    }));
+    expect(
+      layout.overflow,
+      `horizontal overflow at ${width}px: ${JSON.stringify(layout.elements)}`
+    ).toBeLessThanOrEqual(1);
+  }
+});

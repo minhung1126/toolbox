@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../components/Toast';
 import { useFfmpegGeneratorWorkflow } from '../features/ffmpeg/hooks/useFfmpegGeneratorWorkflow';
+import '../features/ffmpeg/ffmpeg-generator.css';
 
 import { PRESET_LIST, formatFileSize, parseHmsToSeconds, secondsToHms } from '../utils/ffmpegCommand';
 
