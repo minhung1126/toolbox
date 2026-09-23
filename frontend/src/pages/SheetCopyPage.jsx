@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Clipboard, FileSpreadsheet, RotateCcw, Search, Trash2 } from 'lucide-react';
-import { api } from '../services/api';
+import { sheetsCopyApi } from '../features/sheets/api/sheetsCopyApi';
 import SheetDataSourcePanel from '../components/SheetDataSourcePanel';
 import TeamPersonFilterPanel from '../components/TeamPersonFilterPanel';
 import useTeamPersonFilter from '../hooks/useTeamPersonFilter';
@@ -110,7 +110,7 @@ export default function SheetCopyPage({ sysSettings }) {
       setColumns([]);
       setSourceError('');
       try {
-        const table = await api.getCopyableSheetTable(source, name);
+        const table = await sheetsCopyApi.getCopyableSheetTable(source, name);
         if (worksheetRequestRef.current !== requestId) return;
         const nextColumns = table.columns || [];
         const retained = visibleKeys.filter((key) => nextColumns.some((column) => column.key === key));
@@ -134,7 +134,7 @@ export default function SheetCopyPage({ sysSettings }) {
     setSourceError('');
     setDismissedRowNumbers([]);
     try {
-      const metadata = await api.getSpreadsheetMetadata(nextSource);
+      const metadata = await sheetsCopyApi.getSpreadsheetMetadata(nextSource);
       const nextWorksheets = metadata.worksheets || [];
       const nextName = nextWorksheets.some((sheet) => sheet.title === worksheetName)
         ? worksheetName

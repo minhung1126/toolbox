@@ -3,11 +3,16 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SheetCopyPage from './SheetCopyPage';
 import { api } from '../services/api';
+import { sheetsCopyApi } from '../features/sheets/api/sheetsCopyApi';
 import { AccountWorkStateProvider } from '../hooks/useAccountWorkState';
 
 vi.mock('../services/api', () => ({
   api: {
     updateWorkState: vi.fn(),
+  },
+}));
+vi.mock('../features/sheets/api/sheetsCopyApi', () => ({
+  sheetsCopyApi: {
     getSpreadsheetMetadata: vi.fn(),
     getCopyableSheetTable: vi.fn(),
   },
@@ -101,10 +106,12 @@ describe('SheetCopyPage row dismissal and restoration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.updateWorkState.mockResolvedValue({ state: {} });
-    api.getSpreadsheetMetadata.mockResolvedValue({
-      worksheets: [{ title: '工作表1' }],
+    sheetsCopyApi.getSpreadsheetMetadata.mockResolvedValue({
+      spreadsheet_id: 'sheet-123',
+      spreadsheet_title: '測試工作簿',
+      worksheets: [{ title: '工作表1', columns: ['標題', '說明'] }],
     });
-    api.getCopyableSheetTable.mockResolvedValue(mockTable);
+    sheetsCopyApi.getCopyableSheetTable.mockResolvedValue(mockTable);
   });
 
   it('allows dismissing individual rows and restoring all dismissed rows', async () => {
