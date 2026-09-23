@@ -11,7 +11,7 @@
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 11px 14px;
+  padding: 12px 16px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--surface-inset);
@@ -36,6 +36,7 @@
 .sheet-copy-display-panel {
   display: grid;
   gap: 18px;
+  border-radius: var(--radius-lg);
 }
 
 .sheet-copy-display-grid {
@@ -93,23 +94,29 @@
   padding: 10px 12px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  background: var(--surface-raised);
+  background: var(--surface-inset);
   color: var(--text-muted);
   cursor: pointer;
   overflow-wrap: anywhere;
+  transition: all 0.18s ease;
+}
+
+.sheet-copy-column-grid label:hover {
+  border-color: rgb(99 102 241 / 40%);
+  color: var(--text-main);
 }
 
 .sheet-copy-column-grid label.selected {
-  border-color: #8a6e3e;
-  background: #302b21;
-  color: var(--text-main);
+  border-color: var(--primary);
+  background: rgb(99 102 241 / 15%);
+  color: #fff;
 }
 
 .sheet-copy-panel {
   overflow: hidden;
 }
 
-.sheet-copy-panel > header {
+.sheet-copy-panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -118,17 +125,17 @@
   border-bottom: 1px solid var(--border-color);
 }
 
-.sheet-copy-panel > header > div {
+.sheet-copy-panel-header-content {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.sheet-copy-panel > header strong {
+.sheet-copy-panel-count {
   color: var(--text-main);
 }
 
-.sheet-copy-panel > header small {
+.sheet-copy-panel-caption {
   color: var(--text-muted);
 }
 
@@ -153,8 +160,8 @@
   gap: 4px;
   padding: 2px 8px;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-xs);
+  background: var(--surface-raised);
   color: var(--text-main);
   font-size: 0.75rem;
   cursor: pointer;
@@ -162,7 +169,7 @@
 }
 
 .sheet-copy-restore-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-card-hover);
   border-color: var(--primary);
   color: var(--text-main);
 }
@@ -178,7 +185,7 @@
   font-size: 0.8125rem;
 }
 
-.sheet-copy-panel > header > span {
+.sheet-copy-panel-copy-status {
   min-height: 20px;
   color: #34d399;
   font-size: 0.8rem;
@@ -224,8 +231,9 @@
   min-width: 220px;
   max-width: 420px;
   padding: 12px 14px;
-  background: var(--surface-raised);
+  background: #172236;
   color: var(--text-main);
+  border-bottom: 1px solid var(--border-color);
   text-align: left;
 }
 
@@ -236,8 +244,9 @@
   min-width: 60px;
   width: 60px;
   padding: 10px 8px;
-  background: var(--surface-raised);
-  color: var(--text-dim);
+  background: #172236;
+  color: var(--text-main);
+  border-bottom: 1px solid var(--border-color);
   text-align: center;
 }
 
@@ -277,8 +286,8 @@
 
 .sheet-copy-row-remove-btn:hover {
   opacity: 1;
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.35);
+  background: rgb(239 68 68 / 15%);
+  border-color: rgb(239 68 68 / 35%);
   color: #ef4444;
 }
 
@@ -303,6 +312,9 @@
   color: var(--text-main);
   text-align: left;
   cursor: copy;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .sheet-copy-cell-collapsed {
@@ -315,13 +327,13 @@
 .sheet-copy-cell:hover,
 .sheet-copy-cell:focus-visible {
   outline: none;
-  background: #302b21;
-  box-shadow: inset 0 0 0 1px #8a6e3e;
+  background: rgb(99 102 241 / 8%);
+  box-shadow: inset 0 0 0 1px var(--primary);
 }
 
 .sheet-copy-cell.copied {
-  background: #1d302a;
-  box-shadow: inset 0 0 0 1px #3f695a;
+  background: var(--success-bg);
+  box-shadow: inset 0 0 0 1px var(--success);
 }
 
 .sheet-copy-cell-content {
@@ -348,7 +360,7 @@
 }
 
 .sheet-copy-cell.copied small {
-  color: #34d399;
+  color: var(--success-text);
 }
 
 .sheet-copy-cell em,
@@ -364,13 +376,13 @@
 
 @media (max-width: 767px) {
   .sheet-copy-display-grid,
-  .sheet-copy-panel > header {
+  .sheet-copy-panel-header {
     grid-template-columns: 1fr;
     align-items: stretch;
     flex-direction: column;
   }
 
-  .sheet-copy-panel > header > span {
+  .sheet-copy-panel-copy-status {
     text-align: left;
   }
 

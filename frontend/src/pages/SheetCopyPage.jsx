@@ -8,6 +8,7 @@ import useAccountWorkState from '../hooks/useAccountWorkState';
 import useSharedTeamPersonFilterPersistence from '../hooks/useSharedTeamPersonFilterPersistence';
 import { readSharedTeamPersonFilter } from '../utils/teamPersonFilterStorage';
 import { copyToClipboard } from '../utils/clipboard';
+import '../features/sheets/sheets.css';
 
 export default function SheetCopyPage({ sysSettings }) {
   const {
@@ -357,10 +358,10 @@ export default function SheetCopyPage({ sysSettings }) {
       </section>
 
       <section className="glass-panel sheet-copy-panel">
-        <header>
-          <div className="sheet-copy-panel-title-wrap">
+        <header className="sheet-copy-panel-header">
+          <div className="sheet-copy-panel-header-content">
             <div className="sheet-copy-panel-title-row">
-              <strong>{filteredRows.length} 列結果</strong>
+              <strong className="sheet-copy-panel-count">{filteredRows.length} 列結果</strong>
               {dismissedRowNumbers.length > 0 && (
                 <span className="sheet-copy-dismissed-badge">
                   （已隱藏 {dismissedRowNumbers.length} 列）
@@ -377,9 +378,13 @@ export default function SheetCopyPage({ sysSettings }) {
                 </span>
               )}
             </div>
-            <small>{autoCollapse ? '內容格已折疊；' : ''}點擊儲存格即複製完整內容。</small>
+            <small className="sheet-copy-panel-caption">
+              {autoCollapse ? '內容格已折疊；' : ''}點擊儲存格即複製完整內容。
+            </small>
           </div>
-          <span aria-live="polite">{copyStatus}</span>
+          <span className="sheet-copy-panel-copy-status" aria-live="polite">
+            {copyStatus}
+          </span>
         </header>
         {!visibleColumns.length ? (
           <div className="sheet-copy-empty">請至少勾選一個欄位。</div>

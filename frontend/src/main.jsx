@@ -5,8 +5,6 @@ import App from './App.jsx';
 import './styles/tokens.css';
 import './styles/foundation.css';
 import './index.css';
-import './sticky-bulk-edit.css';
-import './sheet-copy.css';
 import './styles/app-theme.css';
 import './shared/ui/ui.css';
 

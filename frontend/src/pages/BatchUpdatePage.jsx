@@ -1,4 +1,5 @@
 import React from 'react';
+import '../features/youtube/bulk-edit.css';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ResultStatus from '../components/ResultStatus';
