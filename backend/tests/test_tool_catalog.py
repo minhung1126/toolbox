@@ -66,10 +66,18 @@ def test_tool_catalog_not_found():
 def test_backend_tool_catalog_matches_frontend_manifest_contract():
     """Keep plugin IDs and declared routes aligned with frontend navigation paths."""
     repository_root = Path(__file__).resolve().parents[2]
-    frontend_catalog = (repository_root / "frontend/src/tools/catalog.js").read_text(encoding="utf-8")
     paths_source = (repository_root / "frontend/src/routes/paths.js").read_text(encoding="utf-8")
 
-    frontend_module_ids = set(re.findall(r"(?m)^    id: ['\"]([^'\"]+)['\"],$", frontend_catalog))
+    manifest_paths = sorted((repository_root / "frontend/src/features").rglob("manifest.js"))
+    frontend_module_ids = []
+    for manifest_path in manifest_paths:
+        manifest_source = manifest_path.read_text(encoding="utf-8")
+        match = re.search(r"const manifest = \{\s*id: ['\"]([^'\"]+)['\"]", manifest_source)
+        assert match is not None, f"Frontend feature manifest has no top-level id: {manifest_path}"
+        frontend_module_ids.append(match.group(1))
+    assert frontend_module_ids, "Frontend feature manifests were not found."
+    assert len(frontend_module_ids) == len(set(frontend_module_ids)), "Frontend feature IDs must be unique."
+    frontend_module_ids = set(frontend_module_ids)
     paths_match = re.search(
         r"export const PATHS = Object\.freeze\(\{(?P<paths>.*?)\n\}\);",
         paths_source,

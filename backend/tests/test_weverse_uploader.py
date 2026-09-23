@@ -1,6 +1,8 @@
 """Unit tests for Weverse Video Uploader plugin, scanner, store, and APIs."""
 
 import asyncio
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -164,6 +166,53 @@ def test_weverse_upload_store(tmp_path: Path):
     store.record_recent_path(user_sub, "C:\\downloads\\weverse")
     paths = store.get_recent_paths(user_sub)
     assert "C:\\downloads\\weverse" in paths
+
+
+def test_weverse_upload_store_serializes_process_updates(tmp_path: Path):
+    data_file = tmp_path / "process_uploads.json"
+    store = WeverseUploadStore(data_file)
+    worker_script = """
+import sys
+from pathlib import Path
+from backend.app.core.weverse_upload_store import WeverseUploadStore
+
+store = WeverseUploadStore(Path(sys.argv[1]))
+worker_id = int(sys.argv[2])
+for index in range(8):
+    task_id = f"worker-{worker_id}-task-{index}"
+    store.create_task("shared-user", {"task_id": task_id, "status": "pending"})
+"""
+    project_root = Path(__file__).resolve().parents[2]
+    processes = [
+        subprocess.Popen(
+            [sys.executable, "-c", worker_script, str(data_file), str(worker_id)],
+            cwd=project_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for worker_id in range(4)
+    ]
+
+    try:
+        results = [process.communicate(timeout=30) for process in processes]
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+
+    failures = [
+        (process.returncode, stdout, stderr)
+        for process, (stdout, stderr) in zip(processes, results, strict=True)
+        if process.returncode != 0
+    ]
+    assert failures == [], failures
+    tasks = store.list_tasks("shared-user", limit=100)
+    assert len(tasks) == 32
+    assert {task["task_id"] for task in tasks} == {
+        f"worker-{worker_id}-task-{index}" for worker_id in range(4) for index in range(8)
+    }
 
 
 def test_weverse_upload_store_marks_active_work_interrupted_without_retry(tmp_path: Path):

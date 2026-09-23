@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '../../services/api';
+import { weverseUploadApi } from '../api/weverseUploadApi';
 
 export const YOUTUBE_CATEGORIES = [
   { id: '22', name: '人物與網誌 (People & Blogs)' },
@@ -86,7 +86,7 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
   // Load recent paths & history on mount
   const loadRecentPaths = useCallback(async () => {
     try {
-      const res = await api.getWeverseRecentPaths();
+      const res = await weverseUploadApi.getRecentPaths();
       if (res?.paths) setRecentPaths(res.paths);
     } catch {
       // Ignore background error
@@ -96,7 +96,7 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
-      const res = await api.getWeverseUploadHistory(10);
+      const res = await weverseUploadApi.getHistory(10);
       if (res?.tasks) setHistoryList(res.tasks);
     } catch {
       // Ignore background error
@@ -123,7 +123,7 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
 
     const interval = setInterval(async () => {
       try {
-        const res = await api.getWeverseUploadTask(currentTaskId);
+        const res = await weverseUploadApi.getTask(currentTaskId);
         if (res?.task) {
           setTaskStatus(res.task);
           if (res.task.status === 'completed') {
@@ -193,7 +193,7 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
 
     setScanning(true);
     try {
-      const res = await api.scanWeverseFolder(target.trim());
+      const res = await weverseUploadApi.scanFolder(target.trim());
       if (res?.packages && res.packages.length > 0) {
         populatePackageForReview(res.packages[0], 'path');
         loadRecentPaths();
@@ -249,7 +249,7 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
 
     setScanning(true);
     try {
-      const res = await api.parseWeverseFiles(metaList);
+      const res = await weverseUploadApi.parseFiles(metaList);
       if (res?.packages && res.packages.length > 0) {
         populatePackageForReview(res.packages[0], 'browser_files');
       } else {
@@ -397,7 +397,7 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
             enabled: s.enabled,
           })),
         };
-        res = await api.uploadWeverseFromPath(payload);
+        res = await weverseUploadApi.uploadFromPath(payload);
       } else {
         // Upload from browser files
         const formData = new FormData();
@@ -426,7 +426,7 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
         };
         formData.append('metadata', JSON.stringify(metaPayload));
 
-        res = await api.uploadWeverseFiles(formData);
+        res = await weverseUploadApi.uploadFiles(formData);
       }
 
       if (res?.task_id) {

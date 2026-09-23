@@ -2,34 +2,17 @@ import React, { useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import AppShell from '../layouts/AppShell';
 import AccountSettingsLayout from '../layouts/AccountSettingsLayout';
-import YouTubeSettingsLayout from '../layouts/YouTubeSettingsLayout';
-import BatchUpdatePage from '../pages/BatchUpdatePage';
 import DashboardPage from '../pages/DashboardPage';
-import ApiHealthPage from '../pages/ApiHealthPage';
-import PublishCleanerPage from '../pages/PublishCleanerPage';
-import SheetCopyPage from '../pages/SheetCopyPage';
 import LoginPage from '../pages/LoginPage';
 import NotFoundPage from '../pages/NotFoundPage';
-import YoutubeConnectionsPage from '../pages/YoutubeConnectionsPage';
-import YoutubeRoutingPage from '../pages/YoutubeRoutingPage';
-import YoutubeQuotaPage from '../pages/YoutubeQuotaPage';
-import YoutubePlaylistSettingsPage from '../pages/YoutubePlaylistSettingsPage';
 import GoogleAccountSettingsPage from '../pages/GoogleAccountSettingsPage';
-import GoogleSheetSettingsPage from '../pages/GoogleSheetSettingsPage';
-import SystemSettingsPage from '../pages/SystemSettingsPage';
 import SetupWizardPage from '../pages/SetupWizardPage';
-import SystemInfoPage from '../pages/SystemInfoPage';
-import ComponentShowcasePage from '../pages/ComponentShowcasePage';
-import StickyNotesPage from '../pages/StickyNotesPage';
-import PhotoCuratorPage from '../pages/PhotoCuratorPage';
-import FfmpegGeneratorPage from '../pages/FfmpegGeneratorPage';
 import RequireAuth from './RequireAuth';
 import RouteEffects from './RouteEffects';
 import { getSafeReturnPath, PATHS } from './paths';
+import { getFeatureRoutes } from '../tools/catalog';
 
-const PlaylistSortPage = React.lazy(() => import('../pages/PlaylistSortPage'));
-const YtmusicSettingsPage = React.lazy(() => import('../pages/YtmusicSettingsPage'));
-const WeverseUploaderPage = React.lazy(() => import('../pages/WeverseUploaderPage'));
+const FEATURE_ROUTES = getFeatureRoutes();
 
 function LoginRoute({ initialError }) {
   const location = useLocation();
@@ -53,6 +36,24 @@ export function OAuthReturnEffect({ returnPath, clearReturnPath }) {
     navigate(safePath, { replace: true });
   }, [clearReturnPath, navigate, returnPath]);
   return null;
+}
+
+function renderFeatureRoute(route, context) {
+  const Component = route.component;
+  const children = (route.children || []).map((child) => renderFeatureRoute(child, context));
+  const element = route.redirectTo ? (
+    <Navigate replace to={route.redirectTo} />
+  ) : Component ? (
+    <React.Suspense fallback={<div className="loading-center">載入中…</div>}>
+      <Component key={route.componentKey} {...(route.getProps?.(context) || {})} />
+    </React.Suspense>
+  ) : null;
+
+  return (
+    <Route key={route.path || 'index'} {...(route.index ? { index: true } : { path: route.path })} element={element}>
+      {children.length ? children : null}
+    </Route>
+  );
 }
 
 export default function AppRoutes({
@@ -88,6 +89,7 @@ export default function AppRoutes({
     setSidebarCollapsed,
   };
   const pageProps = { authUser, sysSettings, refreshSettings: fetchSettings, refreshAuthUser: fetchUser };
+  const featureRouteContext = { authUser, sysSettings, pageProps };
 
   return (
     <>
@@ -108,66 +110,9 @@ export default function AppRoutes({
         >
           <Route index element={<Navigate replace to={PATHS.dashboard} />} />
           <Route path="dashboard" element={<DashboardPage authUser={authUser} sysSettings={sysSettings} />} />
-          <Route path="notes" element={<StickyNotesPage {...pageProps} />} />
-          <Route path="photo-curator" element={<PhotoCuratorPage {...pageProps} />} />
-          <Route path="ffmpeg-generator" element={<FfmpegGeneratorPage {...pageProps} />} />
-          <Route
-            path="weverse-uploader"
-            element={
-              <React.Suspense fallback={<div className="loading-center">載入中…</div>}>
-                <WeverseUploaderPage {...pageProps} />
-              </React.Suspense>
-            }
-          />
-          <Route path="system/health" element={<ApiHealthPage authUser={authUser} />} />
-          <Route path="system/info" element={<SystemInfoPage sysSettings={sysSettings} />} />
-          <Route path="system/design-system" element={<ComponentShowcasePage />} />
-          <Route path="system/settings" element={<SystemSettingsPage {...pageProps} />} />
-          <Route
-            path="youtube/drafts/videos"
-            element={
-              <BatchUpdatePage key="video-drafts" sysSettings={sysSettings} authUser={authUser} videoType="Video" />
-            }
-          />
-          <Route
-            path="youtube/drafts/shorts"
-            element={
-              <BatchUpdatePage key="shorts-drafts" sysSettings={sysSettings} authUser={authUser} videoType="Shorts" />
-            }
-          />
-          <Route
-            path="youtube/publish-cleanup"
-            element={<PublishCleanerPage sysSettings={sysSettings} authUser={authUser} />}
-          />
           <Route path="youtube/playlist-sort" element={<Navigate replace to={PATHS.ytmusicPlaylistSort} />} />
-          <Route
-            path="ytmusic/playlist-sort"
-            element={
-              <React.Suspense fallback={<div className="loading-center">載入中…</div>}>
-                <PlaylistSortPage {...pageProps} />
-              </React.Suspense>
-            }
-          />
-          <Route
-            path="ytmusic/settings"
-            element={
-              <React.Suspense fallback={<div className="loading-center">載入中…</div>}>
-                <YtmusicSettingsPage {...pageProps} />
-              </React.Suspense>
-            }
-          />
-          <Route path="sheets/copy" element={<SheetCopyPage sysSettings={sysSettings} />} />
-          <Route path="sheets/settings" element={<GoogleSheetSettingsPage {...pageProps} />} />
-
           <Route path="youtube/settings" element={<Navigate replace to={PATHS.youtubeConnections} />} />
-          <Route path="youtube/settings/*" element={<YouTubeSettingsLayout />}>
-            <Route index element={<Navigate replace to="connections" />} />
-            <Route path="connections" element={<YoutubeConnectionsPage {...pageProps} />} />
-            <Route path="routing" element={<YoutubeRoutingPage {...pageProps} />} />
-            <Route path="quota" element={<YoutubeQuotaPage {...pageProps} />} />
-            <Route path="playlist" element={<YoutubePlaylistSettingsPage {...pageProps} />} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Route>
+          {FEATURE_ROUTES.map((route) => renderFeatureRoute(route, featureRouteContext))}
 
           <Route path="settings" element={<Navigate replace to={PATHS.googleSettings} />} />
           <Route path="settings/*" element={<AccountSettingsLayout />}>

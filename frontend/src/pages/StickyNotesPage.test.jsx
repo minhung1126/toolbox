@@ -4,6 +4,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import StickyNotesPage from './StickyNotesPage';
 import { api } from '../services/api';
 
+const toastMocks = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+
 vi.mock('../services/api', () => ({
   api: {
     getNotes: vi.fn(),
@@ -14,7 +16,7 @@ vi.mock('../services/api', () => ({
 }));
 
 vi.mock('../components/Toast', () => ({
-  useToast: () => ({ success: vi.fn(), error: vi.fn() }),
+  useToast: () => toastMocks,
 }));
 
 vi.mock('../utils/clipboard', () => ({

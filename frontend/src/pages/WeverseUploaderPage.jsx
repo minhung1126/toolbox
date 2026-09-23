@@ -19,7 +19,11 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import ServiceAuthCard from '../components/ServiceAuthCard';
 import { useOAuthConnect } from '../hooks/useOAuthConnect';
 import WeverseUploadHistory from './weverse/WeverseUploadHistory';
-import { COMMON_BCP47_LANGS, useWeverseUploadWorkflow, YOUTUBE_CATEGORIES } from './weverse/useWeverseUploadWorkflow';
+import {
+  COMMON_BCP47_LANGS,
+  useWeverseUploadWorkflow,
+  YOUTUBE_CATEGORIES,
+} from '../features/weverse/hooks/useWeverseUploadWorkflow';
 
 export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
   const toast = useToast();

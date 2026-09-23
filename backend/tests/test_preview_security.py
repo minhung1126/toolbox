@@ -2,10 +2,12 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 from backend.app.api import youtube as youtube_api
 from backend.app.api.youtube import BatchUpdateInput, PublishCleanupInput, VideoAssignment
 from backend.app.core.youtube_context import YouTubeRequestContext
+from backend.app.main import app
 
 
 def youtube_context():
@@ -15,6 +17,46 @@ def youtube_context():
         quota_limiter=SimpleNamespace(),
         owner_sub="preview-security-user",
     )
+
+
+def test_batch_preview_resolves_workflow_service_from_fastapi_dependency(monkeypatch):
+    context = youtube_context()
+    sheet_credentials = object()
+    calls = []
+    result = {"preview_token": "injected-preview", "plan": []}
+
+    class FakeWorkflowService:
+        def create_batch_metadata_preview(self, payload, *, creds, sheet_creds):
+            calls.append((payload, creds, sheet_creds))
+            return result
+
+    monkeypatch.setitem(app.dependency_overrides, youtube_api.require_youtube_context, lambda: context)
+    monkeypatch.setitem(app.dependency_overrides, youtube_api.require_sheets_credentials, lambda: sheet_credentials)
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        youtube_api.get_youtube_workflow_service,
+        lambda: FakeWorkflowService(),
+    )
+
+    response = TestClient(app).post(
+        "/api/v1/youtube/batch-preview",
+        json={
+            "spreadsheet_url_or_id": "sheet-1",
+            "playlist_id": "playlist-1",
+            "worksheet_name": "Videos",
+            "title_column": "標題",
+            "description_column": "說明",
+            "team": "Team",
+            "assignments": [{"video_id": "video-1", "person": "Alice"}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == result
+    assert len(calls) == 1
+    assert calls[0][0].assignments[0].video_id == "video-1"
+    assert calls[0][1] is context
+    assert calls[0][2] is sheet_credentials
 
 
 def playlist_item(video_id: str, item_id: str | None = None):

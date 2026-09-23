@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, normalizeYoutubePlaylistInput } from '../../../services/api';
+import { normalizeYoutubePlaylistInput, youtubeBatchApi } from '../api/youtubeBatchApi';
 import useAccountWorkState from '../../../hooks/useAccountWorkState';
 import useTeamPersonFilter from '../../../hooks/useTeamPersonFilter';
 import useSharedTeamPersonFilterPersistence from '../../../hooks/useSharedTeamPersonFilterPersistence';
@@ -205,7 +205,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
             overrides.descriptionColumn !== undefined ? overrides.descriptionColumn : descriptionColumn;
           const nextPlaylistId = overrides.playlistId !== undefined ? overrides.playlistId : playlistId;
 
-          await api.updateYoutubeDraftSettings(videoType, {
+          await youtubeBatchApi.updateDraftSettings(videoType, {
             spreadsheet_id: nextSpreadsheetId.trim(),
             worksheet_name: nextWorksheetName,
             title_column: nextTitleColumn,
@@ -234,7 +234,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
             setPlaylistAutosaveStatus('invalid');
             return;
           }
-          await api.updateYoutubePlaylist({ playlistId: normalized || '' });
+          await youtubeBatchApi.updatePlaylist({ playlistId: normalized || '' });
           setPlaylistAutosaveStatus('saved');
           scheduleDraftSave({ playlistId: value });
         } catch {
@@ -252,7 +252,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     setDraftAutosaveStatus('saving');
     setConfigSaveError('');
     try {
-      await api.updateYoutubeDraftSettings(videoType, {
+      await youtubeBatchApi.updateDraftSettings(videoType, {
         spreadsheet_id: spreadsheetId.trim(),
         worksheet_name: worksheetName,
         title_column: titleColumn,
@@ -324,8 +324,8 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
       };
     }
 
-    api
-      .getYoutubeDraftSettings()
+    youtubeBatchApi
+      .getDraftSettings()
       .then((data) => {
         if (cancelled) return;
         const serverConfig = data?.[videoType.toLowerCase()];
@@ -436,7 +436,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     setRandomPreviewLoading(true);
     setPreviewError('');
     try {
-      const preview = await api.getRandomMemberPreview(appliedSpreadsheetId, worksheetName, selectedTeam, [
+      const preview = await youtubeBatchApi.getRandomMemberPreview(appliedSpreadsheetId, worksheetName, selectedTeam, [
         titleColumn,
         descriptionColumn,
       ]);
@@ -497,7 +497,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
       setErrorMsg(null);
       setSourceError('');
       try {
-        const metadata = await api.getSpreadsheetMetadata(nextSource);
+        const metadata = await youtubeBatchApi.getSpreadsheetMetadata(nextSource);
         if (requestId !== sheetRequestRef.current) return;
         const sheetList = metadata.worksheets || [];
         setWorksheets(sheetList);
@@ -603,7 +603,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     setErrorMsg(null);
     setResult(null);
     try {
-      const res = await api.getPlaylistVideos(playlistId);
+      const res = await youtubeBatchApi.getPlaylistVideos(playlistId);
       if (playlistRequestRef.current !== requestId) return;
       const videoList = sortVideosByUploadTime(res.videos || []);
       const nextAssignments = Object.fromEntries(
@@ -669,7 +669,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     setLoadingPreview(true);
     setErrorMsg(null);
     try {
-      const response = await api.getBatchPreview({
+      const response = await youtubeBatchApi.getBatchPreview({
         spreadsheetUrlOrId: appliedSpreadsheetId,
         playlistId,
         videoType,
@@ -736,7 +736,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     setErrorMsg(null);
     setResult(null);
     try {
-      const res = await api.batchUpdateMetadata({
+      const res = await youtubeBatchApi.updateMetadata({
         spreadsheetUrlOrId: appliedSpreadsheetId,
         playlistId,
         videoType,
@@ -796,7 +796,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     setEstimateLoading(true);
     try {
       setQuotaEstimate(
-        await api.estimateYoutubeQuota({
+        await youtubeBatchApi.estimateQuota({
           operation: 'youtube.metadata_update',
           itemCount: activeCount,
           slot: snapshot?.youtube_slot || activeSlot,

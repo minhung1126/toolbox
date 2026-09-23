@@ -269,6 +269,18 @@ def _quota_estimate(operation: str, item_count: int, *, slot: Optional[str] = No
     }
 
 
+def get_youtube_workflow_service() -> YoutubeWorkflowService:
+    """Build the YouTube workflow adapter through FastAPI dependency injection."""
+    return YoutubeWorkflowService(_youtube_workflow_dependencies())
+
+
+def _resolve_workflow_service(workflows: Any) -> YoutubeWorkflowService:
+    """Preserve direct route-function calls used by existing tests and tools."""
+    if getattr(workflows, "dependency", None) is get_youtube_workflow_service:
+        return get_youtube_workflow_service()
+    return workflows
+
+
 @router.get("/quota-usage")
 def get_quota_usage(
     slot: Optional[str] = Query(default=None, max_length=32),
@@ -501,11 +513,11 @@ def create_batch_metadata_preview(
     payload: BatchUpdateInput,
     creds: YouTubeRequestContext = Depends(require_youtube_context),
     sheet_creds: Credentials = Depends(require_sheets_credentials),
+    workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
 ):
     """Build a signed, account-bound batch plan without performing writes."""
-    return YoutubeWorkflowService(_youtube_workflow_dependencies()).create_batch_metadata_preview(
-        payload, creds=creds, sheet_creds=sheet_creds
-    )
+    workflows = _resolve_workflow_service(workflows)
+    return workflows.create_batch_metadata_preview(payload, creds=creds, sheet_creds=sheet_creds)
 
 
 @router.post("/batch-update")
@@ -514,12 +526,12 @@ def run_batch_metadata_update(
     creds: YouTubeRequestContext = Depends(require_youtube_context),
     sheet_creds: Credentials = Depends(require_sheets_credentials),
     _rate_limit: None = Depends(enforce_workflow_rate_limit),
+    workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
 ):
     """Validate and update selected videos synchronously, returning one result per video."""
     del _rate_limit
-    return YoutubeWorkflowService(_youtube_workflow_dependencies()).run_batch_metadata_update(
-        payload, creds=creds, sheet_creds=sheet_creds
-    )
+    workflows = _resolve_workflow_service(workflows)
+    return workflows.run_batch_metadata_update(payload, creds=creds, sheet_creds=sheet_creds)
 
 
 @router.post("/publish-and-cleanup")
@@ -527,10 +539,12 @@ def run_publish_and_cleanup(
     payload: PublishCleanupInput,
     creds: YouTubeRequestContext = Depends(require_youtube_context),
     _rate_limit: None = Depends(enforce_workflow_rate_limit),
+    workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
 ):
     """Snapshot To-Post, sort oldest-first, then publish each video synchronously."""
     del _rate_limit
-    return YoutubeWorkflowService(_youtube_workflow_dependencies()).run_publish_and_cleanup(payload, creds=creds)
+    workflows = _resolve_workflow_service(workflows)
+    return workflows.run_publish_and_cleanup(payload, creds=creds)
 
 
 __all__ = [
@@ -569,6 +583,7 @@ __all__ = [
     "get_playlist_videos",
     "get_quota_usage",
     "get_youtube_quota_tracker",
+    "get_youtube_workflow_service",
     "resolve_assignment_row",
     "router",
     "run_batch_metadata_update",

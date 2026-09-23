@@ -94,9 +94,9 @@ describe('AppRoutes', () => {
     [PATHS.notes, 'notes route'],
     [PATHS.photoCurator, 'photo curator route'],
     [PATHS.ffmpegGenerator, 'FFmpeg route'],
-  ])('renders %s', (path, expected) => {
+  ])('renders %s', async (path, expected) => {
     renderRoutes(path);
-    expect(screen.getByText(expected)).toBeInTheDocument();
+    expect(await screen.findByText(expected)).toBeInTheDocument();
   });
 
   it('renders the lazy-loaded Weverse uploader route', async () => {
@@ -108,9 +108,9 @@ describe('AppRoutes', () => {
     ['/', PATHS.dashboard, 'dashboard route'],
     [PATHS.youtubeSettings, PATHS.youtubeConnections, 'connections route'],
     [PATHS.settings, PATHS.googleSettings, 'google settings route'],
-  ])('replaces parent path %s with %s', (from, to, expected) => {
+  ])('replaces parent path %s with %s', async (from, to, expected) => {
     renderRoutes(from);
-    expect(screen.getByText(expected)).toBeInTheDocument();
+    expect(await screen.findByText(expected)).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent(to);
   });
 
@@ -125,15 +125,15 @@ describe('AppRoutes', () => {
 
   it.each(['/youtube/settings/missing', '/settings/missing'])(
     'renders 404 for unknown settings child path %s',
-    (path) => {
+    async (path) => {
       renderRoutes(path);
-      expect(screen.getByText('找不到頁面')).toBeInTheDocument();
+      expect(await screen.findByText('找不到頁面')).toBeInTheDocument();
     }
   );
 
-  it('renders a safe 404 for an unknown protected URL', () => {
+  it('renders a safe 404 for an unknown protected URL', async () => {
     renderRoutes('/not-a-real-page');
-    expect(screen.getByText('找不到頁面')).toBeInTheDocument();
+    expect(await screen.findByText('找不到頁面')).toBeInTheDocument();
   });
 
   it('preserves a safe deep path when auth is missing', () => {
