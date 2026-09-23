@@ -10,7 +10,7 @@
 
 本分支完成第一批可靠性修正、Weverse 工作入列與生命週期修正、共用前端 token／基礎樣式整理，以及「同一個 main commit 先驗證、後發布」的 CI 串接。這不是整份多年期路線圖的最終完成狀態；未完成項目列於本節末，不能以本次測試全綠宣稱所有頁面無錯或視覺已全面驗收。
 
-本批驗證結果：前端 57 個測試檔、285 項通過，ESLint 與 production build 通過；後端隔離副本 Ruff format／lint 通過、221 項測試通過（環境套件仍發出 2 項 deprecation warning）；兩份 GitHub Actions YAML 語法解析通過。此環境沒有 Docker／actionlint，因此本機未驗證容器建置與 GitHub Actions 執行；CI 仍會在 release SHA 上做容器檢查。瀏覽器多尺寸截圖和真實 OAuth／YouTube 操作也未做。
+本批驗證結果：前端 57 個測試檔、288 項通過，ESLint 與 production build 通過；後端隔離副本 Ruff format／lint 通過、221 項測試通過（環境套件仍發出 2 項 deprecation warning）；兩份 GitHub Actions YAML 語法解析通過。此環境沒有 Docker／actionlint，因此本機未驗證容器建置與 GitHub Actions 執行；CI 仍會在 release SHA 上做容器檢查。瀏覽器多尺寸截圖和真實 OAuth／YouTube 操作也未做。
 
 已完成：
 
@@ -20,6 +20,7 @@
 - 前端 OAuth 導頁可注入以隔離瀏覽器導頁；測試補上 React 更新等待、下載點擊模擬與路由／catalog ID、網址契約。ESLint 已啟用未使用變數與 Hooks 相依錯誤門檻，清除既有死程式碼與未使用匯入。
 - 根 token 移至 `frontend/src/styles/tokens.css`，共用基礎樣式移至 `foundation.css`，原主題整理為 `app-theme.css`；Weverse 標題、資料夾選取面板部分固定樣式改用頁面 CSS。
 - 發布工作重用完整驗證流程；只有驗證通過的 main commit 會進行 image publish。文件已對齊目前支援的平台及實際前端網址。
+- Weverse 上傳歷史拆成獨立元件及頁面樣式；表格改用 token 樣式、窄螢幕容器捲動，並補上空狀態、loading、狀態 badge 與外連測試。
 
 尚待後續階段：大型 Playlist Sort／FFmpeg／Weverse 頁面拆分、YouTube API router 使用案例拆分、前後端 catalog manifest 完整同步、全頁 inline 樣式遷移、元件展示頁與 390／768／1440 px 瀏覽器視覺驗收、端對端測試、漸進型別與 formatter／CSS lint、Weverse 重啟後工作對帳與程序間寫入策略。故目前完成的是計劃中的可靠性與設計基礎批次，不代表第 2–5 階段全部完成。
 

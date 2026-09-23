@@ -9,7 +9,6 @@ import {
   FolderOpen,
   FolderUp,
   Loader2,
-  RefreshCw,
   UploadCloud,
   Video,
 } from 'lucide-react';
@@ -19,6 +18,7 @@ import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ServiceAuthCard from '../components/ServiceAuthCard';
 import { useOAuthConnect } from '../hooks/useOAuthConnect';
+import WeverseUploadHistory from './weverse/WeverseUploadHistory';
 
 const YOUTUBE_CATEGORIES = [
   { id: '22', name: '人物與網誌 (People & Blogs)' },
@@ -1009,80 +1009,7 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
         </div>
       )}
 
-      {/* 6. Recent History */}
-      <div className="glass-panel" style={{ padding: '1.5rem', marginTop: '1.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-          <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <Clock size={18} color="var(--text-muted)" /> 近期上傳紀錄
-          </h4>
-          <button
-            type="button"
-            className="btn btn-sm btn-secondary"
-            onClick={loadHistory}
-            disabled={historyLoading}
-          >
-            <RefreshCw size={14} className={historyLoading ? 'animate-spin' : ''} /> 重新整理
-          </button>
-        </div>
-
-        {historyList.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', margin: 0, textAlign: 'center', padding: '1rem' }}>
-            尚未有任何上傳紀錄。
-          </p>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
-              <thead>
-                <tr style={{ background: 'rgba(255, 255, 255, 0.04)', textAlign: 'left', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                  <th style={{ padding: '0.6rem 0.8rem' }}>標題 / 影片檔名</th>
-                  <th style={{ padding: '0.6rem 0.8rem' }}>隱私狀態</th>
-                  <th style={{ padding: '0.6rem 0.8rem' }}>字幕數</th>
-                  <th style={{ padding: '0.6rem 0.8rem' }}>狀態</th>
-                  <th style={{ padding: '0.6rem 0.8rem' }}>時間</th>
-                  <th style={{ padding: '0.6rem 0.8rem' }}>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {historyList.map((item) => (
-                  <tr key={item.task_id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                    <td style={{ padding: '0.6rem 0.8rem' }}>
-                      <div style={{ fontWeight: 500 }}>{item.title}</div>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{item.video_filename}</div>
-                    </td>
-                    <td style={{ padding: '0.6rem 0.8rem' }}>
-                      <span className="badge badge-secondary" style={{ fontSize: '0.78rem' }}>{item.privacy_status || 'private'}</span>
-                    </td>
-                    <td style={{ padding: '0.6rem 0.8rem' }}>{item.subtitles_count || 0}</td>
-                    <td style={{ padding: '0.6rem 0.8rem' }}>
-                      {item.status === 'completed' && <span className="badge badge-connected" style={{ fontSize: '0.78rem' }}>已完成</span>}
-                      {item.status === 'failed' && <span className="badge badge-disconnected" style={{ fontSize: '0.78rem' }}>失敗</span>}
-                      {(item.status === 'uploading_video' || item.status === 'uploading_captions' || item.status === 'pending') && (
-                        <span className="badge badge-warning" style={{ fontSize: '0.78rem' }}>上傳中</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '0.6rem 0.8rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                      {item.created_at ? new Date(item.created_at).toLocaleString() : '-'}
-                    </td>
-                    <td style={{ padding: '0.6rem 0.8rem' }}>
-                      {item.video_url && (
-                        <a
-                          href={item.video_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-sm btn-secondary"
-                          style={{ padding: '0.2rem 0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
-                        >
-                          YouTube <ExternalLink size={12} />
-                        </a>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <WeverseUploadHistory items={historyList} loading={historyLoading} onRefresh={loadHistory} />
     </div>
   );
 }
