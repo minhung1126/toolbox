@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import '../features/youtube/publish-cleaner.css';
 import { api, normalizeYoutubePlaylistInput } from '../services/api';
 import { PATHS } from '../routes/paths';
 import { useToast } from '../components/Toast';

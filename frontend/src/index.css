@@ -428,49 +428,6 @@
   user-select: none;
 }
 
-.publish-cleaner-thumbnail {
-  width: 120px;
-  aspect-ratio: 16 / 9;
-  flex-shrink: 0;
-  border-radius: var(--radius-sm);
-  object-fit: contain;
-  background: #000;
-  cursor: zoom-in;
-}
-
-.publish-cleaner-thumbnail-button {
-  display: block;
-  flex: 0 0 auto;
-  width: 120px;
-  padding: 0;
-  border: 0;
-  color: inherit;
-  background: transparent;
-  cursor: zoom-in;
-}
-
-.publish-cleaner-thumbnail-button:focus-visible {
-  outline: 3px solid var(--primary);
-  outline-offset: 3px;
-}
-
-.publish-cleaner-thumbnail-empty {
-  width: 120px;
-  aspect-ratio: 16 / 9;
-  flex-shrink: 0;
-  border-radius: var(--radius-sm);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  color: var(--text-dim);
-  font-size: 0.72rem;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid var(--border-color);
-  user-select: none;
-}
-
 .thumbnail-dialog-overlay {
   position: fixed;
   inset: 0;
@@ -950,59 +907,6 @@
   justify-content: space-between;
 }
 
-.publish-progress-panel {
-  padding: 18px 20px;
-  display: grid;
-  gap: 11px;
-  border-color: rgba(99, 102, 241, 0.42);
-}
-
-.publish-progress-heading,
-.publish-progress-meta {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.publish-progress-heading strong {
-  color: #fff;
-}
-
-.publish-progress-heading p {
-  margin-top: 4px;
-  color: var(--primary);
-  font-size: 0.86rem;
-}
-
-.publish-progress-heading span {
-  display: block;
-  margin-top: 3px;
-  color: var(--text-muted);
-  font-size: 0.76rem;
-  word-break: break-word;
-}
-
-.publish-progress-track {
-  height: 9px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.publish-progress-track span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--primary);
-  transition: width 0.35s ease;
-}
-
-.publish-progress-meta {
-  color: var(--text-muted);
-  font-size: 0.78rem;
-}
-
 /* Login Page Gate */
 .login-container {
   min-height: 100dvh;
@@ -1465,62 +1369,6 @@
   overflow-wrap: anywhere;
 }
 
-.publish-cleaner-thumbnail {
-  max-width: 100%;
-}
-
-.publish-list,
-.publish-result-list {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.publish-item {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  gap: 1rem;
-  padding: 0.875rem 1.125rem;
-}
-
-.publish-item-index {
-  flex: 0 0 2.5rem;
-  padding-top: 0.25rem;
-  color: var(--secondary);
-  font-size: 0.85rem;
-  font-weight: 700;
-}
-
-.publish-item-content {
-  min-width: 0;
-  flex: 1 1 18rem;
-}
-
-.publish-item-meta {
-  display: flex;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
-  color: var(--text-dim);
-  font-size: 0.78rem;
-  flex-wrap: wrap;
-}
-
-.publish-item-status {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  padding-top: 0.25rem;
-  flex-wrap: wrap;
-}
-
-.publish-edit-button {
-  min-height: 36px;
-  padding: 7px 12px;
-  color: var(--text-main);
-}
-
 .youtube-video-link {
   display: inline-flex;
   align-items: center;
@@ -1535,10 +1383,6 @@
 .youtube-video-link:focus-visible {
   color: var(--primary);
   text-decoration: underline;
-}
-
-.publish-item-content > .youtube-video-link {
-  margin-top: 0.65rem;
 }
 
 .youtube-edit-overlay {
@@ -1941,8 +1785,6 @@
   .toolbar,
   .action-bar,
   .execution-bar,
-  .publish-item,
-  .publish-item-status,
   .result-item {
     align-items: stretch;
     flex-direction: column;
@@ -1951,8 +1793,7 @@
   .page-actions,
   .toolbar,
   .action-bar,
-  .execution-bar,
-  .publish-item-status {
+  .execution-bar {
     justify-content: stretch;
   }
 
@@ -1997,31 +1838,6 @@
   .filter-panel-team-grid,
   .filter-option-grid {
     grid-template-columns: 1fr;
-  }
-
-  .publish-item {
-    gap: 0.75rem;
-  }
-
-  .publish-item-index {
-    flex-basis: auto;
-    padding-top: 0;
-  }
-
-  .publish-cleaner-thumbnail {
-    width: min(100%, 18rem);
-    align-self: center;
-  }
-
-  .publish-cleaner-thumbnail-button {
-    width: min(100%, 18rem);
-    align-self: center;
-  }
-
-  .publish-item-content,
-  .publish-item-status {
-    width: 100%;
-    flex-basis: auto;
   }
 
   .result-item .badge {
@@ -2430,16 +2246,6 @@
   gap: 0.75rem;
 }
 
-.publish-items-list {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 .batch-preview-item-title {
   display: flex;
   min-width: 0;
@@ -2606,8 +2412,7 @@
   font-size: 0.8rem;
 }
 
-.result-panel,
-.publish-result-panel {
+.result-panel {
   gap: 0.75rem;
 }
 
@@ -2618,8 +2423,7 @@
   font-size: 1.3rem;
 }
 
-.result-heading-success,
-.result-heading-publish-success {
+.result-heading-success {
   color: #34d399;
 }
 
@@ -2645,80 +2449,9 @@
   color: #f87171;
 }
 
-.publish-cleaner-page {
-  --secondary-button-color: var(--secondary);
-}
-
-.publish-source-panel {
-  align-items: flex-end;
-}
-
-.publish-source-field {
-  flex: 1 1 18rem;
-}
-
-.publish-action-button {
-  background: var(--secondary-button-color);
-}
-
-.publish-workflow {
-  gap: 1.25rem;
-}
-
-.publish-summary-panel {
-  border-left: 4px solid var(--secondary);
-}
-
-.publish-summary-panel h2 {
-  margin-bottom: 0.5rem;
-  font-size: 1.3rem;
-}
-
-.publish-summary-panel p {
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  line-height: 1.6;
-}
-
-.publish-list-heading {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--text-muted);
-  font-size: 1.1rem;
-}
-
-.publish-remove-badge {
-  background: rgba(236, 72, 153, 0.15);
-  color: #f472b6;
-  border-color: rgba(236, 72, 153, 0.3);
-}
-
-.publish-result-panel {
-  border: 1px solid rgba(236, 72, 153, 0.4);
-  background: rgba(15, 23, 42, 0.95);
-}
-
-.publish-result-item-success {
-  background: rgba(236, 72, 153, 0.1);
-}
-
-.publish-result-item-failed {
-  background: rgba(239, 68, 68, 0.1);
-}
-
-.publish-result-metadata {
-  margin-top: 0.375rem;
-}
-
 @media (max-width: 767px) {
   .settings-card-actions .btn,
-  .settings-page-actions .btn,
-  .publish-action-button {
+  .settings-page-actions .btn {
     width: 100%;
-  }
-
-  .publish-source-panel {
-    align-items: stretch;
   }
 }

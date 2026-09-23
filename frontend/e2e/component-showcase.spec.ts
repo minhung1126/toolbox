@@ -136,3 +136,23 @@ test('FFmpeg feature styles switch to a single-column workbench on narrow screen
     ).toBeLessThanOrEqual(1);
   }
 });
+
+test('publish cleaner feature styles align source controls for mobile and desktop', async ({ page }) => {
+  await mockAuthenticatedBackend(page);
+
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/youtube/publish-cleanup');
+    await expect(page.getByRole('heading', { level: 1, name: '發布 YouTube 草稿' })).toBeVisible();
+
+    const sourceAlignment = await page
+      .locator('.publish-source-panel')
+      .evaluate((element) => getComputedStyle(element).alignItems);
+    expect(sourceAlignment, `publish feature styles did not load at ${width}px`).toBe(
+      width < 768 ? 'stretch' : 'flex-end'
+    );
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+  }
+});
