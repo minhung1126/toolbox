@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import '../features/youtube/publish-cleaner.css';
-import { api, normalizeYoutubePlaylistInput } from '../services/api';
+import { publishCleanupApi } from '../features/youtube/api/publishCleanupApi';
+import { normalizeYoutubePlaylistInput } from '../services/api';
 import { PATHS } from '../routes/paths';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -346,7 +347,7 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
     setEditingVideo(null);
 
     try {
-      const response = await api.getPlaylistVideos(requestedPlaylistId);
+      const response = await publishCleanupApi.getPlaylistVideos(requestedPlaylistId);
       if (!isRequestCurrent(requestRevision, requestedPlaylistId, requestedAuthKey, requestedDataVersion)) return;
 
       const serverPreviewSnapshot = getPreviewSnapshot(response);
@@ -409,7 +410,7 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
     setEstimateLoading(true);
     setQuotaEstimate(null);
     try {
-      const estimate = await api.estimateYoutubeQuota({
+      const estimate = await publishCleanupApi.estimateQuota({
         operation: 'youtube.publish_cleanup',
         itemCount: candidateSnapshot.videos.length,
         slot: candidateSnapshot.auth.slot,
@@ -453,7 +454,7 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
     setResult(null);
     setEditingVideo(null);
     try {
-      const response = await api.publishAndCleanup(requestSnapshot.playlistId, publishOptions);
+      const response = await publishCleanupApi.publishAndCleanup(requestSnapshot.playlistId, publishOptions);
       if (requestRevision !== workflowRevisionRef.current) return;
       invalidateSnapshot();
       setResult(response);
@@ -489,7 +490,7 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
     const videoId = editingVideo.video_id;
     setSavingEdit(true);
     try {
-      const updated = await api.updateYoutubeVideoMetadata({ videoId, title, description });
+      const updated = await publishCleanupApi.updateVideoMetadata({ videoId, title, description });
       if (!isRequestCurrent(editRevision, editPlaylistId, editAuthKey, editDataVersion)) return;
       invalidateSnapshot();
       toast.success('影片標題與描述已更新，請重新讀取播放清單以建立最新預覽');

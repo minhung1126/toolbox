@@ -246,11 +246,9 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
 
       {/* 3. Step: Review & Inspect ("辨識後讓我複查") */}
       {viewStep === 'review' && (
-        <div className="glass-panel" style={{ padding: '1.75rem' }}>
-          <div
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}
-          >
-            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div className="glass-panel weverse-review-panel">
+          <div className="weverse-review-header">
+            <h3 className="weverse-review-title">
               <FileText size={20} color="var(--primary)" /> 步驟二：辨識結果複查與編輯
             </h3>
             <button type="button" className="btn btn-sm btn-secondary" onClick={handleReset}>
@@ -260,52 +258,31 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
 
           {/* Video summary card */}
           {videoInfo && (
-            <div
-              style={{
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '8px',
-                padding: '1rem',
-                marginBottom: '1.5rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <Video size={24} color="var(--primary)" />
+            <div className="weverse-video-summary">
+              <div className="weverse-video-summary-content">
+                <Video size={24} color="var(--primary)" className="weverse-video-summary-icon" />
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{videoInfo.filename}</div>
-                  <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  <div className="weverse-video-filename">{videoInfo.filename}</div>
+                  <div className="weverse-video-details">
                     檔案大小：{videoInfo.size_formatted}
                     {videoInfo.full_path ? ` · 路徑：${videoInfo.full_path}` : ''}
                   </div>
                 </div>
               </div>
-              <span className="badge badge-connected" style={{ fontSize: '0.8rem' }}>
-                主要影片已就緒
-              </span>
+              <span className="badge badge-connected weverse-video-ready">主要影片已就緒</span>
             </div>
           )}
 
           {/* Video Metadata Settings */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: '1rem',
-              marginBottom: '1.5rem',
-            }}
-          >
-            <div>
-              <label style={{ display: 'block', fontSize: '0.88rem', fontWeight: 600, marginBottom: '0.35rem' }}>
-                影片標題 (Title) <span style={{ color: 'var(--danger)' }}>*</span>
-                <span style={{ float: 'right', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  {metadata.title.length}/100
-                </span>
+          <div className="weverse-metadata-grid">
+            <div className="weverse-metadata-field">
+              <label className="weverse-field-label" htmlFor="weverse-video-title">
+                影片標題 (Title) <span className="weverse-required">*</span>
+                <span className="weverse-field-counter">{metadata.title.length}/100</span>
               </label>
               <input
                 type="text"
+                id="weverse-video-title"
                 className="input-field"
                 value={metadata.title}
                 maxLength={100}
@@ -314,11 +291,12 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
               />
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.88rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+            <div className="weverse-metadata-field">
+              <label className="weverse-field-label" htmlFor="weverse-video-privacy">
                 公開隱私狀態 (Privacy Status)
               </label>
               <select
+                id="weverse-video-privacy"
                 className="input-field"
                 value={metadata.privacy_status}
                 onChange={(e) => setMetadata({ ...metadata, privacy_status: e.target.value })}
@@ -329,11 +307,12 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
               </select>
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.88rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+            <div className="weverse-metadata-field">
+              <label className="weverse-field-label" htmlFor="weverse-video-category">
                 影片類別 (Category)
               </label>
               <select
+                id="weverse-video-category"
                 className="input-field"
                 value={metadata.category_id}
                 onChange={(e) => setMetadata({ ...metadata, category_id: e.target.value })}
@@ -346,12 +325,13 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
               </select>
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.88rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+            <div className="weverse-metadata-field">
+              <label className="weverse-field-label" htmlFor="weverse-video-tags">
                 標籤 (Tags, 逗號分隔)
               </label>
               <input
                 type="text"
+                id="weverse-video-tags"
                 className="input-field"
                 value={metadata.tags}
                 onChange={(e) => setMetadata({ ...metadata, tags: e.target.value })}
@@ -360,43 +340,34 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
             </div>
           </div>
 
-          <div style={{ marginBottom: '1.75rem' }}>
-            <label style={{ display: 'block', fontSize: '0.88rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+          <div className="weverse-description-field">
+            <label className="weverse-field-label" htmlFor="weverse-video-description">
               影片說明 (Description)
-              <span style={{ float: 'right', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                {metadata.description.length}/5000
-              </span>
+              <span className="weverse-field-counter">{metadata.description.length}/5000</span>
             </label>
             <textarea
-              className="input-field"
+              id="weverse-video-description"
               rows={3}
               maxLength={5000}
               value={metadata.description}
               onChange={(e) => setMetadata({ ...metadata, description: e.target.value })}
               placeholder="輸入影片詳細說明內容..."
-              style={{ width: '100%', resize: 'vertical' }}
+              className="input-field weverse-video-description-input"
             />
           </div>
 
           {/* Subtitles review section */}
-          <div style={{ marginBottom: '1.75rem' }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '0.75rem',
-              }}
-            >
+          <div className="weverse-subtitle-section">
+            <div className="weverse-subtitle-header">
               <div>
-                <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <h4 className="weverse-subtitle-title">
                   字幕軌清單與語言對照
-                  <span style={{ fontSize: '0.82rem', fontWeight: 'normal', color: 'var(--text-muted)' }}>
+                  <span className="weverse-subtitle-count">
                     (已勾選 {enabledSubsCount} / {subtitles.length} 軌)
                   </span>
                 </h4>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div className="weverse-subtitle-actions">
                 <button type="button" className="btn btn-sm btn-secondary" onClick={() => handleToggleAllSubs(true)}>
                   全選
                 </button>
@@ -407,73 +378,54 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
             </div>
 
             {subtitles.length === 0 ? (
-              <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                此資料夾中未偵測到任何 .vtt 或 .srt 字幕檔案。
-              </div>
+              <div className="weverse-subtitle-empty">此資料夾中未偵測到任何 .vtt 或 .srt 字幕檔案。</div>
             ) : (
-              <div style={{ overflowX: 'auto', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+              <div className="weverse-subtitle-table-wrap">
+                <table className="weverse-subtitle-table">
                   <thead>
-                    <tr
-                      style={{
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        textAlign: 'left',
-                        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-                      }}
-                    >
-                      <th style={{ padding: '0.75rem 1rem', width: '50px' }}>上傳</th>
-                      <th style={{ padding: '0.75rem 1rem' }}>原字幕檔名 / 偵測代碼</th>
-                      <th style={{ padding: '0.75rem 1rem' }}>YouTube 語言代碼 (BCP-47)</th>
-                      <th style={{ padding: '0.75rem 1rem' }}>字幕軌顯示名稱 (Label)</th>
-                      <th style={{ padding: '0.75rem 1rem', width: '90px' }}>大小</th>
+                    <tr className="weverse-subtitle-table-head">
+                      <th className="weverse-subtitle-table-heading weverse-subtitle-table-heading-upload">上傳</th>
+                      <th className="weverse-subtitle-table-heading">原字幕檔名 / 偵測代碼</th>
+                      <th className="weverse-subtitle-table-heading">YouTube 語言代碼 (BCP-47)</th>
+                      <th className="weverse-subtitle-table-heading">字幕軌顯示名稱 (Label)</th>
+                      <th className="weverse-subtitle-table-heading weverse-subtitle-table-heading-size">大小</th>
                     </tr>
                   </thead>
                   <tbody>
                     {subtitles.map((sub) => (
-                      <tr
-                        key={sub.id}
-                        style={{
-                          borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-                          background: sub.enabled ? 'transparent' : 'rgba(0, 0, 0, 0.2)',
-                          opacity: sub.enabled ? 1 : 0.6,
-                        }}
-                      >
-                        <td style={{ padding: '0.6rem 1rem', textAlign: 'center' }}>
+                      <tr key={sub.id} className={`weverse-subtitle-row ${sub.enabled ? 'is-enabled' : 'is-disabled'}`}>
+                        <td className="weverse-subtitle-cell weverse-subtitle-cell-upload">
                           <input
                             type="checkbox"
                             checked={sub.enabled}
                             onChange={() => handleToggleSub(sub.id)}
-                            style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                            className="weverse-subtitle-checkbox"
                           />
                         </td>
-                        <td style={{ padding: '0.6rem 1rem' }}>
-                          <div style={{ fontWeight: 500 }}>{sub.filename}</div>
-                          <span style={{ fontSize: '0.78rem', color: 'var(--accent)' }}>
-                            代碼：{sub.raw_lang || '未知'}
-                          </span>
+                        <td className="weverse-subtitle-cell">
+                          <div className="weverse-subtitle-filename">{sub.filename}</div>
+                          <span className="weverse-subtitle-language-code">代碼：{sub.raw_lang || '未知'}</span>
                         </td>
-                        <td style={{ padding: '0.6rem 1rem' }}>
+                        <td className="weverse-subtitle-cell">
                           <input
                             type="text"
-                            className="input-field input-sm"
                             value={sub.bcp47}
                             disabled={!sub.enabled}
                             onChange={(e) => handleSubChange(sub.id, 'bcp47', e.target.value)}
                             list="bcp47-suggestions"
-                            style={{ width: '120px' }}
+                            className="input-field input-sm weverse-subtitle-language-input"
                           />
                         </td>
-                        <td style={{ padding: '0.6rem 1rem' }}>
+                        <td className="weverse-subtitle-cell">
                           <input
                             type="text"
-                            className="input-field input-sm"
                             value={sub.label}
                             disabled={!sub.enabled}
                             onChange={(e) => handleSubChange(sub.id, 'label', e.target.value)}
-                            style={{ width: '100%', maxWidth: '240px' }}
+                            className="input-field input-sm weverse-subtitle-label-input"
                           />
                         </td>
-                        <td style={{ padding: '0.6rem 1rem', color: 'var(--text-muted)' }}>{sub.size_formatted}</td>
+                        <td className="weverse-subtitle-cell weverse-subtitle-cell-size">{sub.size_formatted}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -491,42 +443,27 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
           </div>
 
           {/* Quota preview card */}
-          <div
-            style={{
-              background: 'rgba(var(--accent-rgb), 0.07)',
-              border: '1px solid rgba(var(--accent-rgb), 0.25)',
-              borderRadius: '8px',
-              padding: '1rem',
-              marginBottom: '1.75rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '1rem',
-            }}
-          >
+          <div className="weverse-quota-card">
             <div>
-              <div
-                style={{ fontWeight: 600, fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-              >
+              <div className="weverse-quota-title">
                 <Clock size={16} color="var(--accent)" /> YouTube API 配額預估消耗：{estimatedQuota.toLocaleString()}{' '}
                 單位
               </div>
-              <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              <div className="weverse-quota-description">
                 影片上傳：1,600 單位 · 字幕上傳：{enabledSubsCount} 軌 × 400 單位 ={' '}
                 {(enabledSubsCount * 400).toLocaleString()} 單位
               </div>
             </div>
 
             {estimatedQuota >= 8000 && (
-              <span className="badge badge-warning" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <span className="badge badge-warning weverse-quota-warning">
                 <AlertTriangle size={14} /> 接近 YouTube 每日預設上限 (10,000)
               </span>
             )}
           </div>
 
           {/* Actions */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+          <div className="weverse-review-actions">
             <button type="button" className="btn btn-secondary" onClick={handleReset}>
               取消
             </button>
@@ -560,35 +497,29 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
 
       {/* 4. Step: Uploading / Progress */}
       {viewStep === 'uploading' && taskStatus && (
-        <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
-          <Loader2 size={48} color="var(--primary)" className="animate-spin" style={{ margin: '0 auto 1.25rem' }} />
-          <h3 style={{ margin: '0 0 0.5rem 0' }}>影片與字幕正在上傳至 YouTube...</h3>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', margin: '0 0 1.5rem 0' }}>
-            {taskStatus.current_step || '處理中，請勿關閉視窗...'}
-          </p>
+        <div className="glass-panel weverse-upload-progress-panel">
+          <Loader2 size={48} color="var(--primary)" className="animate-spin weverse-upload-spinner" />
+          <h3 className="weverse-upload-progress-title">影片與字幕正在上傳至 YouTube...</h3>
+          <p className="weverse-upload-progress-description">{taskStatus.current_step || '處理中，請勿關閉視窗...'}</p>
 
           {/* Progress bar */}
           <div
-            style={{
-              background: 'rgba(255, 255, 255, 0.1)',
-              borderRadius: '999px',
-              height: '14px',
-              maxWidth: '500px',
-              margin: '0 auto 1.5rem',
-              overflow: 'hidden',
-            }}
+            className="weverse-progress-track"
+            role="progressbar"
+            aria-label="上傳進度"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={taskStatus.progress_percent || 0}
           >
             <div
               style={{
-                background: 'linear-gradient(90deg, var(--primary), var(--accent))',
-                height: '100%',
                 width: `${taskStatus.progress_percent || 0}%`,
-                transition: 'width 0.4s ease',
               }}
+              className="weverse-progress-fill"
             />
           </div>
 
-          <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--primary)' }}>
+          <div className="weverse-progress-percent" aria-hidden="true">
             {taskStatus.progress_percent || 0}%
           </div>
         </div>
@@ -596,23 +527,20 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
 
       {/* 5. Step: Completed View */}
       {viewStep === 'completed' && taskStatus && (
-        <div className="glass-panel" style={{ padding: '2.5rem 2rem', textAlign: 'center' }}>
-          <CheckCircle2 size={54} color="var(--success)" style={{ margin: '0 auto 1rem' }} />
-          <h2 style={{ margin: '0 0 0.5rem 0' }}>上傳成功！</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', margin: '0 0 1.75rem 0' }}>
+        <div className="glass-panel weverse-upload-complete-panel">
+          <CheckCircle2 size={54} color="var(--success)" className="weverse-upload-success-icon" />
+          <h2 className="weverse-upload-success-title">上傳成功！</h2>
+          <p className="weverse-upload-success-description">
             影片「{taskStatus.title}」已順利發布，並已掛載多語系字幕。
           </p>
 
-          <div
-            style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}
-          >
+          <div className="weverse-upload-links">
             {taskStatus.video_url && (
               <a
                 href={taskStatus.video_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn btn-primary"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                className="btn btn-primary weverse-result-link"
               >
                 在 YouTube 開啟影片 <ExternalLink size={16} />
               </a>
@@ -622,8 +550,7 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
                 href={taskStatus.studio_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn btn-secondary"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                className="btn btn-secondary weverse-result-link"
               >
                 在 YouTube Studio 編輯 <ExternalLink size={16} />
               </a>

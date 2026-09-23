@@ -225,6 +225,9 @@ test('Weverse folder picker styles stay usable across viewport widths', async ({
     await page.getByRole('button', { name: '掃描並辨識' }).click();
     await expect(page.getByRole('heading', { level: 3, name: /步驟二：辨識結果複查與編輯/ })).toBeVisible();
     await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Sample Live');
+    await expect(page.getByLabel(/影片標題 \(Title\)/)).toHaveValue('Sample Live');
+    await expect(page.locator('.weverse-metadata-grid')).toHaveCSS('display', 'grid');
+    await expect(page.locator('.weverse-quota-card')).toHaveCSS('background-color', 'rgba(99, 102, 241, 0.12)');
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);

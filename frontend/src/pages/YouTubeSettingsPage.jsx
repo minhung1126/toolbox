@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import { api, normalizeYoutubePlaylistInput } from '../services/api';
+import { normalizeYoutubePlaylistInput } from '../services/api';
+import { youtubeSettingsApi } from '../features/youtube/api/youtubeSettingsApi';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useDebouncedAutosave } from '../hooks/useDebouncedAutosave';
@@ -112,7 +113,7 @@ export default function YouTubeSettingsPage({
     onSave: async (nextValue) => {
       const normalized = normalizeYoutubePlaylistInput(nextValue);
       if (!normalized) return;
-      await api.updateYoutubePlaylist({ playlistId: normalized });
+      await youtubeSettingsApi.updatePlaylist({ playlistId: normalized });
     },
     onSuccess: async (_nextValue, { notify } = {}) => {
       await refreshSettings?.();
@@ -153,7 +154,7 @@ export default function YouTubeSettingsPage({
       if (slotClientSecret.trim()) {
         payload.client_secret = slotClientSecret.trim();
       }
-      await api.updateYoutubeSlotConfig(slot, payload);
+      await youtubeSettingsApi.updateSlotConfig(slot, payload);
       if (refreshSettings) await refreshSettings();
       if (refreshAuthUser) await refreshAuthUser();
       setEditingSlot(null);
@@ -168,7 +169,7 @@ export default function YouTubeSettingsPage({
   const handleUseSystemOAuthForPrimary = async () => {
     setSavingSlotCreds(true);
     try {
-      await api.updateYoutubeSlotConfig('primary', {
+      await youtubeSettingsApi.updateSlotConfig('primary', {
         use_system_google_oauth: true,
       });
       if (refreshSettings) await refreshSettings();
@@ -212,7 +213,7 @@ export default function YouTubeSettingsPage({
     setBusyAction({ kind: 'routing' });
     setMsg(null);
     try {
-      await api.updateYoutubeRoutingMode(routingModeDraft);
+      await youtubeSettingsApi.updateRoutingMode(routingModeDraft);
       setRoutingMode(routingModeDraft);
       if (refreshSettings) await refreshSettings();
       if (refreshAuthUser) await refreshAuthUser();
@@ -239,7 +240,7 @@ export default function YouTubeSettingsPage({
     setBusyAction({ kind: 'quota', slot });
     setMsg(null);
     try {
-      await api.updateYoutubeQuota({
+      await youtubeSettingsApi.updateQuota({
         slot,
         quotaLimit: limit,
         safetyBufferUnits: buffer,
@@ -319,7 +320,7 @@ export default function YouTubeSettingsPage({
     setBusyAction({ kind: 'authorization', slot });
     try {
       saveOAuthReturnPath('youtube', `${location.pathname}${location.search}`);
-      const result = await api.getYoutubeAuthUrl(slot);
+      const result = await youtubeSettingsApi.getAuthUrl(slot);
       if (!result.auth_url) throw new Error('無法取得 Google 授權網址，請稍後再試。');
       window.location.href = result.auth_url;
     } catch (error) {
@@ -332,7 +333,7 @@ export default function YouTubeSettingsPage({
     if (busyAction || !slotRecords[slot].can_be_active) return;
     setBusyAction({ kind: 'authorization', slot });
     try {
-      await api.activateYoutubeSlot(slot);
+      await youtubeSettingsApi.activateSlot(slot);
       setActiveSlot(slot);
       if (refreshAuthUser) await refreshAuthUser();
       toast.success(`已將 ${slotRecords[slot].label} 設為作用中 slot`);
@@ -355,7 +356,7 @@ export default function YouTubeSettingsPage({
     setDisconnectTarget(null);
     setBusyAction({ kind: 'authorization', slot });
     try {
-      await api.disconnectYoutube(slot, { confirm: true });
+      await youtubeSettingsApi.disconnectSlot(slot, { confirm: true });
       if (refreshAuthUser) await refreshAuthUser();
       toast.success(`${slotRecords[slot].label} 已斷開`);
     } catch (error) {
