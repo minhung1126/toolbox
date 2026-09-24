@@ -230,6 +230,36 @@ test('YouTube settings sub-navigation uses feature styles on supported widths', 
   }
 });
 
+test('YouTube Music settings use feature styles and remain usable on supported widths', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/auth/user': {
+      authenticated: true,
+      user: { sub: 'ytmusic-settings-e2e', email: 'music@example.test' },
+      authorizations: {
+        sheets: { connected: false },
+        ytmusic: { connected: true, has_custom_token: true, user: { email: 'music@example.test' } },
+        video_uploader: { connected: false },
+      },
+      google_scopes: {},
+      youtube: { slots: {} },
+    },
+  });
+
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/ytmusic/settings');
+    await expect(page.getByRole('heading', { level: 1, name: 'YouTube Music 設定' })).toBeVisible();
+    await expect(page.locator('.ytmusic-token-active-panel')).toBeVisible();
+    await expect(page.locator('.ytmusic-code-reference')).toBeVisible();
+
+    await page.getByLabel('顯示地區與語言偏好').selectOption('custom');
+    await expect(page.getByLabel('語言代碼 (Language)')).toBeVisible();
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `YouTube Music settings horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+  }
+});
+
 test('sheet copy feature styles load and stay within supported viewport widths', async ({ page }) => {
   await mockAuthenticatedBackend(page);
 
