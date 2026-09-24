@@ -33,6 +33,8 @@ export function validateFeatureManifests(manifests) {
   const navItemIds = new Set();
   const featureCardIds = new Set();
   const routePaths = new Set();
+  const indexPaths = new Set();
+  const wildcardPaths = new Set();
   const assertKnownPath = (path, label) => {
     if (typeof path !== 'string' || !knownPaths.has(path)) {
       throw new Error(`${label} points to an unknown route: ${String(path)}`);
@@ -41,6 +43,9 @@ export function validateFeatureManifests(manifests) {
   const validateRoutes = (routes, parentPath = '') => {
     for (const route of routes || []) {
       let fullPath = parentPath;
+      if (route.index && (route.path || route.children?.length)) {
+        throw new Error(`Feature index route ${parentPath} cannot declare a path or children.`);
+      }
       if (route.path && route.path !== '*') {
         fullPath = route.path.startsWith('/') ? route.path : `${parentPath}/${route.path}`.replace(/\/+/g, '/');
         assertKnownPath(fullPath.replace(/\/\*$/, ''), `Feature route ${route.path}`);
@@ -48,6 +53,17 @@ export function validateFeatureManifests(manifests) {
         routePaths.add(fullPath);
       } else if (route.index) {
         assertKnownPath(parentPath, `Feature index route ${parentPath}`);
+        if (indexPaths.has(parentPath)) throw new Error(`Duplicate feature index route: ${parentPath}`);
+        indexPaths.add(parentPath);
+      } else if (route.path === '*') {
+        if (wildcardPaths.has(parentPath)) throw new Error(`Duplicate feature wildcard route: ${parentPath}`);
+        wildcardPaths.add(parentPath);
+      }
+      if (route.redirectTo) {
+        const destination = route.redirectTo.startsWith('/')
+          ? route.redirectTo
+          : `${fullPath.replace(/\/\*$/, '')}/${route.redirectTo}`.replace(/\/+/g, '/');
+        assertKnownPath(destination, `Feature redirect ${fullPath}`);
       }
       if (!route.component && !route.redirectTo && !route.children?.length) {
         throw new Error(`Feature route ${fullPath || route.path} has no component or redirect.`);

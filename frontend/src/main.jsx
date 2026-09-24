@@ -7,6 +7,7 @@ import './styles/foundation.css';
 import './index.css';
 import './styles/app-theme.css';
 import './shared/ui/ui.css';
+import './shared/ui/feedback.css';
 import './shared/ui/filter-panel.css';
 import './shared/ui/media.css';
 

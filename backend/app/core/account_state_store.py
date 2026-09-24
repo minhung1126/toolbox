@@ -11,9 +11,12 @@ import copy
 import json
 import logging
 from collections.abc import Iterable
+from contextvars import ContextVar
 from pathlib import Path
 from threading import RLock
 from typing import Any
+
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from backend.app.core.data_paths import data_directory
 from backend.app.core.persistence import atomic_write_json, read_json_file
@@ -80,8 +83,8 @@ class _DynamicKeysProxy:
         return f"DynamicKeysProxy({set(keys)})"
 
 
-ACCOUNT_SETTING_KEYS = _DynamicKeysProxy("setting", lambda: account_state_store)
-WORK_STATE_KEYS = _DynamicKeysProxy("work_state", lambda: account_state_store)
+ACCOUNT_SETTING_KEYS = _DynamicKeysProxy("setting", lambda: get_account_state_store())
+WORK_STATE_KEYS = _DynamicKeysProxy("work_state", lambda: get_account_state_store())
 
 MISSING = object()
 
@@ -252,11 +255,42 @@ class AccountStateStore:
 
 
 account_state_store = AccountStateStore()
+_request_store: ContextVar[AccountStateStore | None] = ContextVar("account_state_store", default=None)
+
+
+def get_account_state_store() -> AccountStateStore:
+    """Resolve the app repository, retaining legacy callers outside HTTP requests."""
+    store = _request_store.get()
+    return account_state_store if store is None else store
+
+
+class AccountStateMiddleware:
+    """Bridge legacy helpers to the app repository, including sync threadpool calls.
+
+    The token is reset even on failures. Background threads created manually must
+    receive their repository explicitly; they do not inherit this request scope.
+    """
+
+    def __init__(self, app: ASGIApp, store: AccountStateStore) -> None:
+        self.app = app
+        self.store = store
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        token = _request_store.set(self.store)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _request_store.reset(token)
 
 
 __all__ = [
     "ACCOUNT_SETTING_KEYS",
     "AccountStateStore",
+    "AccountStateMiddleware",
+    "get_account_state_store",
     "DEFAULT_ACCOUNT_SETTING_KEYS",
     "DEFAULT_WORK_STATE_KEYS",
     "MISSING",

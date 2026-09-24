@@ -13,6 +13,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend.app.api.router import create_api_router
+from backend.app.core.account_state_store import (
+    AccountStateMiddleware,
+)
+from backend.app.core.account_state_store import (
+    account_state_store as default_account_state_store,
+)
 from backend.app.core.config import settings
 from backend.app.core.error_contract import http_error, normalize_http_detail, validation_field_errors
 from backend.app.tools.builtin import register_builtin_tools
@@ -168,7 +174,13 @@ def resolve_frontend_path(full_path: str) -> Path:
 
 
 def create_app(
-    *, notes_store=None, upload_worker=None, youtube_workflow_adapters=None, registry=None, dependency_overrides=None
+    *,
+    notes_store=None,
+    account_state_store=None,
+    upload_worker=None,
+    youtube_workflow_adapters=None,
+    registry=None,
+    dependency_overrides=None,
 ) -> FastAPI:
     """Compose per-app repositories, workflow adapters, registry and worker lifecycle."""
     if registry is None:
@@ -187,6 +199,10 @@ def create_app(
     )
     application.state.tool_registry = registry
     application.state.notes_store = notes_store
+    application.state.account_state_store = (
+        default_account_state_store if account_state_store is None else account_state_store
+    )
+    application.add_middleware(AccountStateMiddleware, store=application.state.account_state_store)
     application.state.upload_worker = upload_worker
     application.state.youtube_workflow_adapters = dict(youtube_workflow_adapters or {})
     application.dependency_overrides.update(dependency_overrides or {})

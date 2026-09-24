@@ -5,7 +5,10 @@ import base from './playwright.config';
 // generating snapshots on CI would silently accept a visual regression.
 if (process.platform !== 'win32') throw new Error('Visual baselines require Windows and Microsoft Edge.');
 
-export default defineConfig(base, {
+// defineConfig concatenates webServer entries; visual tests need only their own server.
+const { webServer: _baseWebServer, ...sharedConfig } = base;
+
+export default defineConfig(sharedConfig, {
   testIgnore: [],
   testMatch: '**/*.visual.spec.ts',
   workers: 2,

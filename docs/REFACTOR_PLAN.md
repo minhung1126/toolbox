@@ -6,7 +6,7 @@
 
 「沒有錯誤」應落實為可重現的測試、明確的錯誤處理、關鍵流程驗收與可回退發布；測試全綠不能證明不存在所有錯誤。
 
-## 實作進度（2026-09-24）
+## 實作進度（2026-09-25）
 
 本分支已完成可靠性修正、五個主要前端工作流程的邏輯抽離、YouTube 批次使用案例服務、第一批共用 UI 與前端品質門檻。以下只將有程式碼及測試證據的工作列為完成；整份路線圖仍有明確未完成項目。
 
@@ -34,7 +34,7 @@
 - Playwright 增加 390／768／1440 px 共用元件展示溢位與截圖測試，並驗證九個工具／設定頁的樣式載入及多尺寸版面、Weverse 資料夾拖曳／掃描／複查與 fake provider 上傳至完成、Google OAuth URL 導向、Playlist Sort 新歌單、YouTube Batch Update 預覽與執行、Publish Cleaner 清單／配額／快照確認至發布完成、Photo Curator ZIP 匯出及 Sticky Notes API 生命週期。前後端工具 ID 與路由契約測試發現並修正 `youtube-integrations`／`integrations-quota` 漂移。
 - 發布 workflow 只會發布已通過驗證的同一個 main SHA；README 的支援平台與前端路徑已修正。
 
-本輪接續交付（工作目錄，尚未提交／取得同 SHA CI）：
+上一輪接續交付（已於 `453de4b` 提交並由 `0abaeef` 合併）：
 
 - `Navbar` 完全由 feature manifest 的導覽資料組裝。單項目直接顯示、多項目為展開群組，保留既有 `<groupId>Open` 儲存鍵；`sidebar: false` 保留 YouTube 設定子導覽的位置。新增 manifest 自動顯示及 active 展開的互動測試通過，開發規範與架構範例已同步。
 - 新增 `create_app()`，提供獨立 registry／upload worker 與 notes store、YouTube workflow adapter、FastAPI dependency override 的組裝入口。HTTP 測試確認兩個 app 的 notes、上傳工作及 provider fake 相互隔離；預設 app 的既有 URL／錯誤契約維持相容。全平台 settings／auth store 仍未全面改為 app scope。
@@ -44,11 +44,19 @@
 - 新增 Windows／Edge `npm run test:visual`，以禁止自動更新的 `toHaveScreenshot` 比對三種寬度的元件、focus 與 Dashboard，共 6 項／9 張基準。基準已人工檢視；跨平台 CI 基準尚待建立，不能把 Windows 字型結果直接套用於 Linux Chromium。
 - 部署文件補上中斷任務與資料副本回退驗收流程，Compose 現在實際支援文件中的 `IMAGE_NAME` 固定 SHA 設定。本機未安裝 Docker，因此未執行容器建置或回退演練。
 
+本輪接續交付（2026-09-25，工作目錄，尚未提交／取得同 SHA CI）：
+
+- `create_app(account_state_store=...)` 新增帳號設定與工作狀態 repository 注入。HTTP context 橋接既有 helper、動態 key 驗證及 YTMusic 地區偏好，工具 startup 登錄使用各 app 的 repository。新增同帳號跨 app、同步並行請求、動態 key 與失敗後 context 還原測試。未注入仍沿用 singleton；背景執行緒須明確傳入 repository，其他 settings／credential／session store 尚未完成隔離。
+- FFmpeg 純命令模型、preset 與 request/model 型別移至 `features/ffmpeg/model`，頁面及 hooks 使用 feature 入口，舊 utils 保留相容匯出。新增 7 項回歸案例涵蓋裁切、seek、shell 換行、轉碼、音訊與 GIF。
+- Dialog、ConfirmDialog 與 Toast 樣式集中至 `shared/ui/feedback.css`，合併等價覆寫；index.css 從 1,231 降至 874 行，app-theme.css 從 706 降至 629 行。新增 390／768／1440 px 確認框版面、Escape 與焦點還原 E2E。主 CSS 53.96 kB／gzip 10.00 kB。
+- Manifest 驗證補上重複 index／wildcard、非法 index 子路由與 redirect destination 檢查。Playwright 可用 `PLAYWRIGHT_PORT` 切換連接埠，修正 visual config 合併時額外啟動一般 E2E server 的問題。
+- 驗證：後端 238 項 pytest、Ruff lint／format 通過；前端 70 檔／333 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過。Vitest 因本機快取目錄權限改用 `--no-cache`；Edge E2E 23 項及既有 visual 6 項通過，未更新基準圖。因 4173 在本機回報 EACCES，E2E 使用 18473，visual 使用 4174。依既有 lockfile 執行 `npm ci` 修復缺漏依賴，未修改 lockfile。
+
 尚待完成：
 
 - 共用 UI 尚未逐頁遷移；全域 CSS 仍承載多個 feature 的樣式，固定 inline layout 也仍有保留。Stylelint 已涵蓋全部 CSS，foundation reset selector 有單檔規則例外；仍需將全域樣式逐頁移入 feature CSS，並持續統一 token 與版面規則。
 - Feature hook 已從頁面抽離，但仍有其他 feature 的 API/model 邊界及較完整的 TS 型別尚未完成。E2E 已覆蓋 mock OAuth 導向、排序、Batch Update 與 Publish Cleaner 執行及照片匯出；尚未驗證真實 Google／YouTube OAuth callback 與 Weverse 真實 provider smoke test。
-- YouTube workflow adapter、Notes repository 與 Weverse worker／store／provider 已可由 app factory 注入；身分驗證、settings、credential／session／account-state store 與其他外部 client 的 app scope 注入仍待完成。
+- YouTube workflow adapter、Notes repository、account-state repository 與 Weverse worker／store／provider 已可由 app factory 注入；身分驗證、全平台 settings、credential／session store 與其他外部 client 的 app scope 注入仍待完成。Account-state 的 context 橋接後續可逐步替換為明確 service dependency。
 - Weverse sidecar lock 只承諾在支援作業系統檔案鎖定語意的本機檔案系統上協調合作程序；NFS／網路檔案系統或跨主機多實例仍需驗證鎖語意，或改採資料庫／外部鎖服務。沒有真實 provider smoke test，也未演練 Docker 部署回退。
 - 過去 `npm install` 曾顯示 9 項安全公告；本輪 `npm audit --offline --json` 已完成並回報 0 項漏洞。線上 registry 的即時 advisory 查詢仍需在可連線的 CI／維護環境複核。
 

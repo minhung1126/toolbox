@@ -58,7 +58,7 @@ class CreatorToolsPlugin(ToolPlugin):
 
     async def on_startup(self, app: FastAPI) -> None:
         """Creator tools plugin startup hook."""
-        from backend.app.core.account_state_store import account_state_store
+        account_state_store = app.state.account_state_store
 
         account_state_store.register_setting_keys(
             [

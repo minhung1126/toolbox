@@ -24,7 +24,8 @@ import { useToast } from '../components/Toast';
 import { useFfmpegGeneratorWorkflow } from '../features/ffmpeg/hooks/useFfmpegGeneratorWorkflow';
 import '../features/ffmpeg/ffmpeg-generator.css';
 
-import { PRESET_LIST, formatFileSize, parseHmsToSeconds, secondsToHms } from '../utils/ffmpegCommand';
+import { formatFileSize, parseHmsToSeconds, secondsToHms } from '../features/ffmpeg/model/ffmpegCommand';
+import { PRESET_LIST } from '../features/ffmpeg/model/presets';
 
 export { isVideoFile } from '../hooks/useFfmpegVideo';
 

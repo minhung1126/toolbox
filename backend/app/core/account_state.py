@@ -9,7 +9,7 @@ from backend.app.core.account_state_store import (
     DEFAULT_WORK_STATE_KEYS,
     MISSING,
     WORK_STATE_KEYS,
-    account_state_store,
+    get_account_state_store,
 )
 from backend.app.core.config import normalize_youtube_slot, settings
 
@@ -34,7 +34,7 @@ def ensure_account(owner_sub: str) -> str:
     subject = _owner(owner_sub)
     if not subject:
         raise ValueError("account subject is required")
-    account_state_store.ensure_account(subject)
+    get_account_state_store().ensure_account(subject)
     return subject
 
 
@@ -42,7 +42,7 @@ def get_account_setting(owner_sub: str, key: str, default: Any = "") -> Any:
     if key not in ACCOUNT_SETTING_KEYS:
         raise ValueError(f"Unsupported account setting: {key}")
     subject = ensure_account(owner_sub)
-    value = account_state_store.get_setting(subject, key, MISSING)
+    value = get_account_state_store().get_setting(subject, key, MISSING)
     return default if value is MISSING else value
 
 
@@ -50,14 +50,14 @@ def set_account_setting(owner_sub: str, key: str, value: Any) -> None:
     if key not in ACCOUNT_SETTING_KEYS:
         raise ValueError(f"Unsupported account setting: {key}")
     subject = ensure_account(owner_sub)
-    account_state_store.set_setting(subject, key, value)
+    get_account_state_store().set_setting(subject, key, value)
 
 
 def update_account_settings(owner_sub: str, values: dict[str, Any]) -> None:
     subject = ensure_account(owner_sub)
     for key, value in values.items():
         if key in ACCOUNT_SETTING_KEYS and value is not None:
-            account_state_store.set_setting(subject, key, value)
+            get_account_state_store().set_setting(subject, key, value)
 
 
 def get_account_active_slot(owner_sub: str) -> str:
@@ -97,14 +97,14 @@ def set_account_youtube_routing_mode(owner_sub: str, mode: str) -> str:
 
 def get_account_work_state(owner_sub: str) -> dict[str, Any]:
     subject = ensure_account(owner_sub)
-    return account_state_store.get_work_state(subject)
+    return get_account_state_store().get_work_state(subject)
 
 
 def update_account_work_state(owner_sub: str, key: str, value: dict[str, Any]) -> dict[str, Any]:
     if key not in WORK_STATE_KEYS:
         raise ValueError(f"Unsupported work state: {key}")
     subject = ensure_account(owner_sub)
-    return account_state_store.set_work_state(subject, key, value)
+    return get_account_state_store().set_work_state(subject, key, value)
 
 
 __all__ = [

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { copyToClipboard } from '../../../utils/clipboard';
 import { useFfmpegVideo } from '../../../hooks/useFfmpegVideo';
-import { buildFfmpegCommand, buildTrimSummary, parseHmsToSeconds, secondsToHms } from '../../../utils/ffmpegCommand';
+import { buildFfmpegCommand, buildTrimSummary, parseHmsToSeconds, secondsToHms } from '../model/ffmpegCommand';
 
 export function useFfmpegGeneratorWorkflow({ toast }) {
   // Cut Options

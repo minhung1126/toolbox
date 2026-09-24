@@ -42,7 +42,7 @@ class YouTubeMusicPlugin(ToolPlugin):
         return playlist_sort_router
 
     async def on_startup(self, app) -> None:
-        from backend.app.core.account_state_store import account_state_store
+        account_state_store = app.state.account_state_store
 
         account_state_store.register_work_state_keys(
             [

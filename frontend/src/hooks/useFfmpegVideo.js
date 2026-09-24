@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { parseHmsToSeconds } from '../utils/ffmpegCommand';
+import { parseHmsToSeconds } from '../features/ffmpeg/model/ffmpegCommand';
 
 export function isVideoFile(file) {
   if (!file) return false;

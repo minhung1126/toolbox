@@ -1,5 +1,8 @@
 import { defineConfig } from '@playwright/test';
 
+const port = Number(process.env.PLAYWRIGHT_PORT || 4173);
+const baseURL = `http://127.0.0.1:${port}`;
+
 export default defineConfig({
   testDir: './e2e',
   testIgnore: '**/*.visual.spec.ts',
@@ -11,7 +14,7 @@ export default defineConfig({
   reporter: 'list',
   outputDir: './test-results',
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     ...(process.env.PLAYWRIGHT_BROWSER_CHANNEL
@@ -21,8 +24,8 @@ export default defineConfig({
         : {}),
   },
   webServer: {
-    command: 'node ./node_modules/vite/bin/vite.js --host 127.0.0.1 --port 4173',
-    url: 'http://127.0.0.1:4173',
+    command: `node ./node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${port} --strictPort`,
+    url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
   },

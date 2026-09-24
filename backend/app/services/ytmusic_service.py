@@ -55,9 +55,9 @@ def resolve_ytmusic_locale(
     if not resolved_lang or not resolved_loc:
         if owner_sub:
             try:
-                from backend.app.core.account_state_store import account_state_store
+                from backend.app.core.account_state_store import get_account_state_store
 
-                work_state = account_state_store.get_work_state(owner_sub)
+                work_state = get_account_state_store().get_work_state(owner_sub)
                 prefs = work_state.get("ytmusic_preferences") if isinstance(work_state, dict) else {}
                 if isinstance(prefs, dict):
                     region_preset = prefs.get("regionPreset") or prefs.get("region_preset")

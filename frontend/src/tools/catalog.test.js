@@ -70,6 +70,33 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(new Set(routes.map((route) => route.path)).size).toBe(routes.length);
   });
 
+  it('rejects ambiguous nested index and wildcard routes', () => {
+    const tool = getToolById('youtube-integrations');
+    const parent = tool.routes[0];
+    for (const child of [parent.children[0], parent.children.at(-1)]) {
+      expect(() =>
+        validateFeatureManifests([{ ...tool, routes: [{ ...parent, children: [...parent.children, child] }] }])
+      ).toThrow(child.index ? 'Duplicate feature index route' : 'Duplicate feature wildcard route');
+    }
+    expect(() =>
+      validateFeatureManifests([
+        { ...tool, routes: [{ ...parent, children: [{ index: true, path: 'connections', component: () => null }] }] },
+      ])
+    ).toThrow('cannot declare a path or children');
+  });
+
+  it('validates absolute and relative redirect destinations', () => {
+    const tool = getToolById('youtube-integrations');
+    const parent = tool.routes[0];
+    const withRedirect = (redirectTo) => [
+      { ...tool, routes: [{ ...parent, children: [{ index: true, redirectTo }] }] },
+    ];
+    expect(() => validateFeatureManifests(withRedirect('connections'))).not.toThrow();
+    expect(() => validateFeatureManifests(withRedirect(PATHS.dashboard))).not.toThrow();
+    expect(() => validateFeatureManifests(withRedirect('missing'))).toThrow('unknown route');
+    expect(() => validateFeatureManifests(withRedirect('/missing'))).toThrow('unknown route');
+  });
+
   it('finds tool by id', () => {
     const tool = getToolById('creator-tools');
     expect(tool).not.toBeNull();
