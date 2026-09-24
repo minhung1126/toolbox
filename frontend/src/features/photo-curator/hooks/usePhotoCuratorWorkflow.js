@@ -42,16 +42,17 @@ export function usePhotoCuratorWorkflow({ toast }) {
 
   // Upload/Import Photos
   const handleFilesSelected = (files) => {
+    const selectedFiles = Array.from(files || []);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-    if (!files || files.length === 0) return;
+    if (selectedFiles.length === 0) return;
 
     const isImageFile = (file) => {
       if (file.type && file.type.startsWith('image/')) return true;
       return /\.(jpe?g|png|webp|gif|svg|avif|bmp|ico|heic|heif)$/i.test(file.name || '');
     };
-    const fileList = Array.from(files).filter(isImageFile);
+    const fileList = selectedFiles.filter(isImageFile);
     if (fileList.length === 0) {
       toast.warning('所選檔案中沒有支援的圖片格式。若為 iPhone HEIC 格式請先轉為 JPG。');
       return;

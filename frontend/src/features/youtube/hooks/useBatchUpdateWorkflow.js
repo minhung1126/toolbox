@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { normalizeYoutubePlaylistInput, youtubeBatchApi } from '../api/youtubeBatchApi';
+import { normalizeYoutubePlaylistInput, youtubeBatchApi } from '../api/youtubeBatchApi.ts';
 import useAccountWorkState from '../../../hooks/useAccountWorkState';
 import useTeamPersonFilter from '../../../hooks/useTeamPersonFilter';
 import useSharedTeamPersonFilterPersistence from '../../../hooks/useSharedTeamPersonFilterPersistence';
@@ -297,6 +297,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     if (hydrationStartedRef.current === hydrationKey) return undefined;
     hydrationStartedRef.current = hydrationKey;
     let cancelled = false;
+    let settled = false;
     const fallbackConfig = normalizeConfig({}, defaults, persistedDefaults, sharedFilter);
     setHydrated(false);
     setWorksheets([]);
@@ -318,6 +319,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     applyConfig(fallbackConfig);
 
     if (!accountKey) {
+      settled = true;
       setHydrated(true);
       return () => {
         cancelled = true;
@@ -333,13 +335,17 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
           normalizeConfig(resolveDraftConfig(serverConfig, fallbackConfig), defaults, persistedDefaults, sharedFilter)
         );
       })
-      .catch((err) => setConfigSaveError(`讀取 YouTube 草稿設定失敗：${err.message}`))
+      .catch((err) => {
+        if (!cancelled) setConfigSaveError(`讀取 YouTube 草稿設定失敗：${err.message}`);
+      })
       .finally(() => {
+        settled = true;
         if (!cancelled) setHydrated(true);
       });
 
     return () => {
       cancelled = true;
+      if (!settled && hydrationStartedRef.current === hydrationKey) hydrationStartedRef.current = '';
     };
   }, [
     applyConfig,

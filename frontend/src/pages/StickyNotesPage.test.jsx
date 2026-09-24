@@ -2,12 +2,12 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import StickyNotesPage from './StickyNotesPage';
-import { api } from '../services/api';
+import { notesApi } from '../features/notes/api/notesApi';
 
 const toastMocks = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 
-vi.mock('../services/api', () => ({
-  api: {
+vi.mock('../features/notes/api/notesApi', () => ({
+  notesApi: {
     getNotes: vi.fn(),
     createNote: vi.fn(),
     updateNote: vi.fn(),
@@ -48,7 +48,7 @@ describe('StickyNotesPage', () => {
   });
 
   it('renders notes list fetched from api', async () => {
-    api.getNotes.mockResolvedValueOnce({ notes: mockNotes, total: 2 });
+    notesApi.getNotes.mockResolvedValueOnce({ notes: mockNotes, total: 2 });
 
     render(<StickyNotesPage />);
 
@@ -60,7 +60,7 @@ describe('StickyNotesPage', () => {
   });
 
   it('creates a new note when clicking add button', async () => {
-    api.getNotes.mockResolvedValueOnce({ notes: [], total: 0 });
+    notesApi.getNotes.mockResolvedValueOnce({ notes: [], total: 0 });
     const newNote = {
       id: 'n-new',
       content: '',
@@ -69,7 +69,7 @@ describe('StickyNotesPage', () => {
       created_at: '2026-09-12T14:00:00Z',
       updated_at: '2026-09-12T14:00:00Z',
     };
-    api.createNote.mockResolvedValueOnce({ note: newNote });
+    notesApi.createNote.mockResolvedValueOnce({ note: newNote });
 
     render(<StickyNotesPage />);
 
@@ -81,13 +81,13 @@ describe('StickyNotesPage', () => {
     fireEvent.click(addButtons[0]);
 
     await waitFor(() => {
-      expect(api.createNote).toHaveBeenCalledWith({ content: '', remark: '', pinned: false });
+      expect(notesApi.createNote).toHaveBeenCalledWith({ content: '', remark: '', pinned: false });
       expect(screen.getByText('共 1 張便籤')).toBeInTheDocument();
     });
   });
 
   it('filters notes based on search query', async () => {
-    api.getNotes.mockResolvedValueOnce({ notes: mockNotes, total: 2 });
+    notesApi.getNotes.mockResolvedValueOnce({ notes: mockNotes, total: 2 });
 
     render(<StickyNotesPage />);
 

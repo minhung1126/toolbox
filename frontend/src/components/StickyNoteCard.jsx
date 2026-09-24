@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Check, Copy, Pin, Tag, Trash2 } from 'lucide-react';
-import { api } from '../services/api';
+import { notesApi } from '../features/notes/api/notesApi';
 import { copyToClipboard } from '../utils/clipboard';
 import { useToast } from './Toast';
 import ConfirmDialog from './ConfirmDialog';
@@ -31,7 +31,7 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted }) {
     delay: 500,
     compareFn: (a, b) => a.content === b.content && a.remark === b.remark,
     onSave: async (nextData) => {
-      const res = await api.updateNote(note.id, nextData);
+      const res = await notesApi.updateNote(note.id, nextData);
       if (res?.note) {
         setLocalNote((prev) => ({ ...prev, ...res.note }));
         onUpdated?.(res.note);
@@ -64,7 +64,7 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted }) {
     const nextPinned = !localNote.pinned;
     setLocalNote((prev) => ({ ...prev, pinned: nextPinned }));
     try {
-      const res = await api.updateNote(note.id, { pinned: nextPinned });
+      const res = await notesApi.updateNote(note.id, { pinned: nextPinned });
       if (res?.note) {
         onUpdated?.(res.note);
       }
@@ -89,7 +89,7 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted }) {
   const handleConfirmDelete = async () => {
     setDeleting(true);
     try {
-      await api.deleteNote(note.id);
+      await notesApi.deleteNote(note.id);
       toast.success('便利貼已刪除');
       setConfirmDelete(false);
       onDeleted?.(note.id);

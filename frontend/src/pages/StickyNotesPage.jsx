@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw, Search, StickyNote } from 'lucide-react';
-import { api } from '../services/api';
+import { notesApi } from '../features/notes/api/notesApi';
 import StickyNoteCard from '../components/StickyNoteCard';
 import { useToast } from '../components/Toast';
 import { Badge, Button, EmptyState, LoadingState, PageHeader } from '../shared/ui';
@@ -16,7 +16,7 @@ export default function StickyNotesPage() {
   const fetchNotes = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.getNotes();
+      const res = await notesApi.getNotes();
       setNotes(res.notes || []);
     } catch (err) {
       toast.error(`載入便利貼失敗：${err.message || '未知錯誤'}`);
@@ -33,7 +33,7 @@ export default function StickyNotesPage() {
     if (creating) return;
     setCreating(true);
     try {
-      const res = await api.createNote({ content: '', remark: '', pinned: false });
+      const res = await notesApi.createNote({ content: '', remark: '', pinned: false });
       if (res?.note) {
         setNotes((prev) => [res.note, ...prev]);
         toast.success('已新增便利貼');
