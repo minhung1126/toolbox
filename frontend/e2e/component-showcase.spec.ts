@@ -193,7 +193,18 @@ test('Quick Token Drawer uses its feature styles on supported widths', async ({ 
 });
 
 test('YouTube settings sub-navigation uses feature styles on supported widths', async ({ page }) => {
-  await mockAuthenticatedBackend(page);
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/auth/user': {
+      authenticated: true,
+      user: { sub: 'design-system-e2e', email: 'design-system@example.test' },
+      authorizations: {},
+      google_scopes: {},
+      youtube: {
+        active_slot: 'primary',
+        slots: { primary: { label: 'Primary', configured: true, authenticated: true, can_be_active: true } },
+      },
+    },
+  });
 
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
@@ -203,6 +214,10 @@ test('YouTube settings sub-navigation uses feature styles on supported widths', 
     await expect(navigation).toHaveCSS('background-color', 'rgb(20, 21, 26)');
     await expect(navigation).toHaveCSS('gap', '6px');
     await expect(navigation.locator('a.active')).toHaveCSS('background-color', 'rgb(38, 42, 52)');
+
+    await page.getByRole('button', { name: '修改憑證' }).first().click();
+    await expect(page.getByLabel('OAuth Client Secret', { exact: true })).toBeVisible();
+    await expect(page.locator('.youtube-slot-editor')).toHaveCSS('background-color', 'rgb(20, 21, 26)');
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow, `YouTube settings horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);

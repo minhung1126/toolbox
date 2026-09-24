@@ -99,6 +99,20 @@ describe('YouTubeSettingsPage', () => {
     });
   });
 
+  it('labels OAuth credential fields and exposes the secret visibility state', () => {
+    renderPage();
+    fireEvent.click(screen.getAllByRole('button', { name: '修改憑證' })[0]);
+
+    expect(screen.getByLabelText('槽位顯示名稱 (Label)')).toHaveValue('Primary');
+    expect(screen.getByLabelText('OAuth Client ID')).toBeInTheDocument();
+    const secret = screen.getByLabelText('OAuth Client Secret');
+    expect(secret).toHaveAttribute('type', 'password');
+
+    fireEvent.click(screen.getByRole('button', { name: '顯示 OAuth Client Secret' }));
+    expect(secret).toHaveAttribute('type', 'text');
+    expect(screen.getByRole('button', { name: '隱藏 OAuth Client Secret' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('saves quota and playlist through separate actions without crossing unsaved drafts', async () => {
     renderPage();
 

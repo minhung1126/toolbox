@@ -43,7 +43,7 @@ export default function YouTubeSlotCard({
     <section className="glass-panel card-padding settings-card card-stack" key={slot}>
       <div className="card-header">
         <div className="card-header-title">
-          <Youtube size={20} color="#ff4d6d" />
+          <Youtube size={20} className="youtube-slot-icon" aria-hidden="true" />
           <h2 className="settings-heading">{record.label}</h2>
         </div>
         {isActive && <span className="badge badge-info">目前作用中</span>}
@@ -59,65 +59,36 @@ export default function YouTubeSlotCard({
         )}
         <button
           type="button"
-          className="btn btn-secondary btn-sm"
+          className="btn btn-secondary btn-sm youtube-slot-edit-button"
           onClick={() => handleOpenEditSlot(slot)}
-          style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem' }}
         >
           <Key size={13} /> {record.configured ? '修改憑證' : '配置憑證'}
         </button>
       </div>
 
       {editingSlot === slot && (
-        <div
-          style={{
-            background: 'rgba(0, 0, 0, 0.25)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '8px',
-            padding: '1rem',
-            marginTop: '0.75rem',
-          }}
-        >
-          <h4
-            style={{
-              fontSize: '0.9rem',
-              fontWeight: 600,
-              marginBottom: '0.75rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-            }}
-          >
-            <Key size={16} color="#60a5fa" /> 設定 {record.label} OAuth 憑證
+        <div className="youtube-slot-editor">
+          <h4 className="youtube-slot-editor-title">
+            <Key size={16} aria-hidden="true" /> 設定 {record.label} OAuth 憑證
           </h4>
 
           {slot === 'primary' && (
-            <div style={{ marginBottom: '0.85rem' }}>
+            <div className="youtube-slot-system-oauth">
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
+                className="btn btn-secondary btn-sm youtube-slot-system-oauth-button"
                 onClick={handleUseSystemOAuthForPrimary}
                 disabled={savingSlotCreds}
-                style={{
-                  width: '100%',
-                  marginBottom: '0.5rem',
-                  background: 'rgba(59, 130, 246, 0.15)',
-                  borderColor: '#3b82f6',
-                  color: '#93c5fd',
-                }}
               >
                 ✓ 一鍵共用控制台 Google OAuth 憑證
               </button>
-              <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                — 或填寫自訂獨立憑證 —
-              </div>
+              <div className="youtube-slot-oauth-divider">— 或填寫自訂獨立憑證 —</div>
             </div>
           )}
 
           {slot === 'secondary' && (
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}
-              >
+            <div className="youtube-slot-secondary-option">
+              <label className="youtube-slot-checkbox-label">
                 <input
                   type="checkbox"
                   checked={slotEnabled}
@@ -129,70 +100,57 @@ export default function YouTubeSlotCard({
             </div>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div className="youtube-slot-fields">
             <div>
-              <label
-                style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}
-              >
+              <label className="youtube-slot-field-label" htmlFor={`${slot}-label`}>
                 槽位顯示名稱 (Label)
               </label>
               <input
+                id={`${slot}-label`}
                 type="text"
                 className="form-input"
                 value={slotLabel}
                 onChange={(e) => setSlotLabel(e.target.value)}
                 placeholder="例如：Primary 或 Secondary"
                 disabled={savingSlotCreds}
-                style={{ width: '100%' }}
               />
             </div>
 
             <div>
-              <label
-                style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}
-              >
+              <label className="youtube-slot-field-label" htmlFor={`${slot}-client-id`}>
                 OAuth Client ID
               </label>
               <input
+                id={`${slot}-client-id`}
                 type="text"
                 className="form-input"
                 value={slotClientId}
                 onChange={(e) => setSlotClientId(e.target.value)}
                 placeholder="請填寫 Google Cloud Console OAuth Client ID"
                 disabled={savingSlotCreds}
-                style={{ width: '100%' }}
               />
             </div>
 
             <div>
-              <label
-                style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}
-              >
+              <label className="youtube-slot-field-label" htmlFor={`${slot}-client-secret`}>
                 OAuth Client Secret
               </label>
-              <div style={{ position: 'relative' }}>
+              <div className="youtube-slot-secret-field">
                 <input
+                  id={`${slot}-client-secret`}
                   type={showSlotSecret ? 'text' : 'password'}
-                  className="form-input"
+                  className="form-input youtube-slot-secret-input"
                   value={slotClientSecret}
                   onChange={(e) => setSlotClientSecret(e.target.value)}
                   placeholder="••••••••••••••••（輸入可覆蓋更新）"
                   disabled={savingSlotCreds}
-                  style={{ width: '100%', paddingRight: '2.5rem' }}
                 />
                 <button
                   type="button"
+                  className="youtube-slot-secret-toggle"
+                  aria-label={showSlotSecret ? '隱藏 OAuth Client Secret' : '顯示 OAuth Client Secret'}
+                  aria-pressed={showSlotSecret}
                   onClick={() => setShowSlotSecret(!showSlotSecret)}
-                  style={{
-                    position: 'absolute',
-                    right: '0.5rem',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                  }}
                 >
                   {showSlotSecret ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
@@ -200,27 +158,13 @@ export default function YouTubeSlotCard({
             </div>
 
             {isSlotCredsDirty(slot) && (
-              <div
-                className="info-banner warning-banner"
-                style={{
-                  background: 'rgba(245, 158, 11, 0.12)',
-                  border: '1px solid rgba(245, 158, 11, 0.3)',
-                  color: '#fbbf24',
-                  padding: '0.5rem 0.75rem',
-                  borderRadius: '6px',
-                  fontSize: '0.8rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  marginTop: '0.5rem',
-                }}
-              >
+              <div className="info-banner warning-banner youtube-slot-credentials-dirty">
                 <AlertCircle size={15} />
                 <span>槽位憑證設定已修改（尚未保存）。請記得點擊右下方的「儲存設定」按鈕！</span>
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.25rem' }}>
+            <div className="youtube-slot-editor-actions">
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -321,21 +265,7 @@ export default function YouTubeSlotCard({
             </div>
           </div>
           {isQuotaDirty(slot) && (
-            <div
-              className="info-banner warning-banner"
-              style={{
-                background: 'rgba(245, 158, 11, 0.12)',
-                border: '1px solid rgba(245, 158, 11, 0.3)',
-                color: '#fbbf24',
-                padding: '0.6rem 0.8rem',
-                borderRadius: '6px',
-                fontSize: '0.82rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                margin: '0.75rem 0',
-              }}
-            >
+            <div className="info-banner warning-banner youtube-slot-quota-dirty">
               <AlertCircle size={16} />
               <span>
                 您已修改 {record.label} 的配額設定（尚未儲存）。為避免過度消耗寫入資源，修改後請記得點擊右下方的「儲存

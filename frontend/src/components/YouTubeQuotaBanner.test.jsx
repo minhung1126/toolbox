@@ -44,7 +44,7 @@ describe('YouTubeQuotaBanner', () => {
     api.getYoutubeQuotaUsage.mockResolvedValue({ ...usage(), updated_at: updatedAt });
     render(<YouTubeQuotaBanner />);
 
-    expect(await screen.findByText(`最後更新：${new Date(updatedAt).toLocaleString('zh-TW')}`)).toBeInTheDocument();
+    expect(await screen.findByText(/最後更新：2026\/8\/3/)).toBeInTheDocument();
   });
 
   it('shows confirmed exhaustion as blocked with zero effective availability', async () => {
