@@ -13,6 +13,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+.pytest-cache/
 .ruff_cache/
 
 # Local Git worktrees

@@ -1,3 +1,4 @@
+import '../features/youtube/youtube-shared.css';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import '../features/youtube/publish-cleaner.css';
 import { publishCleanupApi } from '../features/youtube/api/publishCleanupApi';

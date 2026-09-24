@@ -1,3 +1,4 @@
+import '../features/youtube/youtube-shared.css';
 import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { useLocation } from 'react-router-dom';

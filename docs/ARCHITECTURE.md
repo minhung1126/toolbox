@@ -117,51 +117,47 @@ tool_registry.register(MyToolPlugin())
 - `/api/v1/tools` 目錄端點會自動對外公開該工具的完整元數據。
 - FastAPI 會自動載入該工具的路由，無須手動修改主程式。
 
-### 步驟 3：在前端註冊工具導覽與路由
+### 步驟 3：建立前端 feature manifest
 
-先在 `frontend/src/routes/paths.js` 增加唯一的 canonical URL，再在 `frontend/src/tools/catalog.js` 登錄導覽與 dashboard card。這個 catalog 的測試會檢查重複 ID 與未登記網址：
+1. 在 `frontend/src/routes/paths.js` 加入 canonical URL；需要登入回跳的入口也加入既有 return-path 白名單。
+2. 在 `frontend/src/features/<tool>/manifest.js` 宣告與後端一致的 ID、metadata、`routes`、`navGroups` 及 `featureCards`，並在 `tools/catalog.js` 匯入此 manifest。
+3. `AppRoutes`、`Navbar` 與 Dashboard 自動讀取 catalog。新增工具不需修改上述共用元件。單一導覽項目預設直接顯示連結；多項目顯示可展開群組。`collapsible: true` 可強制單項目使用群組；`sidebar: false` 表示該群組只用於子導覽，例如 YouTube 設定頁。
+4. 頁面使用 `shared/ui` 元件與 `styles/tokens.css` 語意 token，固定版面放 feature CSS。API 契約與包裝器放 feature 的 `api/`，領域純函式放 `model/`。
+5. 補齊 manifest／路由契約、功能互動與需要的 E2E。Navbar 測試已驗證新增 manifest 群組可直接呈現及展開目前路由。
 
 ```javascript
+import { lazy } from 'react';
 import { Wrench } from 'lucide-react';
-import { PATHS } from '../routes/paths';
+import { PATHS } from '../../routes/paths';
 
-{
+const manifest = {
   id: 'my-tool',
   name: 'My Tool',
-  title: '我的新工具',
-  description: '說明本工具的用途與功能...',
+  title: '我的工具',
   category: '實用工具',
-  icon: Wrench,
-  badge: '新功能',
   status: 'active',
   entryUrl: PATHS.myTool,
-  navGroups: [
-    {
-      id: 'my-tool',
-      label: 'My Tool',
-      icon: Wrench,
-      items: [
-        { id: 'my_tool_home', to: PATHS.myTool, label: '工具首頁', icon: Wrench },
-      ],
-    },
-  ],
-  featureCards: [
-    {
-      id: 'my_tool_card',
-      title: '我的新工具',
-      description: '點擊立即使用新工具功能。',
-      to: PATHS.myTool,
-      actionLabel: '進入工具',
-      icon: Wrench,
-      colorTheme: 'accent',
-    },
-  ],
-}
+  navGroups: [{
+    id: 'my-tool', label: '我的工具', icon: Wrench,
+    items: [{ id: 'my-tool-home', to: PATHS.myTool, label: '我的工具', icon: Wrench }],
+  }],
+  routes: [{
+    path: PATHS.myTool.slice(1),
+    component: lazy(() => import('./pages/MyToolPage')),
+    getProps: ({ pageProps }) => pageProps,
+  }],
+  featureCards: [],
+};
+export default manifest;
 ```
 
-並在 `PATHS` 常數物件中加入 `myTool: '/my-tool'`。
+### 應用組裝與測試隔離
 
-在 `frontend/src/routes/AppRoutes.jsx` 中將 `PATHS.myTool` 對應到新頁面。路徑請集中維護於 `paths.js`，catalog 的 destination 必須使用已知 `PATHS`，並為新 route 補上路由測試；導覽列 (`Navbar`) 與儀表板 (`DashboardPage`) 會從 catalog 讀取資料。
+`backend.app.main.create_app()` 接受 `notes_store`、`upload_worker`、`youtube_workflow_adapters`、`registry` 與 `dependency_overrides`。每次呼叫預設建立獨立 registry 及上傳 worker；有資料隔離需求時傳入不同路徑的 repository。上傳 worker 的 provider factory 可替換成 fake，HTTP 整合測試會確認兩個 app 的 notes、上傳歷史及 provider 呼叫相互隔離。其他身分驗證與系統設定目前仍沿用既有 process-level store／settings，不能宣稱整個平台已支援不同設定的多租戶 app。
+
+所有預設資料路徑統一由 `core/data_paths.py` 解析；`TOOLBOX_DATA_DIR` 未設定時仍使用專案的 `data/`。pytest 的 `conftest.py` 會在應用匯入前配置暫存資料目錄，並禁止第三方網路連線（保留 Windows asyncio 所需的 loopback socket）。預設測試不需要复制整個 repository 才能保護正式資料。
+
+Weverse worker 在首次入列時才建立執行緒。停機先拒絕新工作，最多等待 20 秒；逾時工作標記 `interrupted`，排隊工作取消並清理暫存檔案，執行中工作在下一個 provider 呼叫前停止。晚到的影片 ID 可保留，但不能解除中斷狀態。Python 執行緒不能強制中止已進行的網路 I/O；容器另以 45 秒 grace period 作最後終止界線。重啟只提示確認 YouTube Studio，不會自動重送。
 
 ---
 

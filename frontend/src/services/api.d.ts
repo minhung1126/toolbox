@@ -7,6 +7,12 @@ import type {
 } from '../features/ytmusic/api/types';
 import type { CopyableSheetTable, SpreadsheetMetadata } from '../features/sheets/api/types';
 import type {
+  SharedTeamPersonFilter,
+  SharedTeamPersonFilterResponse,
+  SheetTeamOptions,
+  SheetTeamPeople,
+} from '../features/sheets/api/sheetsFilterTypes';
+import type {
   StickyNoteDeleteResponse,
   StickyNoteDraft,
   StickyNoteResponse,
@@ -92,6 +98,10 @@ export const api: {
   previewPlaylistSort(request: PlaylistSortPreviewRequest): Promise<PlaylistSortPreviewResponse>;
   applyPlaylistSort(request: PlaylistSortApplyRequest): Promise<PlaylistSortApplyResponse>;
   getSpreadsheetMetadata(spreadsheetUrlOrId: string): Promise<SpreadsheetMetadata>;
+  parseSheetOptions(spreadsheetUrlOrId: string, worksheetName: string): Promise<SheetTeamOptions>;
+  getTeamPeople(spreadsheetUrlOrId: string, worksheetName: string, team: string): Promise<SheetTeamPeople>;
+  getTeamPersonFilter(): Promise<SharedTeamPersonFilterResponse>;
+  updateTeamPersonFilter(filter: SharedTeamPersonFilter): Promise<SharedTeamPersonFilterResponse>;
   getCopyableSheetTable(spreadsheetUrlOrId: string, worksheetName: string): Promise<CopyableSheetTable>;
   getYoutubeDraftSettings(): Promise<YoutubeDraftSettingsResponse>;
   updateYoutubeDraftSettings(videoType: YoutubeDraftVideoType, config: YoutubeDraftConfig): Promise<unknown>;

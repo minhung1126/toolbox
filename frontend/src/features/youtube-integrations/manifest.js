@@ -17,6 +17,7 @@ const manifest = {
   navGroups: [
     {
       id: 'integrations',
+      sidebar: false, // Exposed by the YouTube settings sub-navigation.
       label: '整合與配額',
       icon: Sliders,
       items: [

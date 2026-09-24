@@ -16,12 +16,13 @@ from typing import Any, Dict, Optional, Tuple
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from backend.app.core.data_paths import data_directory
 from backend.app.core.persistence import atomic_write_json, derive_fernet, read_json_file, secure_chmod
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-_DATA_DIR = _PROJECT_ROOT / "data"
+_DATA_DIR = data_directory()
 _SECRETS_FILE = _DATA_DIR / ".secrets.json"
 _CREDENTIALS_FILE = _DATA_DIR / "system_credentials.json"
 _SETUP_PIN_FILE = _DATA_DIR / ".setup_pin"

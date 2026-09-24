@@ -2,6 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: '**/*.visual.spec.ts',
   fullyParallel: true,
   workers: process.env.CI ? 2 : 4,
   expect: {

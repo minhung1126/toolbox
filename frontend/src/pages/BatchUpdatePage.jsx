@@ -1,3 +1,4 @@
+import '../features/youtube/youtube-shared.css';
 import React from 'react';
 import '../features/youtube/batch-update.css';
 import '../features/youtube/bulk-edit.css';

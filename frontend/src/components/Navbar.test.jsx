@@ -1,8 +1,11 @@
+import { vi } from 'vitest';
 import React, { useState } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Navbar from './Navbar';
 import { PATHS } from '../routes/paths';
+import * as catalog from '../tools/catalog';
+import { Wrench } from 'lucide-react';
 
 function NavbarHarness({ initialEntry = '/dashboard' }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -19,6 +22,37 @@ function NavbarHarness({ initialEntry = '/dashboard' }) {
 }
 
 describe('Navbar', () => {
+  it('renders an additional manifest without changing Navbar and expands its active route', () => {
+    const groups = catalog.getToolNavGroups();
+    const spy = vi.spyOn(catalog, 'getToolNavGroups').mockReturnValue([
+      ...groups,
+      {
+        id: 'new-tool',
+        label: '新工具',
+        icon: Wrench,
+        items: [
+          { id: 'new-start', to: '/new/start', label: '新工具首頁', icon: Wrench },
+          { id: 'new-settings', to: '/new/settings', label: '新工具設定', icon: Wrench },
+        ],
+      },
+    ]);
+    try {
+      render(<NavbarHarness initialEntry="/new/settings" />);
+      expect(screen.getByRole('button', { name: '新工具' })).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByRole('link', { name: '新工具設定' })).toHaveAttribute('aria-current', 'page');
+      fireEvent.click(screen.getByRole('button', { name: '新工具' }));
+      expect(screen.queryByRole('link', { name: '新工具設定' })).not.toBeInTheDocument();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('keeps settings sub-navigation out of the sidebar', () => {
+    render(<NavbarHarness />);
+    expect(screen.queryByRole('button', { name: '整合與配額' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '便利貼' })).toHaveAttribute('href', PATHS.notes);
+  });
+
   it('keeps labels available until the user toggles the sidebar', () => {
     window.localStorage.clear();
     render(<NavbarHarness />);

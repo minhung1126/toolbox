@@ -1,17 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2,
   ChevronDown,
-  Disc3,
-  Instagram,
   LayoutDashboard,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
-  Shield,
-  StickyNote,
-  UploadCloud,
   Video,
   X,
 } from 'lucide-react';
@@ -19,42 +14,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { youtubeIsConnected } from '../utils/youtubeRouting';
 import { PATHS } from '../routes/paths';
-import { getSystemNavItems, getToolNavGroups } from '../tools/catalog';
-
-const toolNavGroups = getToolNavGroups();
-const systemNavItems = getSystemNavItems();
-const ytmusicGroup = toolNavGroups.find((g) => g.id === 'ytmusic') || { items: [] };
-const youtubeGroup = toolNavGroups.find((g) => g.id === 'youtube') || { items: [] };
-const sheetGroup = toolNavGroups.find((g) => g.id === 'sheet') || { items: [] };
-const systemGroup = toolNavGroups.find((g) => g.id === 'system') || {
-  items: systemNavItems,
-  icon: Shield,
-};
-const photoCuratorGroup = toolNavGroups.find((g) => g.id === 'photo_curator_nav') || { items: [] };
-const photoCuratorItem = photoCuratorGroup.items?.[0] || {
-  id: 'photo_curator_workbench',
-  to: PATHS.photoCurator,
-  label: 'Instagram 排版',
-  icon: Instagram,
-};
-const ffmpegGroup = toolNavGroups.find((g) => g.id === 'ffmpeg_nav') || { items: [] };
-const ffmpegItem = ffmpegGroup.items?.[0] || {
-  id: 'ffmpeg_generator_workbench',
-  to: PATHS.ffmpegGenerator,
-  label: 'FFmpeg 生成器',
-  icon: Video,
-};
-const weverseGroup = toolNavGroups.find((g) => g.id === 'weverse_uploader_nav') || { items: [] };
-const weverseItem = weverseGroup.items?.[0] || {
-  id: 'weverse_uploader_workbench',
-  to: PATHS.weverseUploader,
-  label: 'Weverse 影片上傳',
-  icon: UploadCloud,
-};
-const ytmusicItems = ytmusicGroup.items;
-const youtubeItems = youtubeGroup.items;
-const sheetItems = sheetGroup.items;
-const systemItems = systemGroup.items;
+import { getToolNavGroups } from '../tools/catalog';
 
 function pathIsActive(pathname, item) {
   if (item.activePrefix) return pathname === item.activePrefix || pathname.startsWith(`${item.activePrefix}/`);
@@ -66,14 +26,18 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
   const pathname = location.pathname;
   const youtubeAuthorized = youtubeIsConnected(authUser?.youtube);
   const { value: savedNavigation, save: saveNavigation } = useAccountWorkState('navigation', {});
-  const [ytmusicOpen, setYtmusicOpen] = useState(
-    savedNavigation.ytmusicOpen ?? (pathname.startsWith('/ytmusic/') || pathname === PATHS.youtubePlaylistSort)
+  const toolNavGroups = useMemo(
+    () => getToolNavGroups().filter((entry) => entry.sidebar !== false && entry.items?.length),
+    []
   );
-  const [youtubeOpen, setYoutubeOpen] = useState(
-    savedNavigation.youtubeOpen ?? (pathname.startsWith('/youtube/') && pathname !== PATHS.youtubePlaylistSort)
+  const [openGroups, setOpenGroups] = useState(() =>
+    Object.fromEntries(
+      toolNavGroups.map((entry) => [
+        entry.id,
+        savedNavigation[`${entry.id}Open`] ?? entry.items.some((value) => pathIsActive(pathname, value)),
+      ])
+    )
   );
-  const [sheetOpen, setSheetOpen] = useState(savedNavigation.sheetOpen ?? pathname.startsWith('/sheets/'));
-  const [systemOpen, setSystemOpen] = useState(savedNavigation.systemOpen ?? pathname.startsWith('/system/'));
   const [drawerOpen, setDrawerOpen] = useState(false);
   const drawerRef = useRef(null);
   const closeButtonRef = useRef(null);
@@ -85,12 +49,13 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
   };
 
   useEffect(() => {
-    if (pathname.startsWith('/ytmusic/') || pathname === PATHS.youtubePlaylistSort) setYtmusicOpen(true);
-    if (pathname.startsWith('/youtube/') && pathname !== PATHS.youtubePlaylistSort) setYoutubeOpen(true);
-    if (pathname.startsWith('/sheets/')) setSheetOpen(true);
-    if (pathname.startsWith('/system/')) setSystemOpen(true);
+    setOpenGroups((current) => {
+      const activeGroups = toolNavGroups.filter((entry) => entry.items.some((value) => pathIsActive(pathname, value)));
+      if (activeGroups.every((entry) => current[entry.id])) return current;
+      return { ...current, ...Object.fromEntries(activeGroups.map((entry) => [entry.id, true])) };
+    });
     setDrawerOpen(false);
-  }, [pathname]);
+  }, [pathname, toolNavGroups]);
 
   useEffect(() => {
     if (!drawerOpen) return undefined;
@@ -134,8 +99,11 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
   }, [drawerOpen]);
 
   useEffect(() => {
-    saveNavigation({ sidebarCollapsed, ytmusicOpen, youtubeOpen, sheetOpen, systemOpen }, { debounceMs: 150 });
-  }, [saveNavigation, sheetOpen, sidebarCollapsed, systemOpen, youtubeOpen, ytmusicOpen]);
+    saveNavigation(
+      { sidebarCollapsed, ...Object.fromEntries(Object.entries(openGroups).map(([id, open]) => [`${id}Open`, open])) },
+      { debounceMs: 150 }
+    );
+  }, [saveNavigation, sidebarCollapsed, openGroups]);
 
   const item = (value, child = false) => {
     const Icon = value.icon;
@@ -182,10 +150,6 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
     </div>
   );
 
-  const ytmusicActive = pathname.startsWith('/ytmusic/') || pathname === PATHS.youtubePlaylistSort;
-  const youtubeActive = pathname.startsWith('/youtube/') && pathname !== PATHS.youtubePlaylistSort;
-  const sheetActive = pathname.startsWith('/sheets/');
-  const systemActive = pathname.startsWith('/system/');
   const SidebarToggleIcon = sidebarCollapsed ? PanelLeftOpen : PanelLeftClose;
   const sidebarToggleLabel = sidebarCollapsed ? '展開側邊選單' : '收起側邊選單';
 
@@ -250,29 +214,19 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
         </div>
         <nav className="sidebar-nav">
           {item({ id: 'dashboard', to: PATHS.dashboard, label: '儀表板總覽', icon: LayoutDashboard })}
-          {group('youtube', 'YouTube', youtubeGroup.icon, youtubeOpen, setYoutubeOpen, youtubeItems, youtubeActive)}
-          {group('ytmusic', 'YouTube Music', Disc3, ytmusicOpen, setYtmusicOpen, ytmusicItems, ytmusicActive)}
-          {group('sheet', 'Sheet', sheetGroup.icon, sheetOpen, setSheetOpen, sheetItems, sheetActive)}
-          {item({
-            id: photoCuratorItem.id,
-            to: photoCuratorItem.to || PATHS.photoCurator,
-            label: photoCuratorGroup.label || photoCuratorItem.label || 'Instagram 排版',
-            icon: photoCuratorGroup.icon || photoCuratorItem.icon || Instagram,
-          })}
-          {item({
-            id: ffmpegItem.id,
-            to: ffmpegItem.to || PATHS.ffmpegGenerator,
-            label: ffmpegItem.label || 'FFmpeg 生成器',
-            icon: ffmpegItem.icon || Video,
-          })}
-          {item({
-            id: weverseItem.id,
-            to: weverseItem.to || PATHS.weverseUploader,
-            label: weverseItem.label || 'Weverse 影片上傳',
-            icon: weverseItem.icon || UploadCloud,
-          })}
-          {item({ id: 'notes', to: PATHS.notes, label: '便利貼', icon: StickyNote })}
-          {group('system', '系統管理', systemGroup.icon, systemOpen, setSystemOpen, systemItems, systemActive)}
+          {toolNavGroups.map((entry) =>
+            entry.items.length === 1 && !entry.collapsible
+              ? item({ ...entry.items[0], icon: entry.icon || entry.items[0].icon })
+              : group(
+                  entry.id,
+                  entry.label,
+                  entry.icon,
+                  Boolean(openGroups[entry.id]),
+                  (open) => setOpenGroups((current) => ({ ...current, [entry.id]: open })),
+                  entry.items,
+                  entry.items.some((value) => pathIsActive(pathname, value))
+                )
+          )}
           {item({
             id: 'settings',
             to: PATHS.googleSettings,

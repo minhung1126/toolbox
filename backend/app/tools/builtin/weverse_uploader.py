@@ -1,5 +1,6 @@
 """Weverse Video Uploader Plugin for the Toolbox Platform."""
 
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter
@@ -47,9 +48,12 @@ class WeverseUploaderPlugin(ToolPlugin):
         return self._router
 
     async def on_startup(self, app) -> None:
-        del app
-        recover_interrupted_upload_tasks()
+        worker = getattr(getattr(app, "state", None), "upload_worker", None)
+        if worker is not None:
+            worker.start()
+        else:
+            recover_interrupted_upload_tasks()
 
     async def on_shutdown(self, app) -> None:
-        del app
-        shutdown_upload_executor()
+        worker = getattr(getattr(app, "state", None), "upload_worker", None)
+        await asyncio.to_thread(worker.shutdown if worker is not None else shutdown_upload_executor)

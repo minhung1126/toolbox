@@ -23,6 +23,7 @@ from typing import Any, Mapping
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from backend.app.core.data_paths import data_directory
 from backend.app.core.persistence import atomic_write_json
 from backend.app.core.runtime_config import runtime_config
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable, is_youtube_quota_exceeded, parse_youtube_error
@@ -30,7 +31,7 @@ from backend.app.services.youtube_errors import YouTubeQuotaUnavailable, is_yout
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-DATA_DIR = PROJECT_ROOT / "data"
+DATA_DIR = data_directory()
 QUOTA_FILE = DATA_DIR / "youtube_quota_usage.json"
 QUOTA_FILE_SECONDARY = DATA_DIR / "youtube_quota_usage.secondary.json"
 JSON_SCHEMA_VERSION = 2

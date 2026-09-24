@@ -1,3 +1,4 @@
+import '../features/youtube/youtube-shared.css';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, AlertTriangle, Clock3, Database, RefreshCw, ShieldAlert } from 'lucide-react';
 import { youtubeQuotaApi } from '../features/youtube/api/youtubeQuotaApi';

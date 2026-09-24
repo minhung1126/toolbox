@@ -3,16 +3,22 @@
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
 from backend.app.core.dependencies import require_account_subject
 from backend.app.core.error_contract import http_error
-from backend.app.core.notes_store import notes_store
+from backend.app.core.notes_store import NotesStore, default_notes_store
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/notes", tags=["Sticky Notes"])
+
+
+def get_notes_store(request: Request) -> NotesStore:
+    """Use a repository supplied by this app, or the lazy production default."""
+    configured = getattr(request.app.state, "notes_store", None)
+    return configured if configured is not None else default_notes_store()
 
 
 class CreateNoteRequest(BaseModel):
@@ -40,9 +46,10 @@ class NoteResponse(BaseModel):
 def list_notes(
     q: Optional[str] = Query(default=None, description="關鍵字搜尋"),
     subject: str = Depends(require_account_subject),
+    store: NotesStore = Depends(get_notes_store),
 ) -> Dict[str, Any]:
     """Retrieve all sticky notes for the authenticated user."""
-    notes = notes_store.list_notes(subject=subject, query=q or "")
+    notes = store.list_notes(subject=subject, query=q or "")
     return {
         "notes": notes,
         "total": len(notes),
@@ -53,9 +60,10 @@ def list_notes(
 def create_note(
     payload: CreateNoteRequest,
     subject: str = Depends(require_account_subject),
+    store: NotesStore = Depends(get_notes_store),
 ) -> Dict[str, Any]:
     """Create a new sticky note for the authenticated user."""
-    note = notes_store.create_note(
+    note = store.create_note(
         subject=subject,
         content=payload.content,
         remark=payload.remark,
@@ -71,9 +79,10 @@ def create_note(
 def get_note(
     note_id: str,
     subject: str = Depends(require_account_subject),
+    store: NotesStore = Depends(get_notes_store),
 ) -> Dict[str, Any]:
     """Get a single sticky note by ID."""
-    note = notes_store.get_note(subject=subject, note_id=note_id)
+    note = store.get_note(subject=subject, note_id=note_id)
     if not note:
         raise http_error(404, "note_not_found", "找不到指定的便利貼。")
     return {"note": note}
@@ -84,9 +93,10 @@ def update_note(
     note_id: str,
     payload: UpdateNoteRequest,
     subject: str = Depends(require_account_subject),
+    store: NotesStore = Depends(get_notes_store),
 ) -> Dict[str, Any]:
     """Update content, remark, or pinned state of a sticky note."""
-    note = notes_store.update_note(
+    note = store.update_note(
         subject=subject,
         note_id=note_id,
         content=payload.content,
@@ -105,9 +115,10 @@ def update_note(
 def delete_note(
     note_id: str,
     subject: str = Depends(require_account_subject),
+    store: NotesStore = Depends(get_notes_store),
 ) -> Dict[str, Any]:
     """Delete a sticky note."""
-    success = notes_store.delete_note(subject=subject, note_id=note_id)
+    success = store.delete_note(subject=subject, note_id=note_id)
     if not success:
         raise http_error(404, "note_not_found", "找不到欲刪除的便利貼。")
     return {

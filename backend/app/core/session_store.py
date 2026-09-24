@@ -16,12 +16,13 @@ from typing import Any, Optional
 from cryptography.fernet import InvalidToken
 
 from backend.app.core.config import settings
+from backend.app.core.data_paths import data_directory
 from backend.app.core.persistence import atomic_write_json, derive_fernet, read_json_file
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-_DEFAULT_PATH = _PROJECT_ROOT / "data" / "sessions.json"
+_DEFAULT_PATH = data_directory() / "sessions.json"
 SESSION_MAX_AGE = 7 * 24 * 60 * 60
 _PURGE_INTERVAL_SECONDS = 5 * 60  # purge at most every 5 minutes
 

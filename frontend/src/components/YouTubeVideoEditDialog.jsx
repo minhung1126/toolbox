@@ -1,3 +1,4 @@
+import '../features/youtube/youtube-shared.css';
 import React, { useEffect, useRef, useState } from 'react';
 import { ExternalLink, Pencil, Save, X } from 'lucide-react';
 import Dialog from './Dialog';

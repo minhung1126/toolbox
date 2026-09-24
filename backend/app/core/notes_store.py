@@ -11,16 +11,18 @@ import copy
 import logging
 import uuid
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from threading import RLock
 from typing import Any, List, Optional
 
+from backend.app.core.data_paths import data_directory
 from backend.app.core.persistence import atomic_write_json, read_json_file
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-_DEFAULT_PATH = _PROJECT_ROOT / "data" / "notes.json"
+_DEFAULT_PATH = data_directory() / "notes.json"
 
 
 def _now_iso() -> str:
@@ -187,4 +189,7 @@ class NotesStore:
             return False
 
 
-notes_store = NotesStore()
+@lru_cache(maxsize=1)
+def default_notes_store() -> NotesStore:
+    """Open the production notes file only when an app first needs it."""
+    return NotesStore()

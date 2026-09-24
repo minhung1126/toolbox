@@ -5,10 +5,9 @@ import logging
 import os
 import shutil
 import uuid
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from backend.app.core.dependencies import (
@@ -17,17 +16,26 @@ from backend.app.core.dependencies import (
     require_video_uploader_context,
 )
 from backend.app.core.error_contract import http_error
-from backend.app.core.weverse_upload_store import weverse_upload_store
+from backend.app.core.weverse_upload_store import WeverseUploadStore, weverse_upload_store
 from backend.app.core.youtube_context import YouTubeRequestContext
 from backend.app.services.weverse_scanner import (
     parse_browser_file_list,
     scan_local_path,
 )
-from backend.app.services.weverse_uploader_service import enqueue_upload_task
+from backend.app.services.weverse_uploader_service import UploadWorker, default_upload_worker, enqueue_upload_task
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/weverse-uploader", tags=["Weverse Uploader"])
+
+
+def get_upload_worker(request: Request) -> UploadWorker:
+    configured = getattr(request.app.state, "upload_worker", None)
+    return configured if configured is not None else default_upload_worker()
+
+
+def get_upload_store(request: Request) -> WeverseUploadStore:
+    return get_upload_worker(request).store
 
 
 class ScanPathRequest(BaseModel):
@@ -58,10 +66,14 @@ class UploadFromPathRequest(BaseModel):
     subtitles: List[SubtitleConfig] = Field(default_factory=list)
 
 
-def _enqueue_persisted_upload(owner_sub: str, task_id: str, *, temp_dir_to_clean: str | None = None, **options) -> None:
+def _enqueue_persisted_upload(
+    owner_sub: str, task_id: str, *, worker: UploadWorker | None = None, temp_dir_to_clean: str | None = None, **options
+) -> None:
     """Queue a task only after its initial durable record has been written."""
+    store = worker.store if worker is not None else weverse_upload_store
+    enqueue = worker.enqueue if worker is not None else enqueue_upload_task
     try:
-        enqueue_upload_task(
+        enqueue(
             owner_sub=owner_sub,
             task_id=task_id,
             temp_dir_to_clean=temp_dir_to_clean,
@@ -69,7 +81,7 @@ def _enqueue_persisted_upload(owner_sub: str, task_id: str, *, temp_dir_to_clean
         )
     except Exception as exc:
         try:
-            weverse_upload_store.update_task(
+            store.update_task(
                 owner_sub,
                 task_id,
                 {
@@ -96,6 +108,7 @@ def _enqueue_persisted_upload(owner_sub: str, task_id: str, *, temp_dir_to_clean
 def scan_folder(
     payload: ScanPathRequest,
     auth_session: AuthenticatedSession = Depends(get_authenticated_session),
+    store: WeverseUploadStore = Depends(get_upload_store),
 ) -> Dict[str, Any]:
     """Scan a local folder on disk and automatically identify video and subtitle packages."""
     folder_path = payload.folder_path.strip().strip('"').strip("'")
@@ -104,7 +117,7 @@ def scan_folder(
 
     try:
         result = scan_local_path(folder_path)
-        weverse_upload_store.record_recent_path(auth_session.subject, folder_path)
+        store.record_recent_path(auth_session.subject, folder_path)
         return {"status": "success", **result}
     except (FileNotFoundError, ValueError, PermissionError) as exc:
         raise http_error(400, "scan_failed", str(exc)) from exc
@@ -134,6 +147,7 @@ def parse_files(
 def start_upload_from_path(
     payload: UploadFromPathRequest,
     context: YouTubeRequestContext = Depends(require_video_uploader_context),
+    worker: UploadWorker = Depends(get_upload_worker),
 ) -> Dict[str, Any]:
     """Start an upload task reading directly from a local path on disk."""
     video_path = payload.video_path.strip().strip('"').strip("'")
@@ -153,9 +167,10 @@ def start_upload_from_path(
         "subtitles_count": len([s for s in payload.subtitles if s.enabled]),
     }
 
-    weverse_upload_store.create_task(context.owner_sub, task_record)
+    worker.store.create_task(context.owner_sub, task_record)
 
     _enqueue_persisted_upload(
+        worker=worker,
         owner_sub=context.owner_sub,
         task_id=task_id,
         credentials=context.credentials,
@@ -179,6 +194,7 @@ async def start_upload_files(
     video: UploadFile = File(...),
     subtitles: List[UploadFile] = File(default=[]),
     context: YouTubeRequestContext = Depends(require_video_uploader_context),
+    worker: UploadWorker = Depends(get_upload_worker),
 ) -> Dict[str, Any]:
     """Start an upload task where files were uploaded through the browser."""
     try:
@@ -191,7 +207,7 @@ async def start_upload_files(
         raise http_error(400, "empty_title", "影片標題不可為空。")
 
     task_id = str(uuid.uuid4())
-    base_dir = Path(__file__).resolve().parent.parent.parent.parent / "data" / "weverse_temp" / task_id
+    base_dir = worker.store.data_file.parent / "weverse_temp" / task_id
     base_dir.mkdir(parents=True, exist_ok=True)
 
     # Save video file
@@ -240,9 +256,10 @@ async def start_upload_files(
         "subtitles_count": len([s for s in saved_subtitles if s.get("enabled")]),
     }
 
-    weverse_upload_store.create_task(context.owner_sub, task_record)
+    worker.store.create_task(context.owner_sub, task_record)
 
     _enqueue_persisted_upload(
+        worker=worker,
         owner_sub=context.owner_sub,
         task_id=task_id,
         credentials=context.credentials,
@@ -265,9 +282,10 @@ async def start_upload_files(
 def get_task_status(
     task_id: str,
     auth_session: AuthenticatedSession = Depends(get_authenticated_session),
+    store: WeverseUploadStore = Depends(get_upload_store),
 ) -> Dict[str, Any]:
     """Get the current progress and result of an upload task."""
-    task = weverse_upload_store.get_task(auth_session.subject, task_id)
+    task = store.get_task(auth_session.subject, task_id)
     if not task:
         raise http_error(404, "task_not_found", f"找不到任務 ID：{task_id}")
     return {"status": "success", "task": task}
@@ -277,16 +295,18 @@ def get_task_status(
 def list_history(
     limit: int = 20,
     auth_session: AuthenticatedSession = Depends(get_authenticated_session),
+    store: WeverseUploadStore = Depends(get_upload_store),
 ) -> Dict[str, Any]:
     """List recent upload tasks."""
-    tasks = weverse_upload_store.list_tasks(auth_session.subject, limit=min(limit, 50))
+    tasks = store.list_tasks(auth_session.subject, limit=min(limit, 50))
     return {"status": "success", "tasks": tasks}
 
 
 @router.get("/recent-paths")
 def get_recent_paths(
     auth_session: AuthenticatedSession = Depends(get_authenticated_session),
+    store: WeverseUploadStore = Depends(get_upload_store),
 ) -> Dict[str, Any]:
     """Get recently scanned folder paths."""
-    paths = weverse_upload_store.get_recent_paths(auth_session.subject)
+    paths = store.get_recent_paths(auth_session.subject)
     return {"status": "success", "paths": paths}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../services/api';
+import { sheetsFilterApi } from '../features/sheets/api/sheetsFilterApi';
 import { normalizeTeamPersonFilter } from '../utils/teamPersonFilterStorage';
 
 function emptyStatus() {
@@ -55,7 +55,7 @@ export default function useSharedTeamPersonFilterPersistence({
     updateStatus({ saving: true, saved: false, error: '' });
 
     const request = Promise.resolve()
-      .then(() => api.updateTeamPersonFilter(nextFilter))
+      .then(() => sheetsFilterApi.updateSharedFilter(nextFilter))
       .then((result) => {
         record.inFlightPromise = null;
         record.lastSavedVersion = version;

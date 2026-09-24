@@ -1,8 +1,10 @@
+import { normalizeYoutubePlaylistInput } from '../features/youtube/model/playlistInput';
+export { normalizeYoutubePlaylistInput };
+
 const API_BASE = '/api/v1';
 const DEFAULT_TIMEOUT_MS = 45_000;
 const YOUTUBE_WORKFLOW_TIMEOUT_MS = 10 * 60_000;
 const SESSION_EXPIRED_DEDUP_MS = 1_000;
-const YOUTUBE_PLAYLIST_ID = /^[A-Za-z0-9_-]{1,128}$/;
 let lastSessionExpiredNotificationAt = 0;
 
 export class ApiError extends Error {
@@ -14,31 +16,6 @@ export class ApiError extends Error {
     this.details = details;
     this.retryAfter = retryAfter;
   }
-}
-
-function isValidYoutubePlaylistId(value) {
-  return YOUTUBE_PLAYLIST_ID.test(value);
-}
-
-export function normalizeYoutubePlaylistInput(value) {
-  const trimmed = String(value ?? '').trim();
-  if (!trimmed) return '';
-  if (isValidYoutubePlaylistId(trimmed)) return trimmed;
-
-  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  let parsed;
-  try {
-    parsed = new URL(candidate);
-  } catch {
-    return '';
-  }
-
-  const hostname = parsed.hostname.toLowerCase();
-  const isYoutubeHost = hostname === 'youtu.be' || hostname === 'youtube.com' || hostname.endsWith('.youtube.com');
-  if (!isYoutubeHost || !['http:', 'https:'].includes(parsed.protocol)) return '';
-
-  const playlistId = parsed.searchParams.get('list')?.trim() || '';
-  return isValidYoutubePlaylistId(playlistId) ? playlistId : '';
 }
 
 function parseRetryAfter(value, now = Date.now()) {

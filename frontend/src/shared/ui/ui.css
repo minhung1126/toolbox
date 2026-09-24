@@ -265,8 +265,12 @@
 
 .ui-showcase-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
   gap: var(--space-4);
+}
+
+.ui-showcase-grid .ui-showcase-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
 }
 
 .ui-showcase-actions {

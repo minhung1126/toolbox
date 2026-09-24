@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from functools import partial
 from typing import Any, Optional
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from google.oauth2.credentials import Credentials
 
 from backend.app.api.youtube_helpers import (
@@ -324,6 +324,6 @@ def create_youtube_workflow_service(overrides: Mapping[str, Any] | None = None) 
     return YoutubeWorkflowService(dependencies)
 
 
-def get_youtube_workflow_service() -> YoutubeWorkflowService:
+def get_youtube_workflow_service(request: Request) -> YoutubeWorkflowService:
     """FastAPI dependency used by YouTube workflow endpoints."""
-    return create_youtube_workflow_service()
+    return create_youtube_workflow_service(getattr(request.app.state, "youtube_workflow_adapters", None))

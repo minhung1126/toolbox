@@ -63,7 +63,7 @@ describe('App recovery state', () => {
     api.getSystemInfo.mockResolvedValue({});
     api.getSharedSettings.mockResolvedValue({});
     api.getYoutubeSettings.mockResolvedValue({});
-    api.getTeamPersonFilter.mockResolvedValue({});
+    api.getTeamPersonFilter.mockResolvedValue({ configured: false, team: '', selected_people: [] });
     api.getWorkState.mockResolvedValue({ state: {} });
     api.getAuthConfig.mockResolvedValue({ has_client_id: true, has_client_secret: true });
     api.logout.mockResolvedValue({});

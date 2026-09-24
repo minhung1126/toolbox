@@ -147,104 +147,33 @@ export const PATHS = Object.freeze({
 
 - 若該路徑需支援登入後安全跳轉或 OAuth 授權回跳，需同步登錄至 `STATIC_RETURN_PATHS` 集合中。
 
-### 步驟 5：開發前端頁面元件 (`frontend/src/pages/MyToolPage.jsx`)
+### 步驟 5：建立 feature 頁面與 API 邊界
 
-1. **樣式規範**：
-   - 沿用暗色 Glassmorphism 風格，統一採用 `index.css` 與 `flat-theme.css` 中的共用 class（如 `.glass-panel`, `.page-header`, `.section-gap`, `.input-field`, `.btn-primary` 等），避免大量 inline style。
-2. **互動規範**：
-   - 嚴格禁止使用原生瀏覽器對話框（`alert`, `confirm`, `prompt`）。
-   - 狀態與通知一律使用 `useToast()`：`toast.success('...')`, `toast.error('...')`。
-   - 刪除或高危操作一律使用 `<ConfirmDialog />` 元件進行確認。
-3. **API 呼叫**：
-   - 建議在 `frontend/src/services/api.js` 中封裝 API 方法（透過既有 `request('/my-tool/...')` 呼叫），妥善捕捉錯誤並以 `toast.error()` 呈現錯誤訊息。
+- 新頁面放在 `frontend/src/features/<tool>/pages/`；既有頁面可逐步遷移。
+- 使用 `shared/ui` 共用元件、`styles/tokens.css` 語意 token 與 feature CSS，避免固定 inline layout。
+- API request／response 型別與包裝器放在 feature 的 `api/`；領域純函式放 `model/`。
+- 通知使用 `useToast()`；刪除或高危操作使用共用 `ConfirmDialog`。禁止原生 `alert`、`confirm`、`prompt`。
 
-### 步驟 6：掛載前端路由 (`frontend/src/routes/AppRoutes.jsx`)
+### 步驟 6：註冊 feature manifest
 
-在受登入保護的 `AppShell` 路由區塊內，新增對應 `<Route>`：
+建立 `frontend/src/features/<tool>/manifest.js`，集中宣告 metadata、`routes`、`navGroups` 及 `featureCards`，在 `tools/catalog.js` 匯入登錄。參照 `docs/ARCHITECTURE.md` 的完整範例。
 
-```jsx
-import MyToolPage from '../pages/MyToolPage';
-// ...
-<Route path="my-tool" element={<MyToolPage {...pageProps} />} />
-```
-*(若頁面較為龐大，建議使用 `React.lazy(() => import('../pages/MyToolPage'))` 進行代碼分割)*
+- ID 與後端 plugin 一致，destination 使用 `PATHS`。
+- route 以 `React.lazy()` 載入頁面，必要 props 透過 `getProps` 傳入。
+- `AppRoutes`、`Navbar`、Dashboard 自動依 catalog 組裝；新增工具不需要修改這些共用元件。
+- 單項目導覽預設為連結，多項目為展開群組；`collapsible: true` 強制群組，`sidebar: false` 留給子導覽。
+- 既有群組的展開狀態以 `<groupId>Open` 儲存，維持相容。
 
-### 步驟 7：登記前端工具目錄 (`frontend/src/tools/catalog.js`)
+### 步驟 7：驗證工具擴充契約
 
-在 `TOOL_MODULES` 陣列中新增工具條目：
-
-```javascript
-import { Wrench } from 'lucide-react';
-import { PATHS } from '../routes/paths';
-
-{
-  id: 'my-tool',
-  name: 'My Tool',
-  title: '我的新工具',
-  description: '說明本工具的用途與主要功能...',
-  category: '日常生產力',
-  icon: Wrench,
-  badge: '新功能',
-  status: 'active',
-  entryUrl: PATHS.myTool,
-  navGroups: [
-    {
-      id: 'my_tool_nav',
-      label: '我的工具',
-      icon: Wrench,
-      items: [
-        { id: 'my_tool_home', to: PATHS.myTool, label: '功能主頁', icon: Wrench },
-      ],
-    },
-  ],
-  featureCards: [
-    {
-      id: 'my_tool_card',
-      title: '我的新工具',
-      description: '點擊立即進入新工具工作台。',
-      to: PATHS.myTool,
-      actionLabel: '進入工具',
-      icon: Wrench,
-      colorTheme: 'primary', // 'primary' | 'secondary' | 'accent'
-    },
-  ],
-}
-```
-
-- **儀表板連動**：`DashboardPage` 會自動透過 `getDashboardFeatureCards()` 讀取並渲染卡片，無需手動修改儀表板代碼。
-
-### 步驟 8：註冊側邊導覽選單／目錄 (`frontend/src/components/Navbar.jsx`)
-
-若新工具需要常駐顯示於左側主選單（側邊導覽目錄），**必須**在 `frontend/src/components/Navbar.jsx` 進行登記：
-
-1. **提取選單項目**：從 `toolNavGroups` 取得工具外掛定義的導覽群組與項目：
-   ```javascript
-   const myToolGroup = toolNavGroups.find((g) => g.id === 'my_tool_nav') || { items: [] };
-   const myToolItem = myToolGroup.items?.[0] || {
-     id: 'my_tool_workbench',
-     to: PATHS.myTool,
-     label: '我的工具',
-     icon: Wrench,
-   };
-   ```
-2. **掛載於側邊導覽列**：在 `<nav className="sidebar-nav">` 內適當位置渲染：
-   ```jsx
-   {item({
-     id: myToolItem.id,
-     to: myToolItem.to || PATHS.myTool,
-     label: myToolItem.label || '我的工具',
-     icon: myToolItem.icon || Wrench,
-   })}
-   ```
-   *(若為多子項目的功能群組，則使用 `{group(...)}` 結構渲染)*
-3. **單元測試**：在 `frontend/src/components/Navbar.test.jsx` 補齊導覽選單渲染與 active 狀態測試。
+新增工具時補齊 feature API／互動测试，並通過 `catalog.test.js`、`AppRoutes.test.jsx`、`Navbar.test.jsx` 及後端 `test_tool_catalog.py`。導覽、路由和 Dashboard 必須由 manifest 自動呈現，禁止再加入逐工具的共用元件分支。
 
 ---
 
 ## 3. 前端規範
 
 - **對話框規範**：禁止使用原生瀏覽器警告／確認對話框（`alert`, `confirm`）；統一使用 `useToast()` 與 `ConfirmDialog`。
-- **視覺一致性**：沿用暗色 Glassmorphism 與 `index.css` 的共用 class，避免重複 inline style。
+- **視覺一致性**：使用深灰底、靛紫主色與單一語意 token；優先採用 `shared/ui`，頁面樣式由 feature 管理。
 - **授權就地原則**：若工具需使用獨立 OAuth 服務（如 Google Sheets、YouTube 等），必須在該工具的頁面或設定面板中就地提供授權狀態卡片、連線連結與解除按鈕，不得強制要求使用者於全站登入時一次性同意。
 
 ---
@@ -261,10 +190,20 @@ import { PATHS } from '../routes/paths';
   ```
 - **前端驗證**：
   ```bash
+  npm run format:check
   npm run lint
+  npm run lint:styles
+  npm run typecheck
   npm test -- --run
   npm run build
   ```
 - **單元測試規範**：
   - 新增後端工具時，需於 `backend/tests/` 新增 `test_<tool_name>.py` 測試主要路由與例外情境。
   - 新增前端模組時，需確認 `frontend/src/tools/catalog.test.js`、`frontend/src/components/Navbar.test.jsx` 與頁面渲染測試均正常通過。
+
+
+### 測試資料與視覺驗證
+
+- pytest 會自動設定暫存 `TOOLBOX_DATA_DIR` 並禁止第三方網路；不得移除隔離以讓測試讀取實際 `data/`。
+- 新增有狀態的流程時優先使用 `create_app()` 傳入 repository／provider adapter；不要依賴全域 monkeypatch 建立新功能。
+- 版面變更執行 `npm run test:e2e`。Windows／Edge 的已審核截圖基準以 `npm run test:visual` 比對；只有確認預期畫面後才用 `--update-snapshots` 更新，不能在 CI 自動接受差異。

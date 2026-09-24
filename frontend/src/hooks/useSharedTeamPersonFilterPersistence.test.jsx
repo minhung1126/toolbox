@@ -18,7 +18,7 @@ describe('useSharedTeamPersonFilterPersistence', () => {
   afterEach(() => vi.useRealTimers());
 
   it('waits for readiness and saves one normalized shared filter', async () => {
-    api.updateTeamPersonFilter.mockResolvedValue({ configured: true });
+    api.updateTeamPersonFilter.mockResolvedValue({ configured: true, team: '團體', selected_people: ['甲'] });
     const { result, rerender } = renderHook((props) => useSharedTeamPersonFilterPersistence(props), {
       initialProps: {
         team: ' 團體 ',
@@ -41,7 +41,9 @@ describe('useSharedTeamPersonFilterPersistence', () => {
 
   it('reports a failed sync and retries without changing the desired filter', async () => {
     const onError = vi.fn();
-    api.updateTeamPersonFilter.mockRejectedValueOnce(new Error('網路中斷')).mockResolvedValueOnce({ configured: true });
+    api.updateTeamPersonFilter
+      .mockRejectedValueOnce(new Error('網路中斷'))
+      .mockResolvedValueOnce({ configured: true, team: '團體', selected_people: ['甲'] });
     const { result } = renderHook((props) => useSharedTeamPersonFilterPersistence(props), {
       initialProps: { team: '團體', selectedPeople: ['甲'], ready: true, onError },
     });

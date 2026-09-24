@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
+from backend.app.core.data_paths import data_directory
 from backend.app.core.persistence import atomic_write_json
 
 logger = logging.getLogger(__name__)
@@ -37,13 +38,12 @@ class WeverseUploadStore:
     def __init__(self, data_file: Optional[Path] = None) -> None:
         if data_file is None:
             # Persistent data folder outside codebase
-            base_dir = Path(__file__).resolve().parent.parent.parent.parent / "data"
+            base_dir = data_directory()
             self.data_file = base_dir / "weverse_uploads.json"
         else:
             self.data_file = data_file
         self._lock = threading.Lock()
         self._process_thread_lock = _thread_lock_for(self.data_file)
-        self._ensure_file()
 
     @contextmanager
     def _process_file_lock(self) -> Iterator[None]:
@@ -57,6 +57,7 @@ class WeverseUploadStore:
         lock_path = self.data_file.with_name(f"{self.data_file.name}.lock")
         with self._process_thread_lock:
             try:
+                lock_path.parent.mkdir(parents=True, exist_ok=True)
                 lock_file = lock_path.open("a+b")
             except OSError as exc:
                 raise WeverseUploadStoreError("無法鎖定 Weverse 上傳工作紀錄。") from exc
@@ -94,15 +95,6 @@ class WeverseUploadStore:
                             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
                     except OSError:
                         logger.exception("Failed to release Weverse upload store lock %s", lock_path)
-
-    def _ensure_file(self) -> None:
-        try:
-            self.data_file.parent.mkdir(parents=True, exist_ok=True)
-            with self._lock, self._process_file_lock():
-                if not self.data_file.exists():
-                    atomic_write_json(self.data_file, {})
-        except Exception as exc:
-            logger.error("Failed to initialize Weverse upload store: %s", exc)
 
     def _load_all(self) -> Dict[str, Any]:
         if not self.data_file.exists():
@@ -152,6 +144,14 @@ class WeverseUploadStore:
             task = tasks.get(task_id)
             if not task:
                 return None
+            if task.get("status") == "interrupted":
+                # A late provider response may supply useful evidence, but cannot
+                # clear a shutdown decision or resume subsequent provider writes.
+                updates = {
+                    key: value
+                    for key, value in updates.items()
+                    if key in {"video_id", "video_url", "studio_url", "uploaded_captions", "failed_captions"}
+                }
             task.update(updates)
             task["updated_at"] = _utc_now_iso()
             tasks[task_id] = task
@@ -197,6 +197,17 @@ class WeverseUploadStore:
             if recovered:
                 self._save_all(data)
             return recovered
+
+    def interrupt_task(self, owner_sub: str, task_id: str, message: str) -> None:
+        """Atomically preserve terminal outcomes when stopping an unfinished task."""
+        with self._lock, self._process_file_lock():
+            data = self._load_all()
+            task = data.get(owner_sub, {}).get("tasks", {}).get(task_id)
+            if task and task.get("status") in {"pending", "uploading_video", "uploading_captions"}:
+                task.update(
+                    status="interrupted", current_step=message, error_message=message, updated_at=_utc_now_iso()
+                )
+                self._save_all(data)
 
     def record_recent_path(self, owner_sub: str, path: str) -> None:
         """Save a recently scanned folder path."""

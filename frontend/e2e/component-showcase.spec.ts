@@ -2,67 +2,7 @@ import { expect, test } from '@playwright/test';
 import JSZip from 'jszip';
 import { readFile } from 'node:fs/promises';
 
-async function mockAuthenticatedBackend(page, responseOverrides: Record<string, unknown> = {}) {
-  await page.route('**/api/v1/**', async (route) => {
-    const path = new URL(route.request().url()).pathname;
-    const responses: Record<string, unknown> = {
-      '/api/v1/auth/user': {
-        authenticated: true,
-        user: { sub: 'design-system-e2e', email: 'design-system@example.test' },
-        authorizations: {
-          sheets: { connected: false },
-          ytmusic: { connected: false },
-          video_uploader: { connected: false },
-        },
-        google_scopes: {},
-        youtube: { slots: {} },
-      },
-      '/api/v1/settings/system': {},
-      '/api/v1/settings/shared': {},
-      '/api/v1/settings/youtube': {},
-      '/api/v1/settings/team-person-filter': {},
-      '/api/v1/settings/work-state': { state: {} },
-      '/api/v1/health': { commit_sha: 'development' },
-      '/api/v1/weverse-uploader/scan': {
-        packages: [
-          {
-            package_id: 'sample-live',
-            suggested_title: 'Sample Live',
-            video: {
-              filename: 'sample-live.mp4',
-              full_path: 'C:\\weverse\\sample-live.mp4',
-              size_formatted: '1 MB',
-            },
-            subtitles: [
-              {
-                id: 'sample-subtitle',
-                filename: 'sample-live.zh_TW.vtt',
-                full_path: 'C:\\weverse\\sample-live.zh_TW.vtt',
-                raw_lang: 'zh_TW',
-                bcp47: 'zh-TW',
-                label: '繁體中文',
-                size_formatted: '1 KB',
-              },
-            ],
-          },
-        ],
-      },
-      ...responseOverrides,
-    };
-
-    const response = responses[path] ?? {};
-    if (typeof response === 'function') {
-      await response(route);
-      return;
-    }
-
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(response),
-    });
-  });
-}
+import { mockAuthenticatedBackend } from './fixtures';
 
 test('component showcase stays readable without horizontal overflow on supported widths', async ({
   page,
@@ -699,6 +639,32 @@ test('YouTube Batch Update checks a full preview before executing the update', a
   });
 
   await page.goto('/youtube/drafts/videos');
+  await expect(page.locator('.filter-panel')).toHaveCount(2);
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth))
+      .toBeLessThanOrEqual(1);
+    const geometry = await page.evaluate(() => ({
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      panels: Array.from(document.querySelectorAll('.filter-panel')).map((panel) => ({
+        left: panel.getBoundingClientRect().left,
+        right: panel.getBoundingClientRect().right,
+        scrollWidth: panel.scrollWidth,
+        clientWidth: panel.clientWidth,
+      })),
+    }));
+    expect(
+      geometry.overflow,
+      `filter panel horizontal overflow at ${width}px: ${JSON.stringify(geometry)}`
+    ).toBeLessThanOrEqual(1);
+    for (const panel of geometry.panels) {
+      expect(panel.right, `filter panel right edge at ${width}px`).toBeLessThanOrEqual(width);
+      expect(panel.scrollWidth - panel.clientWidth, `filter panel content overflow at ${width}px`).toBeLessThanOrEqual(
+        1
+      );
+    }
+  }
   await expect(page.getByRole('combobox', { name: '所屬團體' })).toBeEnabled();
   await page.getByRole('textbox', { name: '主要試算表 ID / URL' }).fill('sheet-b');
   const metadataResponsePromise = page.waitForResponse((response) =>

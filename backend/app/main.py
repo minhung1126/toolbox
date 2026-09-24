@@ -12,11 +12,11 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from backend.app.api.router import api_router
+from backend.app.api.router import create_api_router
 from backend.app.core.config import settings
 from backend.app.core.error_contract import http_error, normalize_http_detail, validation_field_errors
 from backend.app.tools.builtin import register_builtin_tools
-from backend.app.tools.registry import tool_registry
+from backend.app.tools.registry import ToolRegistry, tool_registry
 
 # Ensure built-in tools are registered
 register_builtin_tools()
@@ -45,22 +45,13 @@ def frontend_cache_control(path: str, content_type: str | None) -> str | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await tool_registry.run_startup(app)
+    await app.state.tool_registry.run_startup(app)
     try:
         yield
     finally:
-        await tool_registry.run_shutdown(app)
+        await app.state.tool_registry.run_shutdown(app)
 
 
-app = FastAPI(
-    title="Toolbox API",
-    description="FastAPI backend for the Toolbox platform, Google OAuth, Google Sheets, and YouTube workflows.",
-    version="1.1.0",
-    lifespan=lifespan,
-)
-
-
-@app.exception_handler(RequestValidationError)
 async def request_validation_error_handler(request: Request, exc: RequestValidationError):
     del request
     detail = {
@@ -72,7 +63,6 @@ async def request_validation_error_handler(request: Request, exc: RequestValidat
     return JSONResponse(status_code=422, content={"detail": detail})
 
 
-@app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     del request
     detail = normalize_http_detail(exc.status_code, exc.detail)
@@ -86,7 +76,6 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     return JSONResponse(status_code=exc.status_code, content={"detail": detail}, headers=headers)
 
 
-@app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.error("Unhandled API exception on %s: %s", request.url.path, type(exc).__name__)
     return JSONResponse(
@@ -102,32 +91,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
-origins = {settings.frontend_url, settings.base_url}
-if not settings.is_production:
-    origins.update(
-        {
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:5173",
-        }
-    )
-origins.discard("")
-
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.trusted_hosts))
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=sorted(origins),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.include_router(api_router)
-
-
-@app.middleware("http")
 async def security_headers(request, call_next):
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -149,8 +112,8 @@ async def security_headers(request, call_next):
     return response
 
 
-@app.get("/api/v1/health")
-def health_check():
+def health_check(request: Request = None):
+    registry = request.app.state.tool_registry if request is not None else tool_registry
     google_oauth_ready = bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET)
     youtube_primary = settings.youtube_oauth_slot("primary")
     youtube_secondary = settings.youtube_oauth_slot("secondary")
@@ -159,7 +122,7 @@ def health_check():
     youtube_secondary_ready = youtube_secondary.configured
     access_allowlist_ready = bool(settings.allowed_google_emails) or not settings.allowlist_required
     warnings = []
-    tool_health = tool_registry.health_check()
+    tool_health = registry.health_check()
     failed_tools = [tool_id for tool_id, state in tool_health.items() if state.get("status") != "ok"]
     if failed_tools:
         warnings.append("部分工具模組未能初始化")
@@ -204,19 +167,76 @@ def resolve_frontend_path(full_path: str) -> Path:
     return requested_path
 
 
-if frontend_dist.is_dir():
-    assets_dir = frontend_dist / "assets"
-    if assets_dir.is_dir():
-        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+def create_app(
+    *, notes_store=None, upload_worker=None, youtube_workflow_adapters=None, registry=None, dependency_overrides=None
+) -> FastAPI:
+    """Compose per-app repositories, workflow adapters, registry and worker lifecycle."""
+    if registry is None:
+        registry = ToolRegistry()
+        register_builtin_tools(registry)
+    if upload_worker is None:
+        from backend.app.core.weverse_upload_store import WeverseUploadStore
+        from backend.app.services.weverse_uploader_service import UploadWorker
 
-    @app.get("/{full_path:path}")
-    def serve_frontend(full_path: str):
-        if full_path.startswith("api/"):
-            raise http_error(404, "not_found", "找不到 API 端點。")
-        requested_path = resolve_frontend_path(full_path)
-        if requested_path.is_file():
-            return FileResponse(str(requested_path))
-        return FileResponse(str(resolve_frontend_path("index.html")))
+        upload_worker = UploadWorker(WeverseUploadStore())
+    application = FastAPI(
+        title="Toolbox API",
+        description="FastAPI backend for the Toolbox platform, Google OAuth, Google Sheets, and YouTube workflows.",
+        version="1.1.0",
+        lifespan=lifespan,
+    )
+    application.state.tool_registry = registry
+    application.state.notes_store = notes_store
+    application.state.upload_worker = upload_worker
+    application.state.youtube_workflow_adapters = dict(youtube_workflow_adapters or {})
+    application.dependency_overrides.update(dependency_overrides or {})
+    application.add_exception_handler(RequestValidationError, request_validation_error_handler)
+    application.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    application.add_exception_handler(Exception, unhandled_exception_handler)
+    application.middleware("http")(security_headers)
+    application.get("/api/v1/health")(health_check)
+    origins = {settings.frontend_url, settings.base_url}
+    if not settings.is_production:
+        origins.update(
+            {
+                "http://localhost:3000",
+                "http://localhost:5173",
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:5173",
+            }
+        )
+    origins.discard("")
+
+    application.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.trusted_hosts))
+
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=sorted(origins),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    application.include_router(create_api_router(registry))
+
+    if frontend_dist.is_dir():
+        assets_dir = frontend_dist / "assets"
+        if assets_dir.is_dir():
+            application.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+        @application.get("/{full_path:path}")
+        def serve_frontend(full_path: str):
+            if full_path.startswith("api/"):
+                raise http_error(404, "not_found", "找不到 API 端點。")
+            requested_path = resolve_frontend_path(full_path)
+            if requested_path.is_file():
+                return FileResponse(str(requested_path))
+            return FileResponse(str(resolve_frontend_path("index.html")))
+
+    return application
+
+
+app = create_app(registry=tool_registry)
 
 
 if __name__ == "__main__":

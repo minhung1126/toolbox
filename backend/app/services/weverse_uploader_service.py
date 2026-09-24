@@ -4,21 +4,23 @@ import logging
 import os
 import shutil
 import threading
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import googleapiclient.discovery
 from googleapiclient.http import MediaFileUpload
 
-from backend.app.core.weverse_upload_store import weverse_upload_store
+from backend.app.core.weverse_upload_store import WeverseUploadStore, weverse_upload_store
 
 logger = logging.getLogger(__name__)
 
-# Create the upload worker only when the first task is submitted, so importing
-# API modules does not start a background thread.
-_upload_executor: ThreadPoolExecutor | None = None
-_upload_executor_lock = threading.Lock()
+
+class UploadInterrupted(Exception):
+    """Stop between provider calls without automatically repeating an upload."""
+
+
+INTERRUPTED_MESSAGE = "服務停止前未能確認上傳結果。為避免重複建立影片，請先檢查 YouTube Studio。"
 
 
 def _get_youtube_service(credentials):
@@ -38,14 +40,27 @@ def execute_upload_task(
     category_id: str = "22",
     default_language: str = "ko",
     temp_dir_to_clean: Optional[str] = None,
+    *,
+    store: WeverseUploadStore | None = None,
+    service_factory=None,
+    stop_event: threading.Event | None = None,
 ) -> None:
     """Synchronous worker function that executes YouTube video and captions upload."""
+    store = store if store is not None else weverse_upload_store
+    service_factory = service_factory or _get_youtube_service
+
+    def check_stopping():
+        if stop_event is not None and stop_event.is_set():
+            raise UploadInterrupted(INTERRUPTED_MESSAGE)
+
     logger.info("Starting Weverse YouTube upload task %s for user %s", task_id, owner_sub)
     try:
-        service = _get_youtube_service(credentials)
+        check_stopping()
+        service = service_factory(credentials)
+        check_stopping()
 
         # 1. Prepare video upload request
-        weverse_upload_store.update_task(
+        store.update_task(
             owner_sub,
             task_id,
             {
@@ -79,11 +94,12 @@ def execute_upload_task(
 
         logger.info("Executing chunked video upload for task %s", task_id)
         while response is None:
+            check_stopping()
             status, response = request.next_chunk()
             if status:
                 # Video progress covers 5% to 80%
                 percent = int(5 + status.progress() * 75)
-                weverse_upload_store.update_task(
+                store.update_task(
                     owner_sub,
                     task_id,
                     {
@@ -100,7 +116,7 @@ def execute_upload_task(
         studio_url = f"https://studio.youtube.com/video/{video_id}/edit"
         logger.info("Video uploaded successfully for task %s, video_id=%s", task_id, video_id)
 
-        weverse_upload_store.update_task(
+        store.update_task(
             owner_sub,
             task_id,
             {
@@ -112,6 +128,8 @@ def execute_upload_task(
             },
         )
 
+        check_stopping()
+
         # 2. Upload subtitles
         uploaded_captions = []
         failed_captions = []
@@ -119,7 +137,7 @@ def execute_upload_task(
         total_subs = len(enabled_subs)
 
         if total_subs > 0:
-            weverse_upload_store.update_task(
+            store.update_task(
                 owner_sub,
                 task_id,
                 {
@@ -128,12 +146,13 @@ def execute_upload_task(
             )
 
             for index, sub in enumerate(enabled_subs, start=1):
+                check_stopping()
                 sub_path = sub.get("full_path")
                 bcp47 = sub.get("bcp47") or "zh-TW"
                 label = sub.get("label") or bcp47
 
                 sub_percent = int(80 + (index / total_subs) * 18)
-                weverse_upload_store.update_task(
+                store.update_task(
                     owner_sub,
                     task_id,
                     {
@@ -172,8 +191,10 @@ def execute_upload_task(
                     logger.error("Failed to upload caption [%s]: %s", bcp47, cap_err)
                     failed_captions.append({"language": bcp47, "name": label, "error": str(cap_err)})
 
+        check_stopping()
+
         # 3. Mark completed
-        weverse_upload_store.update_task(
+        store.update_task(
             owner_sub,
             task_id,
             {
@@ -186,9 +207,11 @@ def execute_upload_task(
         )
         logger.info("Upload task %s finished successfully", task_id)
 
+    except UploadInterrupted:
+        store.interrupt_task(owner_sub, task_id, INTERRUPTED_MESSAGE)
     except Exception as exc:
         logger.exception("Upload task %s failed: %s", task_id, exc)
-        weverse_upload_store.update_task(
+        store.update_task(
             owner_sub,
             task_id,
             {
@@ -207,51 +230,106 @@ def execute_upload_task(
                 logger.warning("Could not clean temp dir %s: %s", temp_dir_to_clean, clean_err)
 
 
-def enqueue_upload_task(
-    owner_sub: str,
-    task_id: str,
-    credentials: Any,
-    video_path: str,
-    title: str,
-    description: str,
-    privacy_status: str,
-    subtitles: List[Dict[str, Any]],
-    tags: Optional[List[str]] = None,
-    category_id: str = "22",
-    default_language: str = "ko",
-    temp_dir_to_clean: Optional[str] = None,
-) -> Future:
-    """Submit the upload task to the thread pool."""
-    global _upload_executor
-    with _upload_executor_lock:
-        if _upload_executor is None:
-            _upload_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="weverse_upload_worker")
-        return _upload_executor.submit(
-            execute_upload_task,
-            owner_sub=owner_sub,
-            task_id=task_id,
-            credentials=credentials,
-            video_path=video_path,
-            title=title,
-            description=description,
-            privacy_status=privacy_status,
-            subtitles=subtitles,
-            tags=tags,
-            category_id=category_id,
-            default_language=default_language,
-            temp_dir_to_clean=temp_dir_to_clean,
-        )
+class UploadWorker:
+    """App-owned queue with lazy threads, injectable provider, and bounded draining."""
+
+    def __init__(
+        self, store: WeverseUploadStore, service_factory=None, *, drain_timeout: float = 20.0, max_workers: int = 3
+    ):
+        if drain_timeout < 0:
+            raise ValueError("drain_timeout must be non-negative")
+        self.store = store
+        self.service_factory = service_factory or _get_youtube_service
+        self.drain_timeout = drain_timeout
+        self.max_workers = max_workers
+        self._executor = None
+        self._lock = threading.RLock()
+        self._accepting = True
+        self._tasks = {}
+
+    def start(self) -> None:
+        with self._lock:
+            if self._tasks:
+                raise RuntimeError("Cannot restart while previous upload workers are still running")
+            self.store.mark_active_tasks_interrupted()
+            self._executor = None
+            self._accepting = True
+
+    def enqueue(self, **options) -> Future:
+        with self._lock:
+            if not self._accepting:
+                raise RuntimeError("Upload queue is stopping")
+            if self._executor is None:
+                self._executor = ThreadPoolExecutor(
+                    max_workers=self.max_workers, thread_name_prefix="weverse_upload_worker"
+                )
+            stop_event = threading.Event()
+            future = self._executor.submit(
+                execute_upload_task,
+                **options,
+                store=self.store,
+                service_factory=self.service_factory,
+                stop_event=stop_event,
+            )
+            self._tasks[future] = (options, stop_event)
+            future.add_done_callback(self._finished)
+            return future
+
+    def _finished(self, future):
+        with self._lock:
+            record = self._tasks.pop(future, None)
+        if record and future.cancelled():
+            options, _ = record
+            directory = options.get("temp_dir_to_clean")
+            if directory:
+                shutil.rmtree(directory, ignore_errors=True)
+
+    def shutdown(self) -> int:
+        """Stop admission, drain up to the deadline, and preserve uncertain work."""
+        with self._lock:
+            self._accepting = False
+            executor = self._executor
+            pending = dict(self._tasks)
+        if executor is None:
+            return 0
+        _, unfinished = wait(pending, timeout=self.drain_timeout) if pending else (set(), set())
+        try:
+            for future in unfinished:
+                options, stop_event = pending[future]
+                stop_event.set()
+                try:
+                    self.store.interrupt_task(options["owner_sub"], options["task_id"], INTERRUPTED_MESSAGE)
+                finally:
+                    future.cancel()
+        finally:
+            # Set every cancellation signal even if a repository write fails.
+            for future in unfinished:
+                pending[future][1].set()
+            executor.shutdown(wait=False, cancel_futures=True)
+        return len(unfinished)
+
+
+_default_worker: UploadWorker | None = None
+_default_worker_lock = threading.Lock()
+
+
+def default_upload_worker() -> UploadWorker:
+    global _default_worker
+    with _default_worker_lock:
+        if _default_worker is None:
+            _default_worker = UploadWorker(weverse_upload_store)
+        return _default_worker
+
+
+def enqueue_upload_task(**options) -> Future:
+    return default_upload_worker().enqueue(**options)
 
 
 def shutdown_upload_executor() -> None:
-    """Drain upload workers during application shutdown."""
-    global _upload_executor
-    with _upload_executor_lock:
-        executor, _upload_executor = _upload_executor, None
-        if executor is not None:
-            executor.shutdown(wait=True, cancel_futures=False)
+    if _default_worker is not None:
+        _default_worker.shutdown()
 
 
 def recover_interrupted_upload_tasks() -> int:
-    """Mark active persisted uploads interrupted so startup never blindly retries them."""
+    """Startup never blindly retries an upload with an uncertain provider result."""
     return weverse_upload_store.mark_active_tasks_interrupted()

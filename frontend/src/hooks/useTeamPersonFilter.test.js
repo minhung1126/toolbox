@@ -1,8 +1,19 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
+import { api } from '../services/api';
 import useTeamPersonFilter from './useTeamPersonFilter';
 
+afterEach(() => vi.restoreAllMocks());
+
 describe('useTeamPersonFilter', () => {
+  it('reports malformed provider options instead of silently showing no teams', async () => {
+    vi.spyOn(api, 'parseSheetOptions').mockResolvedValue({ teams: [null] });
+    const { result } = renderHook(() => useTeamPersonFilter({ source: 'sheet', worksheetName: '工作表' }));
+
+    await waitFor(() => expect(result.current.error).toContain('工作表團體選項回應格式不正確'));
+    expect(result.current.errorType).toBe('teams');
+  });
+
   it('loads teams and defaults a newly selected team to all people in API order', async () => {
     const apiClient = {
       parseSheetOptions: vi.fn().mockResolvedValue({ teams: ['團體 B', '團體 A'] }),

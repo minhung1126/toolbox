@@ -18,7 +18,7 @@ const manifest = {
       id: 'notes',
       label: '便利貼',
       icon: StickyNote,
-      items: [{ id: 'sticky_notes_list', to: PATHS.notes, label: '便利貼備忘錄', icon: StickyNote }],
+      items: [{ id: 'sticky_notes_list', to: PATHS.notes, label: '便利貼', icon: StickyNote }],
     },
   ],
   featureCards: [

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '../services/api';
+import { sheetsFilterApi } from '../features/sheets/api/sheetsFilterApi';
 
 function asList(value) {
   return Array.isArray(value) ? value : [];
@@ -18,7 +18,7 @@ export default function useTeamPersonFilter({
   initialSelectedPeople = [],
   defaultTeam = 'none',
   refreshKey = 0,
-  apiClient = api,
+  apiClient = sheetsFilterApi,
 }) {
   const initialSelectionRef = useRef({ team: initialTeam || '', people: asList(initialSelectedPeople) });
   const contextRef = useRef('');

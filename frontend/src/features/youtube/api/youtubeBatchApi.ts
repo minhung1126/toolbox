@@ -1,4 +1,4 @@
-import { api, normalizeYoutubePlaylistInput } from '../../../services/api';
+import { api } from '../../../services/api';
 import type { YoutubeBatchApi } from './youtubeBatchTypes';
 
 export type * from './youtubeBatchTypes';
@@ -18,4 +18,4 @@ const client: YoutubeBatchApi = {
 
 export const youtubeBatchApi: Readonly<YoutubeBatchApi> = Object.freeze(client);
 
-export { normalizeYoutubePlaylistInput };
+export { normalizeYoutubePlaylistInput } from '../model/playlistInput';

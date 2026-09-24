@@ -271,7 +271,7 @@ def test_weverse_upload_store_propagates_write_failure(tmp_path: Path, monkeypat
     monkeypatch.setattr(module, "atomic_write_json", fail_write)
     with pytest.raises(WeverseUploadStoreError, match="無法儲存"):
         store.create_task("test-user", {"task_id": "unsaved"})
-    assert store.data_file.read_text(encoding="utf-8") == "{}"
+    assert not store.data_file.exists()
 
 
 def test_weverse_queue_failure_marks_task_failed_and_removes_uploaded_files(tmp_path: Path, monkeypatch):
@@ -308,43 +308,119 @@ def test_weverse_queue_failure_marks_task_failed_and_removes_uploaded_files(tmp_
     assert not upload_dir.exists()
 
 
-def test_upload_worker_is_created_on_demand_and_drained_by_plugin_shutdown(monkeypatch):
-    import asyncio
+def test_upload_worker_drains_completed_work_and_rejects_new_work(tmp_path, monkeypatch):
+    from types import SimpleNamespace
 
-    submitted = []
-    shutdown = []
+    store = WeverseUploadStore(tmp_path / "tasks.json")
+    worker = upload_service.UploadWorker(store)
+    assert worker._executor is None
+    completed = []
+    monkeypatch.setattr(upload_service, "execute_upload_task", lambda **options: completed.append(options["task_id"]))
+    worker.enqueue(owner_sub="user", task_id="one").result(timeout=2)
+    asyncio.run(WeverseUploaderPlugin().on_shutdown(SimpleNamespace(state=SimpleNamespace(upload_worker=worker))))
+    assert completed == ["one"]
+    with pytest.raises(RuntimeError, match="stopping"):
+        worker.enqueue(owner_sub="user", task_id="two")
 
-    class ExecutorStub:
-        def __init__(self, **kwargs):
-            self.options = kwargs
 
-        def submit(self, function, **kwargs):
-            submitted.append((function, kwargs))
-            return "submitted"
+def test_upload_shutdown_deadline_cancels_queued_work_and_preserves_uncertain_result(tmp_path, monkeypatch):
+    import threading
+    import time
 
-        def shutdown(self, *, wait, cancel_futures):
-            shutdown.append((wait, cancel_futures))
+    store = WeverseUploadStore(tmp_path / "tasks.json")
+    for task_id in ["running", "queued"]:
+        store.create_task("user", {"task_id": task_id, "status": "pending"})
+    started, release = threading.Event(), threading.Event()
+    calls = []
 
-    monkeypatch.setattr(upload_service, "_upload_executor", None)
-    monkeypatch.setattr(upload_service, "ThreadPoolExecutor", ExecutorStub)
+    def blocked(**options):
+        calls.append(options["task_id"])
+        started.set()
+        assert release.wait(5)
+        store.update_task("user", "running", {"status": "completed", "video_id": "known-video"})
 
-    result = upload_service.enqueue_upload_task(
-        owner_sub="test-user",
-        task_id="task-1",
+    monkeypatch.setattr(upload_service, "execute_upload_task", blocked)
+    worker = upload_service.UploadWorker(store, drain_timeout=0.01, max_workers=1)
+    running = worker.enqueue(owner_sub="user", task_id="running")
+    assert started.wait(2)
+    directory = tmp_path / "queued-files"
+    directory.mkdir()
+    queued = worker.enqueue(owner_sub="user", task_id="queued", temp_dir_to_clean=str(directory))
+    try:
+        before = time.monotonic()
+        assert worker.shutdown() == 2
+        assert time.monotonic() - before < 1
+        assert queued.cancelled()
+        assert not directory.exists()
+        assert store.get_task("user", "running")["status"] == "interrupted"
+    finally:
+        release.set()
+        running.result(timeout=2)
+    assert calls == ["running"]
+    task = store.get_task("user", "running")
+    assert task["status"] == "interrupted"
+    assert task["video_id"] == "known-video"
+    assert store.mark_active_tasks_interrupted() == 0
+
+
+def test_completed_upload_is_not_reclassified_by_shutdown(tmp_path):
+    store = WeverseUploadStore(tmp_path / "tasks.json")
+    store.create_task("user", {"task_id": "complete", "status": "completed", "video_id": "done"})
+    store.interrupt_task("user", "complete", "stopping")
+    assert store.get_task("user", "complete")["status"] == "completed"
+
+
+def test_late_video_response_is_preserved_without_starting_captions(tmp_path):
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+    calls = []
+
+    class Provider:
+        def videos(self):
+            return self
+
+        def insert(self, **kwargs):
+            calls.append("video")
+            return self
+
+        def next_chunk(self):
+            started.set()
+            assert release.wait(5)
+            return None, {"id": "late-video"}
+
+        def captions(self):
+            calls.append("caption")
+            raise AssertionError("Stopping workers must not start another provider write")
+
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"fake video")
+    store = WeverseUploadStore(tmp_path / "state" / "tasks.json")
+    store.create_task("user", {"task_id": "one", "status": "pending"})
+    worker = upload_service.UploadWorker(store, service_factory=lambda _: Provider(), drain_timeout=0.01)
+    future = worker.enqueue(
+        owner_sub="user",
+        task_id="one",
         credentials=object(),
-        video_path="video.mp4",
+        video_path=str(video),
         title="Test",
         description="",
         privacy_status="private",
-        subtitles=[],
+        subtitles=[{"full_path": "unused.vtt"}],
     )
-
-    asyncio.run(WeverseUploaderPlugin().on_shutdown(None))
-
-    assert result == "submitted"
-    assert len(submitted) == 1
-    assert shutdown == [(True, False)]
-    assert upload_service._upload_executor is None
+    try:
+        assert started.wait(2)
+        assert worker.shutdown() == 1
+        with pytest.raises(RuntimeError, match="still running"):
+            worker.start()
+    finally:
+        release.set()
+        future.result(timeout=2)
+    task = store.get_task("user", "one")
+    assert task["status"] == "interrupted"
+    assert task["video_id"] == "late-video"
+    assert task["studio_url"].endswith("/late-video/edit")
+    assert calls == ["video"]
 
 
 def test_unauthorized_upload_access():

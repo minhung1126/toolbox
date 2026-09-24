@@ -7,6 +7,8 @@ import './styles/foundation.css';
 import './index.css';
 import './styles/app-theme.css';
 import './shared/ui/ui.css';
+import './shared/ui/filter-panel.css';
+import './shared/ui/media.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
