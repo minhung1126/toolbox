@@ -151,6 +151,23 @@ test('Quick Token Drawer uses its feature styles on supported widths', async ({ 
   }
 });
 
+test('YouTube settings sub-navigation uses feature styles on supported widths', async ({ page }) => {
+  await mockAuthenticatedBackend(page);
+
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/youtube/settings/connections');
+
+    const navigation = page.getByRole('navigation', { name: 'YouTube 設定子導覽' });
+    await expect(navigation).toHaveCSS('background-color', 'rgb(20, 21, 26)');
+    await expect(navigation).toHaveCSS('gap', '6px');
+    await expect(navigation.locator('a.active')).toHaveCSS('background-color', 'rgb(38, 42, 52)');
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `YouTube settings horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+  }
+});
+
 test('sheet copy feature styles load and stay within supported viewport widths', async ({ page }) => {
   await mockAuthenticatedBackend(page);
 
