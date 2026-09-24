@@ -133,6 +133,47 @@ test('login and setup pages use the shared auth layout on supported widths', asy
   }
 });
 
+test('system settings use feature styles and remain usable on supported widths', async ({ page }, testInfo) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/system/credentials': {
+      status: 'success',
+      credentials: {
+        google: {
+          client_id: 'settings-e2e.apps.googleusercontent.com',
+          has_client_secret: true,
+          client_secret_masked: 'GOCSPX****1234',
+          configured: true,
+        },
+      },
+      public_base_url: 'https://toolbox.example.test',
+      redirect_uri: 'https://toolbox.example.test/api/v1/auth/callback',
+    },
+    '/api/v1/system/allowlist': {
+      allowed_emails: ['admin@example.test', 'viewer@example.test'],
+      current_user_email: 'admin@example.test',
+      allow_new_users: true,
+    },
+  });
+
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/system/settings');
+    await expect(page.getByRole('heading', { level: 1, name: '系統設定' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Google OAuth 憑證配置' })).toBeVisible();
+    await expect(page.getByLabel('新增允許登入的 Google Email')).toBeVisible();
+    await expect(page.getByText('admin@example.test')).toBeVisible();
+    await expect(page.locator('.system-settings-allow-users')).toHaveCSS('background-color', 'rgb(20, 21, 26)');
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `system settings horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+    await page.screenshot({
+      path: testInfo.outputPath(`system-settings-${width}.png`),
+      fullPage: true,
+      animations: 'disabled',
+    });
+  }
+});
+
 test('Quick Token Drawer uses its feature styles on supported widths', async ({ page }) => {
   await mockAuthenticatedBackend(page);
 

@@ -1,9 +1,328 @@
+.system-settings-page {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.system-settings-header {
+  margin-bottom: 0;
+}
+
 .system-settings-title {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
 }
 
-.system-settings-title svg {
-  color: var(--success);
+.system-settings-title svg,
+.system-settings-section-icon-success,
+.system-settings-copy-success {
+  color: var(--success-text);
+}
+
+.system-settings-section-icon {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.system-settings-page .system-settings-card {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: clamp(var(--space-4), 2.2vw, var(--space-6));
+}
+
+.system-settings-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.system-settings-card-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.system-settings-card-title h2 {
+  font-size: 1.1rem;
+  line-height: 1.4;
+}
+
+.system-settings-page .section-desc {
+  margin: 0;
+}
+
+.system-settings-status-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.system-settings-redirect-uri {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-inset);
+  flex-wrap: wrap;
+}
+
+.system-settings-redirect-content {
+  min-width: 0;
+}
+
+.system-settings-redirect-uri code {
+  overflow-wrap: anywhere;
+}
+
+.system-settings-redirect-label {
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
+.system-settings-credentials-form {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.system-settings-secret-field {
+  position: relative;
+  min-width: 0;
+}
+
+.system-settings-secret-input {
+  width: 100%;
+  padding-right: 2.75rem;
+}
+
+.system-settings-secret-toggle {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.system-settings-secret-toggle:hover {
+  background: var(--surface-raised);
+  color: var(--text-main);
+}
+
+.system-settings-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.system-settings-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--space-3);
+}
+
+.system-settings-info-card {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  overflow-wrap: anywhere;
+}
+
+.system-settings-info-card p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.system-settings-client-id code {
+  overflow-wrap: anywhere;
+}
+
+.system-settings-status-text-success {
+  color: var(--success-text);
+}
+
+.system-settings-status-text-danger {
+  color: var(--danger-text);
+}
+
+.system-settings-allow-users {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-inset);
+}
+
+.system-settings-allow-users-summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.system-settings-allow-users-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.system-settings-allow-users-title strong {
+  font-size: 0.92rem;
+}
+
+.system-settings-allow-users-description {
+  margin: var(--space-1) 0 0;
+}
+
+.system-settings-allow-users-toggle {
+  flex: 0 0 auto;
+  min-width: 6rem;
+  white-space: nowrap;
+}
+
+.system-settings-warning-banner {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.system-settings-warning-banner svg {
+  flex: 0 0 auto;
+}
+
+.system-settings-add-member-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.system-settings-add-member-form > .form-label,
+.system-settings-add-member-help {
+  grid-column: 1 / -1;
+}
+
+.system-settings-add-member-form > .form-label {
+  margin: 0;
+}
+
+.system-settings-add-member-help {
+  margin: 0;
+}
+
+.system-settings-email-list {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.system-settings-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  line-height: 1.55;
+  text-align: center;
+}
+
+.system-settings-email-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+}
+
+.system-settings-email-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.system-settings-email {
+  font-size: 0.9rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.system-settings-email-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.system-settings-remove-button {
+  width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0;
+}
+
+.system-settings-remove-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 640px) {
+  .system-settings-allow-users {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .system-settings-allow-users-summary {
+    align-items: flex-start;
+  }
+
+  .system-settings-allow-users-toggle {
+    align-self: flex-start;
+  }
+
+  .system-settings-add-member-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .system-settings-add-button {
+    width: 100%;
+  }
+
+  .system-settings-email-row {
+    align-items: flex-start;
+  }
 }
