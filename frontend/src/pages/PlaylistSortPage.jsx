@@ -461,39 +461,20 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
 
       {/* YouTube Music In-Place Authorization Status */}
       <section className="glass-panel card-padding">
-        <div
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div
-              className="icon-box icon-box-primary"
-              style={{
-                width: 40,
-                height: 40,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 8,
-              }}
-            >
+        <div className="playlist-sort-auth-row">
+          <div className="playlist-sort-auth-summary">
+            <div className="icon-box icon-box-primary playlist-sort-auth-icon">
               <Disc3 size={22} />
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <strong style={{ fontSize: '1rem' }}>YouTube Music 運作模式</strong>
+              <div className="playlist-sort-auth-title-row">
+                <strong className="playlist-sort-auth-title">YouTube Music 運作模式</strong>
                 {hasCustomToken ? (
                   <span className="badge badge-connected" data-testid="badge-ytm-zero-quota">
                     <CheckCircle2 size={12} /> ⚡ 0 配額模式（瀏覽器 Token 已啟用）
                   </span>
                 ) : isYtmusicConnected ? (
-                  <span
-                    className="badge badge-warning"
-                    style={{
-                      background: 'rgba(234, 179, 8, 0.15)',
-                      color: '#facc15',
-                      border: '1px solid rgba(234, 179, 8, 0.3)',
-                    }}
-                  >
+                  <span className="badge badge-warning playlist-sort-quota-mode">
                     <AlertTriangle size={12} /> Google API 配額模式
                   </span>
                 ) : activeYoutubeConnected ? (
@@ -504,7 +485,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                   </span>
                 )}
               </div>
-              <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)' }}>
+              <p className="playlist-sort-auth-description">
                 {hasCustomToken
                   ? `已啟用 YouTube Music 瀏覽器 Token${tokenAccountName ? `（${tokenAccountName}${tokenChannelHandle ? ` / ${tokenChannelHandle}` : ''}）` : ''}。排序作業採用內部協定，消耗 0 Google API 配額。`
                   : isYtmusicConnected
@@ -515,35 +496,32 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
               </p>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="playlist-sort-auth-actions">
             {hasCustomToken ? (
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
+                className="btn btn-secondary btn-sm playlist-sort-auth-action"
                 onClick={() => setShowTokenDrawer(!showTokenDrawer)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
                 <Key size={14} /> {showTokenDrawer ? '收合 Token 面板' : '更換 / 管理 Token'}
               </button>
             ) : (
               <button
                 type="button"
-                className="btn btn-primary btn-sm"
+                className="btn btn-primary btn-sm playlist-sort-auth-action"
                 onClick={() => setShowTokenDrawer(!showTokenDrawer)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
                 <Key size={14} /> ⚡ 貼上 Token 啟用 0 配額
               </button>
             )}
             <Link
               to={PATHS.ytmusicSettings}
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-sm playlist-sort-auth-action"
               title="前往 YouTube Music 設定（可切換歌名與歌手名地區顯示）"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
               <Globe size={14} />
               <span>地區：{regionDisplayLabel}</span>
-              <Settings size={14} style={{ marginLeft: 2 }} />
+              <Settings size={14} className="playlist-sort-region-settings-icon" />
             </Link>
             {isYtmusicConnected ? (
               <>
@@ -557,8 +535,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                 </button>
                 <button
                   type="button"
-                  className="btn btn-secondary btn-sm"
-                  style={{ color: 'var(--color-danger, #ef4444)' }}
+                  className="btn btn-secondary btn-sm playlist-sort-disconnect"
                   onClick={() => ytmusicOAuth.setConfirmDisconnect(true)}
                 >
                   解除授權
@@ -593,21 +570,12 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
 
       {/* Step 1: Select Playlist */}
       <section className="glass-panel card-padding">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 12,
-            flexWrap: 'wrap',
-            gap: 8,
-          }}
-        >
-          <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="playlist-sort-section-header">
+          <h3 className="playlist-sort-section-title">
             <ListMusic size={18} /> 選擇播放清單
           </h3>
           {playlists.length > 0 && (
-            <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)' }}>
+            <span className="playlist-sort-muted-summary">
               {playlistFilterQuery
                 ? `篩選符合 ${filteredPlaylists.length} / 共 ${playlists.length} 個`
                 : `共 ${playlists.length} 個播放清單`}
@@ -616,42 +584,22 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         </div>
 
         {/* Playlist Name Filter Input */}
-        <div style={{ position: 'relative', marginBottom: 10 }}>
-          <Search
-            size={16}
-            style={{
-              position: 'absolute',
-              left: 10,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'rgba(255,255,255,0.4)',
-              pointerEvents: 'none',
-            }}
-          />
+        <div className="playlist-sort-filter">
+          <Search size={16} className="playlist-sort-filter-icon" aria-hidden="true" />
           <input
             type="text"
-            className="form-input"
+            className={`form-input playlist-sort-filter-input${playlistFilterQuery ? ' playlist-sort-filter-input-clearable' : ''}`}
+            aria-label="依播放清單名稱或說明篩選"
             placeholder="依播放清單名稱或說明快速篩選…"
             value={playlistFilterQuery}
             onChange={(e) => setPlaylistFilterQuery(e.target.value)}
             disabled={loadingPlaylists || playlists.length === 0}
-            style={{ paddingLeft: 32, paddingRight: playlistFilterQuery ? 32 : 12, width: '100%' }}
           />
           {playlistFilterQuery && (
             <button
               type="button"
+              className="playlist-sort-filter-clear"
               onClick={() => setPlaylistFilterQuery('')}
-              style={{
-                position: 'absolute',
-                right: 8,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'transparent',
-                border: 'none',
-                color: 'rgba(255,255,255,0.5)',
-                cursor: 'pointer',
-                padding: 4,
-              }}
               title="清除篩選"
               aria-label="清除篩選"
             >
@@ -662,80 +610,53 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
 
         {/* Pinned Playlists Quick Access Chips */}
         {pinnedPlaylists.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-            <span
-              style={{
-                fontSize: 12,
-                color: 'rgba(255,255,255,0.6)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-              }}
-            >
-              <Pin size={13} style={{ transform: 'rotate(45deg)' }} /> 常用釘選：
+          <div className="playlist-sort-pinned-list">
+            <span className="playlist-sort-pinned-label">
+              <Pin size={13} className="playlist-sort-pinned-icon" aria-hidden="true" /> 常用釘選：
             </span>
             {pinnedPlaylists.map((pl) => {
               const isCurrent = pl.id === selectedPlaylistId;
               return (
-                <button
+                <div
                   key={pl.id}
-                  type="button"
-                  className={`badge ${isCurrent ? 'badge-primary' : 'badge-secondary'}`}
-                  style={{
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 5,
-                    padding: '4px 8px',
-                    border: isCurrent ? '1px solid var(--color-primary, #3b82f6)' : '1px solid rgba(255,255,255,0.12)',
-                    background: isCurrent ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255,255,255,0.06)',
-                    color: isCurrent ? '#fff' : 'rgba(255,255,255,0.85)',
-                    borderRadius: 6,
-                  }}
-                  onClick={() => {
-                    setSelectedPlaylistId(pl.id);
-                    persistConfig({ selectedPlaylistId: pl.id });
-                  }}
-                  title={`快速切換至「${pl.title}」`}
+                  className={`badge playlist-sort-pinned-chip${isCurrent ? ' playlist-sort-pinned-chip-active' : ''}`}
                 >
-                  <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {pl.title}
-                  </span>
-                  <span style={{ fontSize: 11, opacity: 0.6 }}>({pl.item_count})</span>
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      togglePinPlaylist(pl.id);
+                  <button
+                    type="button"
+                    className="playlist-sort-pinned-select"
+                    aria-label={`快速切換至「${pl.title}」`}
+                    onClick={() => {
+                      setSelectedPlaylistId(pl.id);
+                      persistConfig({ selectedPlaylistId: pl.id });
                     }}
-                    style={{
-                      marginLeft: 3,
-                      opacity: 0.65,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                    }}
-                    title="取消釘選"
                   >
-                    <X size={12} />
-                  </span>
-                </button>
+                    <span className="playlist-sort-pinned-title">{pl.title}</span>
+                    <span className="playlist-sort-pinned-count">({pl.item_count})</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="playlist-sort-pinned-remove"
+                    aria-label={`取消釘選「${pl.title}」`}
+                    onClick={() => togglePinPlaylist(pl.id)}
+                  >
+                    <X size={12} aria-hidden="true" />
+                  </button>
+                </div>
               );
             })}
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="playlist-sort-select-row">
           <select
-            className="form-select"
+            className="form-select playlist-sort-select"
+            aria-label="選擇播放清單"
             value={selectedPlaylistId}
             onChange={(e) => {
               setSelectedPlaylistId(e.target.value);
               persistConfig({ selectedPlaylistId: e.target.value });
             }}
             disabled={loadingPlaylists || filteredPlaylists.length === 0}
-            style={{ flex: 1, minWidth: 200 }}
           >
             {loadingPlaylists ? (
               <option value="">載入中…</option>
@@ -764,19 +685,19 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
           </select>
           <button
             type="button"
-            className={`btn ${isSelectedPinned ? 'btn-primary' : 'btn-secondary'}`}
+            className={`btn playlist-sort-pin-button ${isSelectedPinned ? 'btn-primary' : 'btn-secondary'}`}
             onClick={() => togglePinPlaylist(selectedPlaylistId)}
             disabled={!selectedPlaylistId || loadingPlaylists}
             title={isSelectedPinned ? '取消釘選此播放清單' : '釘選目前播放清單至頂端常用'}
             aria-label={isSelectedPinned ? '取消釘選此播放清單' : '釘選目前播放清單至頂端常用'}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
           >
-            <Pin size={14} style={{ fill: isSelectedPinned ? 'currentColor' : 'none' }} />
+            <Pin size={14} className={isSelectedPinned ? 'playlist-sort-pin-icon-active' : undefined} />
             {isSelectedPinned ? '已釘選' : '釘選'}
           </button>
           <button
             type="button"
             className="btn btn-secondary"
+            aria-label="重新整理清單"
             onClick={fetchPlaylists}
             disabled={loadingPlaylists}
             title="重新整理清單"
@@ -785,7 +706,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
           </button>
         </div>
         {selectedPlaylist && (
-          <p style={{ margin: '8px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
+          <p className="playlist-sort-selected-description">
             {selectedPlaylist.description || '無說明'} ·{' '}
             {selectedPlaylist.privacy_status === 'private'
               ? '私人'
@@ -798,60 +719,40 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
 
       {/* Step 2: Sort Rules */}
       <section className="glass-panel card-padding">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 12,
-            flexWrap: 'wrap',
-            gap: 8,
-          }}
-        >
-          <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="playlist-sort-section-header">
+          <h3 className="playlist-sort-section-title">
             <ArrowUpDown size={18} /> 排序規則
           </h3>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div className="playlist-sort-config-statuses">
             {savingConfig ? (
-              <span
-                className="badge badge-warning"
-                style={{ fontSize: 11, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-              >
+              <span className="badge badge-warning playlist-sort-compact-badge">
                 <Loader2 size={12} className="spin" /> 儲存設定中…
               </span>
             ) : savedConfig ? (
-              <span
-                className="badge badge-connected"
-                style={{ fontSize: 11, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-              >
+              <span className="badge badge-connected playlist-sort-compact-badge">
                 <CheckCircle2 size={12} /> 排序設定已自動儲存
               </span>
             ) : (
-              <span
-                className="badge badge-info"
-                style={{ fontSize: 11, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-              >
+              <span className="badge badge-info playlist-sort-compact-badge">
                 <CheckCircle2 size={12} /> 自動記憶設定
               </span>
             )}
             {cachedOriginalTracks && (
-              <span className="badge badge-connected" style={{ fontSize: 11, padding: '2px 8px' }}>
-                ⚡ 即時快取動態模擬中
-              </span>
+              <span className="badge badge-connected playlist-sort-compact-badge">⚡ 即時快取動態模擬中</span>
             )}
           </div>
         </div>
 
-        <div style={{ marginBottom: 12 }}>
+        <div className="playlist-sort-preset-row">
           <select
-            className="form-select"
+            className="form-select playlist-sort-preset-select"
+            aria-label="排序預設模式"
             value={presetMode}
             onChange={(e) => {
               const next = e.target.value;
               setPresetMode(next);
               persistConfig({ presetMode: next });
             }}
-            style={{ maxWidth: 460 }}
           >
             {SORT_PRESETS.map((p) => (
               <option key={p.id} value={p.id}>
@@ -862,10 +763,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         </div>
 
         {presetMode === 'custom' && (
-          <div style={{ marginBottom: 12 }}>
-            <p style={{ margin: '0 0 8px', fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
-              可按住左側圖示拖曳以調整順位優先層級（靠上層者優先排序）：
-            </p>
+          <div className="playlist-sort-custom-rules">
+            <p className="playlist-sort-help">可按住左側圖示拖曳以調整順位優先層級（靠上層者優先排序）：</p>
             {customKeys.map((k, i) => (
               <SortKeyRow
                 key={i}
@@ -882,25 +781,19 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
               />
             ))}
             {customKeys.length < 5 && (
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={handleAddCustomKey}
-                style={{ fontSize: 13, padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 4 }}
-              >
+              <button type="button" className="btn btn-secondary playlist-sort-add-rule" onClick={handleAddCustomKey}>
                 <Plus size={14} /> 新增排序順位
               </button>
             )}
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="playlist-sort-actions">
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn-primary playlist-sort-action"
             onClick={handlePreview}
             disabled={previewing || !selectedPlaylistId || applying}
-            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
           >
             {previewing ? <Loader2 size={15} className="spin" /> : <ArrowUpDown size={15} />}
             {previewing ? '預覽中…' : '模擬預覽'}
@@ -908,10 +801,9 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
           {cachedOriginalTracks && (
             <button
               type="button"
-              className="btn btn-secondary"
+              className="btn btn-secondary playlist-sort-action playlist-sort-refresh-cache"
               onClick={handlePreview}
               disabled={previewing}
-              style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}
               title="重新向伺服器拉取最新歌曲資料並更新快取"
             >
               <RefreshCw size={14} className={previewing ? 'spin' : ''} /> 重新讀取歌曲快取
@@ -923,29 +815,20 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
       {/* Step 3: Side-by-Side Live Preview Results */}
       {previewData && (
         <section className="glass-panel card-padding">
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: 10,
-              flexWrap: 'wrap',
-              gap: 8,
-            }}
-          >
-            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>左右比對預覽結果</h3>
-            <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div className="playlist-sort-section-header playlist-sort-preview-header">
+            <h3 className="playlist-sort-section-title">左右比對預覽結果</h3>
+            <div className="playlist-sort-preview-stats">
+              <span className="playlist-sort-preview-stat">
                 <StatusDot status="unchanged" /> 不變 {previewData.unchanged_count} 首
               </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span className="playlist-sort-preview-stat">
                 <StatusDot status="moved" /> 移動 {previewData.moved_count} 首
               </span>
-              <span style={{ color: 'rgba(255,255,255,0.5)' }}>共 {previewData.total} 首</span>
+              <span className="playlist-sort-muted-summary">共 {previewData.total} 首</span>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <div className="playlist-sort-preview-columns">
             <PreviewTable title="目前原始順序" items={originalItems} sortKeys={activeSortKeys} />
             <InteractivePreviewTable
               title="即時排序結果"
@@ -963,24 +846,12 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
       {/* Step 4: Apply Configuration */}
       {previewData && (previewData.moved_count > 0 || applyMode === 'new_playlist') && !applyResult && (
         <section className="glass-panel card-padding">
-          <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem' }}>套用模式與配額資訊</h3>
+          <h3 className="playlist-sort-apply-heading">套用模式與配額資訊</h3>
 
           {quotaEstimate && (
-            <div style={{ marginBottom: 16 }}>
+            <div className="playlist-sort-quota-estimate">
               {quotaEstimate.total_units === 0 ? (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '10px 14px',
-                    borderRadius: 8,
-                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                    border: '1px solid rgba(34, 197, 94, 0.25)',
-                    color: '#4ade80',
-                    fontSize: 13,
-                  }}
-                >
+                <div className="playlist-sort-zero-quota">
                   <CheckCircle2 size={18} />
                   <span>
                     <strong>YouTube Music Token 協定運作中（0 配額）</strong>：本次操作預計移動{' '}
@@ -990,15 +861,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                 </div>
               ) : (
                 <StatusMessage tone="warning" title="API 配額消耗預估">
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      flexWrap: 'wrap',
-                      gap: 10,
-                    }}
-                  >
+                  <div className="playlist-sort-quota-warning-row">
                     <span>
                       本次排序將移動 <strong>{previewData.moved_count}</strong> 首歌曲， 預估消耗{' '}
                       <strong>{quotaEstimate.total_units?.toLocaleString()}</strong> API 配額點數 （每次移動{' '}
@@ -1007,9 +870,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                     {!hasCustomToken && (
                       <button
                         type="button"
-                        className="btn btn-secondary btn-sm"
+                        className="btn btn-secondary btn-sm playlist-sort-quota-token-button"
                         onClick={() => setShowTokenDrawer(true)}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#facc15' }}
                       >
                         <Key size={13} /> 展開面板配置 Token 免消耗配額
                       </button>
@@ -1021,8 +883,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
           )}
 
           {/* Sort Mode Selection */}
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
+          <div className="playlist-sort-apply-options">
+            <label className="playlist-sort-apply-option">
               <input
                 type="radio"
                 name="apply_mode"
@@ -1035,7 +897,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
               />
               <span>就地重新排序原播放清單</span>
             </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
+            <label className="playlist-sort-apply-option">
               <input
                 type="radio"
                 name="apply_mode"
@@ -1051,8 +913,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
           </div>
 
           {applyMode === 'new_playlist' && (
-            <div style={{ marginBottom: 14, maxWidth: 400 }}>
-              <label className="form-label" htmlFor="new-playlist-title" style={{ fontSize: 13 }}>
+            <div className="playlist-sort-new-title-field">
+              <label className="form-label" htmlFor="new-playlist-title">
                 新播放清單名稱
               </label>
               <input
@@ -1069,10 +931,9 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
           <div>
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn btn-primary playlist-sort-action"
               onClick={handleApplyClick}
               disabled={applying}
-              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
             >
               {applying ? <Loader2 size={15} className="spin" /> : <Check size={15} />}
               {applying ? '套用中…' : applyMode === 'new_playlist' ? '建立新排序歌單' : '套用排序'}
@@ -1099,13 +960,12 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                 消耗 <strong>{applyResult.quota_used?.toLocaleString() ?? 0}</strong> API 配額點數。
               </span>
               {applyResult.new_playlist_url && (
-                <div style={{ marginTop: 8 }}>
+                <div className="playlist-sort-result-link-row">
                   <a
                     href={applyResult.new_playlist_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="btn btn-secondary btn-sm"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    className="btn btn-secondary btn-sm playlist-sort-auth-action"
                   >
                     <ExternalLink size={14} /> 前往 YouTube Music 查看新歌單
                   </a>
@@ -1132,16 +992,16 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             <strong>{previewData?.moved_count || 0}</strong> 首歌曲。
           </p>
           {applyMode === 'new_playlist' ? (
-            <p style={{ color: 'var(--color-success, #22c55e)' }}>
+            <p className="playlist-sort-confirm-success">
               ✓ 將保留原始播放清單，並為您建立全新的已排序播放清單「<strong>{newPlaylistTitle}</strong>」。
             </p>
           ) : quotaEstimate?.total_units === 0 ? (
-            <p style={{ color: 'var(--color-success, #22c55e)' }}>
+            <p className="playlist-sort-confirm-success">
               ✓ 使用 YouTube Music Token 更新，<strong>消耗 0 API 配額點數</strong>。
             </p>
           ) : (
             quotaEstimate && (
-              <p style={{ color: 'var(--color-warning, #eab308)' }}>
+              <p className="playlist-sort-confirm-warning">
                 ⚠ 預估消耗 <strong>{quotaEstimate.total_units?.toLocaleString()}</strong> API 配額點數。
                 此操作不可自動撤銷。
               </p>
@@ -1180,12 +1040,12 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         }}
       >
         <div>
-          <p style={{ color: '#f87171', fontWeight: 600 }}>{strictFallbackPrompt?.message}</p>
+          <p className="playlist-sort-dialog-danger-title">{strictFallbackPrompt?.message}</p>
           <p>
             系統已依「<strong>嚴格防禦政策</strong>」攔截自動降級，以避免在未經確認的情況下無預警消耗{' '}
             <strong>{strictFallbackPrompt?.quotaUnits}</strong> 點 Google Cloud API 配額。
           </p>
-          <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>
+          <p className="playlist-sort-dialog-help">
             💡 <strong>推薦作法</strong>：點擊「立即更新 Token」，展開上方快速面板貼上新的 cURL / Cookie，即可繼續以 0
             配額完成排序。
           </p>
@@ -1205,19 +1065,9 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         onCancel={() => setQuotaExceededRecovery(null)}
       >
         <div>
-          <p style={{ color: '#f87171' }}>{quotaExceededRecovery?.message}</p>
+          <p className="playlist-sort-dialog-danger-title">{quotaExceededRecovery?.message}</p>
           <p>Google YouTube Data API 每日配額已達上限（將於每日太平洋時間午夜重置）。</p>
-          <div
-            style={{
-              padding: '10px 14px',
-              borderRadius: 8,
-              background: 'rgba(56, 189, 248, 0.1)',
-              border: '1px solid rgba(56, 189, 248, 0.25)',
-              color: '#38bdf8',
-              fontSize: 13,
-              marginTop: 10,
-            }}
-          >
+          <div className="playlist-sort-quota-recovery">
             💡 <strong>即刻救援方案</strong>： 只要貼上 YouTube Music 瀏覽器 Token，即可完全繞過 Google API 配額限制，
             <strong>立刻以 0 配額完成排序</strong>！
           </div>

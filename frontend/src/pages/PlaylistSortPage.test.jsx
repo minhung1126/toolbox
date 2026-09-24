@@ -449,6 +449,13 @@ describe('PlaylistSortPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /取消釘選此播放清單/ })).toHaveTextContent('已釘選');
       expect(screen.getByText(/常用釘選：/)).toBeInTheDocument();
+      expect(api.updateWorkState).toHaveBeenCalledWith('ytmusic_pinned_playlists', { ids: ['pl-1'] });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '取消釘選「我的最愛音樂」' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: '快速切換至「我的最愛音樂」' })).not.toBeInTheDocument();
+      expect(api.updateWorkState).toHaveBeenCalledWith('ytmusic_pinned_playlists', { ids: [] });
     });
   });
 

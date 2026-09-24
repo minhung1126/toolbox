@@ -549,6 +549,9 @@ test('Playlist Sort previews and confirms creation of a sorted playlist', async 
   await page.setViewportSize({ width: 390, height: 1000 });
   await page.goto('/ytmusic/playlist-sort');
   await expect(page.getByRole('combobox').first()).toHaveValue('playlist-1');
+  await page.getByRole('button', { name: '釘選目前播放清單至頂端常用' }).click();
+  await page.getByRole('button', { name: '取消釘選「我的最愛音樂」' }).click();
+  await expect(page.getByRole('button', { name: '快速切換至「我的最愛音樂」' })).toHaveCount(0);
   await page.getByRole('button', { name: '模擬預覽' }).click();
   await expect(page.getByRole('heading', { name: '左右比對預覽結果' })).toBeVisible();
   await expect(page.getByText('Song B').first()).toBeVisible();
