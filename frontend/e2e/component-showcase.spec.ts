@@ -230,7 +230,7 @@ test('YouTube settings sub-navigation uses feature styles on supported widths', 
   }
 });
 
-test('YouTube Music settings use feature styles and remain usable on supported widths', async ({ page }) => {
+test('YouTube Music settings use feature styles and remain usable on supported widths', async ({ page }, testInfo) => {
   await mockAuthenticatedBackend(page, {
     '/api/v1/auth/user': {
       authenticated: true,
@@ -257,6 +257,11 @@ test('YouTube Music settings use feature styles and remain usable on supported w
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow, `YouTube Music settings horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+    await page.screenshot({
+      path: testInfo.outputPath(`ytmusic-settings-${width}.png`),
+      fullPage: true,
+      animations: 'disabled',
+    });
   }
 });
 
