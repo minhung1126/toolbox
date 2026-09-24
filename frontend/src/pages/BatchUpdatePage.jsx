@@ -225,7 +225,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
             共用目前帳號的團體與人物篩選。未指定的資源會使用目前帳號的預設 Google Sheet 或 YouTube 播放清單。
           </span>
         </div>
-        <div className="page-actions settings-card-actions" style={{ marginTop: '0.75rem' }}>
+        <div className="page-actions settings-card-actions batch-settings-actions">
           <button type="button" className="btn btn-secondary" onClick={saveDraftConfig} disabled={configSaving}>
             <Save size={16} /> {configSaving ? '儲存中...' : '立即儲存草稿設定'}
           </button>
@@ -233,17 +233,8 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
       </SheetDataSourcePanel>
 
       <div className="glass-panel card-padding playlist-input-panel">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '0.5rem',
-            marginBottom: '0.5rem',
-          }}
-        >
-          <label className="form-label" htmlFor="batch-playlist-id" style={{ marginBottom: 0 }}>
+        <div className="playlist-input-heading">
+          <label className="form-label" htmlFor="batch-playlist-id">
             <PlaySquare size={14} /> 共用 To-Post 播放清單
           </label>
           {playlistAutosaveStatus === 'saving' && (

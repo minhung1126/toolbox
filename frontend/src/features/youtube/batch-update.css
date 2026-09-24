@@ -1,3 +1,20 @@
+.batch-settings-actions {
+  margin-top: var(--space-3);
+}
+
+.playlist-input-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.playlist-input-heading .form-label {
+  margin-bottom: 0;
+}
+
 @media (max-width: 767px) {
   .batch-preview-comparison {
     grid-template-columns: 1fr;

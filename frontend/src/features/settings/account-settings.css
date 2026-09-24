@@ -25,3 +25,23 @@
 .account-settings-active-account {
   margin-bottom: 0.5rem;
 }
+
+.google-sheet-settings-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+}
+
+.google-sheet-settings-title svg {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.google-sheet-default-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}

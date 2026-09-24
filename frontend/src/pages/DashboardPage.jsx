@@ -5,6 +5,7 @@ import { SourceLinkButton } from '../components/SourceLinkInput';
 import { youtubePreferredUiSlot } from '../utils/youtubeRouting';
 import { getAllTools } from '../tools/catalog';
 import { Badge, Card, PageHeader } from '../shared/ui';
+import '../features/system/dashboard.css';
 
 export default function DashboardPage({ authUser, sysSettings = {} }) {
   const activeSlot = youtubePreferredUiSlot(authUser?.youtube);
@@ -101,26 +102,13 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
         const cards = tool.featureCards || [];
         if (!cards.length) return null;
         return (
-          <section key={tool.id} className="dashboard-module-group" style={{ marginBottom: '2rem' }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '0.85rem',
-                flexWrap: 'wrap',
-                gap: '0.5rem',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <h2 className="section-title" style={{ margin: 0, fontSize: '1.25rem' }}>
-                  {tool.title || tool.name}
-                </h2>
+          <section key={tool.id} className="dashboard-module-group">
+            <div className="dashboard-module-heading">
+              <div className="dashboard-module-title">
+                <h2 className="section-title">{tool.title || tool.name}</h2>
                 <Badge tone="info">{tool.category}</Badge>
               </div>
-              <p className="section-desc" style={{ margin: 0, fontSize: '0.85rem' }}>
-                {tool.description}
-              </p>
+              <p className="section-desc dashboard-module-description">{tool.description}</p>
             </div>
             <div className="feature-grid">
               {cards.map((card) => {

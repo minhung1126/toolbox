@@ -85,6 +85,39 @@ test('component showcase stays readable without horizontal overflow on supported
   }
 });
 
+test('login and setup pages use the shared auth layout on supported widths', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/auth/user': { authenticated: false },
+    '/api/v1/auth/config': { has_client_id: true, has_client_secret: true },
+    '/api/v1/system/setup-status': {
+      is_configured: false,
+      setup_completed: false,
+      needs_pin: true,
+      redirect_uri: 'https://toolbox.example.test/api/v1/auth/callback',
+    },
+  });
+
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/login');
+    await expect(page.getByRole('heading', { level: 1, name: 'Toolbox' })).toBeVisible();
+    await expect(page.locator('.auth-page .login-card')).toHaveCSS('background-color', 'rgb(28, 30, 36)');
+
+    let overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `login page horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+
+    await page.goto('/setup');
+    await expect(page.getByRole('heading', { level: 1, name: 'Toolbox 初始安裝精靈' })).toBeVisible();
+    await expect(page.getByLabel(/Google OAuth Client ID/)).toBeVisible();
+    await expect(page.getByLabel(/安全碼 \(PIN\)/)).toBeVisible();
+    await page.getByRole('button', { name: '顯示 Client Secret' }).click();
+    await expect(page.getByLabel(/Google OAuth Client Secret/)).toHaveAttribute('type', 'text');
+
+    overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `setup page horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+  }
+});
+
 test('sheet copy feature styles load and stay within supported viewport widths', async ({ page }) => {
   await mockAuthenticatedBackend(page);
 

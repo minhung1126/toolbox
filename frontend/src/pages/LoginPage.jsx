@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
 import { PATHS } from '../routes/paths';
 import { Video, LogIn, CheckCircle2, AlertCircle, Lock, RefreshCw } from 'lucide-react';
+import '../features/auth/auth.css';
 
 export default function LoginPage({ initialError, returnTo }) {
   const [loggingIn, setLoggingIn] = useState(false);
@@ -56,7 +57,7 @@ export default function LoginPage({ initialError, returnTo }) {
   const loginReady = Boolean(authConfig?.has_client_id && authConfig?.has_client_secret);
 
   return (
-    <div className="login-container">
+    <div className="auth-page">
       <div className="login-card glass-panel">
         {/* Header Branding */}
         <div className="login-header">
@@ -113,7 +114,7 @@ export default function LoginPage({ initialError, returnTo }) {
             <div className="login-error-content">
               <span>{readinessError}</span>
               {!loginReady && !checkingConfig && (
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem' }}>
+                <div className="login-actions login-actions--stacked">
                   <Link to={PATHS.setup} className="btn btn-primary btn-sm">
                     前往初次安裝精靈
                   </Link>
@@ -136,12 +137,12 @@ export default function LoginPage({ initialError, returnTo }) {
           >
             {checkingConfig ? (
               <>
-                <span className="login-spinner"></span>
+                <span className="ui-inline-spinner" aria-hidden="true"></span>
                 正在檢查登入服務...
               </>
             ) : loggingIn ? (
               <>
-                <span className="login-spinner"></span>
+                <span className="ui-inline-spinner" aria-hidden="true"></span>
                 正在傳送至 Google 授權...
               </>
             ) : (

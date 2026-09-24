@@ -361,7 +361,7 @@ export default function YouTubeSlotCard({
             >
               {busy ? (
                 <>
-                  <span className="login-spinner"></span> 處理中...
+                  <span className="ui-inline-spinner" aria-hidden="true"></span> 處理中...
                 </>
               ) : (
                 <>

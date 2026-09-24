@@ -137,6 +137,17 @@
   animation: ui-spin 0.9s linear infinite;
 }
 
+.ui-inline-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border: 2px solid rgb(255 255 255 / 30%);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: ui-spin 0.8s linear infinite;
+}
+
 .ui-badge {
   display: inline-flex;
   min-height: 24px;

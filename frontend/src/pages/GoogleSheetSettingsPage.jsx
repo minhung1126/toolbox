@@ -7,6 +7,7 @@ import SourceLinkInput from '../components/SourceLinkInput';
 import ServiceAuthCard from '../components/ServiceAuthCard';
 import { useDebouncedAutosave } from '../hooks/useDebouncedAutosave';
 import { useOAuthConnect } from '../hooks/useOAuthConnect';
+import '../features/settings/account-settings.css';
 
 export function initialGoogleSheetForm(defaultSpreadsheetId) {
   return { default_spreadsheet_id: defaultSpreadsheetId || '' };
@@ -77,10 +78,10 @@ export default function GoogleSheetSettingsPage({ sysSettings = {}, refreshSetti
   const isSheetsConnected = Boolean(sheetsAuth?.connected || authUser?.google_scopes?.sheets_readonly);
 
   return (
-    <div className="section-gap settings-page-section">
+    <div className="section-gap settings-page-section google-sheet-settings-page">
       <header className="page-header">
-        <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', margin: '0 0 0.5rem 0' }}>
-          <FileSpreadsheet size={26} color="var(--primary)" /> Google 試算表設定
+        <h1 className="google-sheet-settings-title">
+          <FileSpreadsheet size={26} aria-hidden="true" /> Google 試算表設定
         </h1>
         <p className="section-desc">管理 Google 試算表存取授權與目前帳號預設試算表來源。</p>
       </header>
@@ -122,15 +123,7 @@ export default function GoogleSheetSettingsPage({ sysSettings = {}, refreshSetti
       />
 
       <form className="glass-panel card-padding settings-card card-stack" onSubmit={handleSave}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '0.5rem',
-          }}
-        >
+        <div className="google-sheet-default-header">
           <div>
             <h2 className="settings-heading">
               <FileSpreadsheet size={20} color="var(--accent)" /> 帳號預設 Google Sheet

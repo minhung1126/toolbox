@@ -1,0 +1,28 @@
+.dashboard-module-group {
+  margin-bottom: var(--space-8);
+}
+
+.dashboard-module-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.dashboard-module-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dashboard-module-title .section-title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.dashboard-module-description {
+  margin: 0;
+  font-size: 0.85rem;
+}
