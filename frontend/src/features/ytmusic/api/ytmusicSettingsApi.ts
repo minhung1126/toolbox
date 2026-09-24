@@ -1,9 +1,11 @@
 import { api } from '../../../services/api';
-import type { YtmusicTokenApi } from './tokenTypes';
+import type { YtmusicSettingsApi } from './tokenTypes';
 
 export type * from './tokenTypes';
 
-export const ytmusicTokenApi: YtmusicTokenApi = {
+export const ytmusicSettingsApi: YtmusicSettingsApi = {
+  getAuthUrl: () => api.getYtmusicAuthUrl(),
+  disconnect: () => api.disconnectYtmusic(),
   save: (token) => api.saveYtmusicCustomToken(token),
   clear: () => api.clearYtmusicCustomToken(),
   validate: (token) => api.validateYtmusicCustomToken(token),

@@ -12,7 +12,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { ytmusicTokenApi } from '../features/ytmusic/api/ytmusicTokenApi';
+import { ytmusicSettingsApi } from '../features/ytmusic/api/ytmusicSettingsApi';
 import { useToast } from './Toast';
 import '../features/ytmusic/quick-token-drawer.css';
 
@@ -40,7 +40,7 @@ export default function QuickTokenDrawer({
     setValidating(true);
     setValidationResult(null);
     try {
-      const res = await ytmusicTokenApi.validate(raw || null);
+      const res = await ytmusicSettingsApi.validate(raw || null);
       setValidationResult({
         valid: true,
         message: res.message || 'Token 驗證成功，可正常讀取 YouTube Music 音樂庫並進行 0 配額排序。',
@@ -68,7 +68,7 @@ export default function QuickTokenDrawer({
     }
     setSaving(true);
     try {
-      await ytmusicTokenApi.save(trimmed);
+      await ytmusicSettingsApi.save(trimmed);
       toast.success('YouTube Music 瀏覽器 Token 已成功啟用（0 配額模式）！');
       setTokenInput('');
       setValidationResult(null);
@@ -85,7 +85,7 @@ export default function QuickTokenDrawer({
   const handleClear = async () => {
     setSaving(true);
     try {
-      await ytmusicTokenApi.clear();
+      await ytmusicSettingsApi.clear();
       toast.success('已清除自訂 Token，將改用 Google API 模式');
       setValidationResult(null);
       if (onTokenCleared) {

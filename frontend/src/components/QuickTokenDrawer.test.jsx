@@ -2,11 +2,11 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import QuickTokenDrawer from './QuickTokenDrawer';
-import { ytmusicTokenApi } from '../features/ytmusic/api/ytmusicTokenApi';
+import { ytmusicSettingsApi } from '../features/ytmusic/api/ytmusicSettingsApi';
 import { ToastProvider } from './Toast';
 
-vi.mock('../features/ytmusic/api/ytmusicTokenApi', () => ({
-  ytmusicTokenApi: {
+vi.mock('../features/ytmusic/api/ytmusicSettingsApi', () => ({
+  ytmusicSettingsApi: {
     validate: vi.fn(),
     save: vi.fn(),
     clear: vi.fn(),
@@ -71,7 +71,7 @@ describe('QuickTokenDrawer', () => {
   });
 
   it('validates token and displays result banner on success', async () => {
-    ytmusicTokenApi.validate.mockResolvedValueOnce({
+    ytmusicSettingsApi.validate.mockResolvedValueOnce({
       valid: true,
       account_name: '測試音樂庫',
       channel_handle: '@testmusic',
@@ -86,14 +86,14 @@ describe('QuickTokenDrawer', () => {
     fireEvent.click(testBtn);
 
     await waitFor(() => {
-      expect(ytmusicTokenApi.validate).toHaveBeenCalledWith('curl "https://music.youtube.com" -H "cookie: SID=123"');
+      expect(ytmusicSettingsApi.validate).toHaveBeenCalledWith('curl "https://music.youtube.com" -H "cookie: SID=123"');
       expect(screen.getByText('Token 驗證成功')).toBeInTheDocument();
       expect(screen.getByText('測試音樂庫')).toBeInTheDocument();
     });
   });
 
   it('saves token and calls onTokenSaved callback', async () => {
-    ytmusicTokenApi.save.mockResolvedValueOnce({ status: 'ok' });
+    ytmusicSettingsApi.save.mockResolvedValueOnce({ status: 'success', message: 'saved' });
     const onTokenSaved = vi.fn();
 
     renderDrawer({ onTokenSaved });
@@ -104,13 +104,13 @@ describe('QuickTokenDrawer', () => {
     fireEvent.click(saveBtn);
 
     await waitFor(() => {
-      expect(ytmusicTokenApi.save).toHaveBeenCalledWith('curl "https://music.youtube.com" -H "cookie: SID=valid"');
+      expect(ytmusicSettingsApi.save).toHaveBeenCalledWith('curl "https://music.youtube.com" -H "cookie: SID=valid"');
       expect(onTokenSaved).toHaveBeenCalled();
     });
   });
 
   it('clears token when clear button is clicked', async () => {
-    ytmusicTokenApi.clear.mockResolvedValueOnce({ status: 'ok' });
+    ytmusicSettingsApi.clear.mockResolvedValueOnce({ status: 'success', message: 'cleared' });
     const onTokenCleared = vi.fn();
 
     renderDrawer({ hasCustomToken: true, onTokenCleared });
@@ -118,7 +118,7 @@ describe('QuickTokenDrawer', () => {
     fireEvent.click(clearBtn);
 
     await waitFor(() => {
-      expect(ytmusicTokenApi.clear).toHaveBeenCalled();
+      expect(ytmusicSettingsApi.clear).toHaveBeenCalled();
       expect(onTokenCleared).toHaveBeenCalled();
     });
   });

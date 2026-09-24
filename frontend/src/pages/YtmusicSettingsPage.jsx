@@ -20,7 +20,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { api } from '../services/api';
+import { ytmusicSettingsApi } from '../features/ytmusic/api/ytmusicSettingsApi';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ServiceAuthCard from '../components/ServiceAuthCard';
@@ -106,8 +106,8 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
 
   const ytmusicOAuth = useOAuthConnect({
     serviceName: 'ytmusic',
-    getAuthUrl: api.getYtmusicAuthUrl,
-    disconnect: api.disconnectYtmusic,
+    getAuthUrl: ytmusicSettingsApi.getAuthUrl,
+    disconnect: ytmusicSettingsApi.disconnect,
     onAfterDisconnect: refreshAuthUser,
     serviceLabel: 'YouTube Music 授權',
     successMessage: '已解除 YouTube Music 授權',
@@ -206,7 +206,7 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
     setValidatingToken(true);
     setTokenValidationResult(null);
     try {
-      const res = await api.validateYtmusicCustomToken(tokenToTest);
+      const res = await ytmusicSettingsApi.validate(tokenToTest);
       setTokenValidationResult({
         valid: true,
         message: res.message || 'Token 驗證成功，可正常讀取 YouTube Music 音樂庫與播放清單。',
@@ -235,7 +235,7 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
     }
     setSavingToken(true);
     try {
-      await api.saveYtmusicCustomToken(trimmed);
+      await ytmusicSettingsApi.save(trimmed);
       toast.success('YouTube Music 自訂 Token 已成功儲存！');
       setCustomTokenInput('');
       setTokenValidationResult(null);
@@ -251,7 +251,7 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
     setShowClearTokenConfirm(false);
     setSavingToken(true);
     try {
-      await api.clearYtmusicCustomToken();
+      await ytmusicSettingsApi.clear();
       toast.success('已清除 YouTube Music 自訂 Token');
       setTokenValidationResult(null);
       await refreshAuthUser?.();

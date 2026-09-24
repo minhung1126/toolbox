@@ -46,6 +46,8 @@ import type {
 import type {
   YtmusicCustomTokenMutationResponse,
   YtmusicCustomTokenValidationResponse,
+  YtmusicAuthUrlResponse,
+  YtmusicDisconnectResponse,
 } from '../features/ytmusic/api/tokenTypes';
 import type {
   WeverseFileMetadata,
@@ -65,6 +67,8 @@ export const api: {
   getAuthUrl(): Promise<LoginAuthUrlResponse>;
   getSetupStatus(): Promise<SetupStatusResponse>;
   performSetup(request: SetupRequest): Promise<SetupResponse>;
+  getYtmusicAuthUrl(): Promise<YtmusicAuthUrlResponse>;
+  disconnectYtmusic(): Promise<YtmusicDisconnectResponse>;
   saveYtmusicCustomToken(token: string): Promise<YtmusicCustomTokenMutationResponse>;
   clearYtmusicCustomToken(): Promise<YtmusicCustomTokenMutationResponse>;
   validateYtmusicCustomToken(token?: string | null): Promise<YtmusicCustomTokenValidationResponse>;
