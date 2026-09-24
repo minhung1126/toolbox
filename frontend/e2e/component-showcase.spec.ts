@@ -118,6 +118,24 @@ test('login and setup pages use the shared auth layout on supported widths', asy
   }
 });
 
+test('Quick Token Drawer uses its feature styles on supported widths', async ({ page }) => {
+  await mockAuthenticatedBackend(page);
+
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/ytmusic/playlist-sort');
+    await page.getByRole('button', { name: /貼上 Token 啟用 0 配額/ }).click();
+
+    const drawer = page.getByTestId('quick-token-drawer');
+    await expect(drawer).toHaveCSS('background-color', 'rgb(24, 26, 31)');
+    await page.getByRole('button', { name: '如何取得 Token？' }).click();
+    await expect(page.getByText(/3 步驟快速取得/)).toBeVisible();
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `Quick Token Drawer horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+  }
+});
+
 test('sheet copy feature styles load and stay within supported viewport widths', async ({ page }) => {
   await mockAuthenticatedBackend(page);
 

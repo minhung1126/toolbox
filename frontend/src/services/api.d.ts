@@ -43,6 +43,10 @@ import type {
   SetupResponse,
   SetupStatusResponse,
 } from '../features/auth/api/types';
+import type {
+  YtmusicCustomTokenMutationResponse,
+  YtmusicCustomTokenValidationResponse,
+} from '../features/ytmusic/api/tokenTypes';
 
 export function normalizeYoutubePlaylistInput(value: unknown): string;
 
@@ -51,6 +55,9 @@ export const api: {
   getAuthUrl(): Promise<LoginAuthUrlResponse>;
   getSetupStatus(): Promise<SetupStatusResponse>;
   performSetup(request: SetupRequest): Promise<SetupResponse>;
+  saveYtmusicCustomToken(token: string): Promise<YtmusicCustomTokenMutationResponse>;
+  clearYtmusicCustomToken(): Promise<YtmusicCustomTokenMutationResponse>;
+  validateYtmusicCustomToken(token?: string | null): Promise<YtmusicCustomTokenValidationResponse>;
   getPlaylistSortPlaylists(params?: { language?: string; location?: string }): Promise<PlaylistListResponse>;
   previewPlaylistSort(request: PlaylistSortPreviewRequest): Promise<PlaylistSortPreviewResponse>;
   applyPlaylistSort(request: PlaylistSortApplyRequest): Promise<PlaylistSortApplyResponse>;
