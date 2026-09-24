@@ -154,15 +154,15 @@ function PublishConfirmationContent({ snapshot, quotaEstimate }) {
   return (
     <div className="confirm-content">
       <dl className="confirm-summary-list" aria-label="發布摘要">
-        <div>
+        <div className="confirm-summary-item">
           <dt>播放清單：</dt>
           <dd>{snapshot.playlistId}</dd>
         </div>
-        <div>
+        <div className="confirm-summary-item">
           <dt>授權組合：</dt>
           <dd>{formatAuthContext(snapshot.auth)}</dd>
         </div>
-        <div>
+        <div className="confirm-summary-item">
           <dt>影片數量：</dt>
           <dd>{formatVideoCount(snapshot.videos.length)}</dd>
         </div>
@@ -198,7 +198,7 @@ function PublishConfirmationContent({ snapshot, quotaEstimate }) {
       </section>
 
       <div className="confirm-risk-panel" role="note" aria-label="風險說明">
-        <strong>風險與處理方式</strong>
+        <strong className="confirm-risk-title">風險與處理方式</strong>
         <ul>
           <li>只有上列影片會送出；預覽後新加入清單或未出現在預覽中的影片不會發布。</li>
           <li>影片設為公開後會移出 To-Post 播放清單，但仍會保留在 YouTube 頻道中。</li>

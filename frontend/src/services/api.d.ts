@@ -25,6 +25,7 @@ import type {
   YoutubeSlot,
   YoutubeSlotConfigPatch,
 } from '../features/youtube/api/youtubeSettingsTypes';
+import type { YoutubeQuotaUsage } from '../features/youtube/api/youtubeQuotaTypes';
 import type {
   RandomMemberPreviewResponse,
   YoutubeBatchPreviewRequest,
@@ -109,6 +110,7 @@ export const api: {
   getBatchPreview(request: YoutubeBatchPreviewRequest): Promise<YoutubeBatchPreviewResponse>;
   batchUpdateMetadata(request: YoutubeBatchUpdateRequest): Promise<YoutubeBatchUpdateResponse>;
   estimateYoutubeQuota(request: YoutubeQuotaEstimateRequest): Promise<PublishCleanupQuotaEstimate>;
+  getYoutubeQuotaUsage(slot: YoutubeSlot): Promise<YoutubeQuotaUsage>;
   publishAndCleanup(playlistId: string, options?: PublishCleanupOptions): Promise<PublishCleanupResult>;
   updateYoutubeVideoMetadata(request: PublishCleanupMetadataUpdate): Promise<unknown>;
   updateYoutubePlaylist(request: { playlistId: string }): Promise<unknown>;

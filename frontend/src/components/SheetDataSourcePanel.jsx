@@ -2,7 +2,7 @@ import React from 'react';
 import { CheckCircle2, FileSpreadsheet, Key, RefreshCw, XCircle } from 'lucide-react';
 import SourceLinkInput from './SourceLinkInput';
 import { EmptyState, StatusMessage } from './StatusMessage';
-import { api } from '../services/api';
+import { sheetsSettingsApi } from '../features/sheets/api/sheetsSettingsApi';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
 
 export default function SheetDataSourcePanel({
@@ -28,7 +28,7 @@ export default function SheetDataSourcePanel({
   const handleAuthorizeSheets = async () => {
     try {
       saveOAuthReturnPath('sheets', window.location.pathname + window.location.search);
-      const res = await api.getSheetsAuthUrl();
+      const res = await sheetsSettingsApi.getAuthUrl();
       if (res?.auth_url) window.location.href = res.auth_url;
     } catch (err) {
       console.error('Failed to get sheets auth url:', err);
@@ -38,7 +38,7 @@ export default function SheetDataSourcePanel({
   return (
     <section className={`filter-panel${dependentDisabled ? ' filter-panel-disabled' : ''}`}>
       <div className="filter-panel-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div className="filter-panel-heading-group filter-panel-source-heading">
           <div>
             <strong>
               <FileSpreadsheet size={17} aria-hidden="true" />

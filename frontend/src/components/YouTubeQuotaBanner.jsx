@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, AlertTriangle, Clock3, Database, RefreshCw, ShieldAlert } from 'lucide-react';
-import { api } from '../services/api';
+import { youtubeQuotaApi } from '../features/youtube/api/youtubeQuotaApi';
 import { StatusMessage } from './StatusMessage';
 
 const STATE_META = {
@@ -96,13 +96,13 @@ export default function YouTubeQuotaBanner({
     setUsage(null);
     setLoadedSlot(null);
     try {
-      const nextUsage = await api.getYoutubeQuotaUsage(requestSlot);
+      const nextUsage = await youtubeQuotaApi.getUsage(requestSlot);
       if (requestId !== requestIdRef.current) return;
       setUsage(nextUsage);
       setLoadedSlot(requestSlot);
       setLastUpdatedBySlot((current) => ({
         ...current,
-        [requestSlot]: nextUsage?.last_updated_at || new Date().toISOString(),
+        [requestSlot]: nextUsage?.updated_at || new Date().toISOString(),
       }));
     } catch (err) {
       if (requestId !== requestIdRef.current) return;
@@ -182,10 +182,11 @@ export default function YouTubeQuotaBanner({
   );
   const percent = Math.min(Math.max((used / Math.max(limit, 1)) * 100, 0), 100);
   const confirmed = stateKey === 'confirmed_exhausted' || currentUsage?.confirmed_by_google;
+  const stateClass = stateKey.replace(/_/g, '-');
 
   return (
     <section
-      className={`glass-panel quota-banner quota-state-${stateKey}${compact ? ' quota-banner-compact' : ''}`}
+      className={`glass-panel quota-banner quota-state-${stateClass}${compact ? ' quota-banner-compact' : ''}`}
       style={{ '--quota-percent': `${percent}%` }}
     >
       <div className="quota-banner-header">
@@ -213,7 +214,7 @@ export default function YouTubeQuotaBanner({
             </div>
             <div className="quota-usage-value">
               {units(used)} / {units(limit)}
-              <span>單位（Toolbox 估算）</span>
+              <span className="quota-usage-suffix">單位（Toolbox 估算）</span>
             </div>
           </div>
         </div>

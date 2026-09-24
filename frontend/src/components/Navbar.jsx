@@ -171,7 +171,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
         aria-current={active ? 'page' : undefined}
       >
         <Icon size={18} aria-hidden="true" />
-        <span>{label}</span>
+        <span className="nav-group-label">{label}</span>
         <ChevronDown className="nav-group-chevron" size={16} aria-hidden="true" />
       </button>
       {open && (

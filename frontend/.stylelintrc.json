@@ -8,5 +8,15 @@
     "selector-max-universal": 0,
     "media-feature-range-notation": "prefix",
     "value-keyword-case": null
-  }
+  },
+  "overrides": [
+    {
+      "files": ["src/styles/foundation.css"],
+      "rules": {
+        "selector-max-id": null,
+        "selector-max-type": null,
+        "selector-max-universal": null
+      }
+    }
+  ]
 }

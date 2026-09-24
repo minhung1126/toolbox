@@ -26,10 +26,20 @@ from backend.app.api.youtube_models import (
     VideoAssignment,
     VideoMetadataUpdateInput,
 )
-from backend.app.core.account_state import get_account_active_slot, get_account_setting
+from backend.app.api.youtube_workflow_dependencies import (
+    _load_and_validate_sheet_data,
+    _quota_http_exception,
+    _resolve_playlist_id,
+    _run_youtube_operation_with_quota_fallback,
+    _switch_youtube_context,
+    _validate_batch_inputs,
+    _verify_playlist_preview_token,
+    create_youtube_workflow_service,
+    get_youtube_workflow_service,
+)
+from backend.app.core.account_state import get_account_active_slot
 from backend.app.core.config import normalize_youtube_slot
 from backend.app.core.dependencies import (
-    create_youtube_request_context,
     require_account_subject,
     require_login_credentials,
     require_sheets_credentials,
@@ -46,8 +56,6 @@ from backend.app.core.preview import (
 )
 from backend.app.core.request_protection import enforce_workflow_rate_limit
 from backend.app.core.youtube_context import YouTubeRequestContext
-from backend.app.core.youtube_input import normalize_playlist_id
-from backend.app.core.youtube_routing import choose_youtube_slot
 from backend.app.services.provider_errors import map_youtube_error
 from backend.app.services.sheets_service import (
     get_all_rows_for_sheet,
@@ -69,144 +77,6 @@ from backend.app.services.youtube_workflows import YoutubeWorkflowService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/youtube", tags=["YouTube Operations"])
-
-_YOUTUBE_WORKFLOW_DEPENDENCY_NAMES = (
-    "_direct_workflow_response",
-    "_load_and_validate_sheet_data",
-    "_preview_slot",
-    "_quota_http_exception",
-    "_resolve_person_metadata",
-    "_resolve_playlist_id",
-    "_run_youtube_operation_with_quota_fallback",
-    "_stale_preview_exception",
-    "_switch_youtube_context",
-    "_validate_batch_inputs",
-    "_verify_playlist_preview_token",
-    "_workflow_error_detail",
-    "_youtube_context_metadata",
-    "_youtube_thumbnail",
-    "fetch_playlist_items",
-    "input_digest",
-    "matches_team_person",
-    "playlist_snapshot",
-    "remove_playlist_item",
-    "set_video_public",
-    "sheet_snapshot",
-    "build_preview_token",
-    "fetch_playlist_items",
-    "fetch_video_details",
-    "get_all_rows_for_sheet",
-    "get_sheet_headers",
-    "http_error",
-    "input_digest",
-    "logger",
-    "map_youtube_error",
-    "matches_team_person",
-    "normalize_text",
-    "playlist_snapshot",
-    "remove_playlist_item",
-    "set_video_public",
-    "sheet_snapshot",
-    "update_single_video_metadata",
-    "upload_time_sort_key",
-    "verify_preview_token",
-    "video_snapshot_digest",
-)
-
-
-def _youtube_workflow_dependencies() -> dict[str, Any]:
-    """Provide workflow ports from this API module, including test overrides."""
-    namespace = globals()
-    return {name: namespace[name] for name in _YOUTUBE_WORKFLOW_DEPENDENCY_NAMES}
-
-
-def _resolve_playlist_id(context: YouTubeRequestContext, requested: Optional[str]) -> str:
-    # The account-level playlist is authoritative.  The request field remains
-    # accepted only as a migration fallback for old clients/accounts that have
-    # never saved the shared setting.
-    configured_value = get_account_setting(context.owner_sub, "default_playlist_id", "")
-    raw_value = configured_value or requested
-    if not str(raw_value or "").strip():
-        return ""
-    playlist_id = normalize_playlist_id(raw_value)
-    if not playlist_id:
-        raise http_error(400, "playlist_invalid", "播放清單網址或 ID 格式不正確。")
-    return playlist_id
-
-
-def _quota_http_exception(exc: YouTubeQuotaUnavailable) -> HTTPException:
-    detail = exc.to_dict()
-    return http_error(
-        429,
-        detail["code"],
-        detail["message"],
-        retryable=True,
-        reset_at=detail.get("reset_at"),
-        youtube_slot=detail.get("youtube_slot"),
-    )
-
-
-def _switch_youtube_context(
-    context: YouTubeRequestContext,
-    *,
-    estimated_units: int,
-    attempted_slots: set[str],
-) -> YouTubeRequestContext | None:
-    """Select the other Auto slot after a quota failure.
-
-    The initial request context remains immutable for ordinary work, but a
-    provider quota failure is a safe boundary: both configured slots are
-    required to represent the same channel, and the failed request did not
-    perform a write. The caller retries only that operation on the alternate
-    slot and keeps the same account-bound preview data.
-    """
-
-    if context.routing_mode != "auto_primary" or not context.session_id:
-        return None
-    for slot in ("secondary", "primary"):
-        if slot == context.slot or slot in attempted_slots:
-            continue
-        try:
-            decision = choose_youtube_slot(
-                context.session_id,
-                context.owner_sub,
-                estimated_units=max(int(estimated_units or 0), 1),
-                slot_hint=slot,
-            )
-        except HTTPException:
-            continue
-        if decision.slot == context.slot or decision.slot in attempted_slots:
-            continue
-        return create_youtube_request_context(
-            decision,
-            context.owner_sub,
-            session_id=context.session_id,
-            selection_reason=f"auto_{decision.slot}_quota_fallback",
-        )
-    return None
-
-
-def _run_youtube_operation_with_quota_fallback(
-    context: YouTubeRequestContext,
-    operation,
-    *,
-    estimated_units: int,
-    attempted_slots: set[str],
-) -> tuple[YouTubeRequestContext, Any]:
-    """Run one read/write boundary and retry it once on the other Auto slot."""
-
-    try:
-        return context, operation(context)
-    except YouTubeQuotaUnavailable:
-        fallback_context = _switch_youtube_context(
-            context,
-            estimated_units=max(int(estimated_units or 0), 1),
-            attempted_slots=attempted_slots,
-        )
-        if fallback_context is None:
-            raise
-        attempted_slots.add(fallback_context.slot)
-        return fallback_context, operation(fallback_context)
 
 
 def _quota_estimate(operation: str, item_count: int, *, slot: Optional[str] = None) -> dict:
@@ -269,16 +139,26 @@ def _quota_estimate(operation: str, item_count: int, *, slot: Optional[str] = No
     }
 
 
-def get_youtube_workflow_service() -> YoutubeWorkflowService:
-    """Build the YouTube workflow adapter through FastAPI dependency injection."""
-    return YoutubeWorkflowService(_youtube_workflow_dependencies())
-
-
 def _resolve_workflow_service(workflows: Any) -> YoutubeWorkflowService:
     """Preserve direct route-function calls used by existing tests and tools."""
     if getattr(workflows, "dependency", None) is get_youtube_workflow_service:
-        return get_youtube_workflow_service()
+        return create_youtube_workflow_service(overrides=_youtube_workflow_test_overrides())
     return workflows
+
+
+def _youtube_workflow_test_overrides() -> dict[str, Any]:
+    """Keep direct endpoint tests isolated while HTTP requests use the provider factory."""
+    return {
+        "_switch_youtube_context": _switch_youtube_context,
+        "fetch_playlist_items": fetch_playlist_items,
+        "fetch_video_details": fetch_video_details,
+        "get_all_rows_for_sheet": get_all_rows_for_sheet,
+        "get_sheet_headers": get_sheet_headers,
+        "remove_playlist_item": remove_playlist_item,
+        "set_video_public": set_video_public,
+        "update_single_video_metadata": update_single_video_metadata,
+        "verify_preview_token": verify_preview_token,
+    }
 
 
 @router.get("/quota-usage")
@@ -435,77 +315,6 @@ def _playlist_preview_token(context: YouTubeRequestContext, playlist_id: str, vi
         playlist_id=playlist_id,
         playlist=playlist_snapshot_from_preview(videos),
     )
-
-
-def _verify_playlist_preview_token(
-    context: YouTubeRequestContext,
-    playlist_id: str,
-    expected_playlist: dict[str, Any],
-    preview_token: Optional[str],
-    *,
-    operation: str = "youtube.playlist_preview",
-    token_slot: Optional[str] = None,
-) -> None:
-    if not preview_token or not verify_preview_token(
-        preview_token,
-        owner_sub=context.owner_sub,
-        youtube_slot=token_slot or context.slot,
-        operation=operation,
-        playlist_id=playlist_id,
-        playlist=expected_playlist,
-    ):
-        raise _stale_preview_exception()
-
-
-def _validate_batch_inputs(
-    payload: BatchUpdateInput,
-    owner_sub: str,
-    action_label: str = "預覽",
-) -> tuple[str, str, str, list[tuple[str, str]], list[tuple[str, str]]]:
-    """Extract and validate spreadsheet ID, title/description columns, and assignments."""
-    spreadsheet_id = (
-        payload.spreadsheet_url_or_id or get_account_setting(owner_sub, "default_spreadsheet_id", "")
-    ).strip()
-    if not spreadsheet_id:
-        raise http_error(400, "spreadsheet_required", "請提供試算表 ID 或網址。")
-    title_column = normalize_text(payload.title_column)
-    description_column = normalize_text(payload.description_column)
-    if title_column == description_column:
-        raise http_error(
-            400,
-            "columns_must_differ",
-            "標題欄位與描述欄位必須不同。",
-            field_errors={"description_column": ["不可與 title_column 相同。"]},
-        )
-    all_assignments = [(assignment.video_id, normalize_text(assignment.person)) for assignment in payload.assignments]
-    active_assignments = [(video_id, person) for video_id, person in all_assignments if person and person != "不編輯"]
-    if not active_assignments:
-        raise http_error(400, "no_active_assignments", f"目前沒有任何影片被指定人物，請先選擇人物後再{action_label}。")
-    return spreadsheet_id, title_column, description_column, all_assignments, active_assignments
-
-
-def _load_and_validate_sheet_data(
-    sheet_creds: Credentials,
-    spreadsheet_id: str,
-    worksheet_name: str,
-    title_column: str,
-    description_column: str,
-) -> tuple[list[str], list[dict]]:
-    """Load sheet headers and rows, validating required columns and presence of data."""
-    headers = get_sheet_headers(sheet_creds, spreadsheet_id, worksheet_name)
-    required_headers = ["所屬團體", "人", title_column, description_column]
-    missing_headers = [header for header in required_headers if header not in headers]
-    if missing_headers:
-        raise http_error(
-            400,
-            "sheet_columns_missing",
-            f"工作表「{worksheet_name}」缺少必要欄位，請重新整理後再試。",
-            field_errors={"worksheet_name": [f"缺少欄位：{', '.join(missing_headers)}。"]},
-        )
-    sheet_rows = get_all_rows_for_sheet(sheet_creds, spreadsheet_id, worksheet_name)
-    if not sheet_rows:
-        raise http_error(400, "sheet_rows_empty", f"工作表「{worksheet_name}」沒有可用資料列。")
-    return headers, sheet_rows
 
 
 @router.post("/batch-preview")

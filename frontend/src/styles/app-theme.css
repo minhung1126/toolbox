@@ -57,7 +57,7 @@
 .sidebar-brand-copy h2 {
   font-size: 1.15rem;
   font-weight: 700;
-  color: #ffffff;
+  color: #fff;
   letter-spacing: -0.02em;
 }
 
@@ -83,7 +83,7 @@
 }
 
 .sidebar-toggle:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(255 255 255 / 8%);
   color: var(--text-main);
 }
 
@@ -120,9 +120,9 @@
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgb(255 255 255 / 5%);
   color: var(--text-main);
-  border-color: rgba(255, 255, 255, 0.06);
+  border-color: rgb(255 255 255 / 6%);
 }
 
 .nav-item:hover svg {
@@ -130,9 +130,9 @@
 }
 
 .nav-item.active {
-  background: rgba(99, 102, 241, 0.14);
+  background: rgb(99 102 241 / 14%);
   color: #c7d2fe;
-  border-color: rgba(99, 102, 241, 0.28);
+  border-color: rgb(99 102 241 / 28%);
   font-weight: 600;
   box-shadow: inset 3px 0 0 var(--primary);
 }
@@ -162,8 +162,7 @@
   justify-content: space-between;
 }
 
-.nav-group-toggle > div,
-.nav-group-toggle > span {
+.nav-group-label {
   display: flex;
   align-items: center;
   gap: 11px;
@@ -265,9 +264,9 @@
   min-height: unset;
   line-height: 1.2;
   padding: 3px 7px;
-  border: 1px solid rgba(244, 63, 94, 0.2);
+  border: 1px solid rgb(244 63 94 / 20%);
   border-radius: var(--radius-xs);
-  background: rgba(244, 63, 94, 0.06);
+  background: rgb(244 63 94 / 6%);
   color: #fb7185;
   font-size: 0.75rem;
   font-weight: 600;
@@ -279,8 +278,8 @@
 }
 
 .logout-button:hover {
-  background: rgba(244, 63, 94, 0.16);
-  border-color: rgba(244, 63, 94, 0.35);
+  background: rgb(244 63 94 / 16%);
+  border-color: rgb(244 63 94 / 35%);
   color: #fda4af;
 }
 
@@ -444,15 +443,15 @@
 }
 
 .filter-option:hover {
-  background: rgba(99, 102, 241, 0.08);
-  border-color: rgba(99, 102, 241, 0.4);
+  background: rgb(99 102 241 / 8%);
+  border-color: rgb(99 102 241 / 40%);
   color: var(--text-main);
 }
 
 .filter-option-selected {
-  background: rgba(99, 102, 241, 0.15);
+  background: rgb(99 102 241 / 15%);
   border-color: var(--primary);
-  color: #ffffff;
+  color: #fff;
   box-shadow: 0 0 0 1px var(--primary);
 }
 
@@ -486,19 +485,19 @@
 
 .video-card:hover {
   background: var(--bg-card-hover);
-  border-color: rgba(99, 102, 241, 0.35);
+  border-color: rgb(99 102 241 / 35%);
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
 }
 
 .video-card-skipped {
-  background: rgba(245, 158, 11, 0.08);
-  border-color: rgba(245, 158, 11, 0.3);
+  background: rgb(245 158 11 / 8%);
+  border-color: rgb(245 158 11 / 30%);
 }
 
 .video-card-assigned {
-  background: rgba(16, 185, 129, 0.08);
-  border-color: rgba(16, 185, 129, 0.3);
+  background: rgb(16 185 129 / 8%);
+  border-color: rgb(16 185 129 / 30%);
 }
 
 .video-card-selected {
@@ -543,24 +542,24 @@
 }
 
 .status-message-error {
+  border-color: var(--danger-border);
   border-left-color: var(--danger);
   background: var(--danger-bg);
   color: var(--danger-text);
-  border-color: var(--danger-border);
 }
 
 .status-message-warning {
+  border-color: var(--warning-border);
   border-left-color: var(--warning);
   background: var(--warning-bg);
   color: var(--warning-text);
-  border-color: var(--warning-border);
 }
 
 .status-message-success {
+  border-color: var(--success-border);
   border-left-color: var(--success);
   background: var(--success-bg);
   color: var(--success-text);
-  border-color: var(--success-border);
 }
 
 .empty-state {
@@ -638,7 +637,7 @@
   letter-spacing: -0.02em;
 }
 
-.quota-usage-value span {
+.quota-usage-suffix {
   margin-left: 0.5rem;
   color: var(--text-muted);
   font-size: 0.85rem;
@@ -663,26 +662,26 @@
 
 .quota-state-normal {
   --quota-color: #818cf8;
-  --quota-border: rgba(99, 102, 241, 0.35);
-  --quota-background: rgba(99, 102, 241, 0.12);
+  --quota-border: rgb(99 102 241 / 35%);
+  --quota-background: rgb(99 102 241 / 12%);
 }
 
 .quota-state-warning {
   --quota-color: #fbbf24;
-  --quota-border: rgba(245, 158, 11, 0.35);
-  --quota-background: rgba(245, 158, 11, 0.12);
+  --quota-border: rgb(245 158 11 / 35%);
+  --quota-background: rgb(245 158 11 / 12%);
 }
 
-.quota-state-safety_blocked {
+.quota-state-safety-blocked {
   --quota-color: #fb923c;
-  --quota-border: rgba(251, 146, 60, 0.35);
-  --quota-background: rgba(251, 146, 60, 0.12);
+  --quota-border: rgb(251 146 60 / 35%);
+  --quota-background: rgb(251 146 60 / 12%);
 }
 
-.quota-state-confirmed_exhausted {
+.quota-state-confirmed-exhausted {
   --quota-color: #fb7185;
-  --quota-border: rgba(244, 63, 94, 0.35);
-  --quota-background: rgba(244, 63, 94, 0.12);
+  --quota-border: rgb(244 63 94 / 35%);
+  --quota-background: rgb(244 63 94 / 12%);
 }
 
 /* --------------------------------------------------------------------------
@@ -699,9 +698,8 @@
   justify-content: center;
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
     max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
-  background: rgba(14, 15, 18, 0.78);
+  background: rgb(14 15 18 / 78%);
   backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 
 .confirm-dialog {
@@ -743,9 +741,8 @@
    Toasts Notifications
    -------------------------------------------------------------------------- */
 .toast-item {
-  background: rgba(17, 24, 39, 0.95);
+  background: rgb(17 24 39 / 95%);
   backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
@@ -755,26 +752,26 @@
 }
 
 .toast-success {
-  background: rgba(16, 185, 129, 0.12);
-  border-color: rgba(16, 185, 129, 0.35);
+  background: rgb(16 185 129 / 12%);
+  border-color: rgb(16 185 129 / 35%);
   color: #34d399;
 }
 
 .toast-error {
-  background: rgba(244, 63, 94, 0.12);
-  border-color: rgba(244, 63, 94, 0.35);
+  background: rgb(244 63 94 / 12%);
+  border-color: rgb(244 63 94 / 35%);
   color: #fb7185;
 }
 
 .toast-warning {
-  background: rgba(245, 158, 11, 0.12);
-  border-color: rgba(245, 158, 11, 0.35);
+  background: rgb(245 158 11 / 12%);
+  border-color: rgb(245 158 11 / 35%);
   color: #fbbf24;
 }
 
 .toast-info {
-  background: rgba(56, 189, 248, 0.12);
-  border-color: rgba(56, 189, 248, 0.35);
+  background: rgb(56 189 248 / 12%);
+  border-color: rgb(56 189 248 / 35%);
   color: #38bdf8;
 }
 
@@ -803,9 +800,8 @@
 }
 
 .drawer-backdrop {
-  background: rgba(14, 15, 18, 0.78);
+  background: rgb(14 15 18 / 78%);
   backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 
 @media (max-width: 767px) {

@@ -39,6 +39,14 @@ describe('YouTubeQuotaBanner', () => {
     expect(screen.getByText(/官方重設/)).toHaveTextContent('本地時間');
   });
 
+  it('shows the quota ledger update time returned by the server', async () => {
+    const updatedAt = '2026-08-03T08:00:00Z';
+    api.getYoutubeQuotaUsage.mockResolvedValue({ ...usage(), updated_at: updatedAt });
+    render(<YouTubeQuotaBanner />);
+
+    expect(await screen.findByText(`最後更新：${new Date(updatedAt).toLocaleString('zh-TW')}`)).toBeInTheDocument();
+  });
+
   it('shows confirmed exhaustion as blocked with zero effective availability', async () => {
     api.getYoutubeQuotaUsage.mockResolvedValue(usage('confirmed_exhausted'));
     render(<YouTubeQuotaBanner />);
@@ -46,6 +54,9 @@ describe('YouTubeQuotaBanner', () => {
       expect(screen.getByText('Google 已確認配額耗盡；系統已停止新的 YouTube 請求，直到官方重設。')).toBeInTheDocument()
     );
     expect(screen.getByText(/系統可用 0 單位/)).toBeInTheDocument();
+    expect(
+      screen.getByText('Google 已確認配額耗盡；系統已停止新的 YouTube 請求，直到官方重設。').closest('.quota-banner')
+    ).toHaveClass('quota-state-confirmed-exhausted');
   });
 
   it('loads the selected secondary slot ledger', async () => {

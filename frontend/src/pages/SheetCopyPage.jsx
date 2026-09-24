@@ -290,7 +290,7 @@ export default function SheetCopyPage({ sysSettings }) {
 
       <section className="glass-panel card-padding sheet-copy-display-panel">
         <div className="filter-panel-header">
-          <div>
+          <div className="filter-panel-heading-group">
             <strong>
               <Search size={17} aria-hidden="true" />
               顯示內容

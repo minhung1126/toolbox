@@ -32,7 +32,7 @@ export default function TeamPersonFilterPanel({
   return (
     <section className={`filter-panel${disabled ? ' filter-panel-disabled' : ''}`}>
       <div className="filter-panel-header">
-        <div>
+        <div className="filter-panel-heading-group">
           <strong>
             <Users size={17} aria-hidden="true" />
             團體與人物篩選
