@@ -13,7 +13,9 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
-import { api } from '../services/api';
+import { authApi } from '../features/auth/api/authApi';
+import { sheetsSettingsApi } from '../features/sheets/api/sheetsSettingsApi';
+import { ytmusicSettingsApi } from '../features/ytmusic/api/ytmusicSettingsApi';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ServiceAuthCard from '../components/ServiceAuthCard';
@@ -34,8 +36,8 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
 
   const sheetsOAuth = useOAuthConnect({
     serviceName: 'sheets',
-    getAuthUrl: api.getSheetsAuthUrl,
-    disconnect: api.disconnectSheets,
+    getAuthUrl: sheetsSettingsApi.getAuthUrl,
+    disconnect: sheetsSettingsApi.disconnect,
     onAfterDisconnect: refreshAuthUser,
     serviceLabel: 'Google 試算表授權',
     successMessage: '已解除 Google 試算表授權',
@@ -43,8 +45,8 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
 
   const ytmusicOAuth = useOAuthConnect({
     serviceName: 'ytmusic',
-    getAuthUrl: api.getYtmusicAuthUrl,
-    disconnect: api.disconnectYtmusic,
+    getAuthUrl: ytmusicSettingsApi.getAuthUrl,
+    disconnect: ytmusicSettingsApi.disconnect,
     onAfterDisconnect: refreshAuthUser,
     serviceLabel: 'YouTube Music 授權',
     successMessage: '已解除 YouTube Music 授權',
@@ -53,7 +55,7 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
   const handleStartLoginOAuth = async () => {
     try {
       saveOAuthReturnPath('google', `${location.pathname}${location.search}`);
-      const result = await api.getAuthUrl();
+      const result = await authApi.getLoginUrl();
       if (result.auth_url) window.location.href = result.auth_url;
     } catch (error) {
       toast.error(`取得控制台登入授權網址失敗：${error.message}`);

@@ -3,11 +3,14 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import GoogleSheetSettingsPage from './GoogleSheetSettingsPage';
-import { api } from '../services/api';
+import { sheetsSettingsApi } from '../features/sheets/api/sheetsSettingsApi';
 
-vi.mock('../services/api', () => ({
-  api: {
-    updateSharedSettings: vi.fn(),
+vi.mock('../features/sheets/api/sheetsSettingsApi', () => ({
+  sheetsSettingsApi: {
+    getAuthUrl: vi.fn(),
+    disconnect: vi.fn(),
+    getSettings: vi.fn(),
+    updateSettings: vi.fn(),
   },
 }));
 
@@ -34,7 +37,7 @@ describe('GoogleSheetSettingsPage autosave lifecycle', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
-    api.updateSharedSettings.mockResolvedValue({});
+    sheetsSettingsApi.updateSettings.mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -46,7 +49,7 @@ describe('GoogleSheetSettingsPage autosave lifecycle', () => {
     const { unmount } = renderPage(refreshSettings);
 
     fireEvent.change(screen.getByLabelText('Google Sheet'), { target: { value: 'latest-sheet' } });
-    expect(api.updateSharedSettings).not.toHaveBeenCalled();
+    expect(sheetsSettingsApi.updateSettings).not.toHaveBeenCalled();
 
     unmount();
     await act(async () => {
@@ -54,14 +57,14 @@ describe('GoogleSheetSettingsPage autosave lifecycle', () => {
       await Promise.resolve();
     });
 
-    expect(api.updateSharedSettings).toHaveBeenCalledTimes(1);
-    expect(api.updateSharedSettings).toHaveBeenCalledWith({ default_spreadsheet_id: 'latest-sheet' });
+    expect(sheetsSettingsApi.updateSettings).toHaveBeenCalledTimes(1);
+    expect(sheetsSettingsApi.updateSettings).toHaveBeenCalledWith({ default_spreadsheet_id: 'latest-sheet' });
     expect(refreshSettings).not.toHaveBeenCalled();
   });
 
   it('does not duplicate an autosave already queued before unmount', async () => {
     let resolveSave;
-    api.updateSharedSettings.mockReturnValue(
+    sheetsSettingsApi.updateSettings.mockReturnValue(
       new Promise((resolve) => {
         resolveSave = resolve;
       })
@@ -74,10 +77,10 @@ describe('GoogleSheetSettingsPage autosave lifecycle', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(api.updateSharedSettings).toHaveBeenCalledTimes(1);
+    expect(sheetsSettingsApi.updateSettings).toHaveBeenCalledTimes(1);
 
     unmount();
-    expect(api.updateSharedSettings).toHaveBeenCalledTimes(1);
+    expect(sheetsSettingsApi.updateSettings).toHaveBeenCalledTimes(1);
 
     resolveSave({});
     await act(async () => {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, FileSpreadsheet, RefreshCw, Save, XCircle } from 'lucide-react';
-import { api } from '../services/api';
+import { sheetsSettingsApi } from '../features/sheets/api/sheetsSettingsApi';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import SourceLinkInput from '../components/SourceLinkInput';
@@ -30,8 +30,8 @@ export default function GoogleSheetSettingsPage({ sysSettings = {}, refreshSetti
     handleConfirmDisconnect: handleConfirmDisconnectSheets,
   } = useOAuthConnect({
     serviceName: 'sheets',
-    getAuthUrl: api.getSheetsAuthUrl,
-    disconnect: api.disconnectSheets,
+    getAuthUrl: sheetsSettingsApi.getAuthUrl,
+    disconnect: sheetsSettingsApi.disconnect,
     onAfterDisconnect: refreshAuthUser,
     serviceLabel: 'Google 試算表授權',
   });
@@ -41,7 +41,7 @@ export default function GoogleSheetSettingsPage({ sysSettings = {}, refreshSetti
     delay: 500,
     compareFn: sameGoogleSheetForm,
     onSave: async (nextData) => {
-      await api.updateSharedSettings(nextData);
+      await sheetsSettingsApi.updateSettings(nextData);
     },
     onSuccess: async (nextData, { notify }) => {
       await refreshSettings?.();

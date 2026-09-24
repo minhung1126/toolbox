@@ -66,6 +66,12 @@ import type {
   SystemCredentialsResponse,
   SystemCredentialsUpdateRequest,
 } from '../features/settings/api/systemSettingsTypes';
+import type {
+  SheetsAuthUrlResponse,
+  SheetsDisconnectResponse,
+  SharedSheetSettings,
+  SharedSheetSettingsUpdateResponse,
+} from '../features/sheets/api/sheetsSettingsTypes';
 
 export function normalizeYoutubePlaylistInput(value: unknown): string;
 
@@ -123,4 +129,8 @@ export const api: {
   addAllowlistEmail(email: string): Promise<SystemAllowlistMutationResponse>;
   removeAllowlistEmail(email: string): Promise<SystemAllowlistMutationResponse>;
   updateAllowNewUsers(allowNewUsers: boolean): Promise<AllowNewUsersUpdateResponse>;
+  getSheetsAuthUrl(): Promise<SheetsAuthUrlResponse>;
+  disconnectSheets(): Promise<SheetsDisconnectResponse>;
+  getSharedSettings(): Promise<SharedSheetSettings>;
+  updateSharedSettings(settings: SharedSheetSettings): Promise<SharedSheetSettingsUpdateResponse>;
 };
