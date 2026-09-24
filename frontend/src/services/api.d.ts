@@ -47,6 +47,16 @@ import type {
   YtmusicCustomTokenMutationResponse,
   YtmusicCustomTokenValidationResponse,
 } from '../features/ytmusic/api/tokenTypes';
+import type {
+  WeverseFileMetadata,
+  WeversePackageListResponse,
+  WeverseRecentPathsResponse,
+  WeverseScanResponse,
+  WeverseUploadFromPathRequest,
+  WeverseUploadHistoryResponse,
+  WeverseUploadQueuedResponse,
+  WeverseUploadTaskResponse,
+} from '../features/weverse/api/types';
 
 export function normalizeYoutubePlaylistInput(value: unknown): string;
 
@@ -89,4 +99,11 @@ export const api: {
   getYoutubeAuthUrl(slot: YoutubeSlot): Promise<YoutubeAuthUrlResponse>;
   activateYoutubeSlot(slot: YoutubeSlot): Promise<unknown>;
   disconnectYoutube(slot: YoutubeSlot, options: { confirm: boolean }): Promise<unknown>;
+  scanWeverseFolder(folderPath: string): Promise<WeverseScanResponse>;
+  parseWeverseFiles(files: WeverseFileMetadata[]): Promise<WeversePackageListResponse>;
+  uploadWeverseFromPath(payload: WeverseUploadFromPathRequest): Promise<WeverseUploadQueuedResponse>;
+  uploadWeverseFiles(formData: FormData): Promise<WeverseUploadQueuedResponse>;
+  getWeverseUploadTask(taskId: string): Promise<WeverseUploadTaskResponse>;
+  getWeverseUploadHistory(limit?: number): Promise<WeverseUploadHistoryResponse>;
+  getWeverseRecentPaths(): Promise<WeverseRecentPathsResponse>;
 };

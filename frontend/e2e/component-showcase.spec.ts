@@ -85,6 +85,21 @@ test('component showcase stays readable without horizontal overflow on supported
   }
 });
 
+test('dashboard uses feature-owned styles on supported widths', async ({ page }) => {
+  await mockAuthenticatedBackend(page);
+
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/dashboard');
+    await expect(page.getByRole('heading', { level: 1, name: 'Toolbox 控制台' })).toBeVisible();
+    await expect(page.locator('.dashboard-status-card').first()).toHaveCSS('background-color', 'rgb(28, 30, 36)');
+    await expect(page.locator('.feature-card').first()).toBeVisible();
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `Dashboard horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+  }
+});
+
 test('login and setup pages use the shared auth layout on supported widths', async ({ page }) => {
   await mockAuthenticatedBackend(page, {
     '/api/v1/auth/user': { authenticated: false },
