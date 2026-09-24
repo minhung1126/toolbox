@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import { normalizeYoutubePlaylistInput } from '../services/api';
+import { normalizeYoutubePlaylistInput } from '../features/youtube/api/youtubeBatchApi';
 import { youtubeSettingsApi } from '../features/youtube/api/youtubeSettingsApi';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';

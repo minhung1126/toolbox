@@ -91,6 +91,14 @@ export interface WeverseUploadQueuedResponse {
   task_id: string;
 }
 
+export interface WeverseUploaderAuthUrlResponse {
+  auth_url: string;
+}
+
+export interface WeverseUploaderDisconnectResponse {
+  status: 'video_uploader_disconnected';
+}
+
 export interface WeverseUploadFromPathRequest {
   video_path: string;
   title: string;
@@ -103,6 +111,8 @@ export interface WeverseUploadFromPathRequest {
 }
 
 export interface WeverseUploadApi {
+  getUploaderAuthUrl(): Promise<WeverseUploaderAuthUrlResponse>;
+  disconnectUploader(): Promise<WeverseUploaderDisconnectResponse>;
   getRecentPaths(): Promise<WeverseRecentPathsResponse>;
   getHistory(limit?: number): Promise<WeverseUploadHistoryResponse>;
   getTask(taskId: string): Promise<WeverseUploadTaskResponse>;

@@ -12,7 +12,6 @@ import {
   UploadCloud,
   Video,
 } from 'lucide-react';
-import { api } from '../services/api';
 import './WeverseUploaderPage.css';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -24,6 +23,7 @@ import {
   useWeverseUploadWorkflow,
   YOUTUBE_CATEGORIES,
 } from '../features/weverse/hooks/useWeverseUploadWorkflow';
+import { weverseUploadApi } from '../features/weverse/api/weverseUploadApi';
 
 export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
   const toast = useToast();
@@ -32,8 +32,8 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
   const { connecting, confirmDisconnect, setConfirmDisconnect, handleConnect, handleConfirmDisconnect } =
     useOAuthConnect({
       serviceName: 'video_uploader',
-      getAuthUrl: api.getVideoUploaderAuthUrl,
-      disconnect: api.disconnectVideoUploader,
+      getAuthUrl: weverseUploadApi.getUploaderAuthUrl,
+      disconnect: weverseUploadApi.disconnectUploader,
       onAfterDisconnect: refreshAuthUser,
       serviceLabel: '影片上傳 YouTube 頻道授權',
       successMessage: '已解除影片上傳專屬 YouTube 頻道授權',

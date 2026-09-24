@@ -58,6 +58,8 @@ import type {
   WeverseUploadHistoryResponse,
   WeverseUploadQueuedResponse,
   WeverseUploadTaskResponse,
+  WeverseUploaderAuthUrlResponse,
+  WeverseUploaderDisconnectResponse,
 } from '../features/weverse/api/types';
 import type {
   AllowNewUsersUpdateResponse,
@@ -117,6 +119,8 @@ export const api: {
   activateYoutubeSlot(slot: YoutubeSlot): Promise<unknown>;
   disconnectYoutube(slot: YoutubeSlot, options: { confirm: boolean }): Promise<unknown>;
   scanWeverseFolder(folderPath: string): Promise<WeverseScanResponse>;
+  getVideoUploaderAuthUrl(): Promise<WeverseUploaderAuthUrlResponse>;
+  disconnectVideoUploader(): Promise<WeverseUploaderDisconnectResponse>;
   parseWeverseFiles(files: WeverseFileMetadata[]): Promise<WeversePackageListResponse>;
   uploadWeverseFromPath(payload: WeverseUploadFromPathRequest): Promise<WeverseUploadQueuedResponse>;
   uploadWeverseFiles(formData: FormData): Promise<WeverseUploadQueuedResponse>;

@@ -10,7 +10,7 @@
 
 本分支已完成可靠性修正、五個主要前端工作流程的邏輯抽離、YouTube 批次使用案例服務、第一批共用 UI 與前端品質門檻。以下只將有程式碼及測試證據的工作列為完成；整份路線圖仍有明確未完成項目。
 
-最新本機完整驗證：前端 67 個 Vitest 檔案、314 項通過；ESLint、TypeScript `typecheck`、Stylelint、Prettier 檢查與 production build 通過。Playwright 使用本機 Edge，共 21 項通過：在 390／768／1440 px 驗證 Dashboard、共用元件展示、登入與初次設定頁、系統設定頁、Quick Token Drawer、YouTube 設定子導覽及九個工具／設定頁版面；provider fake 覆蓋 Weverse 上傳至完成、Google OAuth URL 導向與 Google 帳號設定頁響應式版面、Playlist Sort 新歌單建立、YouTube Batch Update 預覽至執行、Publish Cleaner 預覽至發布完成、Photo Curator ZIP 匯出及 Sticky Notes 自動儲存／置頂／刪除。後端隔離副本 226 項 pytest、Ruff lint／format 及 YouTube workflow FastAPI dependency 注入測試通過。GitHub Actions run 15 在 commit `111b1f4` 通過 Python 3.11／Node 20 後端及前端檢查、Chromium E2E、Docker 建置與 Compose 驗證；run 21 在 commit `15860c9` 及 run 22 在 commit `4cbaddf` 及 run 23 在 commit `2761e6d` 均通過同 SHA CI。未安裝 actionlint；未使用真實 Google／YouTube 帳號驗收，也未演練實際部署回退。
+最新本機完整驗證：前端 68 個 Vitest 檔案、316 項通過；ESLint、TypeScript `typecheck`、Stylelint、Prettier 檢查與 production build 通過。Playwright 使用本機 Edge，共 21 項通過：在 390／768／1440 px 驗證 Dashboard、共用元件展示、登入與初次設定頁、系統設定頁、Quick Token Drawer、YouTube 設定子導覽及九個工具／設定頁版面；provider fake 覆蓋 Weverse 上傳至完成、Google OAuth URL 導向與 Google 帳號設定頁響應式版面、Playlist Sort 新歌單建立、YouTube Batch Update 預覽至執行、Publish Cleaner 預覽至發布完成、Photo Curator ZIP 匯出及 Sticky Notes 自動儲存／置頂／刪除。後端隔離副本 226 項 pytest、Ruff lint／format 及 YouTube workflow FastAPI dependency 注入測試通過。GitHub Actions run 15 在 commit `111b1f4` 通過 Python 3.11／Node 20 後端及前端檢查、Chromium E2E、Docker 建置與 Compose 驗證；run 21 在 commit `15860c9` 及 run 22 在 commit `4cbaddf` 及 run 23 在 commit `2761e6d` 均通過同 SHA CI。未安裝 actionlint；未使用真實 Google／YouTube 帳號驗收，也未演練實際部署回退。
 
 已完成：
 
@@ -24,6 +24,7 @@
 - System Settings 頁的憑證、允許新帳號、白名單與確認刪除區塊已改用頁面專屬 CSS 和語意 token；移除固定 inline layout 與玻璃擬態 class，操作按鈕改用共用 Button，新增信箱欄位的 label／說明與密鑰切換的 pressed 狀態。390／768／1440 px E2E 及畫面截圖驗證頁面無水平溢位，排列與深色設計系統一致。
 - System Settings 的 OAuth 憑證、允許登入白名單與新增使用者政策已有 feature API wrapper 和明確的 TypeScript request／response contract；SystemSettingsPage 不再直接呼叫全域 api 物件，wrapper 與頁面互動各有測試。
 - Google Sheets OAuth 連線／解除及共用試算表設定寫入已移入 Sheets feature API wrapper，附 request／response TypeScript 契約與 wrapper 測試；Google Account Settings 已改用 Auth、Sheets、YouTube Music 各自的 API 邊界。
+- Playlist Sort 頁的 YouTube Music OAuth 改用 YT Music feature API；Weverse 上傳頁的專屬 uploader OAuth 已併入 Weverse typed API boundary。YouTube Settings 與 Publish Cleaner 的播放清單正規化也改由 YouTube feature API 提供，頁面不再直接依賴全域 API service。
 - 各工具的前端 manifest 已拆到 feature 目錄，彙整工具 metadata、導覽、dashboard cards 與受保護 routes；catalog 啟動時拒絕重複 ID／路由及不在 PATHS 的 destination，AppRoutes 由 registry 組裝 feature routes。
 - Playwright 增加 390／768／1440 px 共用元件展示溢位與截圖測試，並驗證九個工具／設定頁的樣式載入及多尺寸版面、Weverse 資料夾拖曳／掃描／複查與 fake provider 上傳至完成、Google OAuth URL 導向、Playlist Sort 新歌單、YouTube Batch Update 預覽與執行、Publish Cleaner 清單／配額／快照確認至發布完成、Photo Curator ZIP 匯出及 Sticky Notes API 生命週期。前後端工具 ID 與路由契約測試發現並修正 `youtube-integrations`／`integrations-quota` 漂移。
 - 發布 workflow 只會發布已通過驗證的同一個 main SHA；README 的支援平台與前端路徑已修正。

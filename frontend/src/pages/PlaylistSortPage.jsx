@@ -19,7 +19,6 @@ import {
   X,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { api } from '../services/api';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { StatusMessage } from '../components/StatusMessage';
@@ -49,6 +48,7 @@ import PreviewTable, { StatusDot } from '../components/playlist-sort/PreviewTabl
 import InteractivePreviewTable from '../components/playlist-sort/InteractivePreviewTable';
 import { usePlaylistSortWorkflow } from '../features/ytmusic/hooks/usePlaylistSortWorkflow';
 import { playlistSortApi } from '../features/ytmusic/api/playlistSortApi';
+import { ytmusicSettingsApi } from '../features/ytmusic/api/ytmusicSettingsApi';
 
 export {
   getLocaleCollation,
@@ -155,8 +155,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
 
   const ytmusicOAuth = useOAuthConnect({
     serviceName: 'ytmusic',
-    getAuthUrl: api.getYtmusicAuthUrl,
-    disconnect: api.disconnectYtmusic,
+    getAuthUrl: ytmusicSettingsApi.getAuthUrl,
+    disconnect: ytmusicSettingsApi.disconnect,
     onAfterDisconnect: async () => {
       await refreshAuthUser?.();
       fetchPlaylists();

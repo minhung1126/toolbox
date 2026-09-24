@@ -11,17 +11,25 @@ import PlaylistSortPage, {
   getFirstArtist,
   isGenericArtist,
 } from './PlaylistSortPage';
+import { ytmusicSettingsApi } from '../features/ytmusic/api/ytmusicSettingsApi';
 import { api } from '../services/api';
+
+vi.mock('../utils/navigation', () => ({ redirectToAuth: vi.fn() }));
 
 vi.mock('../services/api', () => ({
   api: {
     getPlaylistSortPlaylists: vi.fn(),
     previewPlaylistSort: vi.fn(),
     applyPlaylistSort: vi.fn(),
-    getYtmusicAuthUrl: vi.fn(),
-    disconnectYtmusic: vi.fn(),
     updateWorkState: vi.fn((key, value) => Promise.resolve({ state: { [key]: value } })),
     getWorkState: vi.fn(() => Promise.resolve({ state: {} })),
+  },
+}));
+
+vi.mock('../features/ytmusic/api/ytmusicSettingsApi', () => ({
+  ytmusicSettingsApi: {
+    getAuthUrl: vi.fn(),
+    disconnect: vi.fn(),
   },
 }));
 
@@ -143,6 +151,18 @@ describe('PlaylistSortPage', () => {
       expect(screen.getByText('我的最愛音樂 (3 首)')).toBeInTheDocument();
       expect(screen.getByText('健身歌單 (5 首)')).toBeInTheDocument();
     });
+  });
+
+  it('uses the YouTube Music feature API to connect a dedicated account', async () => {
+    api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: [] });
+    ytmusicSettingsApi.getAuthUrl.mockResolvedValueOnce({
+      auth_url: 'https://accounts.google.com/o/oauth2/auth?ytmusic=1',
+    });
+
+    renderWithRouter(<PlaylistSortPage authUser={{ authorizations: { ytmusic: { connected: false } } }} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /連結 YouTube Music 專屬帳號/ }));
+    await waitFor(() => expect(ytmusicSettingsApi.getAuthUrl).toHaveBeenCalledOnce());
   });
 
   it('triggers preview and displays comparison results', async () => {

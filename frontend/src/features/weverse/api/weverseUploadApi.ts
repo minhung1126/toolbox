@@ -5,6 +5,8 @@ export type * from './types';
 
 /** Keep the feature's endpoint names and wire contracts inside its API boundary. */
 export const weverseUploadApi: WeverseUploadApi = {
+  getUploaderAuthUrl: () => api.getVideoUploaderAuthUrl(),
+  disconnectUploader: () => api.disconnectVideoUploader(),
   getRecentPaths: () => api.getWeverseRecentPaths(),
   getHistory: (limit) => api.getWeverseUploadHistory(limit),
   getTask: (taskId) => api.getWeverseUploadTask(taskId),

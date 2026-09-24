@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import WeverseUploaderPage from './WeverseUploaderPage';
-import { api } from '../services/api';
+import { weverseUploadApi } from '../features/weverse/api/weverseUploadApi';
 
 const mockToast = {
   success: vi.fn(),
@@ -14,17 +14,17 @@ vi.mock('../components/Toast', () => ({
   useToast: () => mockToast,
 }));
 
-vi.mock('../services/api', () => ({
-  api: {
-    getVideoUploaderAuthUrl: vi.fn(),
-    disconnectVideoUploader: vi.fn(),
-    scanWeverseFolder: vi.fn(),
-    parseWeverseFiles: vi.fn(),
-    uploadWeverseFromPath: vi.fn(),
-    uploadWeverseFiles: vi.fn(),
-    getWeverseUploadTask: vi.fn(),
-    getWeverseUploadHistory: vi.fn().mockResolvedValue({ tasks: [] }),
-    getWeverseRecentPaths: vi.fn().mockResolvedValue({ paths: ['C:\\downloads\\weverse_sample'] }),
+vi.mock('../features/weverse/api/weverseUploadApi', () => ({
+  weverseUploadApi: {
+    getUploaderAuthUrl: vi.fn(),
+    disconnectUploader: vi.fn(),
+    scanFolder: vi.fn(),
+    parseFiles: vi.fn(),
+    uploadFromPath: vi.fn(),
+    uploadFiles: vi.fn(),
+    getTask: vi.fn(),
+    getHistory: vi.fn().mockResolvedValue({ tasks: [] }),
+    getRecentPaths: vi.fn().mockResolvedValue({ paths: ['C:\\downloads\\weverse_sample'] }),
   },
 }));
 
@@ -73,7 +73,7 @@ describe('WeverseUploaderPage', () => {
       },
     };
 
-    api.scanWeverseFolder.mockResolvedValueOnce({
+    weverseUploadApi.scanFolder.mockResolvedValueOnce({
       packages: [
         {
           package_id: '20260923_Live_3-241665049',
@@ -116,7 +116,7 @@ describe('WeverseUploaderPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '掃描並辨識' }));
 
     await waitFor(() => {
-      expect(api.scanWeverseFolder).toHaveBeenCalledWith('C:\\downloads\\20260923_Live_3-241665049');
+      expect(weverseUploadApi.scanFolder).toHaveBeenCalledWith('C:\\downloads\\20260923_Live_3-241665049');
     });
 
     // Step 2 review screen should appear
@@ -139,7 +139,7 @@ describe('WeverseUploaderPage', () => {
       },
     };
 
-    api.scanWeverseFolder.mockResolvedValueOnce({
+    weverseUploadApi.scanFolder.mockResolvedValueOnce({
       packages: [
         {
           package_id: 'test',

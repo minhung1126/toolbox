@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import '../features/youtube/publish-cleaner.css';
 import { publishCleanupApi } from '../features/youtube/api/publishCleanupApi';
-import { normalizeYoutubePlaylistInput } from '../services/api';
+import { normalizeYoutubePlaylistInput } from '../features/youtube/api/youtubeBatchApi';
 import { PATHS } from '../routes/paths';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
