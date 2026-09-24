@@ -36,10 +36,21 @@ import type {
   YoutubeDraftVideoType,
   YoutubeQuotaEstimateRequest,
 } from '../features/youtube/api/youtubeBatchTypes';
+import type {
+  LoginAuthConfig,
+  LoginAuthUrlResponse,
+  SetupRequest,
+  SetupResponse,
+  SetupStatusResponse,
+} from '../features/auth/api/types';
 
 export function normalizeYoutubePlaylistInput(value: unknown): string;
 
 export const api: {
+  getAuthConfig(): Promise<LoginAuthConfig>;
+  getAuthUrl(): Promise<LoginAuthUrlResponse>;
+  getSetupStatus(): Promise<SetupStatusResponse>;
+  performSetup(request: SetupRequest): Promise<SetupResponse>;
   getPlaylistSortPlaylists(params?: { language?: string; location?: string }): Promise<PlaylistListResponse>;
   previewPlaylistSort(request: PlaylistSortPreviewRequest): Promise<PlaylistSortPreviewResponse>;
   applyPlaylistSort(request: PlaylistSortApplyRequest): Promise<PlaylistSortApplyResponse>;

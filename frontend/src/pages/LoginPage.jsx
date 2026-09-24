@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../services/api';
+import { authApi } from '../features/auth/api/authApi';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
 import { PATHS } from '../routes/paths';
 import { Video, LogIn, CheckCircle2, AlertCircle, Lock, RefreshCw } from 'lucide-react';
@@ -16,7 +16,7 @@ export default function LoginPage({ initialError, returnTo }) {
   const checkLoginReadiness = useCallback(async () => {
     setCheckingConfig(true);
     try {
-      const config = await api.getAuthConfig();
+      const config = await authApi.getLoginConfig();
       setAuthConfig(config);
       if (!config.has_client_id || !config.has_client_secret) {
         setReadinessError('Google 登入尚未完成系統設定，請聯絡管理者補齊 OAuth 憑證。');
@@ -40,7 +40,7 @@ export default function LoginPage({ initialError, returnTo }) {
     setOauthError(null);
     try {
       saveOAuthReturnPath('google', returnTo || '/dashboard');
-      const res = await api.getAuthUrl();
+      const res = await authApi.getLoginUrl();
       if (res && res.auth_url) {
         window.location.href = res.auth_url;
       } else {

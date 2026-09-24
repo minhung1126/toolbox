@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Check, CheckCircle2, Copy, Eye, EyeOff, Key, Lock, RefreshCw, Shield, Video } from 'lucide-react';
-import { api } from '../services/api';
+import { authApi } from '../features/auth/api/authApi';
 import { useToast } from '../components/Toast';
 import { PATHS } from '../routes/paths';
 import { copyToClipboard } from '../utils/clipboard';
@@ -28,7 +28,7 @@ export default function SetupWizardPage() {
     setLoadingStatus(true);
     setErrorMessage(null);
     try {
-      const res = await api.getSetupStatus();
+      const res = await authApi.getSetupStatus();
       setSetupStatus(res);
       if (res.development_pin) {
         setPin((prev) => prev || res.development_pin);
@@ -76,7 +76,7 @@ export default function SetupWizardPage() {
 
     setSubmitting(true);
     try {
-      const res = await api.performSetup({
+      const res = await authApi.performSetup({
         googleClientId: clientId.trim(),
         googleClientSecret: clientSecret.trim(),
         adminEmail: adminEmail.trim(),
