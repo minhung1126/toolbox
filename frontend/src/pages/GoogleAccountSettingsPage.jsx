@@ -1,4 +1,5 @@
 import React from 'react';
+import '../features/settings/account-settings.css';
 import {
   CheckCircle2,
   Disc3,
@@ -152,13 +153,9 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
       </div>
 
       {/* Group 2: 已連線第三方服務授權 */}
-      <div style={{ margin: '1.75rem 0 0.75rem 0' }}>
-        <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 0.25rem 0' }}>
-          第三方服務授權矩陣
-        </h3>
-        <p className="section-desc" style={{ margin: 0, fontSize: '0.85rem' }}>
-          控制台採用解耦授權設計，各服務權限依需獨立授權，並提供詳細專屬設定頁面。
-        </p>
+      <div className="account-settings-section-heading">
+        <h3>第三方服務授權矩陣</h3>
+        <p className="section-desc">控制台採用解耦授權設計，各服務權限依需獨立授權，並提供詳細專屬設定頁面。</p>
       </div>
 
       {/* 2. Google 試算表授權 */}
@@ -178,7 +175,7 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
         reconnectText="重新授權 Google 試算表"
         disconnectText="解除試算表授權"
       />
-      <div style={{ margin: '-0.75rem 0 1rem 0', display: 'flex', justifyContent: 'flex-end' }}>
+      <div className="account-settings-service-links">
         <Link className="btn btn-secondary btn-sm" to={PATHS.sheetSettings}>
           <FileSpreadsheet size={14} /> 前往 Sheet 模組設定
         </Link>
@@ -201,15 +198,7 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
         reconnectText="重新授權 YouTube Music"
         disconnectText="解除 YouTube Music 授權"
       />
-      <div
-        style={{
-          margin: '-0.75rem 0 1rem 0',
-          display: 'flex',
-          justifyContent: 'flex-end',
-          gap: '0.5rem',
-          flexWrap: 'wrap',
-        }}
-      >
+      <div className="account-settings-service-links">
         <Link className="btn btn-secondary btn-sm" to={PATHS.ytmusicSettings}>
           <Settings size={14} /> YouTube Music 專屬設定
         </Link>
@@ -240,7 +229,7 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
           安全防護。請至專屬頁面管理各 Slot 頻道授權與連線憑證。
         </p>
         {activeYoutubeEmail && (
-          <div className="settings-grid" style={{ marginBottom: '0.5rem' }}>
+          <div className="settings-grid account-settings-active-account">
             <div className="glass-panel settings-info-card">
               <strong>連線帳號</strong>
               <p>{activeYoutubeEmail}</p>
@@ -255,20 +244,16 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
       </div>
 
       {/* Group 3: 系統安全與維運 */}
-      <div style={{ margin: '1.75rem 0 0.75rem 0' }}>
-        <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 0.25rem 0' }}>
-          全站系統安全與維運
-        </h3>
-        <p className="section-desc" style={{ margin: 0, fontSize: '0.85rem' }}>
-          平台管理者安全配置、全域 OAuth Client 憑證與存取權限控制。
-        </p>
+      <div className="account-settings-section-heading">
+        <h3>全站系統安全與維運</h3>
+        <p className="section-desc">平台管理者安全配置、全域 OAuth Client 憑證與存取權限控制。</p>
       </div>
 
       {/* 5. 系統安全與白名單 */}
       <div className="glass-panel card-padding settings-card card-stack">
         <div className="card-header">
           <div className="card-header-title">
-            <Shield size={20} color="#10b981" />
+            <Shield size={20} color="var(--success)" />
             <h2>系統設定與安全</h2>
           </div>
         </div>
