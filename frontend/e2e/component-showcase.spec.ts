@@ -546,11 +546,15 @@ test('Playlist Sort previews and confirms creation of a sorted playlist', async 
     },
   });
 
+  await page.setViewportSize({ width: 390, height: 1000 });
   await page.goto('/ytmusic/playlist-sort');
   await expect(page.getByRole('combobox').first()).toHaveValue('playlist-1');
   await page.getByRole('button', { name: '模擬預覽' }).click();
   await expect(page.getByRole('heading', { name: '左右比對預覽結果' })).toBeVisible();
   await expect(page.getByText('Song B').first()).toBeVisible();
+  await expect(page.locator('.playlist-preview-list').first()).toHaveCSS('background-color', 'rgb(20, 21, 26)');
+  const previewOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(previewOverflow, 'Playlist Sort preview horizontal overflow at 390px').toBeLessThanOrEqual(1);
 
   await page.getByLabel('另存為新排序歌單（保留原歌單備份）').check();
   await expect(page.getByRole('button', { name: '建立新排序歌單' })).toBeVisible();

@@ -11,11 +11,7 @@ export default function TrackSubtitle({ item, sortKeys = [] }) {
     parts.push({
       key: 'artist',
       node: (
-        <span
-          key="artist"
-          style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}
-          title={artist}
-        >
+        <span key="artist" className="playlist-track-subtitle-truncate" title={artist}>
           {artist}
         </span>
       ),
@@ -43,17 +39,7 @@ export default function TrackSubtitle({ item, sortKeys = [] }) {
     parts.push({
       key: 'album',
       node: (
-        <span
-          key="album"
-          style={{
-            color: 'rgba(255,255,255,0.6)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            maxWidth: 140,
-          }}
-          title={albumTitle}
-        >
+        <span key="album" className="playlist-track-subtitle-truncate playlist-track-subtitle-album" title={albumTitle}>
           {albumDisplay}
         </span>
       ),
@@ -67,8 +53,7 @@ export default function TrackSubtitle({ item, sortKeys = [] }) {
       node: (
         <span
           key="track_number"
-          className="badge badge-info"
-          style={{ fontSize: 10, padding: '1px 5px', height: 'auto', lineHeight: '12px' }}
+          className="badge badge-info playlist-track-number"
           title={`曲目編號：#${item.track_number}`}
         >
           #{item.track_number}
@@ -83,7 +68,7 @@ export default function TrackSubtitle({ item, sortKeys = [] }) {
     parts.push({
       key: 'date',
       node: (
-        <span key="date" style={{ color: 'rgba(255,255,255,0.45)' }} title={`發行日期：${dateVal}`}>
+        <span key="date" title={`發行日期：${dateVal}`}>
           {dateVal}
         </span>
       ),
@@ -97,7 +82,7 @@ export default function TrackSubtitle({ item, sortKeys = [] }) {
     parts.push({
       key: 'published_at',
       node: (
-        <span key="published_at" style={{ color: 'rgba(255,255,255,0.4)' }} title={`發布日期：${item.published_at}`}>
+        <span key="published_at" className="playlist-track-subtitle-secondary" title={`發布日期：${item.published_at}`}>
           發布 {pubStr}
         </span>
       ),
@@ -109,7 +94,7 @@ export default function TrackSubtitle({ item, sortKeys = [] }) {
     parts.push({
       key: 'added_at',
       node: (
-        <span key="added_at" style={{ color: 'rgba(255,255,255,0.4)' }} title={`加入清單日期：${item.added_at}`}>
+        <span key="added_at" className="playlist-track-subtitle-secondary" title={`加入清單日期：${item.added_at}`}>
           加入 {addStr}
         </span>
       ),
@@ -119,19 +104,10 @@ export default function TrackSubtitle({ item, sortKeys = [] }) {
   if (parts.length === 0) return null;
 
   return (
-    <div
-      style={{
-        fontSize: 11,
-        color: 'rgba(255,255,255,0.45)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 3,
-        flexWrap: 'wrap',
-      }}
-    >
+    <div className="playlist-track-subtitle">
       {parts.map((p, i) => (
         <React.Fragment key={p.key}>
-          {i > 0 && <span style={{ color: 'rgba(255,255,255,0.3)', userSelect: 'none' }}>・</span>}
+          {i > 0 && <span className="playlist-track-subtitle-separator">・</span>}
           {p.node}
         </React.Fragment>
       ))}
