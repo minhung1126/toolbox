@@ -10,7 +10,7 @@
 
 本分支已完成可靠性修正、五個主要前端工作流程的邏輯抽離、YouTube 批次使用案例服務、第一批共用 UI 與前端品質門檻。以下只將有程式碼及測試證據的工作列為完成；整份路線圖仍有明確未完成項目。
 
-最新本機完整驗證：前端 64 個 Vitest 檔案、308 項通過；ESLint、TypeScript `typecheck`、Stylelint、Prettier 檢查與 production build 通過。Playwright 使用本機 Edge，共 17 項通過：在 390／768／1440 px 驗證共用元件展示、登入與初次設定頁及八個工具／設定頁版面；provider fake 覆蓋 Weverse 上傳至完成、Google OAuth URL 導向、Playlist Sort 新歌單建立、YouTube Batch Update 預覽至執行、Publish Cleaner 預覽至發布完成、Photo Curator ZIP 匯出及 Sticky Notes 自動儲存／置頂／刪除。後端隔離副本 226 項 pytest、Ruff lint／format 及 YouTube workflow FastAPI dependency 注入測試通過。GitHub Actions run 14 在 commit `1df103f` 通過 Python 3.11／Node 20 後端及前端檢查、Chromium E2E、Docker 建置與 Compose 驗證；本次後續提交仍須以其自身 SHA 驗證。未安裝 actionlint；未使用真實 Google／YouTube 帳號驗收，也未演練實際部署回退。
+最新本機完整驗證：前端 64 個 Vitest 檔案、308 項通過；ESLint、TypeScript `typecheck`、Stylelint、Prettier 檢查與 production build 通過。Playwright 使用本機 Edge，共 17 項通過：在 390／768／1440 px 驗證共用元件展示、登入與初次設定頁及八個工具／設定頁版面；provider fake 覆蓋 Weverse 上傳至完成、Google OAuth URL 導向、Playlist Sort 新歌單建立、YouTube Batch Update 預覽至執行、Publish Cleaner 預覽至發布完成、Photo Curator ZIP 匯出及 Sticky Notes 自動儲存／置頂／刪除。後端隔離副本 226 項 pytest、Ruff lint／format 及 YouTube workflow FastAPI dependency 注入測試通過。GitHub Actions run 15 在 commit `111b1f4` 通過 Python 3.11／Node 20 後端及前端檢查、Chromium E2E、Docker 建置與 Compose 驗證；本計劃文件更新後仍須驗證最新 SHA。未安裝 actionlint；未使用真實 Google／YouTube 帳號驗收，也未演練實際部署回退。
 
 已完成：
 
