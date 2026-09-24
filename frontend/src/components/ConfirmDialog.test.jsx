@@ -4,6 +4,12 @@ import { vi } from 'vitest';
 import ConfirmDialog from './ConfirmDialog';
 
 describe('ConfirmDialog accessibility behavior', () => {
+  it('uses the caller-provided confirmation text', () => {
+    render(<ConfirmDialog open title="確認發布" confirmText="立即上傳" onConfirm={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: '立即上傳' })).toBeInTheDocument();
+  });
+
   it('traps focus, locks the background, restores focus, and prevents duplicate confirmation', async () => {
     const trigger = document.createElement('button');
     trigger.type = 'button';
@@ -12,16 +18,15 @@ describe('ConfirmDialog accessibility behavior', () => {
     trigger.focus();
 
     let resolveConfirm;
-    const onConfirm = vi.fn(() => new Promise((resolve) => { resolveConfirm = resolve; }));
+    const onConfirm = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveConfirm = resolve;
+        })
+    );
     const onCancel = vi.fn();
     const { rerender } = render(
-      <ConfirmDialog
-        open
-        title="刪除項目"
-        message="確定刪除嗎？"
-        onConfirm={onConfirm}
-        onCancel={onCancel}
-      />,
+      <ConfirmDialog open title="刪除項目" message="確定刪除嗎？" onConfirm={onConfirm} onCancel={onCancel} />
     );
 
     const cancelButton = screen.getByRole('button', { name: '取消' });
@@ -57,20 +62,23 @@ describe('ConfirmDialog accessibility behavior', () => {
       <ConfirmDialog
         open
         title="確認發布 2 支影片"
-        content={(
+        content={
           <>
             <dl aria-label="發布摘要">
-              <div><dt>影片數量</dt><dd>2 支影片</dd></div>
+              <div>
+                <dt>影片數量</dt>
+                <dd>2 支影片</dd>
+              </div>
             </dl>
             <ol aria-label="實際確認影片">
               <li>影片一（影片 ID：video-1）</li>
               <li>影片二（影片 ID：video-2）</li>
             </ol>
           </>
-        )}
+        }
         onConfirm={vi.fn()}
         onCancel={vi.fn()}
-      />,
+      />
     );
 
     const dialog = screen.getByRole('dialog', { name: '確認發布 2 支影片' });

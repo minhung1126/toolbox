@@ -1,8 +1,10 @@
+import { normalizeYoutubePlaylistInput } from '../features/youtube/model/playlistInput';
+export { normalizeYoutubePlaylistInput };
+
 const API_BASE = '/api/v1';
 const DEFAULT_TIMEOUT_MS = 45_000;
 const YOUTUBE_WORKFLOW_TIMEOUT_MS = 10 * 60_000;
 const SESSION_EXPIRED_DEDUP_MS = 1_000;
-const YOUTUBE_PLAYLIST_ID = /^[A-Za-z0-9_-]{1,128}$/;
 let lastSessionExpiredNotificationAt = 0;
 
 export class ApiError extends Error {
@@ -16,33 +18,6 @@ export class ApiError extends Error {
   }
 }
 
-function isValidYoutubePlaylistId(value) {
-  return YOUTUBE_PLAYLIST_ID.test(value);
-}
-
-export function normalizeYoutubePlaylistInput(value) {
-  const trimmed = String(value ?? '').trim();
-  if (!trimmed) return '';
-  if (isValidYoutubePlaylistId(trimmed)) return trimmed;
-
-  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  let parsed;
-  try {
-    parsed = new URL(candidate);
-  } catch {
-    return '';
-  }
-
-  const hostname = parsed.hostname.toLowerCase();
-  const isYoutubeHost = hostname === 'youtu.be'
-    || hostname === 'youtube.com'
-    || hostname.endsWith('.youtube.com');
-  if (!isYoutubeHost || !['http:', 'https:'].includes(parsed.protocol)) return '';
-
-  const playlistId = parsed.searchParams.get('list')?.trim() || '';
-  return isValidYoutubePlaylistId(playlistId) ? playlistId : '';
-}
-
 function parseRetryAfter(value, now = Date.now()) {
   if (value === undefined || value === null || value === '') return null;
   const seconds = Number(value);
@@ -54,10 +29,9 @@ function parseRetryAfter(value, now = Date.now()) {
 
 function responseHeader(response, name) {
   try {
-    return response?.headers?.get?.(name)
-      || response?.headers?.[name]
-      || response?.headers?.[name.toLowerCase()]
-      || null;
+    return (
+      response?.headers?.get?.(name) || response?.headers?.[name] || response?.headers?.[name.toLowerCase()] || null
+    );
   } catch {
     return null;
   }
@@ -78,10 +52,8 @@ function payloadCode(data, status) {
 function payloadRetryAfter(data, response) {
   const headerValue = responseHeader(response, 'Retry-After');
   const detail = payloadDetail(data);
-  const bodyValue = detail?.retry_after_seconds
-    ?? detail?.retry_after
-    ?? data?.retry_after_seconds
-    ?? data?.retry_after;
+  const bodyValue =
+    detail?.retry_after_seconds ?? detail?.retry_after ?? data?.retry_after_seconds ?? data?.retry_after;
   return parseRetryAfter(headerValue ?? bodyValue);
 }
 
@@ -168,7 +140,11 @@ function hideUnavailableSecondarySlot(data) {
   if (!slots || !secondary || (secondary.enabled && secondary.configured)) return data;
   const nextSlots = { ...slots };
   delete nextSlots.secondary;
-  const activeSlot = nextSlots[data.youtube.active_slot] ? data.youtube.active_slot : (nextSlots.primary ? 'primary' : data.youtube.active_slot);
+  const activeSlot = nextSlots[data.youtube.active_slot]
+    ? data.youtube.active_slot
+    : nextSlots.primary
+      ? 'primary'
+      : data.youtube.active_slot;
   return { ...data, youtube: { ...data.youtube, active_slot: activeSlot, slots: nextSlots } };
 }
 
@@ -239,7 +215,10 @@ export const api = {
   getYtmusicAuthUrl: () => request('/auth/ytmusic/url'),
   disconnectYtmusic: () => request('/auth/ytmusic/disconnect', { method: 'POST' }),
   getYoutubeAuthUrl: (slot = 'primary') => request(`/auth/youtube/${encodeURIComponent(slot)}/url`),
-  disconnectYoutube: (slot = 'primary', { confirm = false } = {}) => request(`/auth/youtube/${encodeURIComponent(slot)}/disconnect${confirm ? '?confirm=true' : ''}`, { method: 'POST' }),
+  disconnectYoutube: (slot = 'primary', { confirm = false } = {}) =>
+    request(`/auth/youtube/${encodeURIComponent(slot)}/disconnect${confirm ? '?confirm=true' : ''}`, {
+      method: 'POST',
+    }),
   activateYoutubeSlot: (slot) => request(`/auth/youtube/${encodeURIComponent(slot)}/activate`, { method: 'POST' }),
   getUserStatus: async () => hideUnavailableSecondarySlot(await request('/auth/user', { cache: 'no-store' })),
   logout: () => request('/auth/logout', { method: 'POST' }),
@@ -247,108 +226,222 @@ export const api = {
   getSharedSettings: () => request('/settings/shared'),
   updateSharedSettings: (payload) => request('/settings/shared', { method: 'PUT', body: JSON.stringify(payload) }),
   getYoutubeSettings: () => request('/settings/youtube'),
-  updateYoutubePlaylist: ({ playlistId, defaultPlaylistId } = {}) => request('/settings/youtube/playlist', {
-    method: 'PUT',
-    body: JSON.stringify(normalizeYoutubeSettingsPayload({ default_playlist_id: defaultPlaylistId ?? playlistId ?? '' })),
-  }),
-  updateYoutubeRoutingMode: (routingMode) => request('/settings/youtube/routing', {
-    method: 'PUT',
-    body: JSON.stringify({ routing_mode: routingMode }),
-  }),
-  updateYoutubeQuota: ({ slot = 'primary', quotaLimit, safetyBufferUnits, quotaBuffer } = {}) => request('/settings/youtube/quota', {
-    method: 'PUT',
-    body: JSON.stringify({ slot, quota_limit: quotaLimit, safety_buffer_units: safetyBufferUnits ?? quotaBuffer }),
-  }),
+  updateYoutubePlaylist: ({ playlistId, defaultPlaylistId } = {}) =>
+    request('/settings/youtube/playlist', {
+      method: 'PUT',
+      body: JSON.stringify(
+        normalizeYoutubeSettingsPayload({ default_playlist_id: defaultPlaylistId ?? playlistId ?? '' })
+      ),
+    }),
+  updateYoutubeRoutingMode: (routingMode) =>
+    request('/settings/youtube/routing', {
+      method: 'PUT',
+      body: JSON.stringify({ routing_mode: routingMode }),
+    }),
+  updateYoutubeQuota: ({ slot = 'primary', quotaLimit, safetyBufferUnits, quotaBuffer } = {}) =>
+    request('/settings/youtube/quota', {
+      method: 'PUT',
+      body: JSON.stringify({ slot, quota_limit: quotaLimit, safety_buffer_units: safetyBufferUnits ?? quotaBuffer }),
+    }),
   getYoutubeSlotSettings: () => request('/settings/youtube-slots'),
   getTeamPersonFilter: () => request('/settings/team-person-filter'),
-  updateTeamPersonFilter: ({ team = '', selectedPeople = [] }) => request('/settings/team-person-filter', {
-    method: 'PUT',
-    body: JSON.stringify({ team, selected_people: selectedPeople }),
-  }),
+  updateTeamPersonFilter: ({ team = '', selectedPeople = [] }) =>
+    request('/settings/team-person-filter', {
+      method: 'PUT',
+      body: JSON.stringify({ team, selected_people: selectedPeople }),
+    }),
   getYoutubeDraftSettings: () => request('/settings/youtube-drafts'),
-  updateYoutubeDraftSettings: (videoType, config) => request('/settings/youtube-drafts', { method: 'PUT', body: JSON.stringify({ video_type: videoType, config }) }),
+  updateYoutubeDraftSettings: (videoType, config) =>
+    request('/settings/youtube-drafts', { method: 'PUT', body: JSON.stringify({ video_type: videoType, config }) }),
   getWorkState: () => request('/settings/work-state'),
-  updateWorkState: (key, value) => request('/settings/work-state', { method: 'PUT', body: JSON.stringify({ key, value }) }),
-  getSpreadsheetMetadata: (spreadsheetUrlOrId) => request('/sheets/metadata', { method: 'POST', body: JSON.stringify({ spreadsheet_url_or_id: spreadsheetUrlOrId }) }),
-  parseSheetOptions: (spreadsheetUrlOrId, worksheetName) => request('/sheets/parse-options', { method: 'POST', body: JSON.stringify({ spreadsheet_url_or_id: spreadsheetUrlOrId, worksheet_name: worksheetName }) }),
-  getTeamPeople: (spreadsheetUrlOrId, worksheetName, team) => request('/sheets/people', { method: 'POST', body: JSON.stringify({ spreadsheet_url_or_id: spreadsheetUrlOrId, worksheet_name: worksheetName, team }) }),
-  getRandomMemberPreview: (spreadsheetUrlOrId, worksheetName, team, columns) => request('/sheets/random-member-preview', { method: 'POST', body: JSON.stringify({ spreadsheet_url_or_id: spreadsheetUrlOrId, worksheet_name: worksheetName, team, columns }) }),
-  getCopyableSheetTable: (spreadsheetUrlOrId, worksheetName) => request('/sheets/copy-table', { method: 'POST', body: JSON.stringify({ spreadsheet_url_or_id: spreadsheetUrlOrId, worksheet_name: worksheetName }) }),
+  updateWorkState: (key, value) =>
+    request('/settings/work-state', { method: 'PUT', body: JSON.stringify({ key, value }) }),
+  getSpreadsheetMetadata: (spreadsheetUrlOrId) =>
+    request('/sheets/metadata', {
+      method: 'POST',
+      body: JSON.stringify({ spreadsheet_url_or_id: spreadsheetUrlOrId }),
+    }),
+  parseSheetOptions: (spreadsheetUrlOrId, worksheetName) =>
+    request('/sheets/parse-options', {
+      method: 'POST',
+      body: JSON.stringify({ spreadsheet_url_or_id: spreadsheetUrlOrId, worksheet_name: worksheetName }),
+    }),
+  getTeamPeople: (spreadsheetUrlOrId, worksheetName, team) =>
+    request('/sheets/people', {
+      method: 'POST',
+      body: JSON.stringify({ spreadsheet_url_or_id: spreadsheetUrlOrId, worksheet_name: worksheetName, team }),
+    }),
+  getRandomMemberPreview: (spreadsheetUrlOrId, worksheetName, team, columns) =>
+    request('/sheets/random-member-preview', {
+      method: 'POST',
+      body: JSON.stringify({ spreadsheet_url_or_id: spreadsheetUrlOrId, worksheet_name: worksheetName, team, columns }),
+    }),
+  getCopyableSheetTable: (spreadsheetUrlOrId, worksheetName) =>
+    request('/sheets/copy-table', {
+      method: 'POST',
+      body: JSON.stringify({ spreadsheet_url_or_id: spreadsheetUrlOrId, worksheet_name: worksheetName }),
+    }),
   getYoutubeQuotaUsage: (slot) => request(`/youtube/quota-usage${slot ? `?slot=${encodeURIComponent(slot)}` : ''}`),
-  estimateYoutubeQuota: ({ operation, itemCount, slot }) => request('/youtube/quota-estimate', { method: 'POST', body: JSON.stringify({ operation, item_count: itemCount, ...(slot ? { slot } : {}) }) }),
-  getPlaylistVideos: (playlistId) => request('/youtube/playlist-items', { method: 'POST', body: JSON.stringify({ playlist_id: normalizedYoutubePlaylistOrOriginal(playlistId) }) }),
-  getBatchPreview: ({ spreadsheetUrlOrId, playlistId, videoType, worksheetName, titleColumn, descriptionColumn, team, assignments }) => request('/youtube/batch-preview', { method: 'POST', timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS, body: JSON.stringify({ spreadsheet_url_or_id: spreadsheetUrlOrId, playlist_id: normalizedYoutubePlaylistOrOriginal(playlistId), video_type: videoType, worksheet_name: worksheetName, title_column: titleColumn, description_column: descriptionColumn, team, assignments }) }),
-  updateYoutubeVideoMetadata: ({ videoId, title, description }) => request('/youtube/video-metadata', { method: 'POST', body: JSON.stringify({ video_id: videoId, title, description }) }),
-  batchUpdateMetadata: ({ spreadsheetUrlOrId, playlistId, youtubeSlot, videoType, worksheetName, titleColumn, descriptionColumn, team, assignments, previewToken, previewSnapshot }) => request('/youtube/batch-update', { method: 'POST', timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS, body: JSON.stringify({ spreadsheet_url_or_id: spreadsheetUrlOrId, playlist_id: normalizedYoutubePlaylistOrOriginal(playlistId), ...(youtubeSlot ? { youtube_slot: youtubeSlot } : {}), video_type: videoType, worksheet_name: worksheetName, title_column: titleColumn, description_column: descriptionColumn, team, assignments, ...(previewToken ? { preview_token: previewToken } : {}), ...(previewSnapshot ? { preview_snapshot: previewSnapshot } : {}) }) }),
-  publishAndCleanup: (playlistId, { youtubeSlot, previewToken, previewSnapshot } = {}) => request('/youtube/publish-and-cleanup', { method: 'POST', timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS, body: JSON.stringify({ playlist_id: normalizedYoutubePlaylistOrOriginal(playlistId), ...(youtubeSlot ? { youtube_slot: youtubeSlot } : {}), ...(previewToken ? { preview_token: previewToken } : {}), ...(previewSnapshot ? { preview_snapshot: previewSnapshot } : {}) }) }),
+  estimateYoutubeQuota: ({ operation, itemCount, slot }) =>
+    request('/youtube/quota-estimate', {
+      method: 'POST',
+      body: JSON.stringify({ operation, item_count: itemCount, ...(slot ? { slot } : {}) }),
+    }),
+  getPlaylistVideos: (playlistId) =>
+    request('/youtube/playlist-items', {
+      method: 'POST',
+      body: JSON.stringify({ playlist_id: normalizedYoutubePlaylistOrOriginal(playlistId) }),
+    }),
+  getBatchPreview: ({
+    spreadsheetUrlOrId,
+    playlistId,
+    videoType,
+    worksheetName,
+    titleColumn,
+    descriptionColumn,
+    team,
+    assignments,
+  }) =>
+    request('/youtube/batch-preview', {
+      method: 'POST',
+      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+      body: JSON.stringify({
+        spreadsheet_url_or_id: spreadsheetUrlOrId,
+        playlist_id: normalizedYoutubePlaylistOrOriginal(playlistId),
+        video_type: videoType,
+        worksheet_name: worksheetName,
+        title_column: titleColumn,
+        description_column: descriptionColumn,
+        team,
+        assignments,
+      }),
+    }),
+  updateYoutubeVideoMetadata: ({ videoId, title, description }) =>
+    request('/youtube/video-metadata', {
+      method: 'POST',
+      body: JSON.stringify({ video_id: videoId, title, description }),
+    }),
+  batchUpdateMetadata: ({
+    spreadsheetUrlOrId,
+    playlistId,
+    youtubeSlot,
+    videoType,
+    worksheetName,
+    titleColumn,
+    descriptionColumn,
+    team,
+    assignments,
+    previewToken,
+    previewSnapshot,
+  }) =>
+    request('/youtube/batch-update', {
+      method: 'POST',
+      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+      body: JSON.stringify({
+        spreadsheet_url_or_id: spreadsheetUrlOrId,
+        playlist_id: normalizedYoutubePlaylistOrOriginal(playlistId),
+        ...(youtubeSlot ? { youtube_slot: youtubeSlot } : {}),
+        video_type: videoType,
+        worksheet_name: worksheetName,
+        title_column: titleColumn,
+        description_column: descriptionColumn,
+        team,
+        assignments,
+        ...(previewToken ? { preview_token: previewToken } : {}),
+        ...(previewSnapshot ? { preview_snapshot: previewSnapshot } : {}),
+      }),
+    }),
+  publishAndCleanup: (playlistId, { youtubeSlot, previewToken, previewSnapshot } = {}) =>
+    request('/youtube/publish-and-cleanup', {
+      method: 'POST',
+      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+      body: JSON.stringify({
+        playlist_id: normalizedYoutubePlaylistOrOriginal(playlistId),
+        ...(youtubeSlot ? { youtube_slot: youtubeSlot } : {}),
+        ...(previewToken ? { preview_token: previewToken } : {}),
+        ...(previewSnapshot ? { preview_snapshot: previewSnapshot } : {}),
+      }),
+    }),
 
   // System Setup, Credentials & Allowlist
   getSetupStatus: () => request('/system/setup-status', { cache: 'no-store' }),
-  performSetup: ({ googleClientId, googleClientSecret, adminEmail, pin, publicBaseUrl } = {}) => request('/system/setup', {
-    method: 'POST',
-    body: JSON.stringify({
-      google_client_id: googleClientId,
-      google_client_secret: googleClientSecret,
-      admin_email: adminEmail,
-      pin: pin || '',
-      public_base_url: publicBaseUrl || '',
+  performSetup: ({ googleClientId, googleClientSecret, adminEmail, pin, publicBaseUrl } = {}) =>
+    request('/system/setup', {
+      method: 'POST',
+      body: JSON.stringify({
+        google_client_id: googleClientId,
+        google_client_secret: googleClientSecret,
+        admin_email: adminEmail,
+        pin: pin || '',
+        public_base_url: publicBaseUrl || '',
+      }),
     }),
-  }),
   getSystemCredentials: () => request('/system/credentials', { cache: 'no-store' }),
-  updateSystemCredentials: (payload) => request('/system/credentials', {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  }),
+  updateSystemCredentials: (payload) =>
+    request('/system/credentials', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
   getAllowlist: () => request('/system/allowlist', { cache: 'no-store' }),
-  addAllowlistEmail: (email) => request('/system/allowlist/add', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-  }),
-  removeAllowlistEmail: (email) => request('/system/allowlist/remove', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-  }),
-  updateAllowNewUsers: (allowNewUsers) => request('/system/allow-new-users', {
-    method: 'PUT',
-    body: JSON.stringify({ allow_new_users: Boolean(allowNewUsers) }),
-  }),
-  updateYoutubeSlotConfig: (slot, payload) => request(`/settings/youtube-slots/${encodeURIComponent(slot)}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  }),
+  addAllowlistEmail: (email) =>
+    request('/system/allowlist/add', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+  removeAllowlistEmail: (email) =>
+    request('/system/allowlist/remove', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+  updateAllowNewUsers: (allowNewUsers) =>
+    request('/system/allow-new-users', {
+      method: 'PUT',
+      body: JSON.stringify({ allow_new_users: Boolean(allowNewUsers) }),
+    }),
+  updateYoutubeSlotConfig: (slot, payload) =>
+    request(`/settings/youtube-slots/${encodeURIComponent(slot)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
 
   // Sticky Notes API
   getNotes: (query) => request(`/notes${query ? `?q=${encodeURIComponent(query)}` : ''}`),
-  createNote: ({ content = '', remark = '', pinned = false } = {}) => request('/notes', {
-    method: 'POST',
-    body: JSON.stringify({ content, remark, pinned }),
-  }),
+  createNote: ({ content = '', remark = '', pinned = false } = {}) =>
+    request('/notes', {
+      method: 'POST',
+      body: JSON.stringify({ content, remark, pinned }),
+    }),
   getNote: (noteId) => request(`/notes/${encodeURIComponent(noteId)}`),
-  updateNote: (noteId, { content, remark, pinned } = {}) => request(`/notes/${encodeURIComponent(noteId)}`, {
-    method: 'PUT',
-    body: JSON.stringify({ content, remark, pinned }),
-  }),
-  deleteNote: (noteId) => request(`/notes/${encodeURIComponent(noteId)}`, {
-    method: 'DELETE',
-  }),
+  updateNote: (noteId, { content, remark, pinned } = {}) =>
+    request(`/notes/${encodeURIComponent(noteId)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content, remark, pinned }),
+    }),
+  deleteNote: (noteId) =>
+    request(`/notes/${encodeURIComponent(noteId)}`, {
+      method: 'DELETE',
+    }),
 
   // Photo Curator API
   getPhotoCuratorPresets: () => request('/photo-curator/presets'),
-  generatePhotoCuratorChecklist: ({ posts = [], notes = '' } = {}) => request('/photo-curator/checklist', {
-    method: 'POST',
-    body: JSON.stringify({ posts, notes }),
-  }),
+  generatePhotoCuratorChecklist: ({ posts = [], notes = '' } = {}) =>
+    request('/photo-curator/checklist', {
+      method: 'POST',
+      body: JSON.stringify({ posts, notes }),
+    }),
 
   // FFmpeg Generator API
   getFfmpegPresets: () => request('/ffmpeg-generator/presets'),
-  parseFfmpegTime: (payload) => request('/ffmpeg-generator/parse-time', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  }),
-  buildFfmpegCommand: (payload) => request('/ffmpeg-generator/build', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  }),
+  parseFfmpegTime: (payload) =>
+    request('/ffmpeg-generator/parse-time', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  buildFfmpegCommand: (payload) =>
+    request('/ffmpeg-generator/build', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 
   // Playlist Sort API
   getPlaylistSortPlaylists: (params = {}) => {
@@ -365,18 +458,19 @@ export const api = {
     useYoutubeApi = false,
     language = null,
     location = null,
-  }) => request('/playlist-sort/preview', {
-    method: 'POST',
-    timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
-    body: JSON.stringify({
-      playlist_id: playlistId,
-      sort_keys: sortKeys,
-      fetch_album_details: fetchAlbumDetails,
-      use_youtube_api: useYoutubeApi,
-      language,
-      location,
+  }) =>
+    request('/playlist-sort/preview', {
+      method: 'POST',
+      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+      body: JSON.stringify({
+        playlist_id: playlistId,
+        sort_keys: sortKeys,
+        fetch_album_details: fetchAlbumDetails,
+        use_youtube_api: useYoutubeApi,
+        language,
+        location,
+      }),
     }),
-  }),
   applyPlaylistSort: ({
     playlistId,
     sortKeys,
@@ -388,52 +482,60 @@ export const api = {
     language = null,
     location = null,
     allowQuotaFallback = false,
-  }) => request('/playlist-sort/apply', {
-    method: 'POST',
-    timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
-    body: JSON.stringify({
-      playlist_id: playlistId,
-      sort_keys: sortKeys,
-      preview_token: previewToken,
-      mode,
-      new_playlist_title: newPlaylistTitle,
-      use_youtube_api: useYoutubeApi,
-      sorted_item_ids: sortedItemIds,
-      language,
-      location,
-      allow_quota_fallback: allowQuotaFallback,
+  }) =>
+    request('/playlist-sort/apply', {
+      method: 'POST',
+      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+      body: JSON.stringify({
+        playlist_id: playlistId,
+        sort_keys: sortKeys,
+        preview_token: previewToken,
+        mode,
+        new_playlist_title: newPlaylistTitle,
+        use_youtube_api: useYoutubeApi,
+        sorted_item_ids: sortedItemIds,
+        language,
+        location,
+        allow_quota_fallback: allowQuotaFallback,
+      }),
     }),
-  }),
-  saveYtmusicCustomToken: (token) => request('/auth/ytmusic/custom-token', {
-    method: 'POST',
-    body: JSON.stringify({ token }),
-  }),
-  clearYtmusicCustomToken: () => request('/auth/ytmusic/custom-token', {
-    method: 'DELETE',
-  }),
-  validateYtmusicCustomToken: (token = null) => request('/auth/ytmusic/custom-token/validate', {
-    method: 'POST',
-    body: JSON.stringify(token ? { token } : {}),
-  }),
+  saveYtmusicCustomToken: (token) =>
+    request('/auth/ytmusic/custom-token', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }),
+  clearYtmusicCustomToken: () =>
+    request('/auth/ytmusic/custom-token', {
+      method: 'DELETE',
+    }),
+  validateYtmusicCustomToken: (token = null) =>
+    request('/auth/ytmusic/custom-token/validate', {
+      method: 'POST',
+      body: JSON.stringify(token ? { token } : {}),
+    }),
   getVideoUploaderAuthUrl: () => request('/auth/video-uploader/url'),
   disconnectVideoUploader: () => request('/auth/video-uploader/disconnect', { method: 'POST' }),
-  scanWeverseFolder: (folderPath) => request('/weverse-uploader/scan', {
-    method: 'POST',
-    body: JSON.stringify({ folder_path: folderPath }),
-  }),
-  parseWeverseFiles: (files) => request('/weverse-uploader/parse-files', {
-    method: 'POST',
-    body: JSON.stringify({ files }),
-  }),
-  uploadWeverseFromPath: (payload) => request('/weverse-uploader/upload-from-path', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  }),
-  uploadWeverseFiles: (formData) => request('/weverse-uploader/upload-files', {
-    method: 'POST',
-    timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
-    body: formData,
-  }),
+  scanWeverseFolder: (folderPath) =>
+    request('/weverse-uploader/scan', {
+      method: 'POST',
+      body: JSON.stringify({ folder_path: folderPath }),
+    }),
+  parseWeverseFiles: (files) =>
+    request('/weverse-uploader/parse-files', {
+      method: 'POST',
+      body: JSON.stringify({ files }),
+    }),
+  uploadWeverseFromPath: (payload) =>
+    request('/weverse-uploader/upload-from-path', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  uploadWeverseFiles: (formData) =>
+    request('/weverse-uploader/upload-files', {
+      method: 'POST',
+      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+      body: formData,
+    }),
   getWeverseUploadTask: (taskId) => request(`/weverse-uploader/tasks/${taskId}`),
   getWeverseUploadHistory: (limit = 20) => request(`/weverse-uploader/history?limit=${limit}`),
   getWeverseRecentPaths: () => request('/weverse-uploader/recent-paths'),

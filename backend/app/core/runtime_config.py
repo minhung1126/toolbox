@@ -10,12 +10,13 @@ from pathlib import Path
 from threading import RLock
 from typing import Any, Dict
 
+from backend.app.core.data_paths import data_directory
 from backend.app.core.persistence import atomic_write_json, read_json_file
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-_DATA_DIR = _PROJECT_ROOT / "data"
+_DATA_DIR = data_directory()
 _CONFIG_FILE = _DATA_DIR / "runtime_config.json"
 
 # Only non-secret fields belong here. Tokens and secret keys must use credential_store.

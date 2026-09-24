@@ -12,7 +12,7 @@ describe('ResultStatus', () => {
         <ResultStatus status="skipped" />
         <ResultStatus status="failed" />
         <ResultStatus status="not_attempted" />
-      </div>,
+      </div>
     );
 
     expect(screen.getByText('成功')).toBeInTheDocument();
@@ -22,4 +22,3 @@ describe('ResultStatus', () => {
     expect(screen.getByText('未執行')).toBeInTheDocument();
   });
 });
-

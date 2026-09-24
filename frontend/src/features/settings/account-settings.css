@@ -1,0 +1,47 @@
+.account-settings-section-heading {
+  margin: 1.75rem 0 0.75rem;
+}
+
+.account-settings-section-heading h3 {
+  margin: 0 0 0.25rem;
+  color: var(--text-primary);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.account-settings-section-heading .section-desc {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.account-settings-service-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin: -0.75rem 0 1rem;
+}
+
+.account-settings-active-account {
+  margin-bottom: 0.5rem;
+}
+
+.google-sheet-settings-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+}
+
+.google-sheet-settings-title svg {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.google-sheet-default-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}

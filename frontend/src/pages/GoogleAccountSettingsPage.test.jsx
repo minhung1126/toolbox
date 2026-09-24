@@ -1,15 +1,37 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import GoogleAccountSettingsPage from './GoogleAccountSettingsPage';
-import { api } from '../services/api';
+import { sheetsSettingsApi } from '../features/sheets/api/sheetsSettingsApi';
 
-vi.mock('../services/api', () => ({
-  api: {
+vi.mock('../utils/navigation', () => ({ redirectToAuth: vi.fn() }));
+
+vi.mock('../features/auth/api/authApi', () => ({
+  authApi: {
+    getLoginConfig: vi.fn(),
+    getLoginUrl: vi.fn(),
+    getSetupStatus: vi.fn(),
+    performSetup: vi.fn(),
+  },
+}));
+
+vi.mock('../features/sheets/api/sheetsSettingsApi', () => ({
+  sheetsSettingsApi: {
     getAuthUrl: vi.fn(),
-    getSheetsAuthUrl: vi.fn(),
-    disconnectSheets: vi.fn(),
+    disconnect: vi.fn(),
+    getSettings: vi.fn(),
+    updateSettings: vi.fn(),
+  },
+}));
+
+vi.mock('../features/ytmusic/api/ytmusicSettingsApi', () => ({
+  ytmusicSettingsApi: {
+    getAuthUrl: vi.fn(),
+    disconnect: vi.fn(),
+    save: vi.fn(),
+    clear: vi.fn(),
+    validate: vi.fn(),
   },
 }));
 
@@ -51,13 +73,19 @@ describe('GoogleAccountSettingsPage', () => {
     expect(screen.getByText('已授權試算表')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /前往 Sheet 模組設定/ })).toHaveAttribute('href', '/sheets/settings');
     expect(screen.getByRole('link', { name: /YouTube Music 專屬設定/ })).toHaveAttribute('href', '/ytmusic/settings');
-    expect(screen.getByRole('link', { name: /前往 YouTube Music 播放清單排序/ })).toHaveAttribute('href', '/ytmusic/playlist-sort');
-    expect(screen.getByRole('link', { name: /前往 YouTube 頻道授權設定/ })).toHaveAttribute('href', '/youtube/settings/connections');
+    expect(screen.getByRole('link', { name: /前往 YouTube Music 播放清單排序/ })).toHaveAttribute(
+      'href',
+      '/ytmusic/playlist-sort'
+    );
+    expect(screen.getByRole('link', { name: /前往 YouTube 頻道授權設定/ })).toHaveAttribute(
+      'href',
+      '/youtube/settings/connections'
+    );
     expect(screen.getByRole('link', { name: /前往系統設定/ })).toHaveAttribute('href', '/system/settings');
   });
 
   it('allows connecting Sheets when not connected', async () => {
-    api.getSheetsAuthUrl.mockResolvedValue({ auth_url: 'https://accounts.google.com/o/oauth2/auth?sheets=1' });
+    sheetsSettingsApi.getAuthUrl.mockResolvedValue({ auth_url: 'https://accounts.google.com/o/oauth2/auth?sheets=1' });
 
     render(
       <MemoryRouter>
@@ -77,11 +105,11 @@ describe('GoogleAccountSettingsPage', () => {
 
     const connectSheetsBtn = screen.getByRole('button', { name: '連結 Google 試算表' });
     fireEvent.click(connectSheetsBtn);
-    await waitFor(() => expect(api.getSheetsAuthUrl).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(sheetsSettingsApi.getAuthUrl).toHaveBeenCalledTimes(1));
   });
 
   it('allows disconnecting Sheets via confirmation dialog', async () => {
-    api.disconnectSheets.mockResolvedValue({});
+    sheetsSettingsApi.disconnect.mockResolvedValue({ status: 'sheets_disconnected' });
     const refreshAuthUser = vi.fn().mockResolvedValue({});
 
     render(
@@ -104,7 +132,7 @@ describe('GoogleAccountSettingsPage', () => {
     expect(screen.getByText('解除 Google 試算表授權')).toBeInTheDocument();
     const confirmBtn = screen.getByRole('button', { name: '確認解除' });
     fireEvent.click(confirmBtn);
-    await waitFor(() => expect(api.disconnectSheets).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(sheetsSettingsApi.disconnect).toHaveBeenCalledTimes(1));
     expect(refreshAuthUser).toHaveBeenCalled();
   });
 });

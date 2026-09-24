@@ -2,13 +2,13 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import { api } from '../services/api';
+import { authApi } from '../features/auth/api/authApi';
 import LoginPage from './LoginPage';
 
-vi.mock('../services/api', () => ({
-  api: {
-    getAuthConfig: vi.fn(),
-    getAuthUrl: vi.fn(),
+vi.mock('../features/auth/api/authApi', () => ({
+  authApi: {
+    getLoginConfig: vi.fn(),
+    getLoginUrl: vi.fn(),
   },
 }));
 
@@ -24,7 +24,7 @@ describe('LoginPage readiness', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('prevents a dead-end OAuth attempt and can recover after configuration changes', async () => {
-    api.getAuthConfig
+    authApi.getLoginConfig
       .mockResolvedValueOnce({ has_client_id: false, has_client_secret: false })
       .mockResolvedValueOnce({ has_client_id: true, has_client_secret: true });
     renderLoginPage();
@@ -40,16 +40,16 @@ describe('LoginPage readiness', () => {
   });
 
   it('keeps an OAuth callback error visible when readiness later succeeds', async () => {
-    api.getAuthConfig.mockResolvedValue({ has_client_id: true, has_client_secret: true });
+    authApi.getLoginConfig.mockResolvedValue({ has_client_id: true, has_client_secret: true });
     renderLoginPage({ initialError: 'Google 登入 callback 失敗，請重新嘗試。' });
 
-    await waitFor(() => expect(api.getAuthConfig).toHaveBeenCalledOnce());
+    await waitFor(() => expect(authApi.getLoginConfig).toHaveBeenCalledOnce());
     expect(screen.getByText('Google 登入 callback 失敗，請重新嘗試。')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '使用 Google 帳號登入' })).toBeEnabled();
   });
 
   it('clears only the readiness error after a successful recheck', async () => {
-    api.getAuthConfig
+    authApi.getLoginConfig
       .mockResolvedValueOnce({ has_client_id: false, has_client_secret: false })
       .mockResolvedValueOnce({ has_client_id: true, has_client_secret: true });
     renderLoginPage({ initialError: 'Google OAuth callback 失敗。' });
@@ -63,7 +63,7 @@ describe('LoginPage readiness', () => {
   });
 
   it('describes the modular decoupled authorizations', async () => {
-    api.getAuthConfig.mockResolvedValue({ has_client_id: true, has_client_secret: true });
+    authApi.getLoginConfig.mockResolvedValue({ has_client_id: true, has_client_secret: true });
     renderLoginPage();
 
     await waitFor(() => expect(screen.getByText(/模組化權限拆分/)).toBeInTheDocument());

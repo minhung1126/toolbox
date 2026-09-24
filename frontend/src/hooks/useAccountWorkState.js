@@ -47,104 +47,116 @@ export function AccountWorkStateProvider({ initialState = {}, children }) {
     return record;
   }, []);
 
-  const flushSave = useCallback((key) => {
-    const record = recordsRef.current.get(key);
-    if (!record) return Promise.resolve(null);
-    if (record.inFlightPromise) return record.inFlightPromise;
-    if (record.desiredVersion <= record.lastSavedVersion) {
-      updateStatus(key, { saving: false, saved: true, error: '', lastSaved: record.lastSavedValue });
-      return Promise.resolve(null);
-    }
+  const flushSave = useCallback(
+    (key) => {
+      const record = recordsRef.current.get(key);
+      if (!record) return Promise.resolve(null);
+      if (record.inFlightPromise) return record.inFlightPromise;
+      if (record.desiredVersion <= record.lastSavedVersion) {
+        updateStatus(key, { saving: false, saved: true, error: '', lastSaved: record.lastSavedValue });
+        return Promise.resolve(null);
+      }
 
-    const version = record.desiredVersion;
-    const value = record.desiredValue;
-    updateStatus(key, { saving: true, saved: false, error: '' });
+      const version = record.desiredVersion;
+      const value = record.desiredValue;
+      updateStatus(key, { saving: true, saved: false, error: '' });
 
-    const request = Promise.resolve()
-      .then(() => api.updateWorkState(key, value))
-      .then((result) => {
-        record.inFlightPromise = null;
-        record.lastSavedVersion = version;
-        record.lastSavedValue = value;
+      const request = Promise.resolve()
+        .then(() => api.updateWorkState(key, value))
+        .then((result) => {
+          record.inFlightPromise = null;
+          record.lastSavedVersion = version;
+          record.lastSavedValue = value;
 
-        if (mountedRef.current) {
-          setState((current) => {
-            const serverState = result?.state && typeof result.state === 'object' ? result.state : {};
-            const next = { ...current, ...serverState };
-            if (record.desiredVersion > version) next[key] = record.desiredValue;
-            return next;
+          if (mountedRef.current) {
+            setState((current) => {
+              const serverState = result?.state && typeof result.state === 'object' ? result.state : {};
+              const next = { ...current, ...serverState };
+              if (record.desiredVersion > version) next[key] = record.desiredValue;
+              return next;
+            });
+          }
+
+          const hasNewerValue = record.desiredVersion > version;
+          if (hasNewerValue) {
+            updateStatus(key, { saving: true, saved: false, error: '', lastSaved: value });
+            if (!record.timer) return flushSave(key);
+          } else {
+            updateStatus(key, { saving: false, saved: true, error: '', lastSaved: value });
+          }
+          return result;
+        })
+        .catch((error) => {
+          record.inFlightPromise = null;
+          const hasNewerValue = record.desiredVersion > version;
+          if (hasNewerValue) {
+            updateStatus(key, { saving: true, saved: false, error: '' });
+            if (!record.timer) return flushSave(key);
+            return null;
+          }
+
+          updateStatus(key, {
+            saving: false,
+            saved: false,
+            error: error?.message || '工作狀態同步失敗。',
           });
-        }
-
-        const hasNewerValue = record.desiredVersion > version;
-        if (hasNewerValue) {
-          updateStatus(key, { saving: true, saved: false, error: '', lastSaved: value });
-          if (!record.timer) return flushSave(key);
-        } else {
-          updateStatus(key, { saving: false, saved: true, error: '', lastSaved: value });
-        }
-        return result;
-      })
-      .catch((error) => {
-        record.inFlightPromise = null;
-        const hasNewerValue = record.desiredVersion > version;
-        if (hasNewerValue) {
-          updateStatus(key, { saving: true, saved: false, error: '' });
-          if (!record.timer) return flushSave(key);
           return null;
-        }
-
-        updateStatus(key, {
-          saving: false,
-          saved: false,
-          error: error?.message || '工作狀態同步失敗。',
         });
-        return null;
-      });
 
-    record.inFlightPromise = request;
-    return request;
-  }, [updateStatus]);
+      record.inFlightPromise = request;
+      return request;
+    },
+    [updateStatus]
+  );
 
-  const scheduleSave = useCallback((key, debounceMs) => {
-    const record = getRecord(key);
-    if (record.timer) {
-      window.clearTimeout(record.timer);
-      record.timer = null;
-      record.timerResolve?.(null);
-      record.timerResolve = null;
-    }
-
-    if (debounceMs <= 0) return flushSave(key);
-
-    return new Promise((resolve) => {
-      record.timerResolve = resolve;
-      record.timer = window.setTimeout(() => {
+  const scheduleSave = useCallback(
+    (key, debounceMs) => {
+      const record = getRecord(key);
+      if (record.timer) {
+        window.clearTimeout(record.timer);
         record.timer = null;
+        record.timerResolve?.(null);
         record.timerResolve = null;
-        flushSave(key).then(resolve);
-      }, debounceMs);
-    });
-  }, [flushSave, getRecord]);
+      }
 
-  const save = useCallback((key, value, { debounceMs = 450 } = {}) => {
-    const nextValue = asObject(value);
-    const record = getRecord(key);
-    record.desiredValue = nextValue;
-    record.desiredVersion += 1;
+      if (debounceMs <= 0) return flushSave(key);
 
-    setState((current) => ({ ...current, [key]: nextValue }));
-    updateStatus(key, { saving: true, saved: false, error: '' });
-    return scheduleSave(key, debounceMs);
-  }, [getRecord, scheduleSave, updateStatus]);
+      return new Promise((resolve) => {
+        record.timerResolve = resolve;
+        record.timer = window.setTimeout(() => {
+          record.timer = null;
+          record.timerResolve = null;
+          flushSave(key).then(resolve);
+        }, debounceMs);
+      });
+    },
+    [flushSave, getRecord]
+  );
 
-  const retry = useCallback((key) => {
-    const record = recordsRef.current.get(key);
-    if (!record || record.desiredValue === null || record.desiredValue === undefined) return Promise.resolve(null);
-    record.desiredVersion += 1;
-    updateStatus(key, { saving: true, saved: false, error: '' });
-    return scheduleSave(key, 0);
-  }, [scheduleSave, updateStatus]);
+  const save = useCallback(
+    (key, value, { debounceMs = 450 } = {}) => {
+      const nextValue = asObject(value);
+      const record = getRecord(key);
+      record.desiredValue = nextValue;
+      record.desiredVersion += 1;
+
+      setState((current) => ({ ...current, [key]: nextValue }));
+      updateStatus(key, { saving: true, saved: false, error: '' });
+      return scheduleSave(key, debounceMs);
+    },
+    [getRecord, scheduleSave, updateStatus]
+  );
+
+  const retry = useCallback(
+    (key) => {
+      const record = recordsRef.current.get(key);
+      if (!record || record.desiredValue === null || record.desiredValue === undefined) return Promise.resolve(null);
+      record.desiredVersion += 1;
+      updateStatus(key, { saving: true, saved: false, error: '' });
+      return scheduleSave(key, 0);
+    },
+    [scheduleSave, updateStatus]
+  );
 
   useEffect(() => {
     mountedRef.current = true;
@@ -160,13 +172,16 @@ export function AccountWorkStateProvider({ initialState = {}, children }) {
     };
   }, []);
 
-  const contextValue = useMemo(() => ({
-    ready: true,
-    state,
-    statuses,
-    save,
-    retry,
-  }), [retry, save, state, statuses]);
+  const contextValue = useMemo(
+    () => ({
+      ready: true,
+      state,
+      statuses,
+      save,
+      retry,
+    }),
+    [retry, save, state, statuses]
+  );
 
   return createElement(AccountWorkStateContext.Provider, { value: contextValue }, children);
 }
@@ -180,12 +195,9 @@ export default function useAccountWorkState(key, fallback = {}) {
   const contextRetry = context?.retry;
   const save = useCallback(
     (value, options) => (contextSave ? contextSave(key, value, options) : Promise.resolve(null)),
-    [contextSave, key],
+    [contextSave, key]
   );
-  const retry = useCallback(
-    () => (contextRetry ? contextRetry(key) : Promise.resolve(null)),
-    [contextRetry, key],
-  );
+  const retry = useCallback(() => (contextRetry ? contextRetry(key) : Promise.resolve(null)), [contextRetry, key]);
   if (!context) {
     return {
       ready: false,

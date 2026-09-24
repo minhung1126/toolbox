@@ -23,14 +23,22 @@ describe('TeamPersonFilterPanel', () => {
 
   it('toggles an entire person option and supports select all/none', () => {
     const onSelectedPeopleChange = vi.fn();
-    const { rerender } = render(<TeamPersonFilterPanel {...baseProps} onSelectedPeopleChange={onSelectedPeopleChange} />);
+    const { rerender } = render(
+      <TeamPersonFilterPanel {...baseProps} onSelectedPeopleChange={onSelectedPeopleChange} />
+    );
 
     fireEvent.click(screen.getByLabelText('甲'));
     expect(onSelectedPeopleChange).toHaveBeenCalledWith(['乙', '甲']);
 
     fireEvent.click(screen.getByRole('checkbox', { name: '全選或全不選人物' }));
     expect(onSelectedPeopleChange).toHaveBeenLastCalledWith(['全團體', '乙', '甲']);
-    rerender(<TeamPersonFilterPanel {...baseProps} selectedPeople={['全團體', '乙', '甲']} onSelectedPeopleChange={onSelectedPeopleChange} />);
+    rerender(
+      <TeamPersonFilterPanel
+        {...baseProps}
+        selectedPeople={['全團體', '乙', '甲']}
+        onSelectedPeopleChange={onSelectedPeopleChange}
+      />
+    );
 
     fireEvent.click(screen.getByRole('checkbox', { name: '全選或全不選人物' }));
     expect(onSelectedPeopleChange).toHaveBeenLastCalledWith([]);

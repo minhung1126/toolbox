@@ -6,26 +6,42 @@ on:
       - main
     paths:
       - Dockerfile
+      - .dockerignore
       - backend/**
       - frontend/**
+      - pyproject.toml
+      - docker-compose.yml
+      - .env.example
+      - README.md
+      - docs/**
+      - .github/workflows/validate-container.yml
       - .github/workflows/publish-container.yml
   workflow_dispatch:
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 concurrency:
   group: publish-container-main
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}
 
 jobs:
+  validate:
+    name: Test the release commit
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/validate-container.yml
+
   publish:
     name: Build and push image
+    if: github.ref == 'refs/heads/main'
+    needs: validate
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
 
     steps:
       - name: Check out repository

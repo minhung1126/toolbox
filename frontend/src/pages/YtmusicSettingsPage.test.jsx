@@ -3,17 +3,24 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import YtmusicSettingsPage from './YtmusicSettingsPage';
-import { api } from '../services/api';
+import { ytmusicSettingsApi } from '../features/ytmusic/api/ytmusicSettingsApi';
+
+vi.mock('../utils/navigation', () => ({ redirectToAuth: vi.fn() }));
 
 vi.mock('../services/api', () => ({
   api: {
-    getYtmusicAuthUrl: vi.fn(),
-    disconnectYtmusic: vi.fn(),
     updateWorkState: vi.fn((key, value) => Promise.resolve({ state: { [key]: value } })),
     getWorkState: vi.fn(() => Promise.resolve({ state: {} })),
-    saveYtmusicCustomToken: vi.fn(),
-    clearYtmusicCustomToken: vi.fn(),
-    validateYtmusicCustomToken: vi.fn(),
+  },
+}));
+
+vi.mock('../features/ytmusic/api/ytmusicSettingsApi', () => ({
+  ytmusicSettingsApi: {
+    getAuthUrl: vi.fn(),
+    disconnect: vi.fn(),
+    save: vi.fn(),
+    clear: vi.fn(),
+    validate: vi.fn(),
   },
 }));
 
@@ -123,7 +130,7 @@ describe('YtmusicSettingsPage', () => {
   });
 
   it('allows disconnecting YouTube Music via confirm dialog', async () => {
-    api.disconnectYtmusic.mockResolvedValue({});
+    ytmusicSettingsApi.disconnect.mockResolvedValue({ status: 'ytmusic_disconnected' });
     const refreshAuthUser = vi.fn().mockResolvedValue({});
 
     render(
@@ -150,7 +157,7 @@ describe('YtmusicSettingsPage', () => {
     const confirmBtn = screen.getByRole('button', { name: '確認解除' });
     fireEvent.click(confirmBtn);
 
-    await waitFor(() => expect(api.disconnectYtmusic).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(ytmusicSettingsApi.disconnect).toHaveBeenCalledTimes(1));
     expect(refreshAuthUser).toHaveBeenCalled();
   });
 
@@ -220,7 +227,9 @@ describe('YtmusicSettingsPage', () => {
   });
 
   it('triggers connect flow when clicking connect', async () => {
-    api.getYtmusicAuthUrl.mockResolvedValue({ auth_url: 'https://accounts.google.com/o/oauth2/auth?ytmusic=1' });
+    ytmusicSettingsApi.getAuthUrl.mockResolvedValue({
+      auth_url: 'https://accounts.google.com/o/oauth2/auth?ytmusic=1',
+    });
 
     render(
       <MemoryRouter>
@@ -236,11 +245,11 @@ describe('YtmusicSettingsPage', () => {
     const connectBtn = screen.getByRole('button', { name: /連結 YouTube Music 專屬帳號/ });
     fireEvent.click(connectBtn);
 
-    await waitFor(() => expect(api.getYtmusicAuthUrl).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(ytmusicSettingsApi.getAuthUrl).toHaveBeenCalledTimes(1));
   });
 
   it('validates currently saved custom token and displays success result', async () => {
-    api.validateYtmusicCustomToken.mockResolvedValue({
+    ytmusicSettingsApi.validate.mockResolvedValue({
       status: 'success',
       valid: true,
       account_name: 'Test Music User',
@@ -269,7 +278,7 @@ describe('YtmusicSettingsPage', () => {
     fireEvent.click(validateBtn);
 
     await waitFor(() => {
-      expect(api.validateYtmusicCustomToken).toHaveBeenCalledWith(null);
+      expect(ytmusicSettingsApi.validate).toHaveBeenCalledWith(null);
     });
 
     expect(await screen.findByText('Token 驗證成功')).toBeInTheDocument();
@@ -278,7 +287,7 @@ describe('YtmusicSettingsPage', () => {
   });
 
   it('validates input token and displays error when validation fails', async () => {
-    api.validateYtmusicCustomToken.mockRejectedValue(new Error('Token 驗證失敗或 Cookie 已過期：SAPISID 已失效'));
+    ytmusicSettingsApi.validate.mockRejectedValue(new Error('Token 驗證失敗或 Cookie 已過期：SAPISID 已失效'));
 
     render(
       <MemoryRouter>
@@ -308,7 +317,7 @@ describe('YtmusicSettingsPage', () => {
     fireEvent.click(validateBtn);
 
     await waitFor(() => {
-      expect(api.validateYtmusicCustomToken).toHaveBeenCalledWith('curl "https://music.youtube.com" -H "cookie: invalid"');
+      expect(ytmusicSettingsApi.validate).toHaveBeenCalledWith('curl "https://music.youtube.com" -H "cookie: invalid"');
     });
 
     expect(await screen.findByText('Token 驗證失敗')).toBeInTheDocument();

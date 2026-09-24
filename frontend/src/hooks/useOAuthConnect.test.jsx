@@ -23,29 +23,24 @@ describe('useOAuthConnect', () => {
   it('handles connect success by redirecting to auth url', async () => {
     const getAuthUrl = vi.fn().mockResolvedValue({ auth_url: 'https://accounts.google.com/auth' });
     const disconnect = vi.fn();
+    const navigateToAuth = vi.fn();
 
     const { result } = renderHook(() =>
       useOAuthConnect({
         serviceName: 'test_service',
         getAuthUrl,
         disconnect,
+        navigateToAuth,
         serviceLabel: '測試服務',
       })
     );
-
-    // Mock window.location
-    const originalLocation = window.location;
-    delete window.location;
-    window.location = { href: '' };
 
     await act(async () => {
       await result.current.handleConnect();
     });
 
     expect(getAuthUrl).toHaveBeenCalledTimes(1);
-    expect(window.location.href).toBe('https://accounts.google.com/auth');
-
-    window.location = originalLocation;
+    expect(navigateToAuth).toHaveBeenCalledWith('https://accounts.google.com/auth');
   });
 
   it('handles disconnect with confirmation and callbacks', async () => {

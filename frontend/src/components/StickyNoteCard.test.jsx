@@ -2,11 +2,11 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import StickyNoteCard, { formatNoteDate } from './StickyNoteCard';
-import { api } from '../services/api';
+import { notesApi } from '../features/notes/api/notesApi';
 import * as clipboardModule from '../utils/clipboard';
 
-vi.mock('../services/api', () => ({
-  api: {
+vi.mock('../features/notes/api/notesApi', () => ({
+  notesApi: {
     updateNote: vi.fn(),
     deleteNote: vi.fn(),
   },
@@ -66,7 +66,7 @@ describe('StickyNoteCard', () => {
   });
 
   it('toggles pinned state', async () => {
-    api.updateNote.mockResolvedValueOnce({
+    notesApi.updateNote.mockResolvedValueOnce({
       note: { ...mockNote, pinned: true },
     });
     const onUpdated = vi.fn();
@@ -77,13 +77,13 @@ describe('StickyNoteCard', () => {
     fireEvent.click(pinBtn);
 
     await waitFor(() => {
-      expect(api.updateNote).toHaveBeenCalledWith('note-1', { pinned: true });
+      expect(notesApi.updateNote).toHaveBeenCalledWith('note-1', { pinned: true });
       expect(onUpdated).toHaveBeenCalledWith(expect.objectContaining({ pinned: true }));
     });
   });
 
   it('opens confirm dialog and handles deletion', async () => {
-    api.deleteNote.mockResolvedValueOnce({ deleted: true });
+    notesApi.deleteNote.mockResolvedValueOnce({ deleted: true, note_id: 'note-1' });
     const onDeleted = vi.fn();
 
     render(<StickyNoteCard note={mockNote} onDeleted={onDeleted} />);
@@ -97,7 +97,7 @@ describe('StickyNoteCard', () => {
     fireEvent.click(confirmBtn);
 
     await waitFor(() => {
-      expect(api.deleteNote).toHaveBeenCalledWith('note-1');
+      expect(notesApi.deleteNote).toHaveBeenCalledWith('note-1');
       expect(onDeleted).toHaveBeenCalledWith('note-1');
     });
   });

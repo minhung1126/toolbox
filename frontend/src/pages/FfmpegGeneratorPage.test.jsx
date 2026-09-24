@@ -47,8 +47,8 @@ describe('FfmpegGeneratorPage', () => {
     const endInput = screen.getByLabelText('剪輯結束時間或長度');
     fireEvent.change(endInput, { target: { value: '00:02:30.000' } });
 
-    const codeEl = screen.getByText((content) =>
-      content.includes('-ss 00:01:15.000') && content.includes('-to 00:02:30.000')
+    const codeEl = screen.getByText(
+      (content) => content.includes('-ss 00:01:15.000') && content.includes('-to 00:02:30.000')
     );
     expect(codeEl).toBeInTheDocument();
   });
@@ -62,9 +62,7 @@ describe('FfmpegGeneratorPage', () => {
 
     expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('H.264 高相容'));
 
-    const codeEl = screen.getByText((content) =>
-      content.includes('-c:v libx264') && content.includes('-crf 23')
-    );
+    const codeEl = screen.getByText((content) => content.includes('-c:v libx264') && content.includes('-crf 23'));
     expect(codeEl).toBeInTheDocument();
   });
 

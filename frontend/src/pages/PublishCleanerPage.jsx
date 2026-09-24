@@ -1,5 +1,8 @@
+import '../features/youtube/youtube-shared.css';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, normalizeYoutubePlaylistInput } from '../services/api';
+import '../features/youtube/publish-cleaner.css';
+import { publishCleanupApi } from '../features/youtube/api/publishCleanupApi';
+import { normalizeYoutubePlaylistInput } from '../features/youtube/api/youtubeBatchApi';
 import { PATHS } from '../routes/paths';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -9,7 +12,7 @@ import YouTubeVideoEditDialog from '../components/YouTubeVideoEditDialog';
 import ResultStatus from '../components/ResultStatus';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { sortVideosByUploadTime } from '../utils/videoOrder';
-import { getYoutubeAuthContext, youtubeIsConnected, youtubePreferredUiSlot, youtubeRoutingMode, youtubeRoutingReasonLabel } from '../utils/youtubeRouting';
+import { getYoutubeAuthContext, youtubeRoutingMode, youtubeRoutingReasonLabel } from '../utils/youtubeRouting';
 import {
   YOUTUBE_COPY,
   formatQuotaUnits,
@@ -30,7 +33,6 @@ import {
   RefreshCw,
   Send,
   Trash2,
-  XCircle,
 } from 'lucide-react';
 
 function youtubeVideoUrl(videoId) {
@@ -72,48 +74,43 @@ function formatAuthContext(context) {
 function getCurrentYoutubeDataVersion(authUser, sysSettings, authContext) {
   const slot = authUser?.youtube?.slots?.[authContext.slot] || {};
   return normalizeVersion(
-    authUser?.youtube?.data_version
-      ?? authUser?.youtube?.dataVersion
-      ?? slot.data_version
-      ?? slot.dataVersion
-      ?? sysSettings?.youtube_data_version
-      ?? sysSettings?.youtubeDataVersion,
+    authUser?.youtube?.data_version ??
+      authUser?.youtube?.dataVersion ??
+      slot.data_version ??
+      slot.dataVersion ??
+      sysSettings?.youtube_data_version ??
+      sysSettings?.youtubeDataVersion
   );
 }
 
 function getPreviewSnapshot(response) {
-  return response?.preview_snapshot
-    ?? response?.previewSnapshot
-    ?? response?.preview?.snapshot
-    ?? response?.snapshot
-    ?? null;
+  return (
+    response?.preview_snapshot ?? response?.previewSnapshot ?? response?.preview?.snapshot ?? response?.snapshot ?? null
+  );
 }
 
 function getPreviewToken(response) {
-  return response?.preview_token
-    ?? response?.previewToken
-    ?? response?.snapshot_token
-    ?? response?.snapshotToken
-    ?? response?.preview?.token
-    ?? null;
+  return (
+    response?.preview_token ??
+    response?.previewToken ??
+    response?.snapshot_token ??
+    response?.snapshotToken ??
+    response?.preview?.token ??
+    null
+  );
 }
 
 function getDataVersion(response, previewSnapshot) {
   return normalizeVersion(
-    response?.data_version
-      ?? response?.dataVersion
-      ?? response?.version
-      ?? previewSnapshot?.data_version
-      ?? previewSnapshot?.dataVersion,
+    response?.data_version ??
+      response?.dataVersion ??
+      response?.version ??
+      previewSnapshot?.data_version ??
+      previewSnapshot?.dataVersion
   );
 }
 
-function snapshotMatches(snapshot, {
-  playlistId,
-  authKey,
-  dataVersion,
-  workflowRevision,
-}) {
+function snapshotMatches(snapshot, { playlistId, authKey, dataVersion, workflowRevision }) {
   if (!snapshot || snapshot.revision !== workflowRevision) return false;
   if (snapshot.playlistId !== playlistId || snapshot.authKey !== authKey) return false;
   if (dataVersion !== null && snapshot.dataVersion !== dataVersion) return false;
@@ -149,8 +146,7 @@ function YouTubeVideoLink({ videoId }) {
   if (!videoId) return null;
   return (
     <a className="youtube-video-link" href={youtubeVideoUrl(videoId)} target="_blank" rel="noopener noreferrer">
-      <ExternalLink size={14} aria-hidden="true" />
-      在 YouTube 開啟影片
+      <ExternalLink size={14} aria-hidden="true" />在 YouTube 開啟影片
     </a>
   );
 }
@@ -159,15 +155,15 @@ function PublishConfirmationContent({ snapshot, quotaEstimate }) {
   return (
     <div className="confirm-content">
       <dl className="confirm-summary-list" aria-label="發布摘要">
-        <div>
+        <div className="confirm-summary-item">
           <dt>播放清單：</dt>
           <dd>{snapshot.playlistId}</dd>
         </div>
-        <div>
+        <div className="confirm-summary-item">
           <dt>授權組合：</dt>
           <dd>{formatAuthContext(snapshot.auth)}</dd>
         </div>
-        <div>
+        <div className="confirm-summary-item">
           <dt>影片數量：</dt>
           <dd>{formatVideoCount(snapshot.videos.length)}</dd>
         </div>
@@ -179,10 +175,18 @@ function PublishConfirmationContent({ snapshot, quotaEstimate }) {
           {snapshot.videos.map((video, index) => (
             <li key={video.video_id}>
               <div className="confirm-video-heading">
-                <strong>#{index + 1} {video.title || '無標題影片'}</strong>
+                <strong>
+                  #{index + 1} {video.title || '無標題影片'}
+                </strong>
                 <div className="confirm-video-statuses" aria-label={`第 ${index + 1} 支影片的處理狀態`}>
-                  <span className="badge badge-info"><Globe size={12} aria-hidden="true" />{YOUTUBE_COPY.setPublic}</span>
-                  <span className="badge badge-info publish-remove-badge"><Trash2 size={12} aria-hidden="true" />{YOUTUBE_COPY.removeFromToPost}</span>
+                  <span className="badge badge-info">
+                    <Globe size={12} aria-hidden="true" />
+                    {YOUTUBE_COPY.setPublic}
+                  </span>
+                  <span className="badge badge-info publish-remove-badge">
+                    <Trash2 size={12} aria-hidden="true" />
+                    {YOUTUBE_COPY.removeFromToPost}
+                  </span>
                 </div>
               </div>
               <div className="confirm-video-meta">
@@ -195,13 +199,14 @@ function PublishConfirmationContent({ snapshot, quotaEstimate }) {
       </section>
 
       <div className="confirm-risk-panel" role="note" aria-label="風險說明">
-        <strong>風險與處理方式</strong>
+        <strong className="confirm-risk-title">風險與處理方式</strong>
         <ul>
           <li>只有上列影片會送出；預覽後新加入清單或未出現在預覽中的影片不會發布。</li>
           <li>影片設為公開後會移出 To-Post 播放清單，但仍會保留在 YouTube 頻道中。</li>
           {quotaEstimate && (
             <li>
-              本次最壞估算 {formatQuotaUnits(quotaEstimate.projected_units)}，目前配額預計可處理 {formatVideoCount(quotaEstimate.max_items_today ?? snapshot.videos.length)}。
+              本次最壞估算 {formatQuotaUnits(quotaEstimate.projected_units)}，目前配額預計可處理{' '}
+              {formatVideoCount(quotaEstimate.max_items_today ?? snapshot.videos.length)}。
               {quotaEstimate.can_complete_today === false
                 ? ' 若途中達上限，未執行項目需在官方重設後重新讀取清單並送出。'
                 : ''}
@@ -225,7 +230,7 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
   const authKey = useMemo(() => authContextKey(authContext), [authContext]);
   const dataVersion = useMemo(
     () => getCurrentYoutubeDataVersion(authUser, sysSettings, authContext),
-    [authContext, authUser, sysSettings],
+    [authContext, authUser, sysSettings]
   );
   const [loading, setLoading] = useState(false);
   const [executing, setExecuting] = useState(false);
@@ -294,7 +299,9 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
     authKey,
     dataVersion,
     workflowRevision: workflowRevisionRef.current,
-  }) ? playlistSnapshot : null;
+  })
+    ? playlistSnapshot
+    : null;
   const videos = currentSnapshot?.videos || [];
   const sourceLabel = currentSnapshot?.source === 'youtube-api' ? 'YouTube API' : '';
   const dialogSnapshot = snapshotMatches(confirmationSnapshot, {
@@ -302,14 +309,15 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
     authKey,
     dataVersion,
     workflowRevision: workflowRevisionRef.current,
-  }) ? confirmationSnapshot : null;
+  })
+    ? confirmationSnapshot
+    : null;
 
-  const isRequestCurrent = (revision, requestedPlaylistId, requestedAuthKey, requestedDataVersion) => (
-    revision === workflowRevisionRef.current
-      && requestedPlaylistId === normalizePlaylistId(playlistIdRef.current)
-      && requestedAuthKey === currentAuthKeyRef.current
-      && requestedDataVersion === currentDataVersionRef.current
-  );
+  const isRequestCurrent = (revision, requestedPlaylistId, requestedAuthKey, requestedDataVersion) =>
+    revision === workflowRevisionRef.current &&
+    requestedPlaylistId === normalizePlaylistId(playlistIdRef.current) &&
+    requestedAuthKey === currentAuthKeyRef.current &&
+    requestedDataVersion === currentDataVersionRef.current;
 
   const handleLoadPlaylist = async () => {
     if (loadingRef.current || executingRef.current) return;
@@ -340,15 +348,14 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
     setEditingVideo(null);
 
     try {
-      const response = await api.getPlaylistVideos(requestedPlaylistId);
+      const response = await publishCleanupApi.getPlaylistVideos(requestedPlaylistId);
       if (!isRequestCurrent(requestRevision, requestedPlaylistId, requestedAuthKey, requestedDataVersion)) return;
 
       const serverPreviewSnapshot = getPreviewSnapshot(response);
-      const responseSlot = response?.youtube_slot
-        || (serverPreviewSnapshot && typeof serverPreviewSnapshot === 'object' ? serverPreviewSnapshot.youtube_slot : '');
-      const responseAuthContext = responseSlot
-        ? getYoutubeAuthContext(authUser, responseSlot)
-        : requestedAuthContext;
+      const responseSlot =
+        response?.youtube_slot ||
+        (serverPreviewSnapshot && typeof serverPreviewSnapshot === 'object' ? serverPreviewSnapshot.youtube_slot : '');
+      const responseAuthContext = responseSlot ? getYoutubeAuthContext(authUser, responseSlot) : requestedAuthContext;
 
       const loadedVideos = sortVideosByUploadTime(Array.isArray(response?.videos) ? response.videos : []);
       const loadedDataVersion = getDataVersion(response, serverPreviewSnapshot);
@@ -404,7 +411,7 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
     setEstimateLoading(true);
     setQuotaEstimate(null);
     try {
-      const estimate = await api.estimateYoutubeQuota({
+      const estimate = await publishCleanupApi.estimateQuota({
         operation: 'youtube.publish_cleanup',
         itemCount: candidateSnapshot.videos.length,
         slot: candidateSnapshot.auth.slot,
@@ -448,7 +455,7 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
     setResult(null);
     setEditingVideo(null);
     try {
-      const response = await api.publishAndCleanup(requestSnapshot.playlistId, publishOptions);
+      const response = await publishCleanupApi.publishAndCleanup(requestSnapshot.playlistId, publishOptions);
       if (requestRevision !== workflowRevisionRef.current) return;
       invalidateSnapshot();
       setResult(response);
@@ -484,7 +491,7 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
     const videoId = editingVideo.video_id;
     setSavingEdit(true);
     try {
-      const updated = await api.updateYoutubeVideoMetadata({ videoId, title, description });
+      const updated = await publishCleanupApi.updateVideoMetadata({ videoId, title, description });
       if (!isRequestCurrent(editRevision, editPlaylistId, editAuthKey, editDataVersion)) return;
       invalidateSnapshot();
       toast.success('影片標題與描述已更新，請重新讀取播放清單以建立最新預覽');
@@ -506,9 +513,7 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
       </div>
       <div>
         <div className="metadata-label">描述</div>
-        <div className="metadata-description">
-          {description || '（無描述）'}
-        </div>
+        <div className="metadata-description">{description || '（無描述）'}</div>
       </div>
     </div>
   );
@@ -518,7 +523,9 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
       <ConfirmDialog
         open={confirmOpen && Boolean(dialogSnapshot) && !executing}
         title={dialogSnapshot ? `確認發布 ${formatVideoCount(dialogSnapshot.videos.length)}` : '確認發布草稿'}
-        content={dialogSnapshot ? <PublishConfirmationContent snapshot={dialogSnapshot} quotaEstimate={quotaEstimate} /> : null}
+        content={
+          dialogSnapshot ? <PublishConfirmationContent snapshot={dialogSnapshot} quotaEstimate={quotaEstimate} /> : null
+        }
         confirmText={YOUTUBE_COPY.publishConfirmAction}
         cancelText="取消"
         variant="destructive"
@@ -542,14 +549,23 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
           <h1>{YOUTUBE_COPY.pageTitle}</h1>
         </div>
         <p className="section-desc">
-          讀取待發布影片後，依 YouTube 上傳時間由最早到最晚顯示與處理；執行時才呼叫必要的 YouTube API 設為公開並移出 To-Post 播放清單。
+          讀取待發布影片後，依 YouTube 上傳時間由最早到最晚顯示與處理；執行時才呼叫必要的 YouTube API 設為公開並移出
+          To-Post 播放清單。
         </p>
-        <p className="section-desc">目前 YouTube routing：{routingMode === 'auto_primary' ? 'Auto：Primary 優先，配額不足時使用 Secondary' : '手動：只使用目前作用中 slot'}。每次讀取的預覽會固定實際使用的 slot。</p>
+        <p className="section-desc">
+          目前 YouTube routing：
+          {routingMode === 'auto_primary'
+            ? 'Auto：Primary 優先，配額不足時使用 Secondary'
+            : '手動：只使用目前作用中 slot'}
+          。每次讀取的預覽會固定實際使用的 slot。
+        </p>
       </header>
 
       <div className="glass-panel card-padding toolbar publish-source-panel">
         <div className="form-group publish-source-field">
-          <label className="form-label"><PlaySquare size={14} /> 共用 To-Post 播放清單</label>
+          <label className="form-label">
+            <PlaySquare size={14} /> 共用 To-Post 播放清單
+          </label>
           <SourceLinkInput
             type="text"
             value={playlistId}
@@ -558,23 +574,37 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
             readOnly
             disabled={executing}
           />
-          <p className="section-desc">此播放清單由 YouTube 設定統一管理。如需修改，請至 <a href={PATHS.youtubePlaylist}>YouTube 播放清單設定</a>（修改後會自動儲存）。</p>
+          <p className="section-desc">
+            此播放清單由 YouTube 設定統一管理。如需修改，請至 <a href={PATHS.youtubePlaylist}>YouTube 播放清單設定</a>
+            （修改後會自動儲存）。
+          </p>
         </div>
-        <button className="btn btn-primary publish-action-button" onClick={handleLoadPlaylist} disabled={loading || executing || estimateLoading}>
+        <button
+          className="btn btn-primary publish-action-button"
+          onClick={handleLoadPlaylist}
+          disabled={loading || executing || estimateLoading}
+        >
           <RefreshCw size={16} className={loading ? 'spin' : ''} />
           {loading ? YOUTUBE_COPY.readLoading : '讀取 To-Post 播放清單'}
         </button>
       </div>
 
-      {workStateError && <div className="filter-panel-status filter-panel-status-error" role="alert">工作狀態同步失敗：{workStateError}</div>}
+      {workStateError && (
+        <div className="filter-panel-status filter-panel-status-error" role="alert">
+          工作狀態同步失敗：{workStateError}
+        </div>
+      )}
 
       {sourceLabel && (
         <div className="info-banner">
           <ListOrdered size={15} color="var(--secondary)" />
           <span>
-            播放清單來源：{sourceLabel}。顯示與實際處理都依上傳時間由最早到最晚；缺少上傳時間的影片排在最後並維持原始順序。
+            播放清單來源：{sourceLabel}
+            。顯示與實際處理都依上傳時間由最早到最晚；缺少上傳時間的影片排在最後並維持原始順序。
             {currentSnapshot.fallbackReason ? ` 回退原因：${currentSnapshot.fallbackReason}` : ''}
-            {currentSnapshot.routingReason ? ` YouTube routing：${youtubeRoutingReasonLabel(currentSnapshot.routingReason)}。` : ''}
+            {currentSnapshot.routingReason
+              ? ` YouTube routing：${youtubeRoutingReasonLabel(currentSnapshot.routingReason)}。`
+              : ''}
           </span>
         </div>
       )}
@@ -586,14 +616,20 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
         </div>
       )}
 
-      {errorMsg && <div className="glass-panel error-alert" role="alert"><AlertTriangle size={20} /><span>{errorMsg}</span></div>}
+      {errorMsg && (
+        <div className="glass-panel error-alert" role="alert">
+          <AlertTriangle size={20} />
+          <span>{errorMsg}</span>
+        </div>
+      )}
 
       {videos.length > 0 && currentSnapshot && (
         <div className="section-gap publish-workflow">
           <div className="glass-panel card-padding publish-summary-panel">
             <h2>檢查並發布 {formatVideoCount(videos.length)}</h2>
             <p>
-              系統會依下方上傳時間順序逐支<strong>{YOUTUBE_COPY.setPublic}</strong>，成功後再{YOUTUBE_COPY.removeFromToPost}。移出播放清單不會刪除影片。
+              系統會依下方上傳時間順序逐支<strong>{YOUTUBE_COPY.setPublic}</strong>，成功後再
+              {YOUTUBE_COPY.removeFromToPost}。移出播放清單不會刪除影片。
             </p>
           </div>
 
@@ -603,50 +639,58 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
             </h3>
             <ol className="publish-items-list" aria-label="待處理影片清單">
               {videos.map((video, index) => (
-              <li key={video.video_id} className="glass-panel publish-item" value={index + 1}>
-                <span className="publish-item-index" aria-hidden="true">#{index + 1}</span>
-                {(video.thumbnail_url || video.video_id) && (
-                  <VideoThumbnail
-                    src={video.thumbnail_url}
-                    videoId={video.video_id}
-                    alt={video.title || '影片'}
-                    className="publish-cleaner-thumbnail"
-                    buttonClassName="publish-cleaner-thumbnail-button"
-                    emptyClassName="publish-cleaner-thumbnail-empty"
-                    onPreview={(imgInfo) => setPreviewImage(imgInfo)}
-                  />
-                )}
-                <div className="publish-item-content">
-                  {metadataBlock(video.title, video.description)}
-                  <YouTubeVideoLink videoId={video.video_id} />
-                  <div className="publish-item-meta">
-                    <span>{formatVideoId(video.video_id)}</span>
-                    <span>
-                      上傳時間：{formatVideoUploadTime(video.published_at)}
-                    </span>
+                <li key={video.video_id} className="glass-panel publish-item" value={index + 1}>
+                  <span className="publish-item-index" aria-hidden="true">
+                    #{index + 1}
+                  </span>
+                  {(video.thumbnail_url || video.video_id) && (
+                    <VideoThumbnail
+                      src={video.thumbnail_url}
+                      videoId={video.video_id}
+                      alt={video.title || '影片'}
+                      className="publish-cleaner-thumbnail"
+                      buttonClassName="publish-cleaner-thumbnail-button"
+                      emptyClassName="publish-cleaner-thumbnail-empty"
+                      onPreview={(imgInfo) => setPreviewImage(imgInfo)}
+                    />
+                  )}
+                  <div className="publish-item-content">
+                    {metadataBlock(video.title, video.description)}
+                    <YouTubeVideoLink videoId={video.video_id} />
+                    <div className="publish-item-meta">
+                      <span>{formatVideoId(video.video_id)}</span>
+                      <span>上傳時間：{formatVideoUploadTime(video.published_at)}</span>
+                    </div>
                   </div>
-                </div>
-                <div className="publish-item-status">
-                  <span className="badge badge-info"><Globe size={12} aria-hidden="true" /> {YOUTUBE_COPY.setPublic}</span>
-                  <span className="badge badge-info publish-remove-badge"><Trash2 size={12} aria-hidden="true" /> {YOUTUBE_COPY.removeFromToPost}</span>
-                  <button
-                    type="button"
-                    className="btn btn-secondary publish-edit-button"
-                    onClick={() => setEditingVideo(video)}
-                    disabled={executing || savingEdit || loading || estimateLoading}
-                    aria-label={`編輯標題與描述：${video.title || video.video_id}`}
-                  >
-                    <Pencil size={14} aria-hidden="true" /> 編輯標題與描述
-                  </button>
-                </div>
-              </li>
+                  <div className="publish-item-status">
+                    <span className="badge badge-info">
+                      <Globe size={12} aria-hidden="true" /> {YOUTUBE_COPY.setPublic}
+                    </span>
+                    <span className="badge badge-info publish-remove-badge">
+                      <Trash2 size={12} aria-hidden="true" /> {YOUTUBE_COPY.removeFromToPost}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-secondary publish-edit-button"
+                      onClick={() => setEditingVideo(video)}
+                      disabled={executing || savingEdit || loading || estimateLoading}
+                      aria-label={`編輯標題與描述：${video.title || video.video_id}`}
+                    >
+                      <Pencil size={14} aria-hidden="true" /> 編輯標題與描述
+                    </button>
+                  </div>
+                </li>
               ))}
             </ol>
           </div>
 
           <div className="glass-panel execution-bar">
             <span>確認上傳時間、標題與描述無誤後，啟動發布流程：</span>
-            <button className="btn btn-primary publish-action-button" onClick={requestPublish} disabled={executing || loading || estimateLoading || !currentSnapshot || !videos.length}>
+            <button
+              className="btn btn-primary publish-action-button"
+              onClick={requestPublish}
+              disabled={executing || loading || estimateLoading || !currentSnapshot || !videos.length}
+            >
               <Send size={18} /> {executing ? YOUTUBE_COPY.updateLoading : YOUTUBE_COPY.publishConfirmAction}
             </button>
           </div>
@@ -655,22 +699,50 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
 
       {result && (
         <div className="glass-panel card-padding publish-result-panel card-stack">
-          <h3 className={result.completed ? 'result-heading result-heading-publish-success' : 'result-heading result-heading-warning'}><CheckCircle2 size={22} /> {result.completed ? '發布草稿已執行完成' : '發布草稿部分完成'}</h3>
-          <p className="section-desc">共 {formatVideoCount(result.total_count || 0)}：{formatResultCounts(result, { includeWarning: true })}。</p>
-          {result.quota_blocked && <div className="info-banner"><AlertTriangle size={15} /><span>已達 YouTube 配額上限；未執行項目請於官方重設後重新讀取播放清單並送出。</span></div>}
-          {result.results && <div className="publish-result-list">
-            {result.results.map((item, index) => (
-              <div key={`${item.video_id}-${index}`} className={`result-item result-row publish-result-item ${item.status === 'failed' ? 'publish-result-item-failed' : 'publish-result-item-success'}`}>
-                <div>
-                  <strong>#{index + 1}</strong>
-                  <div className="publish-result-metadata">{metadataBlock(item.title, item.description)}</div>
-                  <div className="result-meta">{formatVideoId(item.video_id)} · <YouTubeVideoLink videoId={item.video_id} /></div>
-                  {item.reason && <div className={item.status === 'failed' ? 'result-reason result-reason-failed' : 'result-reason'}>說明：{item.reason}</div>}
+          <h3
+            className={
+              result.completed
+                ? 'result-heading result-heading-publish-success'
+                : 'result-heading result-heading-warning'
+            }
+          >
+            <CheckCircle2 size={22} /> {result.completed ? '發布草稿已執行完成' : '發布草稿部分完成'}
+          </h3>
+          <p className="section-desc">
+            共 {formatVideoCount(result.total_count || 0)}：{formatResultCounts(result, { includeWarning: true })}。
+          </p>
+          {result.quota_blocked && (
+            <div className="info-banner">
+              <AlertTriangle size={15} />
+              <span>已達 YouTube 配額上限；未執行項目請於官方重設後重新讀取播放清單並送出。</span>
+            </div>
+          )}
+          {result.results && (
+            <div className="publish-result-list">
+              {result.results.map((item, index) => (
+                <div
+                  key={`${item.video_id}-${index}`}
+                  className={`result-item result-row publish-result-item ${item.status === 'failed' ? 'publish-result-item-failed' : 'publish-result-item-success'}`}
+                >
+                  <div>
+                    <strong>#{index + 1}</strong>
+                    <div className="publish-result-metadata">{metadataBlock(item.title, item.description)}</div>
+                    <div className="result-meta">
+                      {formatVideoId(item.video_id)} · <YouTubeVideoLink videoId={item.video_id} />
+                    </div>
+                    {item.reason && (
+                      <div
+                        className={item.status === 'failed' ? 'result-reason result-reason-failed' : 'result-reason'}
+                      >
+                        說明：{item.reason}
+                      </div>
+                    )}
+                  </div>
+                  <ResultStatus status={item.status} />
                 </div>
-                <ResultStatus status={item.status} />
-              </div>
-            ))}
-          </div>}
+              ))}
+            </div>
+          )}
         </div>
       )}
 

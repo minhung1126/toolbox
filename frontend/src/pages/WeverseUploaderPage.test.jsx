@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import WeverseUploaderPage from './WeverseUploaderPage';
-import { api } from '../services/api';
+import { weverseUploadApi } from '../features/weverse/api/weverseUploadApi';
 
 const mockToast = {
   success: vi.fn(),
@@ -14,26 +14,33 @@ vi.mock('../components/Toast', () => ({
   useToast: () => mockToast,
 }));
 
-vi.mock('../services/api', () => ({
-  api: {
-    getVideoUploaderAuthUrl: vi.fn(),
-    disconnectVideoUploader: vi.fn(),
-    scanWeverseFolder: vi.fn(),
-    parseWeverseFiles: vi.fn(),
-    uploadWeverseFromPath: vi.fn(),
-    uploadWeverseFiles: vi.fn(),
-    getWeverseUploadTask: vi.fn(),
-    getWeverseUploadHistory: vi.fn().mockResolvedValue({ tasks: [] }),
-    getWeverseRecentPaths: vi.fn().mockResolvedValue({ paths: ['C:\\downloads\\weverse_sample'] }),
+vi.mock('../features/weverse/api/weverseUploadApi', () => ({
+  weverseUploadApi: {
+    getUploaderAuthUrl: vi.fn(),
+    disconnectUploader: vi.fn(),
+    scanFolder: vi.fn(),
+    parseFiles: vi.fn(),
+    uploadFromPath: vi.fn(),
+    uploadFiles: vi.fn(),
+    getTask: vi.fn(),
+    getHistory: vi.fn().mockResolvedValue({ tasks: [] }),
+    getRecentPaths: vi.fn().mockResolvedValue({ paths: ['C:\\downloads\\weverse_sample'] }),
   },
 }));
 
-function renderPage(props = {}) {
-  return render(
-    <MemoryRouter>
-      <WeverseUploaderPage {...props} />
-    </MemoryRouter>
-  );
+async function renderPage(props = {}) {
+  let rendered;
+  await act(async () => {
+    rendered = render(
+      <MemoryRouter>
+        <WeverseUploaderPage {...props} />
+      </MemoryRouter>
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  return rendered;
 }
 
 describe('WeverseUploaderPage', () => {
@@ -41,14 +48,14 @@ describe('WeverseUploaderPage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders page title, YouTube auth card, and folder picker dropzone', () => {
+  it('renders page title, YouTube auth card, and folder picker dropzone', async () => {
     const authUser = {
       authorizations: {
         video_uploader: { connected: false },
       },
     };
 
-    renderPage({ authUser });
+    await renderPage({ authUser });
 
     expect(screen.getByRole('heading', { level: 1, name: /Weverse 影片與字幕上傳/ })).toBeInTheDocument();
     expect(screen.getByText('影片上傳專屬 YouTube 頻道')).toBeInTheDocument();
@@ -66,7 +73,7 @@ describe('WeverseUploaderPage', () => {
       },
     };
 
-    api.scanWeverseFolder.mockResolvedValueOnce({
+    weverseUploadApi.scanFolder.mockResolvedValueOnce({
       packages: [
         {
           package_id: '20260923_Live_3-241665049',
@@ -98,7 +105,7 @@ describe('WeverseUploaderPage', () => {
       ],
     });
 
-    renderPage({ authUser });
+    await renderPage({ authUser });
 
     // Switch to manual path mode
     fireEvent.click(screen.getByRole('button', { name: '直接輸入本機路徑' }));
@@ -109,7 +116,7 @@ describe('WeverseUploaderPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '掃描並辨識' }));
 
     await waitFor(() => {
-      expect(api.scanWeverseFolder).toHaveBeenCalledWith('C:\\downloads\\20260923_Live_3-241665049');
+      expect(weverseUploadApi.scanFolder).toHaveBeenCalledWith('C:\\downloads\\20260923_Live_3-241665049');
     });
 
     // Step 2 review screen should appear
@@ -132,7 +139,7 @@ describe('WeverseUploaderPage', () => {
       },
     };
 
-    api.scanWeverseFolder.mockResolvedValueOnce({
+    weverseUploadApi.scanFolder.mockResolvedValueOnce({
       packages: [
         {
           package_id: 'test',
@@ -146,7 +153,7 @@ describe('WeverseUploaderPage', () => {
       ],
     });
 
-    renderPage({ authUser });
+    await renderPage({ authUser });
 
     fireEvent.click(screen.getByRole('button', { name: '直接輸入本機路徑' }));
     fireEvent.change(screen.getByPlaceholderText(/例如：D:\\Weverse/), { target: { value: 'C:\\test' } });

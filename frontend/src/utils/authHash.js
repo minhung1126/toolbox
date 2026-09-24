@@ -28,6 +28,6 @@ export function clearAuthHash() {
   window.history.replaceState(
     window.history.state,
     document.title,
-    `${window.location.pathname}${window.location.search}`,
+    `${window.location.pathname}${window.location.search}`
   );
 }

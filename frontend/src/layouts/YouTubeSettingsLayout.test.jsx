@@ -32,15 +32,20 @@ describe('YouTubeSettingsLayout', () => {
       <MemoryRouter initialEntries={[PATHS.youtubeConnections]}>
         <Routes>
           <Route path="/youtube/settings/*" element={<YouTubeSettingsLayout />}>
-            <Route path="connections" element={<YoutubeConnectionsPage
-              authUser={{ youtube: { slots: { primary: {}, secondary: {} } } }}
-              sysSettings={{}}
-              refreshSettings={vi.fn()}
-              refreshAuthUser={vi.fn()}
-            />} />
+            <Route
+              path="connections"
+              element={
+                <YoutubeConnectionsPage
+                  authUser={{ youtube: { slots: { primary: {}, secondary: {} } } }}
+                  sysSettings={{}}
+                  refreshSettings={vi.fn()}
+                  refreshAuthUser={vi.fn()}
+                />
+              }
+            />
           </Route>
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     expect(screen.getAllByRole('heading', { level: 1, name: 'YouTube 設定' })).toHaveLength(1);

@@ -1,6 +1,6 @@
 services:
   toolbox:
-    image: ghcr.io/minhung1126/toolbox:latest
+    image: ${IMAGE_NAME:-ghcr.io/minhung1126/toolbox:latest}
     container_name: toolbox
     ports:
       - 8000:8000
@@ -8,4 +8,5 @@ services:
       - .env
     volumes:
       - ./data:/app/data
+    stop_grace_period: 45s
     restart: unless-stopped

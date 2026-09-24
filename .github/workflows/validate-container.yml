@@ -1,6 +1,7 @@
 name: Validate container
 
 on:
+  workflow_call:
   pull_request:
     branches: [main]
     paths:
@@ -9,15 +10,18 @@ on:
       - backend/**
       - frontend/**
       - pyproject.toml
+      - README.md
+      - docs/**
       - docker-compose.yml
       - .env.example
       - .github/workflows/validate-container.yml
+      - .github/workflows/publish-container.yml
 
 permissions:
   contents: read
 
 concurrency:
-  group: validate-container-${{ github.event.pull_request.number }}
+  group: validate-container-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -28,8 +32,8 @@ jobs:
       - name: Check out PR branch
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
           persist-credentials: false
 
@@ -58,9 +62,22 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
+          npm run format:check
           npm run lint
+          npm run lint:styles
+          npm run typecheck
           npm test -- --run
           npm run build
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
+      - name: Upload responsive layout screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: responsive-layout-screenshots
+          path: frontend/test-results/**/*.png
+          if-no-files-found: ignore
 
       - name: Validate Docker and Compose
         run: |

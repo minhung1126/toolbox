@@ -50,25 +50,10 @@ describe('DashboardPage', () => {
     expect(screen.getByText('API 健康度')).toBeInTheDocument();
 
     // Links
-    expect(screen.getByRole('link', { name: /進入 Video 草稿/ })).toHaveAttribute(
-      'href',
-      PATHS.youtubeVideoDrafts
-    );
-    expect(screen.getByRole('link', { name: /進入 Shorts 草稿/ })).toHaveAttribute(
-      'href',
-      PATHS.youtubeShortsDrafts
-    );
-    expect(screen.getByRole('link', { name: /進入發布模組/ })).toHaveAttribute(
-      'href',
-      PATHS.youtubePublishCleanup
-    );
-    expect(screen.getByRole('link', { name: /進入內容複製/ })).toHaveAttribute(
-      'href',
-      PATHS.sheetCopy
-    );
-    expect(screen.getByRole('link', { name: /進入系統設定/ })).toHaveAttribute(
-      'href',
-      PATHS.systemSettings
-    );
+    expect(screen.getByRole('link', { name: /進入 Video 草稿/ })).toHaveAttribute('href', PATHS.youtubeVideoDrafts);
+    expect(screen.getByRole('link', { name: /進入 Shorts 草稿/ })).toHaveAttribute('href', PATHS.youtubeShortsDrafts);
+    expect(screen.getByRole('link', { name: /進入發布模組/ })).toHaveAttribute('href', PATHS.youtubePublishCleanup);
+    expect(screen.getByRole('link', { name: /進入內容複製/ })).toHaveAttribute('href', PATHS.sheetCopy);
+    expect(screen.getByRole('link', { name: /進入系統設定/ })).toHaveAttribute('href', PATHS.systemSettings);
   });
 });

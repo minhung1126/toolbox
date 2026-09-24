@@ -138,9 +138,24 @@ foreach ($asset in $assets) {
 
 ## 健康檢查與資料保存
 
-- Health endpoint：`/api/v1/health`。部署後可確認 HTTP 200 與 JSON 的 `ready` 為 `true`。
+- Health endpoint：`/api/v1/health`。部署後可確認 HTTP 200 與 JSON 的 `ready` 為 `true`；若 plugin 初始化失敗，response 會列出非敏感的 `tools` 狀態並將 readiness 設為 `false`。
 - OAuth callback：`/api/v1/auth/callback`。
 - `data/` 包含加密憑證、session、帳號工作狀態、runtime 設定與兩個 YouTube 配額 ledger。服務重建或搬遷時必須保留整個 volume。
 - 不要提交 `.env`、`data/` 或任何 client secret。修改 `.env` 後要重新建立或重啟容器。
 - 正式環境若遇到 `409 stale_preview`，請讓使用者重新讀取並確認完整預覽；不要在 proxy 或 client 層自動重送寫入請求。
 - API 錯誤的公開格式固定為 `detail.code`、`detail.message`、`detail.retryable`、`detail.field_errors`；不要把 provider 原始錯誤 body 寫入 response 或 log。
+
+
+## 停機、資料隔離與回退驗收
+
+Weverse 停機停止接單並等待最多 20 秒。逾時工作標記 `interrupted`，取消尚未執行的上傳，正在進行的 provider I/O 會在返回後停止後續操作。Compose 設定 `stop_grace_period: 45s`；Python 執行緒無法強制終止已開始的網路呼叫，因此最後由容器終止程序。重啟後必須先查 YouTube Studio 核對，不能直接重送中斷工作。
+
+`TOOLBOX_DATA_DIR` 可指定資料根目錄；未設定仍是專案 `data/`（容器 `/app/data`），原 JSON 格式與檔名保持相容。pytest 會自行使用暫存目錄並阻擋第三方網路；正式啟動時不要把測試暫存路徑放進 `.env`。
+
+回退演練必須使用隔離環境及資料副本：
+
+1. 記錄目前與前一版的完整 image SHA，先停止測試環境的寫入，備份整個 data volume，保留同一組加密主密鑰。
+2. 以本版啟動副本，確認 health、舊 notes／帳號設定可讀，以及 fake provider 的上傳狀態；中斷上傳後重啟，確認未再次呼叫 provider。
+3. 將 `.env` 的 `IMAGE_NAME` 設為前一版 SHA，執行 `docker compose pull` 及 `docker compose up -d`，確認資料可讀、深層網址可直接載入、登入與靜態資源正常。
+4. 比對新版本寫入的 JSON 與前一版 reader；若 reader 不相容，先停機並使用演練前備份，不能只回退 image。
+5. 將實際使用的 SHA、資料相容結果與中斷工作核對結果記入交付紀錄。此處提供操作規程，不代表已完成真實部署演練。

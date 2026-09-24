@@ -12,8 +12,9 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { api } from '../services/api';
+import { ytmusicSettingsApi } from '../features/ytmusic/api/ytmusicSettingsApi';
 import { useToast } from './Toast';
+import '../features/ytmusic/quick-token-drawer.css';
 
 export default function QuickTokenDrawer({
   isOpen,
@@ -39,7 +40,7 @@ export default function QuickTokenDrawer({
     setValidating(true);
     setValidationResult(null);
     try {
-      const res = await api.validateYtmusicCustomToken(raw || null);
+      const res = await ytmusicSettingsApi.validate(raw || null);
       setValidationResult({
         valid: true,
         message: res.message || 'Token 驗證成功，可正常讀取 YouTube Music 音樂庫並進行 0 配額排序。',
@@ -67,7 +68,7 @@ export default function QuickTokenDrawer({
     }
     setSaving(true);
     try {
-      await api.saveYtmusicCustomToken(trimmed);
+      await ytmusicSettingsApi.save(trimmed);
       toast.success('YouTube Music 瀏覽器 Token 已成功啟用（0 配額模式）！');
       setTokenInput('');
       setValidationResult(null);
@@ -84,7 +85,7 @@ export default function QuickTokenDrawer({
   const handleClear = async () => {
     setSaving(true);
     try {
-      await api.clearYtmusicCustomToken();
+      await ytmusicSettingsApi.clear();
       toast.success('已清除自訂 Token，將改用 Google API 模式');
       setValidationResult(null);
       if (onTokenCleared) {
@@ -98,47 +99,32 @@ export default function QuickTokenDrawer({
   };
 
   return (
-    <div
-      data-testid="quick-token-drawer"
-      style={{
-        marginTop: 14,
-        padding: '16px 20px',
-        borderRadius: 10,
-        backgroundColor: 'rgba(15, 23, 42, 0.75)',
-        border: '1px solid rgba(59, 130, 246, 0.35)',
-        boxShadow: '0 8px 24px -4px rgba(0, 0, 0, 0.4)',
-        animation: 'fadeIn 0.2s ease-in-out',
-      }}
-    >
+    <div className="quick-token-drawer" data-testid="quick-token-drawer">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Key size={18} color="var(--primary, #38bdf8)" />
-          <strong style={{ fontSize: '0.95rem', color: '#fff' }}>
-            YouTube Music 瀏覽器 Token 快速配置（0 配額模式）
-          </strong>
+      <div className="quick-token-header">
+        <div className="quick-token-heading">
+          <Key size={18} className="quick-token-heading-icon" aria-hidden="true" />
+          <strong className="quick-token-heading-title">YouTube Music 瀏覽器 Token 快速配置（0 配額模式）</strong>
           {hasCustomToken && (
-            <span className="badge badge-connected" style={{ fontSize: '0.75rem' }}>
+            <span className="badge badge-connected quick-token-active-badge">
               <CheckCircle2 size={11} /> 目前已啟用
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="quick-token-header-actions">
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
             onClick={() => setShowGuide(!showGuide)}
-            style={{ fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+            className="btn btn-secondary btn-sm quick-token-header-button"
           >
             <HelpCircle size={13} />
             {showGuide ? '收合教學' : '如何取得 Token？'}
           </button>
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
             onClick={onClose}
             aria-label="收合面板"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px' }}
+            className="btn btn-secondary btn-sm quick-token-header-button quick-token-collapse-button"
           >
             <ChevronUp size={14} /> 收合面板
           </button>
@@ -147,30 +133,30 @@ export default function QuickTokenDrawer({
 
       {/* Current token metadata pill if active */}
       {hasCustomToken && (
-        <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.2)', fontSize: '0.8rem', color: 'rgba(255,255,255,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div className="quick-token-metadata">
           <div>
             <span>目前 Token 綁定帳號：</span>
-            <strong style={{ color: '#4ade80' }}>{tokenAccountName || '已配置自訂 Token'}</strong>
-            {tokenChannelHandle && <span style={{ opacity: 0.7, marginLeft: 4 }}>({tokenChannelHandle})</span>}
-            {tokenUpdatedAt && <span style={{ opacity: 0.5, marginLeft: 8 }}>（更新於 {new Date(tokenUpdatedAt).toLocaleDateString()}）</span>}
+            <strong className="quick-token-account-name">{tokenAccountName || '已配置自訂 Token'}</strong>
+            {tokenChannelHandle && <span className="quick-token-channel-handle">({tokenChannelHandle})</span>}
+            {tokenUpdatedAt && (
+              <span className="quick-token-updated-at">（更新於 {new Date(tokenUpdatedAt).toLocaleDateString()}）</span>
+            )}
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div className="quick-token-metadata-actions">
             <button
               type="button"
-              className="btn btn-secondary btn-sm"
               onClick={() => handleValidate()}
               disabled={validating || saving}
-              style={{ padding: '2px 8px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              className="btn btn-secondary btn-sm quick-token-small-button"
             >
               {validating ? <Loader2 size={12} className="spin" /> : <ShieldCheck size={12} />}
               檢測有效性
             </button>
             <button
               type="button"
-              className="btn btn-secondary btn-sm"
               onClick={handleClear}
               disabled={validating || saving}
-              style={{ color: 'var(--color-danger, #ef4444)', padding: '2px 8px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              className="btn btn-secondary btn-sm quick-token-small-button quick-token-clear-button"
             >
               <Trash2 size={12} /> 清除
             </button>
@@ -180,23 +166,35 @@ export default function QuickTokenDrawer({
 
       {/* DevTools Quick Guide (Collapsible) */}
       {showGuide && (
-        <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: 8, padding: '12px 14px', marginBottom: 12, fontSize: '0.825rem', lineHeight: 1.5 }}>
-          <div style={{ fontWeight: 600, color: 'var(--primary, #38bdf8)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div className="quick-token-guide">
+          <div className="quick-token-guide-title">
             <Code2 size={15} /> 3 步驟快速取得（最推薦 Copy as cURL）
           </div>
-          <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <ol className="quick-token-guide-steps">
             <li>
               開啟{' '}
-              <a href="https://music.youtube.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary, #38bdf8)', textDecoration: 'underline' }}>
-                music.youtube.com <ExternalLink size={11} style={{ verticalAlign: 'middle' }} />
+              <a
+                href="https://music.youtube.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="quick-token-guide-link"
+              >
+                music.youtube.com <ExternalLink size={11} aria-hidden="true" />
               </a>{' '}
               並確認已登入 Google 帳號。
             </li>
-            <li>按下鍵盤 <kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: 3, border: '1px solid rgba(255,255,255,0.15)' }}>F12</kbd> 開啟開發者工具 ➔ 切換至 <strong>Network (網路)</strong> 標籤頁。</li>
-            <li>在 YouTube Music 頁面上隨意點任一歌單或歌曲，於 Network 面板任一請求點右鍵 ➔ <strong>Copy</strong> ➔ 選擇 <strong>Copy as cURL (cmd/bash)</strong> 或 <strong>Copy as Node.js fetch</strong>。</li>
+            <li>
+              按下鍵盤 <kbd className="quick-token-keyboard-key">F12</kbd> 開啟開發者工具 ➔ 切換至{' '}
+              <strong>Network (網路)</strong> 標籤頁。
+            </li>
+            <li>
+              在 YouTube Music 頁面上隨意點任一歌單或歌曲，於 Network 面板任一請求點右鍵 ➔ <strong>Copy</strong> ➔ 選擇{' '}
+              <strong>Copy as cURL (cmd/bash)</strong> 或 <strong>Copy as Node.js fetch</strong>。
+            </li>
           </ol>
-          <div style={{ marginTop: 8, color: '#f87171', fontSize: '0.775rem' }}>
-            ⚠️ 注意：請避免選純前端「Copy as fetch」（瀏覽器會依安全規範剔除 Cookie）。選擇 <strong>Copy as cURL</strong> 可 100% 完整附帶認證。
+          <div className="quick-token-guide-warning">
+            ⚠️ 注意：請避免選純前端「Copy as fetch」（瀏覽器會依安全規範剔除 Cookie）。選擇{' '}
+            <strong>Copy as cURL</strong> 可 100% 完整附帶認證。
           </div>
         </div>
       )}
@@ -204,86 +202,75 @@ export default function QuickTokenDrawer({
       {/* Validation Result Banner */}
       {validationResult && (
         <div
-          style={{
-            marginBottom: 12,
-            padding: '10px 14px',
-            borderRadius: 6,
-            border: validationResult.valid ? '1px solid rgba(74, 222, 128, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
-            background: validationResult.valid ? 'rgba(74, 222, 128, 0.08)' : 'rgba(239, 68, 68, 0.08)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
-          }}
+          className={`quick-token-validation ${validationResult.valid ? 'quick-token-validation-valid' : 'quick-token-validation-invalid'}`}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {validationResult.valid ? <CheckCircle2 size={16} color="#4ade80" /> : <AlertCircle size={16} color="#f87171" />}
-            <div>
-              <div style={{ fontWeight: 600, fontSize: '0.85rem', color: validationResult.valid ? '#4ade80' : '#f87171' }}>
-                {validationResult.valid ? 'Token 驗證成功' : 'Token 驗證失敗'}
-              </div>
-              <div style={{ fontSize: '0.775rem', color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>
-                {validationResult.message}
-                {validationResult.accountName && (
-                  <span style={{ marginLeft: 6, opacity: 0.9 }}>
-                    （認證帳號：<strong>{validationResult.accountName}</strong>{validationResult.channelHandle ? ` - ${validationResult.channelHandle}` : ''}）
-                  </span>
-                )}
+          <div className="quick-token-validation-content">
+            {validationResult.valid ? (
+              <CheckCircle2 size={16} className="quick-token-validation-icon" aria-hidden="true" />
+            ) : (
+              <AlertCircle size={16} className="quick-token-validation-icon" aria-hidden="true" />
+            )}
+            <div className="quick-token-validation-copy">
+              <div>
+                <div className="quick-token-validation-title">
+                  {validationResult.valid ? 'Token 驗證成功' : 'Token 驗證失敗'}
+                </div>
+                <div className="quick-token-validation-message">
+                  {validationResult.message}
+                  {validationResult.accountName && (
+                    <span className="quick-token-validation-account">
+                      （認證帳號：<strong>{validationResult.accountName}</strong>
+                      {validationResult.channelHandle ? ` - ${validationResult.channelHandle}` : ''}）
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
           <button
             type="button"
             onClick={() => setValidationResult(null)}
-            style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: 2 }}
+            className="quick-token-dismiss"
             aria-label="關閉驗證訊息"
           >
-            <X size={14} />
+            <X size={14} aria-hidden="true" />
           </button>
         </div>
       )}
 
       {/* Input textarea */}
-      <div className="form-group" style={{ margin: '0 0 10px 0' }}>
+      <div className="form-group quick-token-textarea-group">
         <textarea
-          className="form-input"
           rows={3}
           value={tokenInput}
           onChange={(e) => setTokenInput(e.target.value)}
           placeholder="在此貼上右鍵複製的『Copy as cURL』、『Copy as Node.js fetch』或 Cookie 字串…"
-          style={{ fontFamily: 'monospace', fontSize: '0.825rem', width: '100%', lineHeight: 1.4, resize: 'vertical' }}
+          className="form-input quick-token-textarea"
           disabled={saving || validating}
         />
       </div>
 
       {/* Actions */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div className="quick-token-actions">
         <button
           type="button"
-          className="btn btn-primary btn-sm"
           onClick={handleSave}
           disabled={saving || validating || !tokenInput.trim()}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          className="btn btn-primary btn-sm quick-token-action"
         >
           {saving ? <Loader2 size={13} className="spin" /> : <Key size={13} />}
           {saving ? '啟用中…' : '儲存並啟用 0 配額模式'}
         </button>
         <button
           type="button"
-          className="btn btn-secondary btn-sm"
           onClick={() => handleValidate(tokenInput.trim())}
           disabled={saving || validating || !tokenInput.trim()}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          className="btn btn-secondary btn-sm quick-token-action"
         >
           {validating ? <Loader2 size={13} className="spin" /> : <ShieldCheck size={13} />}
           測試此 Token
         </button>
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm"
-          onClick={onClose}
-          style={{ marginLeft: 'auto' }}
-        >
+        <button type="button" className="btn btn-secondary btn-sm quick-token-cancel" onClick={onClose}>
           取消
         </button>
       </div>

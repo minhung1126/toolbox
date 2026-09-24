@@ -1,16 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../services/api';
+import { authApi } from '../features/auth/api/authApi';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
 import { PATHS } from '../routes/paths';
-import { 
-  Video, 
-  LogIn, 
-  CheckCircle2, 
-  AlertCircle, 
-  Lock,
-  RefreshCw,
-} from 'lucide-react';
+import { Video, LogIn, CheckCircle2, AlertCircle, Lock, RefreshCw } from 'lucide-react';
+import '../features/auth/auth.css';
 
 export default function LoginPage({ initialError, returnTo }) {
   const [loggingIn, setLoggingIn] = useState(false);
@@ -22,7 +16,7 @@ export default function LoginPage({ initialError, returnTo }) {
   const checkLoginReadiness = useCallback(async () => {
     setCheckingConfig(true);
     try {
-      const config = await api.getAuthConfig();
+      const config = await authApi.getLoginConfig();
       setAuthConfig(config);
       if (!config.has_client_id || !config.has_client_secret) {
         setReadinessError('Google 登入尚未完成系統設定，請聯絡管理者補齊 OAuth 憑證。');
@@ -37,14 +31,16 @@ export default function LoginPage({ initialError, returnTo }) {
     }
   }, []);
 
-  useEffect(() => { checkLoginReadiness(); }, [checkLoginReadiness]);
+  useEffect(() => {
+    checkLoginReadiness();
+  }, [checkLoginReadiness]);
 
   const handleGoogleLogin = async () => {
     setLoggingIn(true);
     setOauthError(null);
     try {
       saveOAuthReturnPath('google', returnTo || '/dashboard');
-      const res = await api.getAuthUrl();
+      const res = await authApi.getLoginUrl();
       if (res && res.auth_url) {
         window.location.href = res.auth_url;
       } else {
@@ -61,7 +57,7 @@ export default function LoginPage({ initialError, returnTo }) {
   const loginReady = Boolean(authConfig?.has_client_id && authConfig?.has_client_secret);
 
   return (
-    <div className="login-container">
+    <div className="auth-page">
       <div className="login-card glass-panel">
         {/* Header Branding */}
         <div className="login-header">
@@ -79,7 +75,8 @@ export default function LoginPage({ initialError, returnTo }) {
 
         {/* Description */}
         <p className="login-description">
-          歡迎使用 Toolbox 控制台。請使用 Google 帳號登入系統；Google 試算表、Google 雲端硬碟與 YouTube 頻道授權皆已獨立拆開，可在登入後於各自對應頁面中依需要授權。
+          歡迎使用 Toolbox 控制台。請使用 Google 帳號登入系統；Google 試算表、Google 雲端硬碟與 YouTube
+          頻道授權皆已獨立拆開，可在登入後於各自對應頁面中依需要授權。
         </p>
 
         {/* Feature List */}
@@ -90,19 +87,23 @@ export default function LoginPage({ initialError, returnTo }) {
           </div>
           <div className="feature-item">
             <CheckCircle2 size={18} className="feature-icon" />
-            <span><strong>模組化權限拆分</strong>：Google 試算表、雲端硬碟、YouTube 頻道分別獨立授權</span>
+            <span>
+              <strong>模組化權限拆分</strong>：Google 試算表、雲端硬碟、YouTube 頻道分別獨立授權
+            </span>
           </div>
           <div className="feature-item">
             <CheckCircle2 size={18} className="feature-icon" />
-            <span>安全的 <strong>Session Cookie</strong> 加密傳輸與憑證管理</span>
+            <span>
+              安全的 <strong>Session Cookie</strong> 加密傳輸與憑證管理
+            </span>
           </div>
         </div>
 
         {/* OAuth callback and readiness errors are kept separate so a readiness refresh cannot hide a failed login. */}
-          {oauthError && (
-            <div className="login-error-alert">
-              <AlertCircle size={18} />
-              <div className="login-error-content">
+        {oauthError && (
+          <div className="login-error-alert">
+            <AlertCircle size={18} />
+            <div className="login-error-content">
               <span>{oauthError}</span>
             </div>
           </div>
@@ -113,12 +114,13 @@ export default function LoginPage({ initialError, returnTo }) {
             <div className="login-error-content">
               <span>{readinessError}</span>
               {!loginReady && !checkingConfig && (
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem' }}>
+                <div className="login-actions login-actions--stacked">
                   <Link to={PATHS.setup} className="btn btn-primary btn-sm">
                     前往初次安裝精靈
                   </Link>
                   <button type="button" className="btn btn-secondary btn-sm" onClick={checkLoginReadiness}>
-                    <RefreshCw size={14} />重新檢查
+                    <RefreshCw size={14} />
+                    重新檢查
                   </button>
                 </div>
               )}
@@ -128,19 +130,19 @@ export default function LoginPage({ initialError, returnTo }) {
 
         {/* Login Action Button */}
         <div className="login-actions">
-          <button 
+          <button
             className="btn btn-primary login-btn"
             onClick={handleGoogleLogin}
             disabled={loggingIn || checkingConfig || !loginReady}
           >
             {checkingConfig ? (
               <>
-                <span className="login-spinner"></span>
+                <span className="ui-inline-spinner" aria-hidden="true"></span>
                 正在檢查登入服務...
               </>
             ) : loggingIn ? (
               <>
-                <span className="login-spinner"></span>
+                <span className="ui-inline-spinner" aria-hidden="true"></span>
                 正在傳送至 Google 授權...
               </>
             ) : (
@@ -153,7 +155,8 @@ export default function LoginPage({ initialError, returnTo }) {
         </div>
 
         <p className="login-footer">
-          點擊登入會使用 Google OAuth 2.0 登入控制台；各項工具功能（試算表、雲端硬碟、YouTube 等）可在登入後分別獨立授權。
+          點擊登入會使用 Google OAuth 2.0 登入控制台；各項工具功能（試算表、雲端硬碟、YouTube
+          等）可在登入後分別獨立授權。
         </p>
       </div>
     </div>

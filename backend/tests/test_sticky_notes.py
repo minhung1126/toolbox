@@ -1,6 +1,8 @@
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from backend.app.api import notes as notes_api
 from backend.app.core.dependencies import require_account_subject
 from backend.app.core.notes_store import NotesStore
 from backend.app.main import app
@@ -88,15 +90,12 @@ def test_notes_store_search_and_ordering(temp_notes_store):
     assert veg_search[0]["id"] == n2["id"]
 
 
-def test_sticky_notes_api_endpoints(monkeypatch, tmp_path):
+def test_sticky_notes_api_endpoints(tmp_path):
     store_file = tmp_path / "notes_api.json"
     custom_store = NotesStore(path=store_file)
 
-    from backend.app.api import notes as notes_api
-
-    monkeypatch.setattr(notes_api, "notes_store", custom_store)
-
     app.dependency_overrides[require_account_subject] = lambda: "mock_test_subject"
+    app.dependency_overrides[notes_api.get_notes_store] = lambda: custom_store
     client = TestClient(app)
 
     try:
@@ -144,3 +143,20 @@ def test_sticky_notes_api_endpoints(monkeypatch, tmp_path):
         assert resp.status_code == 404
     finally:
         app.dependency_overrides.clear()
+
+
+def test_sticky_notes_repository_is_isolated_per_app(tmp_path):
+    def notes_app(store_path):
+        test_app = FastAPI()
+        test_app.state.notes_store = NotesStore(path=store_path)
+        test_app.include_router(notes_api.router)
+        test_app.dependency_overrides[require_account_subject] = lambda: "same_subject"
+        return TestClient(test_app)
+
+    first = notes_app(tmp_path / "first.json")
+    second = notes_app(tmp_path / "second.json")
+
+    created = first.post("/notes", json={"content": "Only in first app"})
+    assert created.status_code == 200
+    assert first.get("/notes").json()["total"] == 1
+    assert second.get("/notes").json() == {"notes": [], "total": 0}

@@ -20,6 +20,7 @@ vi.mock('../layouts/AccountSettingsLayout', async () => {
 vi.mock('../pages/DashboardPage', () => ({ default: () => <div>dashboard route</div> }));
 vi.mock('../pages/ApiHealthPage', () => ({ default: () => <div>health route</div> }));
 vi.mock('../pages/SystemInfoPage', () => ({ default: () => <div>info route</div> }));
+vi.mock('../pages/ComponentShowcasePage', () => ({ default: () => <div>component showcase route</div> }));
 vi.mock('../pages/PublishCleanerPage', () => ({ default: () => <div>publish route</div> }));
 vi.mock('../pages/SheetCopyPage', () => ({ default: () => <div>sheet route</div> }));
 vi.mock('../pages/BatchUpdatePage', () => ({ default: ({ videoType }) => <div>{videoType} batch route</div> }));
@@ -32,36 +33,45 @@ vi.mock('../pages/GoogleSheetSettingsPage', () => ({ default: () => <div>sheet s
 vi.mock('../pages/SystemSettingsPage', () => ({ default: () => <div>system settings route</div> }));
 vi.mock('../pages/StickyNotesPage', () => ({ default: () => <div>notes route</div> }));
 vi.mock('../pages/PhotoCuratorPage', () => ({ default: () => <div>photo curator route</div> }));
+vi.mock('../pages/FfmpegGeneratorPage', () => ({ default: () => <div>FFmpeg route</div> }));
+vi.mock('../pages/WeverseUploaderPage', () => ({ default: () => <div>Weverse uploader route</div> }));
 vi.mock('../pages/LoginPage', () => ({ default: ({ returnTo }) => <div>login route {returnTo || 'none'}</div> }));
 
 function LocationProbe() {
   const location = useLocation();
-  return <output data-testid="location">{location.pathname}{location.search}</output>;
+  return (
+    <output data-testid="location">
+      {location.pathname}
+      {location.search}
+    </output>
+  );
 }
 
 function renderRoutes(initialEntry, overrides = {}) {
-  return render(<MemoryRouter initialEntries={[initialEntry]}>
-    <AppRoutes
-      authStatus="authenticated"
-      authUser={{ sub: 'user-1', email: 'creator@example.com' }}
-      authError={null}
-      workState={{}}
-      updateAvailable={false}
-      settingsStatus={null}
-      settingsRefreshing={false}
-      fetchSettings={vi.fn()}
-      fetchUser={vi.fn()}
-      pageResume={{ retryNow: vi.fn(), isResuming: false }}
-      onLogout={vi.fn()}
-      sidebarCollapsed={false}
-      setSidebarCollapsed={vi.fn()}
-      oauthReturnPath={null}
-      clearOAuthReturnPath={vi.fn()}
-      sysSettings={{}}
-      {...overrides}
-    />
-    <LocationProbe />
-  </MemoryRouter>);
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <AppRoutes
+        authStatus="authenticated"
+        authUser={{ sub: 'user-1', email: 'creator@example.com' }}
+        authError={null}
+        workState={{}}
+        updateAvailable={false}
+        settingsStatus={null}
+        settingsRefreshing={false}
+        fetchSettings={vi.fn()}
+        fetchUser={vi.fn()}
+        pageResume={{ retryNow: vi.fn(), isResuming: false }}
+        onLogout={vi.fn()}
+        sidebarCollapsed={false}
+        setSidebarCollapsed={vi.fn()}
+        oauthReturnPath={null}
+        clearOAuthReturnPath={vi.fn()}
+        sysSettings={{}}
+        {...overrides}
+      />
+      <LocationProbe />
+    </MemoryRouter>
+  );
 }
 
 describe('AppRoutes', () => {
@@ -69,6 +79,7 @@ describe('AppRoutes', () => {
     [PATHS.dashboard, 'dashboard route'],
     [PATHS.systemHealth, 'health route'],
     [PATHS.systemInfo, 'info route'],
+    [PATHS.componentShowcase, 'component showcase route'],
     [PATHS.youtubeVideoDrafts, 'Video batch route'],
     [PATHS.youtubeShortsDrafts, 'Shorts batch route'],
     [PATHS.youtubePublishCleanup, 'publish route'],
@@ -82,18 +93,24 @@ describe('AppRoutes', () => {
     [PATHS.systemSettings, 'system settings route'],
     [PATHS.notes, 'notes route'],
     [PATHS.photoCurator, 'photo curator route'],
-  ])('renders %s', (path, expected) => {
+    [PATHS.ffmpegGenerator, 'FFmpeg route'],
+  ])('renders %s', async (path, expected) => {
     renderRoutes(path);
-    expect(screen.getByText(expected)).toBeInTheDocument();
+    expect(await screen.findByText(expected)).toBeInTheDocument();
+  });
+
+  it('renders the lazy-loaded Weverse uploader route', async () => {
+    renderRoutes(PATHS.weverseUploader);
+    expect(await screen.findByText('Weverse uploader route')).toBeInTheDocument();
   });
 
   it.each([
     ['/', PATHS.dashboard, 'dashboard route'],
     [PATHS.youtubeSettings, PATHS.youtubeConnections, 'connections route'],
     [PATHS.settings, PATHS.googleSettings, 'google settings route'],
-  ])('replaces parent path %s with %s', (from, to, expected) => {
+  ])('replaces parent path %s with %s', async (from, to, expected) => {
     renderRoutes(from);
-    expect(screen.getByText(expected)).toBeInTheDocument();
+    expect(await screen.findByText(expected)).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent(to);
   });
 
@@ -106,14 +123,17 @@ describe('AppRoutes', () => {
     expect(screen.getByTestId('location')).toHaveTextContent(`/login?returnTo=${encodeURIComponent(canonicalPath)}`);
   });
 
-  it.each(['/youtube/settings/missing', '/settings/missing'])('renders 404 for unknown settings child path %s', (path) => {
-    renderRoutes(path);
-    expect(screen.getByText('找不到頁面')).toBeInTheDocument();
-  });
+  it.each(['/youtube/settings/missing', '/settings/missing'])(
+    'renders 404 for unknown settings child path %s',
+    async (path) => {
+      renderRoutes(path);
+      expect(await screen.findByText('找不到頁面')).toBeInTheDocument();
+    }
+  );
 
-  it('renders a safe 404 for an unknown protected URL', () => {
+  it('renders a safe 404 for an unknown protected URL', async () => {
     renderRoutes('/not-a-real-page');
-    expect(screen.getByText('找不到頁面')).toBeInTheDocument();
+    expect(await screen.findByText('找不到頁面')).toBeInTheDocument();
   });
 
   it('preserves a safe deep path when auth is missing', () => {

@@ -14,6 +14,9 @@ export function getResultStatus(status) {
 
 export default function ResultStatus({ status, compact = false }) {
   const result = getResultStatus(status);
-  return <span className={`result-status result-status-${result.tone}${compact ? ' result-status-compact' : ''}`}>{result.label}</span>;
+  return (
+    <span className={`result-status result-status-${result.tone}${compact ? ' result-status-compact' : ''}`}>
+      {result.label}
+    </span>
+  );
 }
-

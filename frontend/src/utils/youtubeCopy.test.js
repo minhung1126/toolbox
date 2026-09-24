@@ -27,8 +27,9 @@ describe('youtubeCopy', () => {
     expect(formatVideoCount(5)).toBe('5 支影片');
     expect(formatVideoId('abc123')).toBe('影片 ID：abc123');
     expect(formatQuotaUnits(100)).toBe('100 單位');
-    expect(formatResultCounts({ succeeded_count: 1, skipped_count: 2, failed_count: 0, not_attempted_count: 3 }))
-      .toBe('成功 1 支影片、略過 2 支影片、失敗 0 支影片、未執行 3 支影片');
+    expect(formatResultCounts({ succeeded_count: 1, skipped_count: 2, failed_count: 0, not_attempted_count: 3 })).toBe(
+      '成功 1 支影片、略過 2 支影片、失敗 0 支影片、未執行 3 支影片'
+    );
   });
 
   it('keeps missing upload times explicit for stable ordering', () => {

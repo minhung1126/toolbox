@@ -101,9 +101,12 @@ describe('PublishCleanerPage snapshot safety', () => {
 
   it('keeps the shared playlist read-only and ignores stale responses after settings change', async () => {
     const pending = {};
-    api.getPlaylistVideos.mockImplementation((playlistId) => new Promise((resolve) => {
-      pending[playlistId] = resolve;
-    }));
+    api.getPlaylistVideos.mockImplementation(
+      (playlistId) =>
+        new Promise((resolve) => {
+          pending[playlistId] = resolve;
+        })
+    );
     const { rerender } = renderPage();
 
     const input = screen.getByPlaceholderText('YouTube Playlist ID');
@@ -199,10 +202,15 @@ describe('PublishCleanerPage snapshot safety', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '設為公開並移出清單' })).not.toBeInTheDocument();
 
-    rerender(<PublishCleanerPage authUser={{
-      ...primaryAuthUser,
-      youtube: { ...primaryAuthUser.youtube, active_slot: 'secondary' },
-    }} sysSettings={{ default_playlist_id: 'playlist-b' }} />);
+    rerender(
+      <PublishCleanerPage
+        authUser={{
+          ...primaryAuthUser,
+          youtube: { ...primaryAuthUser.youtube, active_slot: 'secondary' },
+        }}
+        sysSettings={{ default_playlist_id: 'playlist-b' }}
+      />
+    );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '設為公開並移出清單' })).not.toBeInTheDocument();
   });
@@ -217,10 +225,12 @@ describe('PublishCleanerPage snapshot safety', () => {
     await loadCurrentPlaylist();
     expect(await screen.findByText('影片一')).toBeInTheDocument();
 
-    rerender(<PublishCleanerPage
-      authUser={{ ...versionedAuth, youtube: { ...versionedAuth.youtube, data_version: 'version-2' } }}
-      sysSettings={{ default_playlist_id: 'playlist-a' }}
-    />);
+    rerender(
+      <PublishCleanerPage
+        authUser={{ ...versionedAuth, youtube: { ...versionedAuth.youtube, data_version: 'version-2' } }}
+        sysSettings={{ default_playlist_id: 'playlist-a' }}
+      />
+    );
     expect(screen.queryByText('影片一')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '設為公開並移出清單' })).not.toBeInTheDocument();
   });

@@ -1,0 +1,217 @@
+.youtube-settings-subnav {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -0.5rem 0 1.5rem;
+  padding: 5px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-inset);
+}
+
+.youtube-settings-subnav-link {
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.18s ease;
+}
+
+.youtube-settings-subnav-link:hover {
+  background: rgb(255 255 255 / 5%);
+  color: var(--text-main);
+}
+
+.youtube-settings-subnav-link.active {
+  border-color: var(--border-color);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.youtube-slot-section-with-routing {
+  margin-top: var(--space-6);
+}
+
+.youtube-slot-section-heading {
+  margin-bottom: var(--space-3);
+}
+
+.youtube-slot-section-title {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.youtube-slot-section-description {
+  margin: var(--space-1) 0 0;
+  font-size: 0.85rem;
+}
+
+.youtube-playlist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.youtube-playlist-icon {
+  color: var(--secondary);
+}
+
+.youtube-slot-icon {
+  color: var(--danger);
+}
+
+.youtube-slot-edit-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+  font-size: 0.78rem;
+}
+
+.youtube-slot-editor {
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-inset);
+}
+
+.youtube-slot-editor-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.youtube-slot-editor-title svg {
+  color: var(--info);
+}
+
+.youtube-slot-system-oauth {
+  margin-bottom: 0.85rem;
+}
+
+.youtube-slot-system-oauth-button {
+  width: 100%;
+  margin-bottom: var(--space-2);
+  border-color: var(--info-border);
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+
+.youtube-slot-oauth-divider {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.youtube-slot-secondary-option {
+  margin-bottom: var(--space-3);
+}
+
+.youtube-slot-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.youtube-slot-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.youtube-slot-field-label {
+  display: block;
+  margin-bottom: var(--space-1);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.youtube-slot-fields .form-input {
+  width: 100%;
+}
+
+.youtube-slot-secret-field {
+  position: relative;
+}
+
+.youtube-slot-secret-input {
+  padding-right: 2.5rem;
+}
+
+.youtube-slot-secret-toggle {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.youtube-slot-secret-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.youtube-slot-credentials-dirty,
+.youtube-slot-quota-dirty,
+.youtube-routing-dirty {
+  align-items: center;
+  border: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.youtube-slot-credentials-dirty {
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.youtube-settings-dirty {
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.82rem;
+}
+
+.youtube-routing-dirty {
+  margin-top: var(--space-3);
+}
+
+.youtube-slot-quota-dirty {
+  margin: var(--space-3) 0;
+}
+
+.youtube-slot-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+@media (max-width: 767px) {
+  .youtube-settings-subnav {
+    width: 100%;
+  }
+
+  .youtube-settings-subnav-link {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+}

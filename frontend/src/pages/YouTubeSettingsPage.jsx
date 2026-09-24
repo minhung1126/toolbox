@@ -1,7 +1,9 @@
+import '../features/youtube/youtube-shared.css';
 import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import { api, normalizeYoutubePlaylistInput } from '../services/api';
+import { normalizeYoutubePlaylistInput } from '../features/youtube/api/youtubeBatchApi';
+import { youtubeSettingsApi } from '../features/youtube/api/youtubeSettingsApi';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useDebouncedAutosave } from '../hooks/useDebouncedAutosave';
@@ -23,9 +25,8 @@ export function initialSettings(defaultPlaylistId, quotaLimit, quotaBuffer) {
 }
 
 export function normalizeSlotRecord(slot, record) {
-  const canBeActive = record?.can_be_active === undefined
-    ? Boolean(record?.authenticated)
-    : Boolean(record.can_be_active);
+  const canBeActive =
+    record?.can_be_active === undefined ? Boolean(record?.authenticated) : Boolean(record.can_be_active);
   return {
     slot,
     label: record?.label || (slot === 'primary' ? 'Primary' : 'Secondary'),
@@ -47,7 +48,13 @@ export function normalizeSlotRecord(slot, record) {
   };
 }
 
-export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refreshSettings, refreshAuthUser, section = 'all' }) {
+export default function YouTubeSettingsPage({
+  authUser,
+  sysSettings = {},
+  refreshSettings,
+  refreshAuthUser,
+  section = 'all',
+}) {
   const toast = useToast();
   const location = useLocation();
   const showConnections = section === 'all' || section === 'connections';
@@ -58,19 +65,28 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
   const youtube = useMemo(() => authUser?.youtube || {}, [authUser?.youtube]);
   const initial = useMemo(
     () => initialSettings(sysSettings.default_playlist_id, sysSettings.quota_limit, sysSettings.safety_buffer_units),
-    [sysSettings.default_playlist_id, sysSettings.quota_limit, sysSettings.safety_buffer_units],
+    [sysSettings.default_playlist_id, sysSettings.quota_limit, sysSettings.safety_buffer_units]
   );
-  const slotRecords = useMemo(() => SLOT_ORDER.reduce((all, slot) => {
-    all[slot] = normalizeSlotRecord(slot, youtube.slots?.[slot]);
-    return all;
-  }, {}), [youtube]);
+  const slotRecords = useMemo(
+    () =>
+      SLOT_ORDER.reduce((all, slot) => {
+        all[slot] = normalizeSlotRecord(slot, youtube.slots?.[slot]);
+        return all;
+      }, {}),
+    [youtube]
+  );
   const [playlistId, setPlaylistId] = useState(initial.playlistId);
-  const [slotDrafts, setSlotDrafts] = useState(() => Object.fromEntries(
-    SLOT_ORDER.map((slot) => [slot, {
-      quotaLimit: slotRecords[slot].quota_limit,
-      quotaBuffer: slotRecords[slot].safety_buffer_units,
-    }]),
-  ));
+  const [slotDrafts, setSlotDrafts] = useState(() =>
+    Object.fromEntries(
+      SLOT_ORDER.map((slot) => [
+        slot,
+        {
+          quotaLimit: slotRecords[slot].quota_limit,
+          quotaBuffer: slotRecords[slot].safety_buffer_units,
+        },
+      ])
+    )
+  );
   const [activeSlot, setActiveSlot] = useState(youtube.active_slot || 'primary');
   const [routingMode, setRoutingMode] = useState(youtube.routing_mode || YOUTUBE_ROUTING_MODES.AUTO_PRIMARY);
   const [routingModeDraft, setRoutingModeDraft] = useState(youtube.routing_mode || YOUTUBE_ROUTING_MODES.AUTO_PRIMARY);
@@ -98,7 +114,7 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
     onSave: async (nextValue) => {
       const normalized = normalizeYoutubePlaylistInput(nextValue);
       if (!normalized) return;
-      await api.updateYoutubePlaylist({ playlistId: normalized });
+      await youtubeSettingsApi.updatePlaylist({ playlistId: normalized });
     },
     onSuccess: async (_nextValue, { notify } = {}) => {
       await refreshSettings?.();
@@ -139,7 +155,7 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
       if (slotClientSecret.trim()) {
         payload.client_secret = slotClientSecret.trim();
       }
-      await api.updateYoutubeSlotConfig(slot, payload);
+      await youtubeSettingsApi.updateSlotConfig(slot, payload);
       if (refreshSettings) await refreshSettings();
       if (refreshAuthUser) await refreshAuthUser();
       setEditingSlot(null);
@@ -154,7 +170,7 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
   const handleUseSystemOAuthForPrimary = async () => {
     setSavingSlotCreds(true);
     try {
-      await api.updateYoutubeSlotConfig('primary', {
+      await youtubeSettingsApi.updateSlotConfig('primary', {
         use_system_google_oauth: true,
       });
       if (refreshSettings) await refreshSettings();
@@ -180,10 +196,17 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
     const nextRoutingMode = youtube.routing_mode || YOUTUBE_ROUTING_MODES.AUTO_PRIMARY;
     setRoutingMode(nextRoutingMode);
     setRoutingModeDraft(nextRoutingMode);
-    setSlotDrafts(Object.fromEntries(SLOT_ORDER.map((slot) => [slot, {
-      quotaLimit: slotRecords[slot].quota_limit,
-      quotaBuffer: slotRecords[slot].safety_buffer_units,
-    }])));
+    setSlotDrafts(
+      Object.fromEntries(
+        SLOT_ORDER.map((slot) => [
+          slot,
+          {
+            quotaLimit: slotRecords[slot].quota_limit,
+            quotaBuffer: slotRecords[slot].safety_buffer_units,
+          },
+        ])
+      )
+    );
   }, [slotRecords, youtube.active_slot, youtube.routing_mode]);
 
   const saveRoutingMode = async () => {
@@ -191,7 +214,7 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
     setBusyAction({ kind: 'routing' });
     setMsg(null);
     try {
-      await api.updateYoutubeRoutingMode(routingModeDraft);
+      await youtubeSettingsApi.updateRoutingMode(routingModeDraft);
       setRoutingMode(routingModeDraft);
       if (refreshSettings) await refreshSettings();
       if (refreshAuthUser) await refreshAuthUser();
@@ -218,7 +241,7 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
     setBusyAction({ kind: 'quota', slot });
     setMsg(null);
     try {
-      await api.updateYoutubeQuota({
+      await youtubeSettingsApi.updateQuota({
         slot,
         quotaLimit: limit,
         safetyBufferUnits: buffer,
@@ -272,17 +295,21 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
     const d = slotDrafts[slot];
     const rec = slotRecords[slot];
     if (!d || !rec) return false;
-    return Number(d.quotaLimit) !== Number(rec.quota_limit) || Number(d.quotaBuffer) !== Number(rec.safety_buffer_units);
+    return (
+      Number(d.quotaLimit) !== Number(rec.quota_limit) || Number(d.quotaBuffer) !== Number(rec.safety_buffer_units)
+    );
   };
 
   const isRoutingDirty = routingModeDraft !== routingMode;
 
   const isSlotCredsDirty = (slot) => {
     if (editingSlot !== slot) return false;
-    return slotLabel.trim() !== slotRecords[slot].label
-      || (slot === 'secondary' && slotEnabled !== slotRecords[slot].enabled)
-      || Boolean(slotClientId.trim())
-      || Boolean(slotClientSecret.trim());
+    return (
+      slotLabel.trim() !== slotRecords[slot].label ||
+      (slot === 'secondary' && slotEnabled !== slotRecords[slot].enabled) ||
+      Boolean(slotClientId.trim()) ||
+      Boolean(slotClientSecret.trim())
+    );
   };
 
   const updateDraft = (slot, field, value) => {
@@ -294,7 +321,7 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
     setBusyAction({ kind: 'authorization', slot });
     try {
       saveOAuthReturnPath('youtube', `${location.pathname}${location.search}`);
-      const result = await api.getYoutubeAuthUrl(slot);
+      const result = await youtubeSettingsApi.getAuthUrl(slot);
       if (!result.auth_url) throw new Error('無法取得 Google 授權網址，請稍後再試。');
       window.location.href = result.auth_url;
     } catch (error) {
@@ -307,7 +334,7 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
     if (busyAction || !slotRecords[slot].can_be_active) return;
     setBusyAction({ kind: 'authorization', slot });
     try {
-      await api.activateYoutubeSlot(slot);
+      await youtubeSettingsApi.activateSlot(slot);
       setActiveSlot(slot);
       if (refreshAuthUser) await refreshAuthUser();
       toast.success(`已將 ${slotRecords[slot].label} 設為作用中 slot`);
@@ -330,7 +357,7 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
     setDisconnectTarget(null);
     setBusyAction({ kind: 'authorization', slot });
     try {
-      await api.disconnectYoutube(slot, { confirm: true });
+      await youtubeSettingsApi.disconnectSlot(slot, { confirm: true });
       if (refreshAuthUser) await refreshAuthUser();
       toast.success(`${slotRecords[slot].label} 已斷開`);
     } catch (error) {
@@ -349,12 +376,22 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
 
   return (
     <div className="section-gap settings-page youtube-settings-page">
-      {section === 'all' && <header className="page-header">
-        <h1>YouTube 設定</h1>
-        <p className="section-desc">管理兩組 YouTube OAuth slot、頻道一致性、配額優先順序、發布預設資源與各 project 配額。Auto 模式會優先使用 Primary，配額不足時自動切換 Secondary 並繼續處理。</p>
-      </header>}
+      {section === 'all' && (
+        <header className="page-header">
+          <h1>YouTube 設定</h1>
+          <p className="section-desc">
+            管理兩組 YouTube OAuth slot、頻道一致性、配額優先順序、發布預設資源與各 project 配額。Auto 模式會優先使用
+            Primary，配額不足時自動切換 Secondary 並繼續處理。
+          </p>
+        </header>
+      )}
 
-      {msg && <div className="info-banner">{msg.type === 'success' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}{msg.text}</div>}
+      {msg && (
+        <div className="info-banner">
+          {msg.type === 'success' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
+          {msg.text}
+        </div>
+      )}
 
       {showRouting && (
         <YouTubeRoutingSection
@@ -369,64 +406,64 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
       )}
 
       {(showConnections || showQuota) && (
-        <div style={{ marginTop: showRouting ? '1.5rem' : 0 }}>
+        <div
+          className={showRouting ? 'youtube-slot-section youtube-slot-section-with-routing' : 'youtube-slot-section'}
+        >
           {showRouting && (
-            <div style={{ marginBottom: '0.75rem' }}>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                各 Slot 配額上限與安全防護緩衝
-              </h3>
-              <p className="section-desc" style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem' }}>
+            <div className="youtube-slot-section-heading">
+              <h3 className="youtube-slot-section-title">各 Slot 配額上限與安全防護緩衝</h3>
+              <p className="section-desc youtube-slot-section-description">
                 設定各連線槽位的每日 API Quota 額度與自動容錯切換門檻。
               </p>
             </div>
           )}
           <div className="responsive-grid youtube-slot-grid">
-          {SLOT_ORDER.map((slot) => {
-            const record = slotRecords[slot];
-            const draft = slotDrafts[slot];
-            const isActive = routingMode === YOUTUBE_ROUTING_MODES.MANUAL && activeSlot === slot;
-            const isPrimaryPreferred = routingMode === YOUTUBE_ROUTING_MODES.AUTO_PRIMARY && slot === 'primary';
-            const busy = busyAction?.slot === slot;
-            return (
-              <YouTubeSlotCard
-                key={slot}
-                slot={slot}
-                record={record}
-                draft={draft}
-                isActive={isActive}
-                isPrimaryPreferred={isPrimaryPreferred}
-                busy={busy}
-                editingSlot={editingSlot}
-                handleOpenEditSlot={handleOpenEditSlot}
-                handleUseSystemOAuthForPrimary={handleUseSystemOAuthForPrimary}
-                slotEnabled={slotEnabled}
-                setSlotEnabled={setSlotEnabled}
-                slotLabel={slotLabel}
-                setSlotLabel={setSlotLabel}
-                slotClientId={slotClientId}
-                setSlotClientId={setSlotClientId}
-                slotClientSecret={slotClientSecret}
-                setSlotClientSecret={setSlotClientSecret}
-                showSlotSecret={showSlotSecret}
-                setShowSlotSecret={setShowSlotSecret}
-                isSlotCredsDirty={isSlotCredsDirty}
-                setEditingSlot={setEditingSlot}
-                handleSaveSlotCreds={handleSaveSlotCreds}
-                savingSlotCreds={savingSlotCreds}
-                showConnections={showConnections}
-                showQuota={showQuota}
-                updateDraft={updateDraft}
-                isQuotaDirty={isQuotaDirty}
-                startOAuth={startOAuth}
-                activateSlot={activateSlot}
-                requestDisconnect={requestDisconnect}
-                saveSlot={saveSlot}
-                pageBusy={pageBusy}
-                authorizationBusy={authorizationBusy}
-                routingMode={routingMode}
-              />
-            );
-          })}
+            {SLOT_ORDER.map((slot) => {
+              const record = slotRecords[slot];
+              const draft = slotDrafts[slot];
+              const isActive = routingMode === YOUTUBE_ROUTING_MODES.MANUAL && activeSlot === slot;
+              const isPrimaryPreferred = routingMode === YOUTUBE_ROUTING_MODES.AUTO_PRIMARY && slot === 'primary';
+              const busy = busyAction?.slot === slot;
+              return (
+                <YouTubeSlotCard
+                  key={slot}
+                  slot={slot}
+                  record={record}
+                  draft={draft}
+                  isActive={isActive}
+                  isPrimaryPreferred={isPrimaryPreferred}
+                  busy={busy}
+                  editingSlot={editingSlot}
+                  handleOpenEditSlot={handleOpenEditSlot}
+                  handleUseSystemOAuthForPrimary={handleUseSystemOAuthForPrimary}
+                  slotEnabled={slotEnabled}
+                  setSlotEnabled={setSlotEnabled}
+                  slotLabel={slotLabel}
+                  setSlotLabel={setSlotLabel}
+                  slotClientId={slotClientId}
+                  setSlotClientId={setSlotClientId}
+                  slotClientSecret={slotClientSecret}
+                  setSlotClientSecret={setSlotClientSecret}
+                  showSlotSecret={showSlotSecret}
+                  setShowSlotSecret={setShowSlotSecret}
+                  isSlotCredsDirty={isSlotCredsDirty}
+                  setEditingSlot={setEditingSlot}
+                  handleSaveSlotCreds={handleSaveSlotCreds}
+                  savingSlotCreds={savingSlotCreds}
+                  showConnections={showConnections}
+                  showQuota={showQuota}
+                  updateDraft={updateDraft}
+                  isQuotaDirty={isQuotaDirty}
+                  startOAuth={startOAuth}
+                  activateSlot={activateSlot}
+                  requestDisconnect={requestDisconnect}
+                  saveSlot={saveSlot}
+                  pageBusy={pageBusy}
+                  authorizationBusy={authorizationBusy}
+                  routingMode={routingMode}
+                />
+              );
+            })}
           </div>
         </div>
       )}
@@ -452,7 +489,9 @@ export default function YouTubeSettingsPage({ authUser, sysSettings = {}, refres
         cancelText="取消"
         variant="destructive"
         onConfirm={disconnectSlot}
-        onCancel={() => { if (!busyAction) setDisconnectTarget(null); }}
+        onCancel={() => {
+          if (!busyAction) setDisconnectTarget(null);
+        }}
       />
     </div>
   );

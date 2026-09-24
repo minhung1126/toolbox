@@ -13,6 +13,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+.pytest-cache/
 .ruff_cache/
 
 # Local Git worktrees
@@ -22,6 +23,8 @@ __pycache__/
 node_modules/
 frontend/node_modules/
 frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
 .npm
 
 # OS & IDE

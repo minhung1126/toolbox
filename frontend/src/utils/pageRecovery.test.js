@@ -4,16 +4,18 @@ import { buildPageRecoveryUrl, clearPageRecoveryParam, recoverPage } from './pag
 describe('page recovery', () => {
   it('preserves the current route while adding a one-time cache-busting parameter', () => {
     expect(buildPageRecoveryUrl('https://example.test/youtube/batch/tasks/42?tab=log#details', 123)).toBe(
-      'https://example.test/youtube/batch/tasks/42?tab=log&__ct_resume=123#details',
+      'https://example.test/youtube/batch/tasks/42?tab=log&__ct_resume=123#details'
     );
   });
 
   it('clears only the recovery parameter after the app mounts', () => {
     const replaceState = vi.fn();
-    expect(clearPageRecoveryParam({
-      href: 'https://example.test/dashboard?filter=active&__ct_resume=123#top',
-      replaceState,
-    })).toBe(true);
+    expect(
+      clearPageRecoveryParam({
+        href: 'https://example.test/dashboard?filter=active&__ct_resume=123#top',
+        replaceState,
+      })
+    ).toBe(true);
     expect(replaceState).toHaveBeenCalledWith('/dashboard?filter=active#top');
   });
 

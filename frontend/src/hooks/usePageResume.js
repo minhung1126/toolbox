@@ -50,10 +50,7 @@ export function forcePageRepaint(root = typeof document !== 'undefined' ? docume
  */
 export function usePageResume(
   onResume,
-  {
-    hiddenThresholdMs = PAGE_HIDDEN_RESUME_THRESHOLD_MS,
-    cooldownMs = PAGE_RESUME_COOLDOWN_MS,
-  } = {},
+  { hiddenThresholdMs = PAGE_HIDDEN_RESUME_THRESHOLD_MS, cooldownMs = PAGE_RESUME_COOLDOWN_MS } = {}
 ) {
   const onResumeRef = useRef(onResume);
   const inactiveAtRef = useRef(null);
@@ -80,32 +77,38 @@ export function usePageResume(
     repaintCleanupRef.current = forcePageRepaint();
   }, []);
 
-  useEffect(() => () => {
-    repaintCleanupRef.current?.();
-    repaintCleanupRef.current = null;
-  }, []);
+  useEffect(
+    () => () => {
+      repaintCleanupRef.current?.();
+      repaintCleanupRef.current = null;
+    },
+    []
+  );
 
-  const requestResume = useCallback(({ force = false, reason = 'unknown' } = {}) => {
-    if (resumePromiseRef.current) return resumePromiseRef.current;
+  const requestResume = useCallback(
+    ({ force = false, reason = 'unknown' } = {}) => {
+      if (resumePromiseRef.current) return resumePromiseRef.current;
 
-    const now = Date.now();
-    if (!force && lastResumeAtRef.current !== null && now - lastResumeAtRef.current < cooldownMs) {
-      return Promise.resolve({ status: 'cooldown', reason });
-    }
+      const now = Date.now();
+      if (!force && lastResumeAtRef.current !== null && now - lastResumeAtRef.current < cooldownMs) {
+        return Promise.resolve({ status: 'cooldown', reason });
+      }
 
-    lastResumeAtRef.current = now;
-    if (mountedRef.current) setIsResuming(true);
+      lastResumeAtRef.current = now;
+      if (mountedRef.current) setIsResuming(true);
 
-    const promise = Promise.resolve()
-      .then(() => onResumeRef.current?.({ reason }))
-      .catch((error) => ({ status: 'error', error }))
-      .finally(() => {
-        if (resumePromiseRef.current === promise) resumePromiseRef.current = null;
-        if (mountedRef.current) setIsResuming(false);
-      });
-    resumePromiseRef.current = promise;
-    return promise;
-  }, [cooldownMs]);
+      const promise = Promise.resolve()
+        .then(() => onResumeRef.current?.({ reason }))
+        .catch((error) => ({ status: 'error', error }))
+        .finally(() => {
+          if (resumePromiseRef.current === promise) resumePromiseRef.current = null;
+          if (mountedRef.current) setIsResuming(false);
+        });
+      resumePromiseRef.current = promise;
+      return promise;
+    },
+    [cooldownMs]
+  );
 
   useEffect(() => {
     const markInactive = () => {

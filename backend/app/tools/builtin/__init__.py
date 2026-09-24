@@ -9,7 +9,7 @@ from backend.app.tools.builtin.sticky_notes import StickyNotesPlugin
 from backend.app.tools.builtin.system_utility import SystemUtilityPlugin
 from backend.app.tools.builtin.weverse_uploader import WeverseUploaderPlugin
 from backend.app.tools.builtin.youtube_integrations import YouTubeIntegrationsPlugin
-from backend.app.tools.registry import tool_registry
+from backend.app.tools.registry import ToolRegistry, tool_registry
 
 __all__ = [
     "CreatorToolsPlugin",
@@ -26,7 +26,7 @@ __all__ = [
 ]
 
 
-def register_builtin_tools() -> None:
+def register_builtin_tools(registry: ToolRegistry = tool_registry) -> None:
     """Register all default built-in tools into the global ToolRegistry."""
     plugins = [
         CreatorToolsPlugin,
@@ -41,5 +41,5 @@ def register_builtin_tools() -> None:
     ]
     for plugin_cls in plugins:
         plugin = plugin_cls()
-        if not tool_registry.get(plugin.metadata.id):
-            tool_registry.register(plugin)
+        if not registry.get(plugin.metadata.id):
+            registry.register(plugin)

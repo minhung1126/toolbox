@@ -4,14 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * Hook to manage debounced autosaving of state, ensuring pending changes are
  * flushed reliably when the component unmounts without duplicate executions.
  */
-export function useDebouncedAutosave({
-  value,
-  onSave,
-  delay = 500,
-  compareFn,
-  onSuccess,
-  onError,
-}) {
+export function useDebouncedAutosave({ value, onSave, delay = 500, compareFn, onSuccess, onError }) {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const latestValueRef = useRef(value);
@@ -35,62 +28,77 @@ export function useDebouncedAutosave({
     const version = editVersionRef.current;
     const pendingSave = { version, data: nextData, promise: null };
     pendingSaveRef.current = pendingSave;
-    const request = saveChainRef.current.catch(() => undefined).then(async () => {
-      if (version !== editVersionRef.current) return;
-      if (mountedRef.current) {
-        setSaving(true);
-      }
-      try {
-        await callbacksRef.current.onSave(nextData);
+    const request = saveChainRef.current
+      .catch(() => undefined)
+      .then(async () => {
         if (version !== editVersionRef.current) return;
-        dirtyRef.current = false;
         if (mountedRef.current) {
-          setDirty(false);
+          setSaving(true);
         }
-        if (!mountedRef.current) return;
-        await callbacksRef.current.onSuccess?.(nextData, { notify });
-      } catch (error) {
-        if (version !== editVersionRef.current || !mountedRef.current) return;
-        callbacksRef.current.onError?.(error, { notify });
-      } finally {
-        if (version === editVersionRef.current && mountedRef.current) {
-          setSaving(false);
+        try {
+          await callbacksRef.current.onSave(nextData);
+          if (version !== editVersionRef.current) return;
+          dirtyRef.current = false;
+          if (mountedRef.current) {
+            setDirty(false);
+          }
+          if (!mountedRef.current) return;
+          await callbacksRef.current.onSuccess?.(nextData, { notify });
+        } catch (error) {
+          if (version !== editVersionRef.current || !mountedRef.current) return;
+          callbacksRef.current.onError?.(error, { notify });
+        } finally {
+          if (version === editVersionRef.current && mountedRef.current) {
+            setSaving(false);
+          }
         }
-      }
-    });
+      });
     pendingSave.promise = request;
     pendingSaveRef.current = pendingSave;
     saveChainRef.current = request;
     request.then(
-      () => { if (pendingSaveRef.current === pendingSave) pendingSaveRef.current = null; },
-      () => { if (pendingSaveRef.current === pendingSave) pendingSaveRef.current = null; },
+      () => {
+        if (pendingSaveRef.current === pendingSave) pendingSaveRef.current = null;
+      },
+      () => {
+        if (pendingSaveRef.current === pendingSave) pendingSaveRef.current = null;
+      }
     );
     return request;
   }, []);
 
   queueSaveRef.current = queueSave;
 
-  const scheduleSave = useCallback((nextData) => {
-    window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(() => {
+  const scheduleSave = useCallback(
+    (nextData) => {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = window.setTimeout(() => {
+        saveTimerRef.current = null;
+        queueSave(nextData);
+      }, delay);
+    },
+    [delay, queueSave]
+  );
+
+  const mutate = useCallback(
+    (nextData) => {
+      editVersionRef.current += 1;
+      latestValueRef.current = nextData;
+      dirtyRef.current = true;
+      setDirty(true);
+      scheduleSave(nextData);
+    },
+    [scheduleSave]
+  );
+
+  const flush = useCallback(
+    async (options = { notify: true }) => {
+      window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
-      queueSave(nextData);
-    }, delay);
-  }, [delay, queueSave]);
-
-  const mutate = useCallback((nextData) => {
-    editVersionRef.current += 1;
-    latestValueRef.current = nextData;
-    dirtyRef.current = true;
-    setDirty(true);
-    scheduleSave(nextData);
-  }, [scheduleSave]);
-
-  const flush = useCallback(async (options = { notify: true }) => {
-    window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = null;
-    return queueSave(latestValueRef.current, options);
-  }, [queueSave]);
+      return queueSave(latestValueRef.current, options);
+    },
+    [queueSave]
+  );
 
   const reset = useCallback((nextData) => {
     window.clearTimeout(saveTimerRef.current);
@@ -110,9 +118,8 @@ export function useDebouncedAutosave({
 
       const latestData = latestValueRef.current;
       const pendingSave = pendingSaveRef.current;
-      const hasPendingLatestSave = pendingSave
-        && pendingSave.version === editVersionRef.current
-        && isSame(pendingSave.data, latestData);
+      const hasPendingLatestSave =
+        pendingSave && pendingSave.version === editVersionRef.current && isSame(pendingSave.data, latestData);
       if (!hasPendingLatestSave) {
         queueSaveRef.current?.(latestData);
       }

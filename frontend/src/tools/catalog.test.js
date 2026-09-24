@@ -2,15 +2,22 @@ import { describe, expect, it } from 'vitest';
 import {
   getAllTools,
   getDashboardFeatureCards,
+  getFeatureRoutes,
   getSystemNavItems,
   getToolById,
   getToolNavGroups,
+  validateFeatureManifests,
 } from './catalog';
+import { PATHS } from '../routes/paths';
+
+function expectUniqueIds(items) {
+  const ids = items.map((item) => item.id);
+  expect(new Set(ids).size).toBe(ids.length);
+}
 
 describe('Toolbox Frontend Tool Catalog', () => {
   it('returns registered tools with metadata', () => {
     const tools = getAllTools();
-    expect(tools.length).toBe(9);
     const ids = tools.map((t) => t.id);
     expect(ids).toContain('creator-tools');
     expect(ids).toContain('youtube-music');
@@ -19,8 +26,48 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(ids).toContain('photo-curator');
     expect(ids).toContain('ffmpeg-generator');
     expect(ids).toContain('weverse-uploader');
-    expect(ids).toContain('integrations-quota');
+    expect(ids).toContain('youtube-integrations');
     expect(ids).toContain('system-utility');
+  });
+
+  it('keeps tool, navigation, card identifiers and destinations consistent', () => {
+    const tools = getAllTools();
+    const groups = getToolNavGroups();
+    const navItems = groups.flatMap((group) => group.items || []);
+    const cards = getDashboardFeatureCards();
+    const knownPaths = new Set(Object.values(PATHS));
+
+    expectUniqueIds(tools);
+    expectUniqueIds(groups);
+    expectUniqueIds(navItems);
+    expectUniqueIds(cards);
+
+    for (const path of [
+      ...tools.map((tool) => tool.entryUrl),
+      ...navItems.map((item) => item.to),
+      ...cards.map((card) => card.to),
+    ]) {
+      expect(knownPaths.has(path), `Unknown catalog destination: ${path}`).toBe(true);
+    }
+  });
+
+  it('rejects duplicate feature IDs and routes outside the route registry', () => {
+    const tools = getAllTools();
+    expect(() => validateFeatureManifests([tools[0], tools[0]])).toThrow('Duplicate feature id');
+    expect(() => validateFeatureManifests([{ ...tools[0], entryUrl: '/missing-route' }])).toThrow(
+      'unknown route: /missing-route'
+    );
+    expect(() => validateFeatureManifests([{ ...tools[0], routes: [...tools[0].routes, tools[0].routes[0]] }])).toThrow(
+      'Duplicate feature route'
+    );
+  });
+
+  it('aggregates unique routes from each feature manifest', () => {
+    const routes = getFeatureRoutes();
+    expect(routes.map((route) => route.path)).toContain('youtube/drafts/videos');
+    expect(routes.map((route) => route.path)).toContain('ytmusic/playlist-sort');
+    expect(routes.map((route) => route.path)).toContain('youtube/settings/*');
+    expect(new Set(routes.map((route) => route.path)).size).toBe(routes.length);
   });
 
   it('finds tool by id', () => {
@@ -41,7 +88,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(sheetsTool).not.toBeNull();
     expect(sheetsTool.name).toBe('Sheets & Data');
 
-    const integrationsTool = getToolById('integrations-quota');
+    const integrationsTool = getToolById('youtube-integrations');
     expect(integrationsTool).not.toBeNull();
     expect(integrationsTool.name).toBe('Integrations & Quota');
 
@@ -100,4 +147,3 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(cardIds).toContain('weverse_uploader_card');
   });
 });
-

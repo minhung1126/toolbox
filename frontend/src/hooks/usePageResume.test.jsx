@@ -1,4 +1,3 @@
-import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { forcePageRepaint, PAGE_REPAINT_OPACITY, usePageResume } from './usePageResume';
@@ -33,8 +32,12 @@ describe('usePageResume', () => {
     const onResume = vi.fn().mockResolvedValue({ status: 'ok' });
     renderHook(() => usePageResume(onResume, { hiddenThresholdMs: 1000, cooldownMs: 0 }));
 
-    act(() => { window.dispatchEvent(new Event('blur')); });
-    act(() => { window.dispatchEvent(new Event('focus')); });
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+    });
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
 
     expect(root.style.opacity).toBe(PAGE_REPAINT_OPACITY);
     expect(onResume).not.toHaveBeenCalled();
@@ -43,7 +46,12 @@ describe('usePageResume', () => {
 
   it('shares one in-flight resume request and exposes its busy state', async () => {
     let release;
-    const onResume = vi.fn(() => new Promise((resolve) => { release = resolve; }));
+    const onResume = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        })
+    );
     const { result } = renderHook(() => usePageResume(onResume, { cooldownMs: 0 }));
 
     let first;
@@ -92,9 +100,13 @@ describe('usePageResume', () => {
     const onResume = vi.fn().mockResolvedValue({ status: 'ok' });
     renderHook(() => usePageResume(onResume, { hiddenThresholdMs: 1000, cooldownMs: 0 }));
 
-    act(() => { window.dispatchEvent(new Event('blur')); });
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+    });
     vi.setSystemTime(1001);
-    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+    });
 
     expect(onResume).toHaveBeenCalledWith({ reason: 'focus' });
   });
@@ -105,7 +117,9 @@ describe('usePageResume', () => {
     const event = new Event('pageshow');
     Object.defineProperty(event, 'persisted', { configurable: true, value: true });
 
-    await act(async () => { window.dispatchEvent(event); });
+    await act(async () => {
+      window.dispatchEvent(event);
+    });
 
     expect(onResume).toHaveBeenCalledWith({ reason: 'pageshow-persisted' });
   });

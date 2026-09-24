@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { ToastProvider } from '../components/Toast';
-import { api } from '../services/api';
+import { authApi } from '../features/auth/api/authApi';
 import SetupWizardPage from './SetupWizardPage';
 
 const mockNavigate = vi.fn();
@@ -15,8 +15,8 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-vi.mock('../services/api', () => ({
-  api: {
+vi.mock('../features/auth/api/authApi', () => ({
+  authApi: {
     getSetupStatus: vi.fn(),
     performSetup: vi.fn(),
   },
@@ -38,7 +38,7 @@ describe('SetupWizardPage', () => {
   });
 
   it('renders completed state when system is already set up', async () => {
-    api.getSetupStatus.mockResolvedValueOnce({
+    authApi.getSetupStatus.mockResolvedValueOnce({
       is_configured: true,
       setup_completed: true,
       needs_pin: false,
@@ -54,7 +54,7 @@ describe('SetupWizardPage', () => {
   });
 
   it('renders setup form with development PIN auto-filled when in dev mode', async () => {
-    api.getSetupStatus.mockResolvedValueOnce({
+    authApi.getSetupStatus.mockResolvedValueOnce({
       is_configured: false,
       setup_completed: false,
       needs_pin: false,
@@ -70,13 +70,13 @@ describe('SetupWizardPage', () => {
   });
 
   it('submits form successfully and redirects to login', async () => {
-    api.getSetupStatus.mockResolvedValueOnce({
+    authApi.getSetupStatus.mockResolvedValueOnce({
       is_configured: false,
       setup_completed: false,
       needs_pin: true,
       redirect_uri: 'https://toolbox.example.com/api/v1/auth/callback',
     });
-    api.performSetup.mockResolvedValueOnce({
+    authApi.performSetup.mockResolvedValueOnce({
       status: 'success',
       message: '初始設定完成！',
     });
@@ -101,7 +101,7 @@ describe('SetupWizardPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '儲存並完成系統初始化' }));
 
     await waitFor(() => {
-      expect(api.performSetup).toHaveBeenCalledWith({
+      expect(authApi.performSetup).toHaveBeenCalledWith({
         googleClientId: 'client-id-test.apps.googleusercontent.com',
         googleClientSecret: 'client-secret-test',
         adminEmail: 'admin@example.com',
@@ -115,13 +115,13 @@ describe('SetupWizardPage', () => {
   });
 
   it('displays error alert when setup fails', async () => {
-    api.getSetupStatus.mockResolvedValueOnce({
+    authApi.getSetupStatus.mockResolvedValueOnce({
       is_configured: false,
       setup_completed: false,
       needs_pin: false,
       redirect_uri: 'http://localhost:8000/api/v1/auth/callback',
     });
-    api.performSetup.mockRejectedValueOnce(new Error('PIN 碼驗證錯誤'));
+    authApi.performSetup.mockRejectedValueOnce(new Error('PIN 碼驗證錯誤'));
 
     renderPage();
 

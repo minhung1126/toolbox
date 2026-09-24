@@ -9,16 +9,17 @@ import {
   Key,
   Lock,
   Plus,
-  RefreshCw,
   Shield,
   Trash2,
   UserCheck,
   UserPlus,
 } from 'lucide-react';
-import { api } from '../services/api';
+import { systemSettingsApi } from '../features/settings/api/systemSettingsApi';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { copyToClipboard } from '../utils/clipboard';
+import { Badge, Button, Card, LoadingState, PageHeader } from '../shared/ui';
+import './SystemSettingsPage.css';
 
 export default function SystemSettingsPage({ sysSettings = {} }) {
   const toast = useToast();
@@ -46,8 +47,8 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
     setLoading(true);
     try {
       const [credsRes, allowlistRes] = await Promise.all([
-        api.getSystemCredentials().catch(() => null),
-        api.getAllowlist().catch(() => null),
+        systemSettingsApi.getCredentials().catch(() => null),
+        systemSettingsApi.getAllowlist().catch(() => null),
       ]);
       if (credsRes) {
         setCredentials(credsRes);
@@ -71,7 +72,8 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
     loadData();
   }, [loadData]);
 
-  const redirectUri = credentials?.redirect_uri || sysSettings?.redirect_uri || `${window.location.origin}/api/v1/auth/callback`;
+  const redirectUri =
+    credentials?.redirect_uri || sysSettings?.redirect_uri || `${window.location.origin}/api/v1/auth/callback`;
 
   const handleCopyRedirectUri = async () => {
     try {
@@ -99,7 +101,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
       if (editClientSecret.trim()) {
         payload.google_client_secret = editClientSecret.trim();
       }
-      const res = await api.updateSystemCredentials(payload);
+      const res = await systemSettingsApi.updateCredentials(payload);
       setCredentials((prev) => ({
         ...prev,
         ...res,
@@ -119,7 +121,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
     const nextVal = !allowNewUsers;
     setUpdatingAllowNewUsers(true);
     try {
-      const res = await api.updateAllowNewUsers(nextVal);
+      const res = await systemSettingsApi.updateAllowNewUsers(nextVal);
       const updatedVal = typeof res.allow_new_users === 'boolean' ? res.allow_new_users : nextVal;
       setAllowNewUsers(updatedVal);
       toast.success(updatedVal ? '已開啟允許新增使用者帳號' : '已關閉允許新增使用者帳號（禁止新增）');
@@ -148,7 +150,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
 
     setAddingEmail(true);
     try {
-      const res = await api.addAllowlistEmail(clean);
+      const res = await systemSettingsApi.addAllowlistEmail(clean);
       setAllowlist(res.allowed_emails || []);
       if (typeof res.allow_new_users === 'boolean') {
         setAllowNewUsers(res.allow_new_users);
@@ -166,7 +168,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
     if (!deleteTargetEmail) return;
     setDeletingEmail(true);
     try {
-      const res = await api.removeAllowlistEmail(deleteTargetEmail);
+      const res = await systemSettingsApi.removeAllowlistEmail(deleteTargetEmail);
       setAllowlist(res.allowed_emails || []);
       toast.success(`已將 ${deleteTargetEmail} 從白名單移除`);
       setDeleteTargetEmail(null);
@@ -179,96 +181,103 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
 
   if (loading) {
     return (
-      <div className="section-gap" style={{ textAlign: 'center', padding: '3rem' }}>
-        <RefreshCw size={28} className="spin" style={{ margin: '0 auto 1rem' }} />
-        <p>正在載入系統設定...</p>
+      <div className="section-gap">
+        <LoadingState>正在載入系統設定...</LoadingState>
       </div>
     );
   }
 
   const googleCreds = credentials?.credentials?.google || credentials?.google || {};
-  const isCredentialsDirty = editingCreds && (
-    editClientId.trim() !== (googleCreds.client_id || '') || Boolean(editClientSecret.trim())
-  );
+  const isCredentialsDirty =
+    editingCreds && (editClientId.trim() !== (googleCreds.client_id || '') || Boolean(editClientSecret.trim()));
 
   return (
     <div className="section-gap system-settings-page">
-      <header className="page-header">
-        <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', margin: '0 0 0.5rem 0' }}>
-          <Shield size={26} color="var(--success)" /> 系統設定
-        </h1>
-        <p className="section-desc">管理系統安全密鑰、Google OAuth 憑證配置與控制台存取控制白名單。</p>
-      </header>
+      <PageHeader
+        className="system-settings-header"
+        title={
+          <span className="system-settings-title">
+            <Shield size={26} aria-hidden="true" /> 系統設定
+          </span>
+        }
+        description="管理系統安全密鑰、Google OAuth 憑證配置與控制台存取控制白名單。"
+      />
 
       {/* 1. Security & System Status Banner */}
-      <section className="glass-panel card-padding settings-card card-stack">
-        <div className="card-header">
-          <div className="card-header-title">
-            <Shield size={20} color="var(--success)" />
+      <Card className="system-settings-card">
+        <div className="system-settings-card-header">
+          <div className="system-settings-card-title">
+            <Shield
+              size={20}
+              className="system-settings-section-icon system-settings-section-icon-success"
+              aria-hidden="true"
+            />
             <h2>系統密鑰與安全防護狀態</h2>
           </div>
         </div>
         <p className="section-desc">
-          Toolbox 已啟用零設定自動金鑰管理。主加密金鑰與工作階段簽名金鑰已自動生成並安全保存在 <code>data/.secrets.json</code>，服務重啟或映像升級皆能持久保留。
+          Toolbox 已啟用零設定自動金鑰管理。主加密金鑰與工作階段簽名金鑰已自動生成並安全保存在{' '}
+          <code>data/.secrets.json</code>，服務重啟或映像升級皆能持久保留。
         </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
-          <span className="badge badge-connected">
+        <div className="system-settings-status-list">
+          <Badge tone="success">
             <CheckCircle2 size={14} /> AES-256 Fernet 憑證保險庫啟用
-          </span>
-          <span className="badge badge-info">
+          </Badge>
+          <Badge tone="info">
             <Lock size={14} /> Session 簽名金鑰持久化
-          </span>
-          <span className="badge badge-info">
+          </Badge>
+          <Badge tone="info">
             公開位址 (.env)：{credentials?.public_base_url || sysSettings.public_base_url || window.location.origin}
-          </span>
+          </Badge>
         </div>
-      </section>
+      </Card>
 
       {/* 2. Google OAuth Credentials Management */}
-      <section className="glass-panel card-padding settings-card card-stack">
-        <div className="card-header">
-          <div className="card-header-title">
-            <Key size={20} color="var(--primary)" />
+      <Card className="system-settings-card">
+        <div className="system-settings-card-header">
+          <div className="system-settings-card-title">
+            <Key size={20} className="system-settings-section-icon" aria-hidden="true" />
             <h2>Google OAuth 憑證配置</h2>
           </div>
           {!editingCreds && (
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => {
                 setEditingCreds(true);
                 setEditClientId(googleCreds.client_id || '');
               }}
             >
               更新憑證
-            </button>
+            </Button>
           )}
         </div>
 
         <p className="section-desc">
-          用於控制台登入驗證、Google 試算表讀取與 Google 雲端硬碟讀取。所有 Client Secret 皆在後端加密儲存，前端絕不接收明文密鑰。
+          用於控制台登入驗證、Google 試算表讀取與 Google 雲端硬碟讀取。所有 Client Secret
+          皆在後端加密儲存，前端絕不接收明文密鑰。
         </p>
 
         {/* Authorized Redirect URI */}
-        <div className="settings-code-block" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-          <div>
-            <span className="form-hint" style={{ display: 'block', marginBottom: '0.25rem' }}>
+        <div className="system-settings-redirect-uri">
+          <div className="system-settings-redirect-content">
+            <span className="form-hint system-settings-redirect-label">
               Google Cloud 授權的重新導向 URI（依據 .env 的 PUBLIC_BASE_URL 產生）
             </span>
             <code>{redirectUri}</code>
           </div>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={handleCopyRedirectUri}
-          >
-            {copied ? <Check size={14} color="var(--success)" /> : <Copy size={14} />}
+          <Button variant="secondary" size="sm" onClick={handleCopyRedirectUri}>
+            {copied ? (
+              <Check size={14} className="system-settings-copy-success" aria-hidden="true" />
+            ) : (
+              <Copy size={14} aria-hidden="true" />
+            )}
             {copied ? '已複製' : '複製網址'}
-          </button>
+          </Button>
         </div>
 
         {editingCreds ? (
-          <form onSubmit={handleSaveCredentials} className="card-stack" style={{ marginTop: '0.5rem' }}>
+          <form onSubmit={handleSaveCredentials} className="system-settings-credentials-form">
             <div className="form-group">
               <label className="form-label" htmlFor="system-oauth-client-id">
                 Google OAuth Client ID
@@ -288,30 +297,23 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
               <label className="form-label" htmlFor="system-oauth-client-secret">
                 Google OAuth Client Secret（留空表示維持原密鑰）
               </label>
-              <div style={{ position: 'relative' }}>
+              <div className="system-settings-secret-field">
                 <input
                   id="system-oauth-client-secret"
                   type={showSecret ? 'text' : 'password'}
-                  className="form-input"
+                  className="form-input system-settings-secret-input"
                   value={editClientSecret}
                   onChange={(e) => setEditClientSecret(e.target.value)}
-                  placeholder={googleCreds.has_client_secret ? '••••••••••••••••（已保存，輸入可覆蓋）' : 'GOCSPX-xxxxxxxx'}
-                  style={{ width: '100%', paddingRight: '2.5rem' }}
+                  placeholder={
+                    googleCreds.has_client_secret ? '••••••••••••••••（已保存，輸入可覆蓋）' : 'GOCSPX-xxxxxxxx'
+                  }
                 />
                 <button
                   type="button"
                   onClick={() => setShowSecret(!showSecret)}
                   aria-label={showSecret ? '隱藏密鑰' : '顯示密鑰'}
-                  style={{
-                    position: 'absolute',
-                    right: '0.5rem',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                  }}
+                  aria-pressed={showSecret}
+                  className="system-settings-secret-toggle"
                 >
                   {showSecret ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -320,15 +322,19 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
 
             {isCredentialsDirty && (
               <div className="info-banner warning-banner">
-                <AlertCircle size={16} />
-                <span>Google OAuth 憑證已修改（尚未保存至保險庫）。為保護金鑰安全並避免頻繁寫入，修改後請記得點擊「儲存憑證」按鈕以套用！</span>
+                <AlertCircle size={16} aria-hidden="true" />
+                <span>
+                  Google OAuth
+                  憑證已修改（尚未保存至保險庫）。為保護金鑰安全並避免頻繁寫入，修改後請記得點擊「儲存憑證」按鈕以套用！
+                </span>
               </div>
             )}
 
-            <div className="page-actions settings-card-actions">
-              <button
+            <div className="system-settings-actions">
+              <Button
                 type="button"
-                className="btn btn-secondary btn-sm"
+                variant="secondary"
+                size="sm"
                 onClick={() => {
                   setEditingCreds(false);
                   setEditClientSecret('');
@@ -336,49 +342,51 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
                 disabled={savingCreds}
               >
                 取消
-              </button>
-              <button
-                type="submit"
-                className="btn btn-primary btn-sm"
-                disabled={savingCreds}
-              >
+              </Button>
+              <Button type="submit" size="sm" disabled={savingCreds}>
                 {savingCreds ? '儲存中...' : '儲存憑證'}
-              </button>
+              </Button>
             </div>
           </form>
         ) : (
-          <div className="settings-grid">
-            <div className="glass-panel settings-info-card">
+          <div className="system-settings-info-grid">
+            <div className="system-settings-info-card">
               <strong>設定狀態</strong>
               <p>
                 {googleCreds.configured ? (
-                  <span style={{ color: 'var(--success)' }}>✓ 已配置並正常運作</span>
+                  <span className="system-settings-status-text system-settings-status-text-success">
+                    ✓ 已配置並正常運作
+                  </span>
                 ) : (
-                  <span style={{ color: 'var(--danger)' }}>尚未完成設定</span>
+                  <span className="system-settings-status-text system-settings-status-text-danger">尚未完成設定</span>
                 )}
               </p>
             </div>
 
-            <div className="glass-panel settings-info-card">
+            <div className="system-settings-info-card">
               <strong>Client ID</strong>
-              <p style={{ wordBreak: 'break-all' }}>
+              <p className="system-settings-client-id">
                 <code>{googleCreds.client_id || '（未設定）'}</code>
               </p>
             </div>
 
-            <div className="glass-panel settings-info-card">
+            <div className="system-settings-info-card">
               <strong>Client Secret</strong>
               <p>{googleCreds.client_secret_masked || '（未設定）'}</p>
             </div>
           </div>
         )}
-      </section>
+      </Card>
 
       {/* 3. Allowed Google Emails (Access Control) */}
-      <section className="glass-panel card-padding settings-card card-stack">
-        <div className="card-header">
-          <div className="card-header-title">
-            <UserCheck size={20} color="var(--success)" />
+      <Card className="system-settings-card">
+        <div className="system-settings-card-header">
+          <div className="system-settings-card-title">
+            <UserCheck
+              size={20}
+              className="system-settings-section-icon system-settings-section-icon-success"
+              aria-hidden="true"
+            />
             <h2>允許登入的 Google 帳號名單 (Access Control)</h2>
           </div>
         </div>
@@ -387,125 +395,99 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
         </p>
 
         {/* Allow New Users Setting */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'var(--surface-inset)',
-            border: '1px solid var(--border-color)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '0.85rem 1rem',
-            gap: '1rem',
-            flexWrap: 'wrap',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div
-              className={`icon-box ${allowNewUsers ? 'icon-box-primary' : 'icon-box-secondary'}`}
-              style={{ width: '38px', height: '38px' }}
-            >
+        <div className="system-settings-allow-users">
+          <div className="system-settings-allow-users-summary">
+            <div className={`icon-box ${allowNewUsers ? 'icon-box-primary' : 'icon-box-secondary'}`} aria-hidden="true">
               {allowNewUsers ? <UserPlus size={18} /> : <Lock size={18} />}
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <strong style={{ fontSize: '0.92rem' }}>允許新增使用者帳號</strong>
-                <span className={`badge ${allowNewUsers ? 'badge-connected' : 'badge-disconnected'}`}>
-                  {allowNewUsers ? '已啟用' : '已停用'}
-                </span>
+              <div className="system-settings-allow-users-title">
+                <strong>允許新增使用者帳號</strong>
+                <Badge tone={allowNewUsers ? 'success' : 'neutral'}>{allowNewUsers ? '已啟用' : '已停用'}</Badge>
               </div>
-              <p className="form-hint" style={{ margin: '0.2rem 0 0 0' }}>
+              <p className="form-hint system-settings-allow-users-description">
                 {allowNewUsers
                   ? '目前允許管理員新增使用者 Google 帳號至系統白名單。'
                   : '目前已鎖定新增功能，禁止新增任何新的使用者 Google 帳號。'}
               </p>
             </div>
           </div>
-          <div>
-            <button
-              type="button"
-              className={`btn btn-sm ${allowNewUsers ? 'btn-secondary' : 'btn-primary'}`}
-              onClick={handleToggleAllowNewUsers}
-              disabled={updatingAllowNewUsers}
-              style={{ minWidth: '96px', whiteSpace: 'nowrap' }}
-            >
-              {updatingAllowNewUsers ? '處理中...' : (allowNewUsers ? '關閉新增' : '開啟新增')}
-            </button>
-          </div>
+          <Button
+            type="button"
+            variant={allowNewUsers ? 'secondary' : 'primary'}
+            size="sm"
+            onClick={handleToggleAllowNewUsers}
+            disabled={updatingAllowNewUsers}
+            className="system-settings-allow-users-toggle"
+          >
+            {updatingAllowNewUsers ? '處理中...' : allowNewUsers ? '關閉新增' : '開啟新增'}
+          </Button>
         </div>
 
         {/* Warning Banner if disabled */}
         {!allowNewUsers && (
-          <div className="info-banner warning-banner" style={{ background: 'var(--danger-bg)', borderColor: 'var(--danger-border)', color: 'var(--danger-text)' }}>
-            <AlertCircle size={18} style={{ flexShrink: 0 }} />
+          <div className="info-banner warning-banner system-settings-warning-banner">
+            <AlertCircle size={18} aria-hidden="true" />
             <span>目前已關閉新增使用者帳號功能。如需新增成員，請先點擊上方按鈕開啟新增。</span>
           </div>
         )}
 
         {/* Add Email Form */}
-        <form onSubmit={handleAddEmail} style={{ display: 'flex', gap: '0.5rem' }}>
+        <form onSubmit={handleAddEmail} className="system-settings-add-member-form">
+          <label className="form-label" htmlFor="system-settings-allowlist-email">
+            新增允許登入的 Google Email
+          </label>
           <input
+            id="system-settings-allowlist-email"
             type="email"
             className="form-input"
             placeholder={allowNewUsers ? '輸入要允許登入的 Google Email...' : '已停用新增使用者帳號功能'}
             value={newEmail}
             onChange={(e) => setNewEmail(e.target.value)}
             disabled={addingEmail || !allowNewUsers}
-            style={{ flex: 1 }}
+            aria-describedby="system-settings-allowlist-help"
           />
-          <button
+          <span id="system-settings-allowlist-help" className="form-hint system-settings-add-member-help">
+            輸入要加入系統白名單的 Google 帳號。
+          </span>
+          <Button
             type="submit"
-            className="btn btn-primary btn-sm"
+            className="system-settings-add-button"
+            icon={Plus}
             disabled={addingEmail || !allowNewUsers || !newEmail.trim()}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+            aria-label={addingEmail ? '新增成員中' : '新增成員'}
           >
-            <Plus size={16} />
             {addingEmail ? '新增中...' : '新增成員'}
-          </button>
+          </Button>
         </form>
 
         {/* Email List */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div className="system-settings-email-list">
           {allowlist.length === 0 ? (
-            <div className="empty-state" style={{ justifyContent: 'center' }}>
-              尚無限制名單（開發模式下所有 Google 帳號皆可登入）
-            </div>
+            <div className="system-settings-empty-state">尚無限制名單（開發模式下所有 Google 帳號皆可登入）</div>
           ) : (
             allowlist.map((email) => {
               const isSelf = email.toLowerCase() === currentUserEmail.toLowerCase();
               return (
-                <div
-                  key={email}
-                  className="settings-info-card"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '0.65rem 1rem',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{email}</span>
-                    {isSelf && (
-                      <span className="badge badge-connected">
-                        目前登入身分（您）
-                      </span>
-                    )}
+                <div key={email} className="system-settings-info-card system-settings-email-row">
+                  <div className="system-settings-email-meta">
+                    <span className="system-settings-email">{email}</span>
+                    {isSelf && <Badge tone="success">目前登入身分（您）</Badge>}
                   </div>
-                  <div>
+                  <div className="system-settings-email-actions">
                     {isSelf ? (
                       <span className="form-hint">不可自刪</span>
                     ) : (
-                      <button
+                      <Button
                         type="button"
-                        className="btn btn-secondary btn-sm"
+                        variant="danger"
+                        size="sm"
                         onClick={() => setDeleteTargetEmail(email)}
-                        style={{ color: 'var(--danger)', padding: '0.3rem 0.5rem' }}
+                        icon={Trash2}
+                        className="system-settings-remove-button"
                         title="自白名單中移除此帳號"
                         aria-label={`自白名單移除 ${email}`}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      />
                     )}
                   </div>
                 </div>
@@ -513,7 +495,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
             })
           )}
         </div>
-      </section>
+      </Card>
 
       {/* Confirm Delete Dialog */}
       <ConfirmDialog

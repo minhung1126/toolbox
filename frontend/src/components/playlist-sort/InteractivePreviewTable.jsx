@@ -49,38 +49,27 @@ export default function InteractivePreviewTable({
   };
 
   return (
-    <div style={{ flex: 1, minWidth: 320 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
-        <h4 style={{ margin: 0, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+    <div className="playlist-preview-column">
+      <div className="playlist-preview-header playlist-preview-header-interactive">
+        <h4 className="playlist-preview-title">
           {Icon && <Icon size={14} />}
           {title}
         </h4>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div className="playlist-preview-controls">
           {isManuallyAdjusted && (
             <button
               type="button"
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-sm playlist-preview-reset"
               onClick={onResetOrder}
-              style={{ fontSize: 11, padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 4 }}
               title="撤銷手動拖曳，重設為目前規則排序"
             >
               <RotateCcw size={12} /> 重設為規則排序
             </button>
           )}
-          <span style={{ fontSize: 11, color: 'var(--primary)' }}>
-            可手動拖曳歌曲
-          </span>
+          <span className="playlist-preview-drag-hint">可手動拖曳歌曲</span>
         </div>
       </div>
-      <div
-        style={{
-          maxHeight: 520,
-          overflowY: 'auto',
-          borderRadius: 8,
-          border: '1px solid rgba(255,255,255,0.08)',
-          background: 'rgba(0,0,0,0.2)',
-        }}
-      >
+      <div className="playlist-preview-list">
         {items.map((item, idx) => {
           const isDragging = draggedIdx === idx;
           const isTarget = dragOverIdx === idx;
@@ -93,53 +82,23 @@ export default function InteractivePreviewTable({
               onDragOver={(e) => handleDragOver(e, idx)}
               onDrop={(e) => handleDrop(e, idx)}
               onDragEnd={handleDragEnd}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '8px 10px',
-                borderBottom: '1px solid rgba(255,255,255,0.05)',
-                fontSize: 13,
-                cursor: 'grab',
-                opacity: isDragging ? 0.35 : 1,
-                borderTop: isTarget ? '2px solid var(--primary)' : undefined,
-                background: isTarget ? 'rgba(59, 130, 246, 0.08)' : undefined,
-                transition: 'background 0.1s ease',
-              }}
+              className={`playlist-preview-row playlist-preview-row-draggable${isDragging ? ' playlist-preview-row-dragging' : ''}${isTarget ? ' playlist-preview-row-drop-target' : ''}`}
             >
-              <div
-                style={{
-                  cursor: 'grab',
-                  color: 'rgba(255, 255, 255, 0.4)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  flexShrink: 0,
-                }}
-                title="按住拖曳以調整順序"
-              >
+              <div className="playlist-preview-grip" title="按住拖曳以調整順序">
                 <GripVertical size={14} />
               </div>
               <StatusDot status={item.status} />
-              <span style={{ color: 'rgba(255,255,255,0.4)', minWidth: 28, textAlign: 'right', fontSize: 12 }}>
-                {idx + 1}
-              </span>
+              <span className="playlist-preview-index">{idx + 1}</span>
               {item.thumbnail_url && (
-                <img
-                  src={item.thumbnail_url}
-                  alt=""
-                  style={{ width: 44, height: 32, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }}
-                  loading="lazy"
-                />
+                <img src={item.thumbnail_url} alt="" className="playlist-preview-thumbnail" loading="lazy" />
               )}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.title}>
+              <div className="playlist-preview-track">
+                <div className="playlist-preview-track-title" title={item.title}>
                   {item.title || '（無標題）'}
                 </div>
                 <TrackSubtitle item={item} sortKeys={sortKeys} />
               </div>
-              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, flexShrink: 0 }}>
-                {formatDuration(item.duration_seconds)}
-              </span>
+              <span className="playlist-preview-duration">{formatDuration(item.duration_seconds)}</span>
             </div>
           );
         })}

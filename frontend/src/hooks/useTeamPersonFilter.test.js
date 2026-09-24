@@ -1,8 +1,19 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
+import { api } from '../services/api';
 import useTeamPersonFilter from './useTeamPersonFilter';
 
+afterEach(() => vi.restoreAllMocks());
+
 describe('useTeamPersonFilter', () => {
+  it('reports malformed provider options instead of silently showing no teams', async () => {
+    vi.spyOn(api, 'parseSheetOptions').mockResolvedValue({ teams: [null] });
+    const { result } = renderHook(() => useTeamPersonFilter({ source: 'sheet', worksheetName: '工作表' }));
+
+    await waitFor(() => expect(result.current.error).toContain('工作表團體選項回應格式不正確'));
+    expect(result.current.errorType).toBe('teams');
+  });
+
   it('loads teams and defaults a newly selected team to all people in API order', async () => {
     const apiClient = {
       parseSheetOptions: vi.fn().mockResolvedValue({ teams: ['團體 B', '團體 A'] }),
@@ -24,10 +35,13 @@ describe('useTeamPersonFilter', () => {
     let resolveNew;
     const apiClient = {
       parseSheetOptions: vi.fn().mockResolvedValue({ teams: ['舊團體', '新團體'] }),
-      getTeamPeople: vi.fn((_, __, team) => new Promise((resolve) => {
-        if (team === '舊團體') resolveOld = resolve;
-        else resolveNew = resolve;
-      })),
+      getTeamPeople: vi.fn(
+        (_, __, team) =>
+          new Promise((resolve) => {
+            if (team === '舊團體') resolveOld = resolve;
+            else resolveNew = resolve;
+          })
+      ),
     };
     const { result } = renderHook(() => useTeamPersonFilter({ source: 'sheet', worksheetName: '工作表', apiClient }));
     await waitFor(() => expect(result.current.teams).toHaveLength(2));
@@ -50,10 +64,9 @@ describe('useTeamPersonFilter', () => {
       parseSheetOptions: vi.fn().mockResolvedValue({ teams: ['團體'] }),
       getTeamPeople: vi.fn().mockResolvedValue({ people: ['人物'] }),
     };
-    const { result, rerender } = renderHook(
-      (props) => useTeamPersonFilter({ ...props, apiClient }),
-      { initialProps: { source: 'sheet', worksheetName: '工作表', enabled: true } },
-    );
+    const { result, rerender } = renderHook((props) => useTeamPersonFilter({ ...props, apiClient }), {
+      initialProps: { source: 'sheet', worksheetName: '工作表', enabled: true },
+    });
     await waitFor(() => expect(result.current.teams).toEqual(['團體']));
     act(() => result.current.setSelectedTeam('團體'));
     await waitFor(() => expect(result.current.people).toEqual(['人物']));

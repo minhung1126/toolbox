@@ -1,0 +1,439 @@
+.ytmusic-settings-card-header,
+.ytmusic-token-validation,
+.ytmusic-token-active-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.ytmusic-settings-card-header {
+  gap: var(--space-2);
+}
+
+.ytmusic-settings-card-title,
+.ytmusic-token-validation-summary,
+.ytmusic-token-active-title,
+.ytmusic-token-active-actions,
+.ytmusic-settings-inline-button {
+  display: inline-flex;
+  align-items: center;
+}
+
+.ytmusic-settings-card-title {
+  gap: var(--space-2);
+  margin: 0 0 var(--space-1);
+}
+
+.ytmusic-settings-card-title svg {
+  color: var(--primary);
+}
+
+.ytmusic-settings-card-description {
+  margin: 0;
+}
+
+.ytmusic-token-validation {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-md);
+  background: var(--danger-bg);
+}
+
+.ytmusic-token-validation-success {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+
+.ytmusic-token-validation-summary {
+  gap: 10px;
+}
+
+.ytmusic-token-validation-icon {
+  flex-shrink: 0;
+  color: var(--danger-text);
+}
+
+.ytmusic-token-validation-success .ytmusic-token-validation-icon {
+  color: var(--success-text);
+}
+
+.ytmusic-token-validation-title {
+  color: var(--danger-text);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.ytmusic-token-validation-success .ytmusic-token-validation-title {
+  color: var(--success-text);
+}
+
+.ytmusic-token-validation-message {
+  margin-top: 2px;
+  color: var(--text-main);
+  font-size: 0.825rem;
+}
+
+.ytmusic-token-validation-account {
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.ytmusic-token-validation-close {
+  padding: var(--space-1) var(--space-2);
+  font-size: 0.75rem;
+}
+
+.ytmusic-token-active-panel {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-inset);
+}
+
+.ytmusic-token-active-title {
+  gap: 6px;
+  color: var(--success-text);
+}
+
+.ytmusic-token-active-description {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.ytmusic-token-active-actions {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.ytmusic-settings-inline-button {
+  gap: 6px;
+}
+
+.ytmusic-token-clear-button {
+  color: var(--danger-text);
+}
+
+.ytmusic-token-setup,
+.ytmusic-token-guide-steps,
+.ytmusic-token-guide-methods {
+  display: flex;
+  flex-direction: column;
+}
+
+.ytmusic-token-setup {
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.ytmusic-token-guide {
+  padding: var(--space-4) 18px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--surface-inset);
+}
+
+.ytmusic-token-guide-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.ytmusic-token-guide-title,
+.ytmusic-token-guide-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ytmusic-token-guide-title {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.ytmusic-token-guide-badge {
+  gap: var(--space-1);
+  font-size: 0.75rem;
+}
+
+.ytmusic-token-guide-steps {
+  gap: var(--space-3);
+  color: var(--text-main);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.ytmusic-token-guide-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.ytmusic-token-guide-step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  color: var(--bg-canvas);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.ytmusic-token-guide-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.ytmusic-token-guide-key {
+  padding: 2px 6px;
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-xs);
+  background: var(--surface-raised);
+  font-family: monospace;
+}
+
+.ytmusic-token-guide-step-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.ytmusic-token-guide-methods {
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.ytmusic-token-guide-method {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+
+.ytmusic-token-guide-method-recommended {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+
+.ytmusic-token-guide-method-alternative {
+  border-color: var(--info-border);
+  background: var(--info-bg);
+}
+
+.ytmusic-token-guide-method-title {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.ytmusic-token-guide-method-recommended .ytmusic-token-guide-method-title {
+  color: var(--success-text);
+}
+
+.ytmusic-token-guide-method-alternative .ytmusic-token-guide-method-title {
+  color: var(--info-text);
+}
+
+.ytmusic-token-guide-method-description {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.ytmusic-token-guide-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  background: var(--danger-bg);
+  color: var(--text-main);
+  font-size: 0.825rem;
+}
+
+.ytmusic-token-guide-warning-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--danger-text);
+}
+
+.ytmusic-token-guide-warning strong:first-child {
+  color: var(--danger-text);
+}
+
+.ytmusic-token-form-group {
+  margin: 0;
+}
+
+.ytmusic-token-input-label,
+.ytmusic-token-form-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.ytmusic-token-input-label {
+  justify-content: space-between;
+}
+
+.ytmusic-token-input-hint {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.ytmusic-token-input {
+  width: 100%;
+  font-family: monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.ytmusic-settings-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  font-size: 1rem;
+}
+
+.ytmusic-settings-section-icon {
+  color: var(--primary);
+}
+
+.ytmusic-token-refresh-warning,
+.ytmusic-region-field {
+  margin-top: var(--space-3);
+}
+
+.ytmusic-settings-select {
+  max-width: 440px;
+}
+
+.ytmusic-region-description {
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.ytmusic-custom-region {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: 10px;
+  padding: 14px var(--space-4);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-inset);
+}
+
+.ytmusic-custom-region-title {
+  color: var(--primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.ytmusic-custom-region-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+
+.ytmusic-custom-region-field {
+  margin: 0;
+}
+
+.ytmusic-custom-region-input {
+  width: 100%;
+}
+
+.ytmusic-code-reference {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--info-border);
+  border-radius: var(--radius-md);
+  background: var(--info-bg);
+  color: var(--text-main);
+  font-size: 0.825rem;
+  line-height: 1.6;
+}
+
+.ytmusic-code-reference-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.ytmusic-code-reference-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--info-text);
+}
+
+.ytmusic-code-reference-title {
+  color: var(--info-text);
+}
+
+.ytmusic-code-reference-list {
+  margin: var(--space-1) 0 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+}
+
+.ytmusic-preset-field {
+  margin-top: 14px;
+}
+
+.ytmusic-preferences-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: var(--space-3);
+}
+
+.ytmusic-quick-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.ytmusic-quick-nav-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-1);
+}
+
+.ytmusic-quick-nav-description {
+  margin: 0;
+}
+
+.ytmusic-settings-page-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.5rem;
+}
+
+.ytmusic-settings-title-icon,
+.ytmusic-quick-nav-icon {
+  color: var(--primary);
+}

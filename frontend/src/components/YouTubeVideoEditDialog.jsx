@@ -1,3 +1,4 @@
+import '../features/youtube/youtube-shared.css';
 import React, { useEffect, useRef, useState } from 'react';
 import { ExternalLink, Pencil, Save, X } from 'lucide-react';
 import Dialog from './Dialog';
@@ -23,7 +24,11 @@ export default function YouTubeVideoEditDialog({ video, saving = false, onSave, 
 
   if (!video) return null;
 
-  const canSave = title.trim().length > 0 && title.length <= TITLE_MAX_LENGTH && description.length <= DESCRIPTION_MAX_LENGTH && !saving;
+  const canSave =
+    title.trim().length > 0 &&
+    title.length <= TITLE_MAX_LENGTH &&
+    description.length <= DESCRIPTION_MAX_LENGTH &&
+    !saving;
   const handleSubmit = (event) => {
     event.preventDefault();
     if (!canSave || submittingRef.current) return;
@@ -55,65 +60,86 @@ export default function YouTubeVideoEditDialog({ video, saving = false, onSave, 
       onBackdropClick={close}
       busy={saving}
     >
-        <div className="youtube-edit-dialog-header">
-          <div>
-            <div className="youtube-edit-dialog-heading">
-              <Pencil size={20} aria-hidden="true" />
-              <h2 id="youtube-edit-dialog-title">編輯 YouTube 影片</h2>
-            </div>
-            <p className="youtube-edit-dialog-id">影片 ID：{video.video_id}</p>
+      <div className="youtube-edit-dialog-header">
+        <div>
+          <div className="youtube-edit-dialog-heading">
+            <Pencil size={20} aria-hidden="true" />
+            <h2 id="youtube-edit-dialog-title">編輯 YouTube 影片</h2>
           </div>
-          <button type="button" className="youtube-edit-dialog-close" aria-label="關閉編輯視窗" onClick={close} disabled={saving}>
-            <X size={20} aria-hidden="true" />
-          </button>
+          <p className="youtube-edit-dialog-id">影片 ID：{video.video_id}</p>
+        </div>
+        <button
+          type="button"
+          className="youtube-edit-dialog-close"
+          aria-label="關閉編輯視窗"
+          onClick={close}
+          disabled={saving}
+        >
+          <X size={20} aria-hidden="true" />
+        </button>
+      </div>
+
+      <form className="youtube-edit-form" onSubmit={handleSubmit}>
+        <div className="form-group">
+          <div className="youtube-edit-label-row">
+            <label className="form-label" htmlFor="youtube-edit-title">
+              標題
+            </label>
+            <span className="youtube-edit-counter">
+              {title.length}/{TITLE_MAX_LENGTH}
+            </span>
+          </div>
+          <input
+            ref={titleRef}
+            id="youtube-edit-title"
+            className="form-input"
+            type="text"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            maxLength={TITLE_MAX_LENGTH}
+            required
+          />
         </div>
 
-        <form className="youtube-edit-form" onSubmit={handleSubmit}>
-          <div className="form-group">
-            <div className="youtube-edit-label-row">
-              <label className="form-label" htmlFor="youtube-edit-title">標題</label>
-              <span className="youtube-edit-counter">{title.length}/{TITLE_MAX_LENGTH}</span>
-            </div>
-            <input
-              ref={titleRef}
-              id="youtube-edit-title"
-              className="form-input"
-              type="text"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              maxLength={TITLE_MAX_LENGTH}
-              required
-            />
+        <div className="form-group">
+          <div className="youtube-edit-label-row">
+            <label className="form-label" htmlFor="youtube-edit-description">
+              描述
+            </label>
+            <span className="youtube-edit-counter">
+              {description.length}/{DESCRIPTION_MAX_LENGTH}
+            </span>
           </div>
+          <textarea
+            id="youtube-edit-description"
+            className="form-input youtube-edit-description"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            maxLength={DESCRIPTION_MAX_LENGTH}
+            rows={10}
+          />
+        </div>
 
-          <div className="form-group">
-            <div className="youtube-edit-label-row">
-              <label className="form-label" htmlFor="youtube-edit-description">描述</label>
-              <span className="youtube-edit-counter">{description.length}/{DESCRIPTION_MAX_LENGTH}</span>
-            </div>
-            <textarea
-              id="youtube-edit-description"
-              className="form-input youtube-edit-description"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              maxLength={DESCRIPTION_MAX_LENGTH}
-              rows={10}
-            />
-          </div>
+        <a
+          className="youtube-video-link youtube-edit-preview-link"
+          href={videoUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <ExternalLink size={15} aria-hidden="true" />
+          編輯前後都可在 YouTube 查看影片
+        </a>
 
-          <a className="youtube-video-link youtube-edit-preview-link" href={videoUrl} target="_blank" rel="noopener noreferrer">
-            <ExternalLink size={15} aria-hidden="true" />
-            編輯前後都可在 YouTube 查看影片
-          </a>
-
-          <div className="youtube-edit-dialog-actions">
-            <button type="button" className="btn btn-secondary" onClick={close} disabled={saving}>取消</button>
-            <button type="submit" className="btn btn-primary" disabled={!canSave}>
-              <Save size={16} aria-hidden="true" />
-              {saving ? '儲存中…' : '儲存變更'}
-            </button>
-          </div>
-        </form>
+        <div className="youtube-edit-dialog-actions">
+          <button type="button" className="btn btn-secondary" onClick={close} disabled={saving}>
+            取消
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={!canSave}>
+            <Save size={16} aria-hidden="true" />
+            {saving ? '儲存中…' : '儲存變更'}
+          </button>
+        </div>
+      </form>
     </Dialog>
   );
 }

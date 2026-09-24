@@ -1,0 +1,95 @@
+.weverse-upload-history {
+  margin-top: var(--space-6);
+  padding: var(--space-6);
+}
+
+.weverse-upload-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.weverse-upload-history-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.weverse-upload-history-title svg {
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+
+.weverse-upload-history-empty {
+  padding: var(--space-4);
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+.weverse-upload-history-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.weverse-upload-history-table {
+  width: 100%;
+  min-width: 660px;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  text-align: left;
+}
+
+.weverse-upload-history-table th,
+.weverse-upload-history-table td {
+  padding: 0.65rem 0.8rem;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.weverse-upload-history-table thead {
+  background: var(--surface-inset);
+  color: var(--text-muted);
+}
+
+.weverse-upload-history-table th {
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.weverse-upload-history-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.weverse-history-video-title {
+  font-weight: 600;
+}
+
+.weverse-history-video-filename,
+.weverse-history-created-at {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.weverse-history-video-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.25rem 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .weverse-upload-history {
+    padding: var(--space-4);
+  }
+
+  .weverse-upload-history-header {
+    align-items: flex-start;
+  }
+}

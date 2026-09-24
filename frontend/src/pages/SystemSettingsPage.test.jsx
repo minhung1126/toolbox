@@ -2,13 +2,13 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../components/Toast';
-import { api } from '../services/api';
+import { systemSettingsApi } from '../features/settings/api/systemSettingsApi';
 import SystemSettingsPage from './SystemSettingsPage';
 
-vi.mock('../services/api', () => ({
-  api: {
-    getSystemCredentials: vi.fn(),
-    updateSystemCredentials: vi.fn(),
+vi.mock('../features/settings/api/systemSettingsApi', () => ({
+  systemSettingsApi: {
+    getCredentials: vi.fn(),
+    updateCredentials: vi.fn(),
     getAllowlist: vi.fn(),
     addAllowlistEmail: vi.fn(),
     removeAllowlistEmail: vi.fn(),
@@ -30,7 +30,7 @@ describe('SystemSettingsPage', () => {
   });
 
   it('renders security status, credentials, and allowlist', async () => {
-    api.getSystemCredentials.mockResolvedValueOnce({
+    systemSettingsApi.getCredentials.mockResolvedValueOnce({
       status: 'success',
       credentials: {
         google: {
@@ -43,7 +43,7 @@ describe('SystemSettingsPage', () => {
       public_base_url: 'https://toolbox.example.com',
       redirect_uri: 'https://toolbox.example.com/api/v1/auth/callback',
     });
-    api.getAllowlist.mockResolvedValueOnce({
+    systemSettingsApi.getAllowlist.mockResolvedValueOnce({
       allowed_emails: ['admin@example.com', 'user@example.com'],
       current_user_email: 'admin@example.com',
       allowlist_required: true,
@@ -60,7 +60,7 @@ describe('SystemSettingsPage', () => {
   });
 
   it('allows editing and updating Google OAuth credentials', async () => {
-    api.getSystemCredentials.mockResolvedValueOnce({
+    systemSettingsApi.getCredentials.mockResolvedValueOnce({
       status: 'success',
       credentials: {
         google: {
@@ -72,11 +72,11 @@ describe('SystemSettingsPage', () => {
       },
       redirect_uri: 'https://toolbox.example.com/api/v1/auth/callback',
     });
-    api.getAllowlist.mockResolvedValueOnce({
+    systemSettingsApi.getAllowlist.mockResolvedValueOnce({
       allowed_emails: ['admin@example.com'],
       current_user_email: 'admin@example.com',
     });
-    api.updateSystemCredentials.mockResolvedValueOnce({
+    systemSettingsApi.updateCredentials.mockResolvedValueOnce({
       status: 'success',
       credentials: {
         google: {
@@ -103,7 +103,7 @@ describe('SystemSettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '儲存憑證' }));
 
     await waitFor(() => {
-      expect(api.updateSystemCredentials).toHaveBeenCalledWith({
+      expect(systemSettingsApi.updateCredentials).toHaveBeenCalledWith({
         google_client_id: 'new-client-id',
         google_client_secret: 'new-secret-value',
       });
@@ -111,19 +111,19 @@ describe('SystemSettingsPage', () => {
   });
 
   it('allows adding and removing emails from the allowlist', async () => {
-    api.getSystemCredentials.mockResolvedValueOnce({
+    systemSettingsApi.getCredentials.mockResolvedValueOnce({
       status: 'success',
       credentials: { google: { configured: true } },
     });
-    api.getAllowlist.mockResolvedValueOnce({
+    systemSettingsApi.getAllowlist.mockResolvedValueOnce({
       allowed_emails: ['admin@example.com'],
       current_user_email: 'admin@example.com',
     });
-    api.addAllowlistEmail.mockResolvedValueOnce({
+    systemSettingsApi.addAllowlistEmail.mockResolvedValueOnce({
       status: 'success',
       allowed_emails: ['admin@example.com', 'newmember@example.com'],
     });
-    api.removeAllowlistEmail.mockResolvedValueOnce({
+    systemSettingsApi.removeAllowlistEmail.mockResolvedValueOnce({
       status: 'success',
       allowed_emails: ['admin@example.com'],
     });
@@ -138,7 +138,7 @@ describe('SystemSettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /新增成員/ }));
 
     await waitFor(() => {
-      expect(api.addAllowlistEmail).toHaveBeenCalledWith('newmember@example.com');
+      expect(systemSettingsApi.addAllowlistEmail).toHaveBeenCalledWith('newmember@example.com');
     });
 
     // Verify added email appears and delete button is available
@@ -151,21 +151,21 @@ describe('SystemSettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '確認移除' }));
 
     await waitFor(() => {
-      expect(api.removeAllowlistEmail).toHaveBeenCalledWith('newmember@example.com');
+      expect(systemSettingsApi.removeAllowlistEmail).toHaveBeenCalledWith('newmember@example.com');
     });
   });
 
   it('allows toggling whether adding new user accounts is permitted', async () => {
-    api.getSystemCredentials.mockResolvedValueOnce({
+    systemSettingsApi.getCredentials.mockResolvedValueOnce({
       status: 'success',
       credentials: { google: { configured: true } },
     });
-    api.getAllowlist.mockResolvedValueOnce({
+    systemSettingsApi.getAllowlist.mockResolvedValueOnce({
       allowed_emails: ['admin@example.com'],
       current_user_email: 'admin@example.com',
       allow_new_users: true,
     });
-    api.updateAllowNewUsers.mockResolvedValueOnce({
+    systemSettingsApi.updateAllowNewUsers.mockResolvedValueOnce({
       status: 'success',
       allow_new_users: false,
     });
@@ -179,7 +179,7 @@ describe('SystemSettingsPage', () => {
     fireEvent.click(toggleButton);
 
     await waitFor(() => {
-      expect(api.updateAllowNewUsers).toHaveBeenCalledWith(false);
+      expect(systemSettingsApi.updateAllowNewUsers).toHaveBeenCalledWith(false);
     });
 
     // Verify disabled UI state
@@ -190,7 +190,7 @@ describe('SystemSettingsPage', () => {
     expect(screen.getByRole('button', { name: /新增成員/ })).toBeDisabled();
 
     // Re-enable
-    api.updateAllowNewUsers.mockResolvedValueOnce({
+    systemSettingsApi.updateAllowNewUsers.mockResolvedValueOnce({
       status: 'success',
       allow_new_users: true,
     });
@@ -198,7 +198,7 @@ describe('SystemSettingsPage', () => {
     fireEvent.click(enableButton);
 
     await waitFor(() => {
-      expect(api.updateAllowNewUsers).toHaveBeenCalledWith(true);
+      expect(systemSettingsApi.updateAllowNewUsers).toHaveBeenCalledWith(true);
     });
     await screen.findByText('已啟用');
     expect(screen.getByPlaceholderText('輸入要允許登入的 Google Email...')).not.toBeDisabled();

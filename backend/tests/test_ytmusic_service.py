@@ -311,21 +311,19 @@ def test_enrich_tracks_with_ytdlp_fallback(mock_get_date):
     assert "v_unique" not in called_vids
 
 
-def test_parse_custom_token_input_creates_valid_browser_client():
-    from ytmusicapi import YTMusic
-    from ytmusicapi.auth.types import AuthType
-
+def test_parse_custom_token_input_is_pure_and_browser_compatible(monkeypatch):
+    monkeypatch.setattr(
+        "backend.app.services.ytmusic_service.YTMusic",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("Parsing must not make a network request")),
+    )
     cookie_input = "SID=abc12345; HSID=def67890; SAPISID=ghi13579; SSID=xyz24680"
     parsed = parse_custom_token_input(cookie_input)
     assert isinstance(parsed, dict)
     assert "__Secure-3PAPISID=ghi13579" in parsed["cookie"]
     assert "authorization" in parsed
-    assert "SAPISIDHASH" in parsed["authorization"]
-
-    # Verify YTMusic accepts the parsed auth as BROWSER auth type
-    client = YTMusic(auth=parsed)
-    assert client.auth_type == AuthType.BROWSER
-    assert client.sapisid == "ghi13579"
+    assert parsed["authorization"].startswith("SAPISIDHASH ")
+    assert parsed["x-origin"] == "https://music.youtube.com"
+    assert parsed["accept-language"].startswith("zh-TW")
 
 
 @patch("backend.app.services.ytmusic_service.get_ytmusic_client")

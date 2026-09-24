@@ -15,12 +15,13 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
+from backend.app.core.data_paths import data_directory
 from backend.app.core.persistence import atomic_write_json, read_json_file
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-_DEFAULT_PATH = _PROJECT_ROOT / "data" / "account_state.json"
+_DEFAULT_PATH = data_directory() / "account_state.json"
 _MAX_SUBJECT_LENGTH = 256
 _MAX_WORK_STATE_BYTES = 128 * 1024
 
