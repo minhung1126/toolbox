@@ -12,18 +12,10 @@ export default function YouTubePlaylistSection({
 }) {
   return (
     <form className="glass-panel card-padding settings-card card-stack" onSubmit={saveResources}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '0.5rem',
-        }}
-      >
+      <div className="youtube-playlist-header">
         <div>
           <h2 className="settings-heading">
-            <PlaySquare size={20} color="var(--secondary)" /> 共用 To-Post 播放清單
+            <PlaySquare size={20} className="youtube-playlist-icon" aria-hidden="true" /> 共用 To-Post 播放清單
           </h2>
           <p className="section-desc">
             這是目前帳號所有 YouTube 子頁面共用的 To-Post 播放清單；新上傳、Video、Shorts
@@ -46,10 +38,11 @@ export default function YouTubePlaylistSection({
         )}
       </div>
       <div className="form-group">
-        <label className="form-label">
+        <label className="form-label" htmlFor="youtube-default-playlist">
           <PlaySquare size={14} /> 共用 To-Post 播放清單
         </label>
         <SourceLinkInput
+          id="youtube-default-playlist"
           value={playlistId}
           onChange={(event) => handlePlaylistChange(event.target.value)}
           sourceType="youtube-playlist"

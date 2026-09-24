@@ -33,6 +33,38 @@
   font-weight: 600;
 }
 
+.youtube-slot-section-with-routing {
+  margin-top: var(--space-6);
+}
+
+.youtube-slot-section-heading {
+  margin-bottom: var(--space-3);
+}
+
+.youtube-slot-section-title {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.youtube-slot-section-description {
+  margin: var(--space-1) 0 0;
+  font-size: 0.85rem;
+}
+
+.youtube-playlist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.youtube-playlist-icon {
+  color: var(--secondary);
+}
+
 .youtube-slot-icon {
   color: var(--danger);
 }
@@ -138,7 +170,8 @@
 }
 
 .youtube-slot-credentials-dirty,
-.youtube-slot-quota-dirty {
+.youtube-slot-quota-dirty,
+.youtube-routing-dirty {
   align-items: center;
   border: 1px solid var(--warning-border);
   background: var(--warning-bg);
@@ -151,11 +184,18 @@
   padding: var(--space-2) var(--space-3);
 }
 
-.youtube-slot-quota-dirty {
+.youtube-settings-dirty {
   gap: var(--space-2);
-  margin: var(--space-3) 0;
   padding: var(--space-2) var(--space-3);
   font-size: 0.82rem;
+}
+
+.youtube-routing-dirty {
+  margin-top: var(--space-3);
+}
+
+.youtube-slot-quota-dirty {
+  margin: var(--space-3) 0;
 }
 
 .youtube-slot-editor-actions {

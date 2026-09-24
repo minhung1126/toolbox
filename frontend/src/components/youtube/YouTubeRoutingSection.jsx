@@ -48,21 +48,7 @@ export default function YouTubeRoutingSection({
         </div>
       </div>
       {isRoutingDirty && (
-        <div
-          className="info-banner warning-banner"
-          style={{
-            background: 'rgba(245, 158, 11, 0.12)',
-            border: '1px solid rgba(245, 158, 11, 0.3)',
-            color: '#fbbf24',
-            padding: '0.6rem 0.8rem',
-            borderRadius: '6px',
-            fontSize: '0.82rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            marginTop: '0.75rem',
-          }}
-        >
+        <div className="info-banner warning-banner youtube-settings-dirty youtube-routing-dirty">
           <AlertCircle size={16} />
           <span>
             您已將路由模式切換為「{youtubeRoutingLabel(routingModeDraft)}

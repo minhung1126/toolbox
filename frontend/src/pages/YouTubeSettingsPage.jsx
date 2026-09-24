@@ -405,13 +405,13 @@ export default function YouTubeSettingsPage({
       )}
 
       {(showConnections || showQuota) && (
-        <div style={{ marginTop: showRouting ? '1.5rem' : 0 }}>
+        <div
+          className={showRouting ? 'youtube-slot-section youtube-slot-section-with-routing' : 'youtube-slot-section'}
+        >
           {showRouting && (
-            <div style={{ marginBottom: '0.75rem' }}>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                各 Slot 配額上限與安全防護緩衝
-              </h3>
-              <p className="section-desc" style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem' }}>
+            <div className="youtube-slot-section-heading">
+              <h3 className="youtube-slot-section-title">各 Slot 配額上限與安全防護緩衝</h3>
+              <p className="section-desc youtube-slot-section-description">
                 設定各連線槽位的每日 API Quota 額度與自動容錯切換門檻。
               </p>
             </div>

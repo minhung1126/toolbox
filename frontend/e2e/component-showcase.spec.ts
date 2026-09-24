@@ -221,6 +221,12 @@ test('YouTube settings sub-navigation uses feature styles on supported widths', 
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow, `YouTube settings horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+
+    await page.goto('/youtube/settings/playlist');
+    await expect(page.getByLabel('共用 To-Post 播放清單')).toBeVisible();
+    await expect(page.locator('.youtube-playlist-header')).toHaveCSS('display', 'flex');
+    const playlistOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(playlistOverflow, `YouTube playlist settings horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
   }
 });
 

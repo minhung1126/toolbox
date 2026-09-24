@@ -265,7 +265,7 @@ export default function YouTubeSlotCard({
             </div>
           </div>
           {isQuotaDirty(slot) && (
-            <div className="info-banner warning-banner youtube-slot-quota-dirty">
+            <div className="info-banner warning-banner youtube-settings-dirty youtube-slot-quota-dirty">
               <AlertCircle size={16} />
               <span>
                 您已修改 {record.label} 的配額設定（尚未儲存）。為避免過度消耗寫入資源，修改後請記得點擊右下方的「儲存
