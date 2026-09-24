@@ -14,7 +14,7 @@ import {
   UserCheck,
   UserPlus,
 } from 'lucide-react';
-import { api } from '../services/api';
+import { systemSettingsApi } from '../features/settings/api/systemSettingsApi';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { copyToClipboard } from '../utils/clipboard';
@@ -47,8 +47,8 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
     setLoading(true);
     try {
       const [credsRes, allowlistRes] = await Promise.all([
-        api.getSystemCredentials().catch(() => null),
-        api.getAllowlist().catch(() => null),
+        systemSettingsApi.getCredentials().catch(() => null),
+        systemSettingsApi.getAllowlist().catch(() => null),
       ]);
       if (credsRes) {
         setCredentials(credsRes);
@@ -101,7 +101,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
       if (editClientSecret.trim()) {
         payload.google_client_secret = editClientSecret.trim();
       }
-      const res = await api.updateSystemCredentials(payload);
+      const res = await systemSettingsApi.updateCredentials(payload);
       setCredentials((prev) => ({
         ...prev,
         ...res,
@@ -121,7 +121,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
     const nextVal = !allowNewUsers;
     setUpdatingAllowNewUsers(true);
     try {
-      const res = await api.updateAllowNewUsers(nextVal);
+      const res = await systemSettingsApi.updateAllowNewUsers(nextVal);
       const updatedVal = typeof res.allow_new_users === 'boolean' ? res.allow_new_users : nextVal;
       setAllowNewUsers(updatedVal);
       toast.success(updatedVal ? '已開啟允許新增使用者帳號' : '已關閉允許新增使用者帳號（禁止新增）');
@@ -150,7 +150,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
 
     setAddingEmail(true);
     try {
-      const res = await api.addAllowlistEmail(clean);
+      const res = await systemSettingsApi.addAllowlistEmail(clean);
       setAllowlist(res.allowed_emails || []);
       if (typeof res.allow_new_users === 'boolean') {
         setAllowNewUsers(res.allow_new_users);
@@ -168,7 +168,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
     if (!deleteTargetEmail) return;
     setDeletingEmail(true);
     try {
-      const res = await api.removeAllowlistEmail(deleteTargetEmail);
+      const res = await systemSettingsApi.removeAllowlistEmail(deleteTargetEmail);
       setAllowlist(res.allowed_emails || []);
       toast.success(`已將 ${deleteTargetEmail} 從白名單移除`);
       setDeleteTargetEmail(null);

@@ -59,6 +59,13 @@ import type {
   WeverseUploadQueuedResponse,
   WeverseUploadTaskResponse,
 } from '../features/weverse/api/types';
+import type {
+  AllowNewUsersUpdateResponse,
+  SystemAllowlistMutationResponse,
+  SystemAllowlistResponse,
+  SystemCredentialsResponse,
+  SystemCredentialsUpdateRequest,
+} from '../features/settings/api/systemSettingsTypes';
 
 export function normalizeYoutubePlaylistInput(value: unknown): string;
 
@@ -110,4 +117,10 @@ export const api: {
   getWeverseUploadTask(taskId: string): Promise<WeverseUploadTaskResponse>;
   getWeverseUploadHistory(limit?: number): Promise<WeverseUploadHistoryResponse>;
   getWeverseRecentPaths(): Promise<WeverseRecentPathsResponse>;
+  getSystemCredentials(): Promise<SystemCredentialsResponse>;
+  updateSystemCredentials(payload: SystemCredentialsUpdateRequest): Promise<SystemCredentialsResponse>;
+  getAllowlist(): Promise<SystemAllowlistResponse>;
+  addAllowlistEmail(email: string): Promise<SystemAllowlistMutationResponse>;
+  removeAllowlistEmail(email: string): Promise<SystemAllowlistMutationResponse>;
+  updateAllowNewUsers(allowNewUsers: boolean): Promise<AllowNewUsersUpdateResponse>;
 };
