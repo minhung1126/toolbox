@@ -44,7 +44,7 @@
 - 新增 Windows／Edge `npm run test:visual`，以禁止自動更新的 `toHaveScreenshot` 比對三種寬度的元件、focus 與 Dashboard，共 6 項／9 張基準。基準已人工檢視；跨平台 CI 基準尚待建立，不能把 Windows 字型結果直接套用於 Linux Chromium。
 - 部署文件補上中斷任務與資料副本回退驗收流程，Compose 現在實際支援文件中的 `IMAGE_NAME` 固定 SHA 設定。本機未安裝 Docker，因此未執行容器建置或回退演練。
 
-本輪接續交付（2026-09-25，工作目錄，尚未提交／取得同 SHA CI）：
+上一輪接續交付（2026-09-25，已於 `74c9fcf` 提交；未取得同 SHA CI）：
 
 - `create_app(account_state_store=...)` 新增帳號設定與工作狀態 repository 注入。HTTP context 橋接既有 helper、動態 key 驗證及 YTMusic 地區偏好，工具 startup 登錄使用各 app 的 repository。新增同帳號跨 app、同步並行請求、動態 key 與失敗後 context 還原測試。未注入仍沿用 singleton；背景執行緒須明確傳入 repository，其他 settings／credential／session store 尚未完成隔離。
 - FFmpeg 純命令模型、preset 與 request/model 型別移至 `features/ffmpeg/model`，頁面及 hooks 使用 feature 入口，舊 utils 保留相容匯出。新增 7 項回歸案例涵蓋裁切、seek、shell 換行、轉碼、音訊與 GIF。
@@ -52,11 +52,19 @@
 - Manifest 驗證補上重複 index／wildcard、非法 index 子路由與 redirect destination 檢查。Playwright 可用 `PLAYWRIGHT_PORT` 切換連接埠，修正 visual config 合併時額外啟動一般 E2E server 的問題。
 - 驗證：後端 238 項 pytest、Ruff lint／format 通過；前端 70 檔／333 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過。Vitest 因本機快取目錄權限改用 `--no-cache`；Edge E2E 23 項及既有 visual 6 項通過，未更新基準圖。因 4173 在本機回報 EACCES，E2E 使用 18473，visual 使用 4174。依既有 lockfile 執行 `npm ci` 修復缺漏依賴，未修改 lockfile。
 
+本輪接續交付（2026-09-25，基於 `74c9fcf`，工作目錄尚未提交）：
+
+- `create_app(session_store=...)` 新增登入 session repository 注入；auth endpoints、身分 dependency 與 Google auth helper 經 request context 取得對應 store，未注入時保留 singleton。HTTP 測試涵蓋跨 app cookie 拒絕、登出隔離、同步並行請求、失敗後 context 還原，以及 OAuth callback 建立／輪替 session 和重新載入持久化資料；settings 與 credential store 仍為 process scope。
+- Playlist Sort 純排序模型移入 `features/ytmusic/model/playlistSort.ts`，API 與 UI 共用模型型別，舊 utils 保留相容匯出。頁面、hook 與四個元件改用 feature 入口；回歸測試另修正 null tracks 的 `.map()` 例外，以及 `__proto__` 等專輯／藝人／曲目 ID 撞到物件原型的問題。sub-agent 獨立審查未發現遷移的行為回歸。
+- 共用設定版型與狀態呈現移至 `shared/ui/settings.css`、`shared/ui/status.css`，YouTube 配額樣式移至 feature；合併設定頁重複宣告並保持載入順序。`index.css` 874→807 行，`app-theme.css` 629→399 行。主 CSS 53.98 kB／gzip 9.99 kB。
+- FFmpeg 檔名、視訊／音訊編碼、畫質、解析度、FPS 與碼率欄位補上 label 關聯。新增 390 px 瀏覽器測試，驗證檔名與剪輯時間、H.264 參數、靜音、PowerShell／CMD／單行格式切換、MP3 與 GIF 預設切換的實際輸出。
+- 驗證：後端 242 項 pytest、全 backend Ruff lint／format 通過；前端 71 檔／338 項 Vitest、Prettier、ESLint、Stylelint、typecheck、production build 通過；Edge E2E 24 項與既有 visual 6 項／9 張基準比對通過，未更新圖片。production build 因既有 `dist/assets` 權限限制改輸出至 `test-results/verified-build`，一般 E2E 使用 18473。本輪未取得同 SHA CI、未執行真實 provider 操作或 Docker 回退演練。
+
 尚待完成：
 
 - 共用 UI 尚未逐頁遷移；全域 CSS 仍承載多個 feature 的樣式，固定 inline layout 也仍有保留。Stylelint 已涵蓋全部 CSS，foundation reset selector 有單檔規則例外；仍需將全域樣式逐頁移入 feature CSS，並持續統一 token 與版面規則。
 - Feature hook 已從頁面抽離，但仍有其他 feature 的 API/model 邊界及較完整的 TS 型別尚未完成。E2E 已覆蓋 mock OAuth 導向、排序、Batch Update 與 Publish Cleaner 執行及照片匯出；尚未驗證真實 Google／YouTube OAuth callback 與 Weverse 真實 provider smoke test。
-- YouTube workflow adapter、Notes repository、account-state repository 與 Weverse worker／store／provider 已可由 app factory 注入；身分驗證、全平台 settings、credential／session store 與其他外部 client 的 app scope 注入仍待完成。Account-state 的 context 橋接後續可逐步替換為明確 service dependency。
+- YouTube workflow adapter、Notes、account-state、session repository 與 Weverse worker／store／provider 已可由 app factory 注入；身分驗證政策、全平台 settings、credential store 與其他外部 client 的 app scope 注入仍待完成。Account-state／session 的 context 橋接後續可逐步替換為明確 service dependency。
 - Weverse sidecar lock 只承諾在支援作業系統檔案鎖定語意的本機檔案系統上協調合作程序；NFS／網路檔案系統或跨主機多實例仍需驗證鎖語意，或改採資料庫／外部鎖服務。沒有真實 provider smoke test，也未演練 Docker 部署回退。
 - 過去 `npm install` 曾顯示 9 項安全公告；本輪 `npm audit --offline --json` 已完成並回報 0 項漏洞。線上 registry 的即時 advisory 查詢仍需在可連線的 CI／維護環境複核。
 

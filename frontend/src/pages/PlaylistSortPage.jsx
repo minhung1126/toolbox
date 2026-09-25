@@ -42,7 +42,7 @@ import {
   normalizeArtistName,
   sortTracksLocally,
   splitArtists,
-} from '../utils/playlistSort';
+} from '../features/ytmusic/model/playlistSort';
 import TrackSubtitle from '../components/playlist-sort/TrackSubtitle';
 import SortKeyRow from '../components/playlist-sort/SortKeyRow';
 import PreviewTable, { StatusDot } from '../components/playlist-sort/PreviewTable';

@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowDown, ArrowUp, GripVertical, X } from 'lucide-react';
-import { SORT_FIELDS } from '../../utils/playlistSort';
+import { SORT_FIELDS } from '../../features/ytmusic/model/playlistSort';
 
 export default function SortKeyRow({
   sortKey,

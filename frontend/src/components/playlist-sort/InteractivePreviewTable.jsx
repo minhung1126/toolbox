@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { GripVertical, RotateCcw } from 'lucide-react';
 import { StatusDot } from './PreviewTable';
 import TrackSubtitle from './TrackSubtitle';
-import { formatDuration } from '../../utils/playlistSort';
+import { formatDuration } from '../../features/ytmusic/model/playlistSort';
 
 export default function InteractivePreviewTable({
   title,

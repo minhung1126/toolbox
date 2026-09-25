@@ -153,9 +153,11 @@ export default manifest;
 
 ### 應用組裝與測試隔離
 
-`backend.app.main.create_app()` 接受 `notes_store`、`account_state_store`、`upload_worker`、`youtube_workflow_adapters`、`registry` 與 `dependency_overrides`。每次呼叫預設建立獨立 registry 及上傳 worker；有資料隔離需求時傳入不同路徑的 repository。上傳 worker 的 provider factory 可替換成 fake，HTTP 整合測試會確認兩個 app 的 notes、上傳歷史及 provider 呼叫相互隔離。其他身分驗證與系統設定目前仍沿用既有 process-level store／settings，不能宣稱整個平台已支援不同設定的多租戶 app。
+`backend.app.main.create_app()` 接受 `notes_store`、`account_state_store`、`session_store`、`upload_worker`、`youtube_workflow_adapters`、`registry` 與 `dependency_overrides`。每次呼叫預設建立獨立 registry 及上傳 worker；有資料隔離需求時傳入不同路徑的 repository。上傳 worker 的 provider factory 可替換成 fake，HTTP 整合測試會確認兩個 app 的 notes、上傳歷史及 provider 呼叫相互隔離。身分驗證政策、credential store 與系統設定目前仍沿用既有 process-level store／settings，不能宣稱整個平台已支援不同設定的多租戶 app。
 
 `account_state_store` 注入後，HTTP middleware 以 ContextVar 將既有 account helpers、動態 key 驗證與 YTMusic 地區偏好導向該 app 的 repository；同步 endpoint 的 threadpool 會繼承此 context，請求結束或失敗都會還原。工具 startup 也會向該 repository 登錄 key。未注入時保留預設 singleton；手動建立的背景執行緒需明確接收 repository，不能假設會繼承 HTTP context。此橋接保留既有函式契約，後續可逐步改為明確 service dependency。
+
+`session_store` 使用相同 request context 機制，涵蓋登入 callback 建立／輪替 session、身分驗證、服務授權 owner 查詢與登出。兩個 app 即使接收到同一 cookie，也只會讀寫各自 session repository；未注入時仍使用既有 singleton。Session 加密金鑰、credential repository 與登入允許政策尚未隔離，不能將 session 隔離解讀為完整多租戶安全邊界。
 
 所有預設資料路徑統一由 `core/data_paths.py` 解析；`TOOLBOX_DATA_DIR` 未設定時仍使用專案的 `data/`。pytest 的 `conftest.py` 會在應用匯入前配置暫存資料目錄，並禁止第三方網路連線（保留 Windows asyncio 所需的 loopback socket）。預設測試不需要复制整個 repository 才能保護正式資料。
 

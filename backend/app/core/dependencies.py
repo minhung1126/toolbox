@@ -16,7 +16,7 @@ from backend.app.core.account_state import get_account_setting
 from backend.app.core.config import settings
 from backend.app.core.credential_store import credential_store
 from backend.app.core.error_contract import http_error
-from backend.app.core.session_store import session_store
+from backend.app.core.session_store import get_session_store, session_store
 from backend.app.core.youtube_context import YouTubeRequestContext
 from backend.app.core.youtube_routing import choose_youtube_slot, estimate_youtube_request_units
 from backend.app.services.google_auth import (
@@ -64,7 +64,7 @@ def get_authenticated_session(request: Request) -> AuthenticatedSession:
         return cached
 
     session_id = request.cookies.get(settings.session_cookie_name)
-    session_data = session_store.get(session_id) if session_id else None
+    session_data = get_session_store(session_store).get(session_id) if session_id else None
     user = session_data.get("user") if isinstance(session_data, dict) else None
     subject = str((user or {}).get("sub") or "").strip()
     if not subject:

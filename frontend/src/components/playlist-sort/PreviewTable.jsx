@@ -1,6 +1,6 @@
 import React from 'react';
 import TrackSubtitle from './TrackSubtitle';
-import { formatDuration } from '../../utils/playlistSort';
+import { formatDuration } from '../../features/ytmusic/model/playlistSort';
 
 export function StatusDot({ status }) {
   const isUnchanged = status === 'unchanged';

@@ -1,10 +1,6 @@
-export type SortDirection = 'asc' | 'desc';
+import type { PlaylistSortKey, PlaylistSortPreview } from '../model/types';
+export type { SortDirection, PlaylistSortKey, PlaylistSortTrack, PlaylistSortPreview } from '../model/types';
 export type PlaylistSortApplyMode = 'in_place' | 'new_playlist';
-
-export interface PlaylistSortKey {
-  field: string;
-  direction: SortDirection;
-}
 
 export interface PlaylistSummary {
   id: string;
@@ -16,26 +12,6 @@ export interface PlaylistSummary {
 
 export interface PlaylistListResponse {
   playlists: PlaylistSummary[];
-}
-
-export interface PlaylistSortTrack {
-  playlist_item_id: string;
-  video_id?: string;
-  title?: string;
-  channel_title?: string;
-  duration_seconds?: number;
-  original_position?: number | null;
-  new_position?: number | null;
-  status?: string;
-  [field: string]: unknown;
-}
-
-export interface PlaylistSortPreview {
-  items: PlaylistSortTrack[];
-  total: number;
-  moved_count: number;
-  unchanged_count?: number;
-  [field: string]: unknown;
 }
 
 export interface PlaylistSortQuotaEstimate {

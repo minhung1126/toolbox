@@ -1,0 +1,109 @@
+/* Shared status messages, empty states, and execution result badges. */
+
+.status-message,
+.empty-state {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  min-width: 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  line-height: 1.55;
+  box-shadow: var(--shadow-sm);
+}
+
+.status-message-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.status-message-content strong {
+  color: var(--text-main);
+  font-size: 0.92rem;
+}
+
+.status-message-content small {
+  color: var(--text-dim);
+}
+
+.status-message-error {
+  border-color: var(--danger-border);
+  border-left-color: var(--danger);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.status-message-warning {
+  border-color: var(--warning-border);
+  border-left-color: var(--warning);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.status-message-success {
+  border-color: var(--success-border);
+  border-left-color: var(--success);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.empty-state {
+  border-left-color: var(--border-color);
+  color: var(--text-dim);
+}
+
+.result-status {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.result-status-success {
+  color: var(--success-text);
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+}
+
+.result-status-warning {
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+}
+
+.result-status-error {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+}
+
+.result-status-neutral {
+  color: var(--text-muted);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-color);
+}
+
+@media (max-width: 767px) {
+  .status-message {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 767px) {
+  .status-message-action,
+  .status-message-actions {
+    width: 100%;
+  }
+}

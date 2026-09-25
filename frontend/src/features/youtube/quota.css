@@ -1,0 +1,93 @@
+/* YouTube quota presentation shared by workflows and settings. */
+
+.quota-banner,
+.quota-status-panel {
+  min-width: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 1.25rem;
+}
+
+.quota-banner-compact {
+  padding: 1rem 1.25rem;
+}
+
+.quota-state-icon {
+  display: inline-flex;
+  padding: 0.6rem;
+  border: 1px solid var(--quota-border, var(--border-color));
+  border-radius: var(--radius-md);
+  color: var(--quota-color, var(--primary));
+  background: var(--quota-background, var(--surface-inset));
+}
+
+.quota-usage-value {
+  margin-top: 0.35rem;
+  color: var(--text-main);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.quota-usage-suffix {
+  margin-left: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.quota-progress-track {
+  height: 8px;
+  margin-top: 1rem;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--surface-raised);
+}
+
+.quota-progress-value {
+  width: var(--quota-percent, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--quota-color, var(--primary));
+  transition: width 220ms ease;
+}
+
+.quota-state-normal {
+  --quota-color: #818cf8;
+  --quota-border: rgb(99 102 241 / 35%);
+  --quota-background: rgb(99 102 241 / 12%);
+}
+
+.quota-state-warning {
+  --quota-color: #fbbf24;
+  --quota-border: rgb(245 158 11 / 35%);
+  --quota-background: rgb(245 158 11 / 12%);
+}
+
+.quota-state-safety-blocked {
+  --quota-color: #fb923c;
+  --quota-border: rgb(251 146 60 / 35%);
+  --quota-background: rgb(251 146 60 / 12%);
+}
+
+.quota-state-confirmed-exhausted {
+  --quota-color: #fb7185;
+  --quota-border: rgb(244 63 94 / 35%);
+  --quota-background: rgb(244 63 94 / 12%);
+}
+
+@media (max-width: 767px) {
+  .quota-banner {
+    padding: 1.25rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .quota-banner-header,
+  .quota-refresh-button,
+  .quota-slot-select {
+    width: 100%;
+  }
+}

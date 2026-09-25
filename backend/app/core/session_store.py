@@ -8,12 +8,14 @@ import json
 import logging
 import secrets
 import time
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import RLock
 from typing import Any, Optional
 
 from cryptography.fernet import InvalidToken
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from backend.app.core.config import settings
 from backend.app.core.data_paths import data_directory
@@ -120,3 +122,34 @@ class SessionStore:
 
 
 session_store = SessionStore()
+
+_request_store: ContextVar[SessionStore | None] = ContextVar("session_store", default=None)
+
+
+def get_session_store(fallback: SessionStore | None = None) -> SessionStore:
+    """Resolve the injected request store, preserving standalone helper callers."""
+    store = _request_store.get()
+    if store is not None:
+        return store
+    return session_store if fallback is None else fallback
+
+
+class SessionStoreMiddleware:
+    """Scope legacy auth helpers to an app, including FastAPI's sync threadpool.
+
+    Manually created background threads must receive the store explicitly.
+    """
+
+    def __init__(self, app: ASGIApp, store: SessionStore | None = None) -> None:
+        self.app = app
+        self.store = store
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        token = _request_store.set(self.store)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _request_store.reset(token)

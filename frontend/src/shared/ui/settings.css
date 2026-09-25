@@ -1,0 +1,75 @@
+/* Shared settings layouts used across feature settings pages. */
+
+.settings-page {
+  max-width: 1000px;
+}
+
+.settings-page-section {
+  display: grid;
+  gap: 1rem;
+}
+
+.settings-card {
+  gap: 1.25rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.settings-card .card-header-title h3,
+.settings-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 1.2rem;
+}
+
+.settings-info-card {
+  display: grid;
+  gap: 0.375rem;
+  background: var(--surface-inset);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+}
+
+.settings-info-card p {
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.settings-code-block {
+  background: var(--surface-inset);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+}
+
+.settings-code-block p {
+  margin-bottom: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.settings-code-block code {
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+  color: #a5b4fc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.settings-card-actions,
+.settings-page-actions {
+  justify-content: flex-start;
+}
+
+.settings-inline-button {
+  width: fit-content;
+}
+
+@media (max-width: 767px) {
+  .settings-card-actions .btn,
+  .settings-page-actions .btn {
+    width: 100%;
+  }
+}

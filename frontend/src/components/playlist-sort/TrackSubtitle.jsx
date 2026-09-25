@@ -1,5 +1,5 @@
 import React from 'react';
-import { normalizeArtistName } from '../../utils/playlistSort';
+import { normalizeArtistName } from '../../features/ytmusic/model/playlistSort';
 
 export default function TrackSubtitle({ item, sortKeys = [] }) {
   const parts = [];

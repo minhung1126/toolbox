@@ -22,7 +22,7 @@ from backend.app.core.security import (
     sign_timed_data,
     verify_timed_data,
 )
-from backend.app.core.session_store import SESSION_MAX_AGE, session_store
+from backend.app.core.session_store import SESSION_MAX_AGE, get_session_store, session_store
 from backend.app.services.google_auth import (
     DRIVE_SCOPES,
     LOGIN_SCOPES,
@@ -175,7 +175,7 @@ def _disconnect_service(request: Request, clear_fn, service_name: str) -> dict:
 def _validate_callback_session(request: Request, flow_state: Optional[dict]) -> Optional[str]:
     session_id = request.cookies.get(SESSION_COOKIE)
     expected_session_id = (flow_state or {}).get("session_id")
-    session_data = session_store.get(session_id) if session_id else None
+    session_data = get_session_store(session_store).get(session_id) if session_id else None
     owner_sub = str(((session_data or {}).get("user") or {}).get("sub") or "").strip()
     login_credentials = get_login_credentials(session_id) if session_id else None
     if (
@@ -549,8 +549,8 @@ def google_oauth_callback(
         credential_store.save_google_connection(token_dict, owner_sub=subject)
         existing_session_id = request.cookies.get(SESSION_COOKIE)
         if existing_session_id:
-            session_store.delete(existing_session_id)
-        session_id = session_store.create(
+            get_session_store(session_store).delete(existing_session_id)
+        session_id = get_session_store(session_store).create(
             {
                 "credential_provider": "google_login",
                 "user": {**user_info, "sub": subject},
@@ -591,7 +591,7 @@ def google_oauth_callback(
 def get_user_status(request: Request):
     """Check control-panel login, sheets, drive, and YouTube authorization status."""
     session_id = request.cookies.get(SESSION_COOKIE)
-    session_data = session_store.get(session_id) or {}
+    session_data = get_session_store(session_store).get(session_id) or {}
     session_sub = str(((session_data.get("user") or {}).get("sub") or "")).strip() or None
     creds = get_login_credentials(session_id) if session_sub else None
     if not session_sub or not creds or not creds.valid:
@@ -750,7 +750,7 @@ def activate_youtube_slot(slot: str, request: Request):
 def logout(request: Request):
     """Clear the control-panel login session without removing YouTube access."""
     res = Response(content='{"status":"logged_out"}', media_type="application/json")
-    session_store.delete(request.cookies.get(SESSION_COOKIE, ""))
+    get_session_store(session_store).delete(request.cookies.get(SESSION_COOKIE, ""))
     res.delete_cookie(SESSION_COOKIE, path="/", secure=settings.cookie_secure, httponly=True, samesite="lax")
     res.delete_cookie(OAUTH_FLOW_COOKIE, path="/", secure=settings.cookie_secure, httponly=True, samesite="lax")
     return res

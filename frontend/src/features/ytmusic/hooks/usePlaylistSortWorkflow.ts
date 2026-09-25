@@ -10,7 +10,7 @@ import type {
   PlaylistSortKey,
   PlaylistSortTrack,
 } from '../api/types';
-import { buildPreviewFromSorted, sortTracksLocally } from '../../../utils/playlistSort';
+import { buildPreviewFromSorted, sortTracksLocally } from '../model/playlistSort';
 
 interface WorkflowError extends Error {
   status?: number;

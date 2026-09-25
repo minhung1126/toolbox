@@ -658,8 +658,15 @@ export default function FfmpegGeneratorPage() {
               /* Re-encode detailed options */
               <div className="reencode-options-grid glass-panel card-padding">
                 <div className="field-group">
-                  <label className="field-label">視訊編碼器 (-c:v)</label>
-                  <select className="select-field" value={videoCodec} onChange={(e) => setVideoCodec(e.target.value)}>
+                  <label className="field-label" htmlFor="ffmpeg-video-codec">
+                    視訊編碼器 (-c:v)
+                  </label>
+                  <select
+                    id="ffmpeg-video-codec"
+                    className="select-field"
+                    value={videoCodec}
+                    onChange={(e) => setVideoCodec(e.target.value)}
+                  >
                     <option value="libx264">H.264 (libx264 - 最相容推薦)</option>
                     <option value="libx265">H.265 / HEVC (libx265 - 高壓縮率)</option>
                     <option value="libvpx-vp9">VP9 (libvpx-vp9 - WebM 推薦)</option>
@@ -670,13 +677,14 @@ export default function FfmpegGeneratorPage() {
                 </div>
 
                 <div className="field-group">
-                  <label className="field-label">
+                  <label className="field-label" htmlFor="ffmpeg-crf">
                     畫質係數 CRF (目前: {crf})
                     <span className="text-dim text-xs ml-2">
                       {crf <= 19 ? '超高畫質' : crf <= 24 ? '畫質平衡' : '高壓縮小檔'}
                     </span>
                   </label>
                   <input
+                    id="ffmpeg-crf"
                     type="range"
                     min={16}
                     max={32}
@@ -687,8 +695,15 @@ export default function FfmpegGeneratorPage() {
                 </div>
 
                 <div className="field-group">
-                  <label className="field-label">解析度縮放</label>
-                  <select className="select-field" value={resolution} onChange={(e) => setResolution(e.target.value)}>
+                  <label className="field-label" htmlFor="ffmpeg-resolution">
+                    解析度縮放
+                  </label>
+                  <select
+                    id="ffmpeg-resolution"
+                    className="select-field"
+                    value={resolution}
+                    onChange={(e) => setResolution(e.target.value)}
+                  >
                     <option value="original">維持原始解析度</option>
                     <option value="1080p">1080p FHD (1920x1080)</option>
                     <option value="720p">720p HD (1280x720)</option>
@@ -698,8 +713,10 @@ export default function FfmpegGeneratorPage() {
                 </div>
 
                 <div className="field-group">
-                  <label className="field-label">影格率 (FPS)</label>
-                  <select className="select-field" value={fps} onChange={(e) => setFps(e.target.value)}>
+                  <label className="field-label" htmlFor="ffmpeg-fps">
+                    影格率 (FPS)
+                  </label>
+                  <select id="ffmpeg-fps" className="select-field" value={fps} onChange={(e) => setFps(e.target.value)}>
                     <option value="original">維持原始幀率</option>
                     <option value="24">24 fps (電影感)</option>
                     <option value="30">30 fps (標準影片)</option>
@@ -708,8 +725,15 @@ export default function FfmpegGeneratorPage() {
                 </div>
 
                 <div className="field-group">
-                  <label className="field-label">音訊編碼器 (-c:a)</label>
-                  <select className="select-field" value={audioCodec} onChange={(e) => setAudioCodec(e.target.value)}>
+                  <label className="field-label" htmlFor="ffmpeg-audio-codec">
+                    音訊編碼器 (-c:a)
+                  </label>
+                  <select
+                    id="ffmpeg-audio-codec"
+                    className="select-field"
+                    value={audioCodec}
+                    onChange={(e) => setAudioCodec(e.target.value)}
+                  >
                     <option value="aac">AAC (最通用推薦)</option>
                     <option value="libmp3lame">MP3 (libmp3lame)</option>
                     <option value="libopus">Opus (libopus - 高品質壓縮)</option>
@@ -719,8 +743,11 @@ export default function FfmpegGeneratorPage() {
                 </div>
 
                 <div className="field-group">
-                  <label className="field-label">音訊碼率 (-b:a)</label>
+                  <label className="field-label" htmlFor="ffmpeg-audio-bitrate">
+                    音訊碼率 (-b:a)
+                  </label>
                   <select
+                    id="ffmpeg-audio-bitrate"
                     className="select-field"
                     value={audioBitrate}
                     onChange={(e) => setAudioBitrate(e.target.value)}
@@ -782,11 +809,12 @@ export default function FfmpegGeneratorPage() {
         {/* Filename Inputs */}
         <div className="filename-inputs-grid">
           <div className="field-group">
-            <label className="field-label">
+            <label className="field-label" htmlFor="ffmpeg-input-name">
               輸入檔名 (Input File)
               <span className="text-dim text-xs ml-2">自動雙引號防護</span>
             </label>
             <input
+              id="ffmpeg-input-name"
               type="text"
               className="input-field"
               value={inputName}
@@ -795,11 +823,12 @@ export default function FfmpegGeneratorPage() {
             />
           </div>
           <div className="field-group">
-            <label className="field-label">
+            <label className="field-label" htmlFor="ffmpeg-output-name">
               輸出檔名 (Output File)
               <span className="text-dim text-xs ml-2">自動雙引號防護</span>
             </label>
             <input
+              id="ffmpeg-output-name"
               type="text"
               className="input-field"
               value={outputName}

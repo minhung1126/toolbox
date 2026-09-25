@@ -11,7 +11,7 @@ from google_auth_oauthlib.flow import Flow
 
 from backend.app.core.config import normalize_youtube_slot, settings
 from backend.app.core.credential_store import credential_store
-from backend.app.core.session_store import session_store
+from backend.app.core.session_store import get_session_store, session_store
 from backend.app.services.youtube_quota_service import get_youtube_quota_tracker
 
 # Configure OAUTHLIB transport security once at module load time to avoid
@@ -451,7 +451,7 @@ def get_login_credentials(session_id: Optional[str] = None) -> Optional[Credenti
     """Load control-panel login credentials for one server session."""
     if not session_id:
         return None
-    session_data = session_store.get(session_id)
+    session_data = get_session_store(session_store).get(session_id)
     if not session_data:
         return None
 
@@ -478,7 +478,7 @@ def _resolve_owner_sub(session_id: Optional[str] = None, owner_sub: Optional[str
         return str(owner_sub).strip() or None
     if not session_id:
         return None
-    session_data = session_store.get(session_id)
+    session_data = get_session_store(session_store).get(session_id)
     if not session_data or session_data.get("credential_provider") != "google_login":
         return None
     session_user = session_data.get("user") if isinstance(session_data.get("user"), dict) else {}
@@ -571,7 +571,7 @@ def get_video_uploader_credentials(
 def get_youtube_credentials(session_id: Optional[str] = None, slot: str = "primary") -> Optional[Credentials]:
     """Load one separately authorized YouTube connection for a login session."""
     slot_name = normalize_youtube_slot(slot)
-    session_data = session_store.get(session_id) if session_id else None
+    session_data = get_session_store(session_store).get(session_id) if session_id else None
     session_user = session_data.get("user") if isinstance(session_data, dict) else None
     owner_sub = str((session_user or {}).get("sub") or "").strip() or None
     if not owner_sub:

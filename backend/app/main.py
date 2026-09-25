@@ -21,6 +21,7 @@ from backend.app.core.account_state_store import (
 )
 from backend.app.core.config import settings
 from backend.app.core.error_contract import http_error, normalize_http_detail, validation_field_errors
+from backend.app.core.session_store import SessionStoreMiddleware
 from backend.app.tools.builtin import register_builtin_tools
 from backend.app.tools.registry import ToolRegistry, tool_registry
 
@@ -177,6 +178,7 @@ def create_app(
     *,
     notes_store=None,
     account_state_store=None,
+    session_store=None,
     upload_worker=None,
     youtube_workflow_adapters=None,
     registry=None,
@@ -203,6 +205,8 @@ def create_app(
         default_account_state_store if account_state_store is None else account_state_store
     )
     application.add_middleware(AccountStateMiddleware, store=application.state.account_state_store)
+    application.state.session_store = session_store
+    application.add_middleware(SessionStoreMiddleware, store=session_store)
     application.state.upload_worker = upload_worker
     application.state.youtube_workflow_adapters = dict(youtube_workflow_adapters or {})
     application.dependency_overrides.update(dependency_overrides or {})
