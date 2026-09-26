@@ -2,15 +2,16 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, CheckCircle2, Sparkles } from 'lucide-react';
 import { SourceLinkButton } from '../components/SourceLinkInput';
-import { youtubePreferredUiSlot } from '../utils/youtubeRouting';
-import { getAllTools } from '../tools/catalog';
+import { youtubePreferredUiSlot } from '../features/youtube/model/routing';
+import { useToolCatalog } from '../tools/ToolCatalogProvider';
+import { getMissingToolCapabilities } from '../tools/capabilities';
 import { Badge, Card, PageHeader } from '../shared/ui';
 import '../features/system/dashboard.css';
 
 export default function DashboardPage({ authUser, sysSettings = {} }) {
   const activeSlot = youtubePreferredUiSlot(authUser?.youtube);
   const activeYoutube = authUser?.youtube?.slots?.[activeSlot] || {};
-  const allTools = getAllTools();
+  const { status: catalogStatus, tools: allTools } = useToolCatalog();
   const sheetsConnected = Boolean(
     authUser?.authorizations?.sheets?.connected || authUser?.google_scopes?.sheets_readonly
   );
@@ -43,7 +44,7 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
             )}
           </div>
           <h3>{authUser ? authUser.email : '尚未登入控制台'}</h3>
-          <p>{allTools.length} 個工具模組已就緒</p>
+          <p>{catalogStatus === 'ready' ? `${allTools.length} 個工具模組已啟用` : '工具目錄尚未就緒'}</p>
         </Card>
 
         <Card as="div" padding="sm" className="dashboard-status-card">
@@ -98,8 +99,10 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
         </Card>
       </div>
 
+      {catalogStatus === 'loading' && <p role="status">工具目錄載入中…</p>}
       {allTools.map((tool) => {
         const cards = tool.featureCards || [];
+        const missingCapabilities = getMissingToolCapabilities(tool, authUser);
         if (!cards.length) return null;
         return (
           <section key={tool.id} className="dashboard-module-group">
@@ -109,6 +112,16 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
                 <Badge tone="info">{tool.category}</Badge>
               </div>
               <p className="section-desc dashboard-module-description">{tool.description}</p>
+              {missingCapabilities.length > 0 && (
+                <div className="dashboard-module-capabilities">
+                  <Badge tone="warning">尚缺授權</Badge>
+                  {missingCapabilities.map((capability) => (
+                    <Link key={capability.key} to={capability.settingsPath}>
+                      連線 {capability.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="feature-grid">
               {cards.map((card) => {

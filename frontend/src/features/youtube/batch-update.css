@@ -53,6 +53,10 @@
 }
 
 .preview-field {
+  background: var(--surface-inset);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-sm);
   padding: 0.875rem;
 }
 

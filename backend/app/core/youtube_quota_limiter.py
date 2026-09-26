@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 
 from backend.app.core.data_paths import data_directory
 from backend.app.core.persistence import atomic_write_json
-from backend.app.core.runtime_config import runtime_config
+from backend.app.core.runtime_config import get_runtime_config, runtime_config
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable, is_youtube_quota_exceeded, parse_youtube_error
 
 logger = logging.getLogger(__name__)
@@ -143,6 +143,7 @@ class YouTubeQuotaLimiter:
         slot: str = "primary",
         bucket: str = GENERAL_BUCKET,
         configured_limit: int | None = None,
+        runtime_store=None,
         safety_buffer_units: int | None = None,
     ) -> None:
         self.slot = str(slot or "primary").strip().casefold()
@@ -152,13 +153,15 @@ class YouTubeQuotaLimiter:
         if Path(path).resolve() == QUOTA_FILE.resolve() and self.slot == "secondary":
             path = QUOTA_FILE_SECONDARY
         self.path = Path(path)
+        self._runtime_store = runtime_store
         self._configured_limit_override = configured_limit
         self._safety_buffer_override = safety_buffer_units
         self._lock = _path_lock(self.path)
 
     def configured_values(self) -> tuple[int, int]:
         if self._configured_limit_override is None or self._safety_buffer_override is None:
-            default_limit, default_buffer = runtime_config.get_youtube_quota_settings(self.slot)
+            store = get_runtime_config(runtime_config) if self._runtime_store is None else self._runtime_store
+            default_limit, default_buffer = store.get_youtube_quota_settings(self.slot)
         else:
             default_limit, default_buffer = OFFICIAL_DEFAULT_LIMIT, DEFAULT_SAFETY_BUFFER_UNITS
         limit = self._configured_limit_override if self._configured_limit_override is not None else default_limit

@@ -5,11 +5,7 @@ import useTeamPersonFilter from '../../../hooks/useTeamPersonFilter';
 import useSharedTeamPersonFilterPersistence from '../../../hooks/useSharedTeamPersonFilterPersistence';
 import { readSharedTeamPersonFilter } from '../../../utils/teamPersonFilterStorage';
 import { sortVideosByUploadTime } from '../../../utils/videoOrder';
-import {
-  getYoutubeAuthorizationFingerprint,
-  youtubeIsConnected,
-  youtubePreferredUiSlot,
-} from '../../../utils/youtubeRouting';
+import { getYoutubeAuthorizationFingerprint, youtubeIsConnected, youtubePreferredUiSlot } from '../model/routing';
 import { YOUTUBE_COPY, formatResultCounts } from '../../../utils/youtubeCopy';
 import {
   DEFAULT_COLUMNS,

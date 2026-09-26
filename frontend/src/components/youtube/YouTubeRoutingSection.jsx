@@ -1,6 +1,6 @@
 import React from 'react';
 import { AlertCircle, Save } from 'lucide-react';
-import { YOUTUBE_ROUTING_MODES, youtubeRoutingLabel } from '../../utils/youtubeRouting';
+import { YOUTUBE_ROUTING_MODES, youtubeRoutingLabel } from '../../features/youtube/model/routing';
 
 export default function YouTubeRoutingSection({
   routingMode,

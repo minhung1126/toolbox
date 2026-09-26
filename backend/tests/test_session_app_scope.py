@@ -11,7 +11,6 @@ from backend.app.core.credential_store import CredentialStore
 from backend.app.core.dependencies import require_account_subject
 from backend.app.core.session_store import SessionStore, SessionStoreMiddleware, get_session_store
 from backend.app.main import create_app
-from backend.app.services import google_auth
 
 
 def test_cookie_authentication_and_logout_are_app_scoped(tmp_path, monkeypatch):
@@ -20,14 +19,13 @@ def test_cookie_authentication_and_logout_are_app_scoped(tmp_path, monkeypatch):
         {"token": "test-token", "user": {"sub": "same-user", "email": "admin@example.test"}},
         owner_sub="same-user",
     )
-    monkeypatch.setattr(google_auth, "credential_store", credentials)
     monkeypatch.setattr(type(settings), "is_google_email_allowed", lambda self, email: True)
     first_store = SessionStore(tmp_path / "first.json")
     session_id = first_store.create({"credential_provider": "google_login", "user": {"sub": "same-user"}})
     second_store = SessionStore(tmp_path / "second.json")
     clients = []
     for store in (first_store, second_store):
-        app = create_app(session_store=store)
+        app = create_app(session_store=store, credential_store=credentials)
 
         @app.get("/session-probe")
         def probe(subject: str = Depends(require_account_subject)):
@@ -93,8 +91,7 @@ def test_oauth_callback_creates_and_rotates_only_the_app_session(tmp_path, monke
     from backend.app.api import auth as auth_api
     from backend.app.core.security import GOOGLE_OAUTH_STATE_SALT, sign_timed_data
 
-    credentials = CredentialStore(tmp_path / "callback-credentials.json")
-    monkeypatch.setattr(auth_api, "credential_store", credentials)
+    credentials = [CredentialStore(tmp_path / f"callback-credentials-{i}.json") for i in range(2)]
     monkeypatch.setattr(type(settings), "is_google_email_allowed", lambda self, email: True)
     user = {"sub": "callback-user", "email": "callback@example.test"}
 
@@ -116,7 +113,7 @@ def test_oauth_callback_creates_and_rotates_only_the_app_session(tmp_path, monke
     old_session = stores[0].create({"credential_provider": "google_login", "user": user})
     new_sessions = []
     for index, store in enumerate(stores):
-        with TestClient(create_app(session_store=store)) as client:
+        with TestClient(create_app(session_store=store, credential_store=credentials[index])) as client:
             # First rotate an owned session; then present a foreign app's session.
             existing = old_session if index == 0 else new_sessions[0]
             response = client.get(
@@ -125,6 +122,9 @@ def test_oauth_callback_creates_and_rotates_only_the_app_session(tmp_path, monke
                 headers={"Cookie": f"{auth_api.OAUTH_FLOW_COOKIE}={flow_cookie}; {auth_api.SESSION_COOKIE}={existing}"},
                 follow_redirects=False,
             )
+        assert credentials[index].get_google_credentials("callback-user")["token"] == "provider-token"
+        if index == 0:
+            assert credentials[1].get_google_credentials("callback-user") is None
         assert response.status_code == 307
         assert response.headers["location"].endswith("/#auth_success=1")
         session_id = response.cookies[auth_api.SESSION_COOKIE]

@@ -1,9 +1,11 @@
 import React from 'react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppRoutes from './AppRoutes';
 import { PATHS } from './paths';
+import { api } from '../services/api';
+import { getAllTools } from '../tools/catalog';
 
 vi.mock('../layouts/AppShell', async () => {
   const { Outlet: RouterOutlet } = await import('react-router-dom');
@@ -75,6 +77,63 @@ function renderRoutes(initialEntry, overrides = {}) {
 }
 
 describe('AppRoutes', () => {
+  beforeEach(() => {
+    vi.spyOn(api, 'getTools').mockResolvedValue({
+      tools: getAllTools().map((tool) => ({
+        id: tool.id,
+        status: 'active',
+        entry_url: tool.entryUrl,
+        name: tool.name,
+        title: tool.title,
+        description: tool.description,
+        category: tool.category,
+        version: '1.0.0',
+        required_scopes: [],
+      })),
+    });
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('blocks a deep link when the backend disables its tool', async () => {
+    api.getTools.mockResolvedValue({
+      tools: getAllTools().map((tool) => ({
+        id: tool.id,
+        status: tool.id === 'creator-tools' ? 'disabled' : 'active',
+        version: '1.0.0',
+        entry_url: tool.entryUrl,
+        required_scopes: [],
+      })),
+    });
+    renderRoutes(PATHS.youtubeVideoDrafts);
+    expect(await screen.findByText('此工具目前未啟用。')).toBeInTheDocument();
+    expect(screen.queryByText('Video batch route')).not.toBeInTheDocument();
+  });
+
+  it('shows an error instead of loading a route for an unsupported catalog version', async () => {
+    api.getTools.mockResolvedValue({
+      tools: getAllTools().map((tool) => ({
+        id: tool.id,
+        status: 'active',
+        version: tool.id === 'creator-tools' ? '2.0.0' : '1.0.0',
+        entry_url: tool.entryUrl,
+        required_scopes: [],
+      })),
+    });
+    renderRoutes(PATHS.youtubeVideoDrafts);
+    expect(await screen.findByText('工具 creator-tools 的版本不受支援。')).toBeInTheDocument();
+    expect(screen.queryByText('Video batch route')).not.toBeInTheDocument();
+  });
+
+  it('retries a failed catalog load before opening a tool route', async () => {
+    const catalog = await api.getTools();
+    api.getTools.mockRejectedValueOnce(new Error('offline')).mockResolvedValue(catalog);
+    renderRoutes(PATHS.notes);
+    expect(await screen.findByText('offline')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '重試載入工具目錄' }));
+    expect(await screen.findByText('notes route')).toBeInTheDocument();
+  });
+
   it.each([
     [PATHS.dashboard, 'dashboard route'],
     [PATHS.systemHealth, 'health route'],

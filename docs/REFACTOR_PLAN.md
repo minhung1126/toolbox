@@ -60,11 +60,125 @@
 - FFmpeg 檔名、視訊／音訊編碼、畫質、解析度、FPS 與碼率欄位補上 label 關聯。新增 390 px 瀏覽器測試，驗證檔名與剪輯時間、H.264 參數、靜音、PowerShell／CMD／單行格式切換、MP3 與 GIF 預設切換的實際輸出。
 - 驗證：後端 242 項 pytest、全 backend Ruff lint／format 通過；前端 71 檔／338 項 Vitest、Prettier、ESLint、Stylelint、typecheck、production build 通過；Edge E2E 24 項與既有 visual 6 項／9 張基準比對通過，未更新圖片。production build 因既有 `dist/assets` 權限限制改輸出至 `test-results/verified-build`，一般 E2E 使用 18473。本輪未取得同 SHA CI、未執行真實 provider 操作或 Docker 回退演練。
 
+本輪接續交付（2026-09-25，憑證 repository 注入）：
+
+- `create_app(credential_store=...)` 提供 OAuth 憑證 repository 注入，授權 callback、登入／服務憑證查詢、解除連線、YouTube 槽位路由、YTMusic token 及 Google refresh 均經 request context 使用 app 對應 store。未注入時保留 singleton 與既有 JSON 格式；設定、加密金鑰與登入政策仍為 process scope。
+- 新增 HTTP 測試涵蓋同帳號跨 app 解除 Sheets／寫入及刪除自訂 token、token refresh 及加密持久化、同步並行請求與例外後 context 還原；既有 OAuth callback／session 測試改為 factory 注入，驗證 callback 憑證只寫入所屬 app。
+- 修正 ESLint 會掃描 `test-results/verified-build` 的問題，排除測試與 Playwright 報告產物目錄，讓先 build 再 lint 也可重複通過。
+- 驗證：後端 246 項 pytest、Ruff lint／format 通過；前端 71 檔／338 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過。build 輸出至 `test-results/verified-build`；本輪未更動 UI 版面。pytest 有一項既有 Starlette/httpx 棄用警告。尚未執行同 SHA CI、真實 provider 或 Docker 回退演練。
+
+本輪接續交付（2026-09-25，settings 與政策注入）：
+
+- 新增 `create_app(app_settings=...)`；`Settings` 接受獨立 RuntimeConfig 與 SystemSecretsManager。HTTP 與 lifespan context 涵蓋設定讀寫、白名單政策、OAuth URL／簽章／cookie、來源保護及健康資訊，CORS／TrustedHost 以該 app 設定組裝。SessionStore／CredentialStore 可明確指定加密金鑰，未注入的 repository 保持原有預設。
+- OAuth 簽章器與 cookie 名稱改為依呼叫時設定解析，避免 import 時固定為另一個 app 的值；移除 Google auth 模組對 `OAUTHLIB_INSECURE_TRANSPORT` 的程序全域修改，本機 HTTP callback 的授權 URL 測試通過。
+- 首次新增／移除白名單會保留環境變數中的既有名單，修正原先首次新增帳號會遺失環境管理員的問題。
+- 新增 6 項測試涵蓋跨 app 設定及密鑰寫入、環境預設、OAuth 回跳／簽章／正式環境 cookie、TrustedHost／來源拒絕、真實身分 dependency 白名單隔離、並行寫入、例外還原、本機 OAuth URL 與 lifespan。後端 252 項 pytest、Ruff lint／format 通過；前端 71 檔／338 項 Vitest 與全部既定品質檢查、production build 通過。未更動 UI；未執行真實 provider、同 SHA CI 或部署回退。
+- 尚未將所有 singleton 延後初始化；配額帳本、速率限制與其他外部 client 的 app 注入仍待完成。此交付提供明確組裝能力，不能將未指定 repository 的 factory 呼叫解讀為完整資料隔離。
+
+本輪接續交付（2026-09-25，配額帳本與速率限制隔離）：
+
+- `create_app(youtube_quota_trackers=..., request_limiter=...)` 支援明確組裝；quota mapping 必須包含相符的 primary／secondary ledger。HTTP/provider helpers 使用所屬 app 的帳本，未注入仍沿用原有檔案；YouTubeQuotaLimiter 可綁定 RuntimeConfig，供 HTTP context 外使用正確政策。
+- 每個 app 預設擁有獨立 SlidingWindowLimiter，保留 API／workflow 桶與標準 429／Retry-After 契約。單一 app 達上限不再占用其他 app 的限流額度。
+- 新增 4 項測試：同步並行 provider 呼叫、實際 quota-usage API 與檔案重新讀取、workflow／API 限流隔離、拒絕請求不得執行工作、limiter 注入、例外後 context 還原與錯誤槽位組裝拒絕。後端 256 項 pytest、Ruff lint／format 通過。前端未變更，最近同工作目錄 338 項 Vitest 與完整品質檢查通過。
+
+本輪接續交付（2026-09-25，auth repository 延後載入與失敗保護）：
+
+- SessionStore 與 CredentialStore 建構不再讀取 JSON；首次存取在既有 RLock 內載入，並行首次寫入不會重複載入或遺失原有記錄。
+- auth repository 使用 strict JSON read：只有不存在的檔案視為空資料，讀取錯誤、損毀 JSON、null／錯誤頂層結構會拋出例外並保留原檔。修復檔案後同一 store 可重試載入；HTTP 仍由既有標準錯誤 handler 處理。
+- 寫入失敗會使記憶體快取失效，下次操作重新讀取持久化結果，避免未成功儲存的刪除／新增被回傳或帶入下一次成功存檔。
+- 新增 14 項回歸驗證延後讀取、保留舊資料、損毀檔案拒絕覆寫／修復重試、讀寫權限失敗及並行首次寫入。後端 270 項 pytest、Ruff lint／format 通過。此改動未增加跨程序交易保證；Settings 的預設建構與其他 singleton 初始化仍待後續移至明確組裝流程。
+
+本輪接續交付（2026-09-25，系統設定持久化錯誤契約）：
+
+- RuntimeConfig 改為首次存取才載入；損毀資料拒絕覆寫，寫入失敗回復上次成功保存的快取，不再吞掉例外或同步未保存的政策。
+- SystemSecretsManager 的主金鑰／OAuth 憑證寫入失敗會拋出錯誤，不再返回成功；損毀 JSON、錯誤頂層結構或無法解密的系統憑證保留原檔並拒絕覆寫。Setup PIN 寫入成功後才保存快取，失敗後可重試。
+- 新增 13 項測試，包含 HTTP 設定更新失敗回傳標準 500、原有政策／憑證保持一致、損毀資料及錯誤金鑰不得覆寫、主金鑰與 Setup PIN 失敗重試。後端 283 項 pytest、Ruff lint／format 通過。
+- 各 JSON 檔案的原子寫入不代表跨檔案交易；setup 的多檔案更新仍可能部分完成後回報錯誤，不能宣稱整個 setup 可原子回退。其餘重構與外部驗收仍按未完成清單繼續。
+
+本輪接續交付（2026-09-25，共用版型與狀態 CSS 收斂）：
+
+- 共用表單、頁面／卡片版型移至 `shared/ui/layout.css`；執行結果與 metadata 版型移至 `shared/ui/results.css`；動畫與 reduced-motion 規則集中至 `shared/ui/motion.css`，loading／error-state 歸入既有 status.css。
+- 合併頁面標頭與 icon box 的重複 theme 覆寫；Batch Update PreviewField 與 API Health 配額頁版型歸回 YouTube feature。`index.css` 807→375 行，`app-theme.css` 399→339 行，剩餘內容集中於 app shell／導覽，其重複規則仍待最後收斂。
+- 前端 71 檔／338 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過；Edge E2E 24 項與 visual 6 項／9 張基準比對通過，未更新截圖。Playwright 在 Windows 收尾時未能停止其 Vite，逐項完成後手動停止本次啟動的 Vite，兩組 runner 均回傳 exit 0；此環境收尾問題仍需改善。
+
+本輪接續交付（2026-09-25，移除舊全域樣式入口與導覽驗收）：
+
+- `index.css` 與 `styles/app-theme.css` 已移除；app shell／導覽樣式合併至 `app/shell.css`，解開舊 base／theme 的重複覆寫。共用版型、狀態、動畫及 feature CSS 各有單一載入入口；token 檢查已同步至新檔案。
+- 修正舊行動選單在遮罩下方的 z-index、桌面收合狀態讓手機選單只剩圖示、關閉時 offscreen 導覽仍可取得焦點等問題。收合樣式限於桌面；焦點循環略過隱藏控制，關閉按鈕只過渡顏色，避免 visibility 過渡讓開啟焦點失敗。
+- 新增實際瀏覽器導覽驗收：桌面收合→390 px 展開、點選便利貼路由、Tab／Shift+Tab 焦點循環、Escape 焦點還原與返回桌面保留收合狀態。
+- 驗證：後端 283 項 pytest／Ruff，前端 338 項 Vitest、全部品質檢查、Edge E2E 25 項、visual 6 項／9 張原基準與 production build 通過。主 CSS 51.20 kB／gzip 9.52 kB。使用明確啟動的 Vite 供測試重用，測試正常退出後停止該 server，避免 Windows 自動收尾問題。
+
+本輪接續交付（2026-09-25，帳號工作狀態 API 邊界）：
+
+- App 的工作狀態載入與 `useAccountWorkState` 儲存改經 settings feature 的 TypeScript API wrapper，明確定義帳號工作狀態 response 與工具值型別；既有 endpoint、key 與 JSON 格式不變。保留未提供 version 的舊回應相容性，明確提供非 1 版本時拒絕處理。
+- wrapper 驗證 state 與每個工具值都是物件，格式錯誤不再被誤標示為已儲存；hook 保留使用者待存值並允許重試。測試涵蓋錯誤格式、版本、傳輸錯誤、未知工具 key 的透傳，以及失敗後重試與既有並行儲存行為。
+- 驗證：前端 72 檔／349 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過；`git diff --check` 通過。本次未改後端或版面，未重跑瀏覽器截圖或後端 suite；同 SHA CI、真實 provider 與 Docker 回退仍未驗收。
+
+本輪接續交付（2026-09-25，配額共用 UI 與版型）：
+
+- API 健康度頁採用共用 PageHeader／Button，配額面板更新與重試操作採用 Button，載入狀態採用具 live region 的 LoadingState。既有輪詢、切槽、錯誤與重試行為維持相容。
+- 截圖檢查發現 quota header／metadata 等 class 缺少版型規則，補入 YouTube feature CSS，讓標頭可換行、資訊分行排列並統一間距。新增 390／768／1440 px 配額頁 E2E，涵蓋全部更新、單次更新失敗與重試；手機與桌面截圖已人工檢視。
+- 驗證：前端 72 檔／349 項 Vitest、26 項 Edge E2E、6 項 visual／9 張既有基準通過，未更新基準；Prettier、ESLint、Stylelint、typecheck、production build 通過。本次未更動後端；整體未完成項目維持如下。
+
+本輪接續交付（2026-09-25，Google discovery client 注入）：
+
+- `create_app(google_client_factory=...)` 提供 HTTP 與 lifespan 的 Google client 建構入口；Sheets service、YouTube service 及 OAuth profile／channel 查詢改用此邊界。保留預設 discovery.build 與各請求 credentials，不引入跨使用者 client 快取。
+- 新增兩個 app 並行呼叫真實 Sheets metadata endpoint 的隔離測試，確認 factory 與 credentials 正確配對；另驗證例外後 context 還原、預設 builder fallback、YouTube helper 傳遞及 provider 失敗的既有錯誤契約。
+- 驗證：後端 286 項 pytest、Ruff lint／format 通過，保留一項既有 Starlette/httpx 棄用警告。OAuth token transport、YTMusic client 與 singleton 初始化仍待處理；Weverse 背景 worker 維持原有明確 provider 注入，不宣稱新 context 自動傳播至執行緒。
+
+本輪接續交付（2026-09-25，YTMusic client 注入）：
+
+- `create_app(ytmusic_client_factory=...)` 提供 HTTP／lifespan 的 YTMusic 建構入口，播放清單查詢與 Token 線上驗證均採用此 factory；保留預設 YTMusic、語言／地區解析及既有 fallback 行為，不快取已認證 client。
+- 新增兩個 app 並行呼叫 playlist endpoint 的測試，驗證 Starlette threadpool context 傳播；另覆蓋 Token 驗證、auth／locale 參數、建構失敗、公開 client fallback 與 context 還原。
+- 驗證：後端 289 項 pytest、Ruff lint／format 通過；仍有既有 Starlette/httpx 棄用警告。本次未修改前端，OAuth token transport 與初始化副作用仍待處理。
+
+本輪接續交付（2026-09-27，OAuth client 注入與驗證）：
+
+- `create_app(oauth_client_factories=...)` 可為每個 app 指定 OAuth flow 建構器及 Google 憑證 refresh request transport；登入及各服務的授權 URL、PKCE code exchange、token refresh 均經此邊界，預設仍使用原有 Google 函式庫實作。
+- 新增授權 URL 的跨 app 併行隔離、PKCE code exchange、真實 Credentials refresh 後只寫入所屬 app 憑證庫，以及例外後 context 還原測試。移除 Google auth 匯入時修改 `OAUTHLIB_INSECURE_TRANSPORT` 的程序全域副作用。
+- 預設 settings 的動態 OAuth／runtime 設定同步移到 `create_app()` 組裝時執行，不再於 `core.config` 模組底部主動同步。`Settings()` 建構時的主金鑰解析及預設 auth store 的加密器建構仍有匯入時副作用，後續須以相容既有資料的方式處理。
+- 後端 294 項 pytest 與 Ruff lint／format 通過；前端 72 檔／349 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過；Edge E2E 26 項、visual 6 項／9 張既有基準通過，未更新截圖。Windows 的 Playwright 在測試完成後仍卡於 Vite 收尾，停止本次啟動的 server 後兩組 runner 均回傳 exit 0。尚未完成所有 singleton 延後初始化或真實 provider 驗收。
+
+本輪接續交付（2026-09-27，預設 auth 初始化延後）：
+
+- 預設 `Settings` 匯入時不再解析／寫入主金鑰；`create_app()` 組裝時解析金鑰並同步動態設定，獨立呼叫簽章 helper 時也會先解析金鑰。預設 SessionStore／CredentialStore 延到首次使用才建立加密器，仍固定使用預設 settings 的加密金鑰；明確建立的 store 保留建構時綁定金鑰的原有語意。
+- 新增獨立程序測試，確認只匯入 config、session 與 credential 模組不建立資料目錄。後端 295 項 pytest、Ruff lint／format 通過；前端 72 檔／349 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 重新驗證通過。本次未更動 UI，未重跑瀏覽器測試；其他 singleton 的初始化與跨程序交易仍待處理。
+
+本輪接續交付（2026-09-27，獨立 auth store 金鑰保護）：
+
+- `SessionStore()`／`CredentialStore()` 若未明確指定加密金鑰，會先解析所屬設定的持久化金鑰，再建立加密器；禁止同時要求延後加密與傳入明確金鑰。這避免在匯入預設設定後、組裝 app 前自行建立 store 時，以空值派生加密金鑰。
+- 新增獨立程序測試，驗證組裝 app 前建立兩種 store 會產生持久化主金鑰，session 可由新 store 解密，credential 加解密一致。後端 296 項 pytest、Ruff lint／format 通過。前端未更動，上一輪完整品質檢查仍適用。
+
+本輪接續交付（2026-09-27，帳號狀態與便利貼持久化保護）：
+
+- 預設 AccountStateStore 延至首次資料操作才讀檔，工具 key 註冊不觸發讀取；損毀 JSON、null 或錯誤頂層結構現在拒絕覆寫，修復檔案後同一 store 可重試。寫入失敗使記憶體快取失效，下一次讀取重新取得已保存資料。
+- NotesStore 同樣拒絕損毀或錯誤頂層結構；寫入失敗後重新載入已保存資料，避免回傳未持久化的便條內容。新增損毀與寫入失敗回歸測試；後端 304 項 pytest、Ruff lint／format 通過。前端 72 檔／349 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 重新驗證通過；未更動 UI，未重跑瀏覽器測試。
+
+本輪接續交付（2026-09-27，YouTube 路由模型歸位）：
+
+- YouTube routing mode、授權槽位選擇、連線狀態、原因文案與授權指紋移入 `features/youtube/model/routing.ts`，新增輸入資料型別；頁面、元件及 Batch Update hook 改由 feature model 匯入，舊 `utils/youtubeRouting.js` 保留相容匯出。既有 API 回應與顯示文案不變。
+- 驗證：前端 72 檔／349 項 Vitest、Prettier、ESLint、Stylelint、typecheck、production build 通過；Edge E2E 中 Publish Cleaner、Batch Update 與 YouTube 設定相關 4 項通過。後端 304 項 pytest、Ruff lint／format 通過。Windows 的 Playwright runner 在四項測試結束後仍需停止本次啟動的 Vite 才回傳 exit 0；未更新視覺基準。
+
+本輪接續交付（2026-09-27，工具目錄啟用狀態契約）：
+
+- 後端停用 plugin 仍列在 `/api/v1/tools` 供查詢，但不啟動、不關閉亦不掛載其 API router；健康資訊明確回傳 `disabled`，不把有意停用視為初始化失敗。
+- 前端登入後載入後端工具目錄，以後端 ID、狀態、入口與版本核對本地 feature manifest；拒絕未知、重複、入口不一致及不支援版本的回應。導覽、Dashboard 與深層網址依後端啟用狀態處理，前端保留圖示、元件與呈現順序。載入失敗會顯示重試入口，不宣稱工具已就緒。
+- 契約與瀏覽器測試覆蓋停用工具在導覽及 Dashboard 隱藏、直接網址不可使用、後端 API 404，以及不支援版本的明確錯誤。後端仍負責實際 API 授權；此時 `required_scopes` 的前端能力呈現仍待完成。
+- 驗證：後端 305 項 pytest、Ruff lint／format 通過；前端 72 檔 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過。Edge E2E 中停用工具、側邊導覽與 Dashboard 版型 3 項通過；既有 visual 6 項／9 張基準通過，未更新基準。Windows Playwright runner 在測試完成後仍需停止本次啟動的 Vite 才回傳 exit 0。
+
+本輪接續交付（2026-09-27，工具能力提示）：
+
+- 前端依後端 `required_scopes` 判斷模組層級的授權需求；同為 `youtube` scope 時，Creator／Integrations 對應 YouTube 頻道、YouTube Music 對應音樂庫、Weverse 對應獨立上傳頻道。未知 scope 與工具組合會使目錄進入明確錯誤狀態，不會假設已授權。
+- Dashboard 對缺少的能力顯示連線入口，保留工具頁及其授權設定頁的導覽；真正操作仍由 API 的認證依賴判斷。狀態卡改為顯示「已啟用」模組數，避免把未授權工具誤稱就緒。Playwright 假後端改用內建工具實際 scope 契約，並補上缺少能力時的導覽驗證。
+- 已人工檢視 390／768／1440 px Dashboard 新增提示的版面，並只更新三張 Dashboard 視覺基準。各功能內更細的能力門檻與實際 provider 驗收仍待完成。
+- 驗證：後端 305 項 pytest、Ruff lint／format 通過；前端 73 檔／359 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過；Edge E2E 28 項、visual 6 項／9 張基準通過。Windows Playwright runner 在測試完成後仍需停止本次啟動的 Vite 才回傳 exit 0。未使用真實 Google／YouTube 授權進行 smoke test。
+
 尚待完成：
 
-- 共用 UI 尚未逐頁遷移；全域 CSS 仍承載多個 feature 的樣式，固定 inline layout 也仍有保留。Stylelint 已涵蓋全部 CSS，foundation reset selector 有單檔規則例外；仍需將全域樣式逐頁移入 feature CSS，並持續統一 token 與版面規則。
+- 共用 UI 尚未逐頁遷移，固定 inline layout 也仍有保留。舊 index.css／app-theme.css 已移除，樣式分至 app shell、shared UI 與 feature；Stylelint 涵蓋全部 CSS，foundation reset selector 有單檔規則例外。仍需完成剩餘頁面共用元件遷移與 token 統一。
 - Feature hook 已從頁面抽離，但仍有其他 feature 的 API/model 邊界及較完整的 TS 型別尚未完成。E2E 已覆蓋 mock OAuth 導向、排序、Batch Update 與 Publish Cleaner 執行及照片匯出；尚未驗證真實 Google／YouTube OAuth callback 與 Weverse 真實 provider smoke test。
-- YouTube workflow adapter、Notes、account-state、session repository 與 Weverse worker／store／provider 已可由 app factory 注入；身分驗證政策、全平台 settings、credential store 與其他外部 client 的 app scope 注入仍待完成。Account-state／session 的 context 橋接後續可逐步替換為明確 service dependency。
+- 工具目錄已由後端狀態驅動前端啟用與模組層級能力呈現；仍需細化各功能的能力要求、驗證缺少授權時的 API 403 契約，並明確界定跨主版本的相容政策。
+- YouTube workflow adapter、Notes、account-state、session、credential repository 與 Weverse worker／store／provider 已可由 app factory 注入；身分驗證政策與 settings 已可注入；配額帳本、速率限制、Google discovery、YTMusic 及 OAuth client 亦可隔離。預設 auth key／store 與 account-state 的匯入時初始化已延後；其他 singleton 的副作用仍待盤點。Account-state／session／credential／settings 的 context 橋接後續可逐步替換為明確 service dependency。
 - Weverse sidecar lock 只承諾在支援作業系統檔案鎖定語意的本機檔案系統上協調合作程序；NFS／網路檔案系統或跨主機多實例仍需驗證鎖語意，或改採資料庫／外部鎖服務。沒有真實 provider smoke test，也未演練 Docker 部署回退。
 - 過去 `npm install` 曾顯示 9 項安全公告；本輪 `npm audit --offline --json` 已完成並回報 0 項漏洞。線上 registry 的即時 advisory 查詢仍需在可連線的 CI／維護環境複核。
 

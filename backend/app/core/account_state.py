@@ -11,7 +11,7 @@ from backend.app.core.account_state_store import (
     WORK_STATE_KEYS,
     get_account_state_store,
 )
-from backend.app.core.config import normalize_youtube_slot, settings
+from backend.app.core.config import get_settings, normalize_youtube_slot, settings
 
 YOUTUBE_ROUTING_MODES = ("auto_primary", "manual")
 
@@ -62,15 +62,15 @@ def update_account_settings(owner_sub: str, values: dict[str, Any]) -> None:
 
 def get_account_active_slot(owner_sub: str) -> str:
     subject = ensure_account(owner_sub)
-    value = get_account_setting(subject, "youtube_active_slot", settings.youtube_default_slot)
+    value = get_account_setting(subject, "youtube_active_slot", get_settings(settings).youtube_default_slot)
     try:
         slot = normalize_youtube_slot(value)
     except ValueError:
-        slot = settings.youtube_default_slot
-    if settings.youtube_oauth_slot(slot).configured:
+        slot = get_settings(settings).youtube_default_slot
+    if get_settings(settings).youtube_oauth_slot(slot).configured:
         return slot
-    if settings.youtube_oauth_slot(settings.youtube_default_slot).configured:
-        return settings.youtube_default_slot
+    if get_settings(settings).youtube_oauth_slot(get_settings(settings).youtube_default_slot).configured:
+        return get_settings(settings).youtube_default_slot
     return slot
 
 

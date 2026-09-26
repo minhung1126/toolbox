@@ -41,19 +41,29 @@ class NotesStore:
         self._path = path
         self._lock = RLock()
         self._data: dict[str, Any] = {"version": 1, "users": {}}
+        self._loaded = False
         self._load()
 
     def _load(self) -> None:
         with self._lock:
-            loaded = read_json_file(self._path)
-            if isinstance(loaded, dict) and isinstance(loaded.get("users"), dict):
-                self._data = loaded
-            else:
-                self._data = {"version": 1, "users": {}}
+            loaded = read_json_file(self._path, {"version": 1, "users": {}}, strict=True)
+            if not isinstance(loaded, dict) or not isinstance(loaded.get("users"), dict):
+                raise ValueError("Invalid notes structure")
+            self._data = loaded
+            self._loaded = True
+
+    def _ensure_loaded(self) -> None:
+        with self._lock:
+            if not self._loaded:
+                self._load()
 
     def _save(self) -> None:
         with self._lock:
-            atomic_write_json(self._path, self._data)
+            try:
+                atomic_write_json(self._path, self._data)
+            except Exception:
+                self._loaded = False
+                raise
 
     def list_notes(self, subject: str, query: str = "") -> List[dict[str, Any]]:
         """Retrieve notes for an account, optionally filtered by keyword, sorted by pin and updated time."""
@@ -62,6 +72,7 @@ class NotesStore:
             return []
 
         with self._lock:
+            self._ensure_loaded()
             user_notes = list(self._data.get("users", {}).get(clean_sub, []))
 
         clean_query = str(query or "").strip().lower()
@@ -88,6 +99,7 @@ class NotesStore:
             return None
 
         with self._lock:
+            self._ensure_loaded()
             for note in self._data.get("users", {}).get(clean_sub, []):
                 if note.get("id") == clean_id:
                     return copy.deepcopy(note)
@@ -116,6 +128,7 @@ class NotesStore:
         }
 
         with self._lock:
+            self._ensure_loaded()
             users = self._data.setdefault("users", {})
             user_notes = users.setdefault(clean_sub, [])
             user_notes.insert(0, note)
@@ -139,6 +152,7 @@ class NotesStore:
             return None
 
         with self._lock:
+            self._ensure_loaded()
             user_notes = self._data.get("users", {}).get(clean_sub, [])
             target = None
             for note in user_notes:
@@ -179,6 +193,7 @@ class NotesStore:
             return False
 
         with self._lock:
+            self._ensure_loaded()
             user_notes = self._data.get("users", {}).get(clean_sub, [])
             initial_len = len(user_notes)
             user_notes[:] = [n for n in user_notes if n.get("id") != clean_id]

@@ -94,5 +94,14 @@ def test_backend_tool_catalog_matches_frontend_manifest_contract():
         path for tool in tools for path in [tool["entry_url"], *(route["path"] for route in tool["routes"])]
     }
 
+    scope_contract = {
+        "creator-tools": ["youtube", "sheets_readonly"],
+        "youtube-music": ["youtube"],
+        "sheets-tools": ["sheets_readonly"],
+        "weverse-uploader": ["youtube"],
+        "youtube-integrations": ["youtube"],
+    }
+
     assert backend_module_ids == frontend_module_ids
     assert backend_paths <= frontend_paths, f"Frontend is missing backend tool routes: {backend_paths - frontend_paths}"
+    assert {tool["id"]: tool["required_scopes"] for tool in tools if tool["required_scopes"]} == scope_contract

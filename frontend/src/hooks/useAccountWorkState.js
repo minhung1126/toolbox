@@ -1,5 +1,5 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../services/api';
+import { workStateApi } from '../features/settings/api/workStateApi';
 
 const AccountWorkStateContext = createContext(null);
 
@@ -62,7 +62,7 @@ export function AccountWorkStateProvider({ initialState = {}, children }) {
       updateStatus(key, { saving: true, saved: false, error: '' });
 
       const request = Promise.resolve()
-        .then(() => api.updateWorkState(key, value))
+        .then(() => workStateApi.update(key, value))
         .then((result) => {
           record.inFlightPromise = null;
           record.lastSavedVersion = version;
@@ -70,8 +70,7 @@ export function AccountWorkStateProvider({ initialState = {}, children }) {
 
           if (mountedRef.current) {
             setState((current) => {
-              const serverState = result?.state && typeof result.state === 'object' ? result.state : {};
-              const next = { ...current, ...serverState };
+              const next = { ...current, ...result.state };
               if (record.desiredVersion > version) next[key] = record.desiredValue;
               return next;
             });

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from backend.app.core.credential_store import credential_store
+from backend.app.core.credential_store import credential_store, get_credential_store
 from backend.app.core.dependencies import require_ytmusic_context
 from backend.app.core.error_contract import http_error
 from backend.app.core.preview import (
@@ -124,7 +124,7 @@ async def preview_sort(
             playlist=snapshot,
         )
 
-        has_custom_token = bool(credential_store.get_ytmusic_custom_token(context.owner_sub))
+        has_custom_token = bool(get_credential_store(credential_store).get_ytmusic_custom_token(context.owner_sub))
         has_valid_set_video_ids = all(item.get("has_set_video_id", True) for item in original_items)
         can_use_ytm = not input_data.use_youtube_api and has_custom_token and has_valid_set_video_ids
 
@@ -213,7 +213,7 @@ async def apply_sort(
             sort_keys_dict = [{"field": k.field, "direction": k.direction} for k in input_data.sort_keys]
             sorted_items = sort_items(original_items, sort_keys_dict)
 
-        has_custom_token = bool(credential_store.get_ytmusic_custom_token(context.owner_sub))
+        has_custom_token = bool(get_credential_store(credential_store).get_ytmusic_custom_token(context.owner_sub))
         effective_fallback = input_data.allow_quota_fallback or (not has_custom_token)
         preview = build_sort_preview(original_items, sorted_items)
 
@@ -237,7 +237,7 @@ async def apply_sort(
         raise
     except Exception as e:
         logger.exception("Error applying sort: %s", e)
-        has_custom = bool(credential_store.get_ytmusic_custom_token(context.owner_sub))
+        has_custom = bool(get_credential_store(credential_store).get_ytmusic_custom_token(context.owner_sub))
         if has_custom and not input_data.use_youtube_api and not input_data.allow_quota_fallback:
             raise http_error(
                 401,

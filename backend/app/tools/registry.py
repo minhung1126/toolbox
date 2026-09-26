@@ -61,6 +61,8 @@ class ToolRegistry:
             setattr(target_router, "_mounted_tool_routers", mounted_routers)
 
         for tool_id, plugin in self._plugins.items():
+            if plugin.metadata.status == "disabled":
+                continue
             router = plugin.router
             if router and id(router) not in mounted_routers:
                 target_router.include_router(router)
@@ -70,6 +72,9 @@ class ToolRegistry:
     async def run_startup(self, app: FastAPI) -> None:
         """Execute on_startup lifecycle hooks for all registered plugins."""
         for tool_id, plugin in self._plugins.items():
+            if plugin.metadata.status == "disabled":
+                self._startup_errors.pop(tool_id, None)
+                continue
             try:
                 res = plugin.on_startup(app)
                 if inspect.isawaitable(res):
@@ -83,6 +88,8 @@ class ToolRegistry:
     async def run_shutdown(self, app: FastAPI) -> None:
         """Execute on_shutdown lifecycle hooks for all registered plugins."""
         for tool_id, plugin in self._plugins.items():
+            if plugin.metadata.status == "disabled":
+                continue
             try:
                 res = plugin.on_shutdown(app)
                 if inspect.isawaitable(res):
@@ -95,6 +102,9 @@ class ToolRegistry:
         """Collect health status across all registered plugins."""
         results = {}
         for tool_id, plugin in self._plugins.items():
+            if plugin.metadata.status == "disabled":
+                results[tool_id] = {"status": "disabled"}
+                continue
             if tool_id in self._startup_errors:
                 results[tool_id] = {"status": "error", "error": self._startup_errors[tool_id]}
                 continue

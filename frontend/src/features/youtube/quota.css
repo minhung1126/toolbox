@@ -14,6 +14,72 @@
   padding: 1rem 1.25rem;
 }
 
+.quota-banner-header,
+.quota-banner-heading,
+.quota-title-row,
+.quota-methods {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.quota-banner-header {
+  justify-content: space-between;
+}
+
+.quota-banner-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.quota-slot-select {
+  width: auto;
+  max-width: 100%;
+}
+
+.quota-meta {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.quota-meta svg {
+  margin-right: 0.3rem;
+  vertical-align: middle;
+}
+
+.quota-methods,
+.quota-alert,
+.quota-note {
+  margin-top: 1rem;
+}
+
+.quota-note {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.quota-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--quota-border);
+  border-radius: var(--radius-md);
+  color: var(--quota-color);
+  background: var(--quota-background);
+}
+
+.quota-alert svg {
+  flex-shrink: 0;
+}
+
 .quota-state-icon {
   display: inline-flex;
   padding: 0.6rem;
@@ -90,4 +156,8 @@
   .quota-slot-select {
     width: 100%;
   }
+}
+
+.api-health-page {
+  max-width: 1240px;
 }

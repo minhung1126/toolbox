@@ -82,9 +82,13 @@ import type {
   SharedSheetSettingsUpdateResponse,
 } from '../features/sheets/api/sheetsSettingsTypes';
 
+import type { AccountWorkStateResponse, WorkStateValue } from '../features/settings/api/workStateTypes';
+
 export function normalizeYoutubePlaylistInput(value: unknown): string;
 
 export const api: {
+  getWorkState(): Promise<AccountWorkStateResponse>;
+  updateWorkState(key: string, value: WorkStateValue): Promise<AccountWorkStateResponse>;
   getAuthConfig(): Promise<LoginAuthConfig>;
   getAuthUrl(): Promise<LoginAuthUrlResponse>;
   getSetupStatus(): Promise<SetupStatusResponse>;

@@ -4,8 +4,9 @@ import re
 import unicodedata
 from typing import Any, Dict, List
 
-import googleapiclient.discovery
 from google.oauth2.credentials import Credentials
+
+from backend.app.services.google_clients import build_google_client
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ def extract_spreadsheet_id(url_or_id: str) -> str:
 
 
 def get_sheets_service(credentials: Credentials):
-    return googleapiclient.discovery.build("sheets", "v4", credentials=credentials)
+    return build_google_client("sheets", "v4", credentials=credentials)
 
 
 def quote_sheet_name(sheet_name: str) -> str:

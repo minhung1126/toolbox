@@ -13,8 +13,7 @@ describe('shared design tokens', () => {
 
     expect(tokens).toMatch(/:root\s*\{/);
     expect(new Set(declarations).size).toBe(declarations.length);
-    expect(readStylesheet('../index.css')).not.toMatch(/:root\s*\{[^}]*--/s);
+    expect(readStylesheet('../app/shell.css')).not.toMatch(/:root\s*\{[^}]*--/s);
     expect(readStylesheet('./foundation.css')).not.toMatch(/:root\s*\{[^}]*--/s);
-    expect(readStylesheet('./app-theme.css')).not.toMatch(/:root\s*\{[^}]*--/s);
   });
 });

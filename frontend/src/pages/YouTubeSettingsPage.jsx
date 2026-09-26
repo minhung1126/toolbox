@@ -7,7 +7,7 @@ import { youtubeSettingsApi } from '../features/youtube/api/youtubeSettingsApi';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useDebouncedAutosave } from '../hooks/useDebouncedAutosave';
-import { YOUTUBE_ROUTING_MODES, youtubeRoutingLabel } from '../utils/youtubeRouting';
+import { YOUTUBE_ROUTING_MODES, youtubeRoutingLabel } from '../features/youtube/model/routing';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
 import YouTubeRoutingSection from '../components/youtube/YouTubeRoutingSection';
 import YouTubeSlotCard from '../components/youtube/YouTubeSlotCard';
