@@ -11,7 +11,7 @@ import SheetDataSourcePanel from '../components/SheetDataSourcePanel';
 import SourceLinkInput from '../components/SourceLinkInput';
 import TeamPersonFilterPanel from '../components/TeamPersonFilterPanel';
 import { YOUTUBE_COPY, formatResultCounts, formatVideoCount, formatVideoId } from '../utils/youtubeCopy';
-import { youtubeRoutingReasonLabel } from '../utils/youtubeRouting';
+import { youtubeRoutingReasonLabel } from '../features/youtube/model/routing';
 import {
   AlertCircle,
   CheckCircle2,

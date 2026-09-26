@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, AlertTriangle, Clock3, Database, RefreshCw, ShieldAlert } from 'lucide-react';
 import { youtubeQuotaApi } from '../features/youtube/api/youtubeQuotaApi';
 import { StatusMessage } from './StatusMessage';
+import { Button, LoadingState } from '../shared/ui';
 
 const STATE_META = {
   normal: { label: '正常', Icon: Activity },
@@ -138,15 +139,15 @@ export default function YouTubeQuotaBanner({
           status="failed"
           title={`${slotLabel(selectedSlot)}配額更新失敗`}
           action={
-            <button
-              type="button"
-              className="btn btn-secondary status-message-action"
+            <Button
+              variant="secondary"
+              icon={RefreshCw}
+              className="status-message-action"
               onClick={loadUsage}
               disabled={loading}
             >
-              <RefreshCw size={14} aria-hidden="true" />
               重試
-            </button>
+            </Button>
           }
         >
           <span>{error}</span>
@@ -161,10 +162,7 @@ export default function YouTubeQuotaBanner({
   if (loading || !currentUsage) {
     return (
       <div className={`glass-panel quota-status-panel${compact ? ' quota-status-panel-compact' : ''}`}>
-        <StatusMessage title="讀取中…">
-          <RefreshCw size={16} className="spin" aria-hidden="true" />
-          更新中…
-        </StatusMessage>
+        <LoadingState>更新中…</LoadingState>
       </div>
     );
   }
@@ -219,10 +217,15 @@ export default function YouTubeQuotaBanner({
             </div>
           </div>
         </div>
-        <button type="button" className="btn btn-secondary quota-refresh-button" onClick={loadUsage} disabled={loading}>
-          <RefreshCw size={14} className={loading ? 'spin' : ''} aria-hidden="true" />
+        <Button
+          variant="secondary"
+          icon={RefreshCw}
+          className="quota-refresh-button"
+          onClick={loadUsage}
+          disabled={loading}
+        >
           更新
-        </button>
+        </Button>
       </div>
 
       {!compact && (

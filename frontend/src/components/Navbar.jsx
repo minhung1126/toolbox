@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import useAccountWorkState from '../hooks/useAccountWorkState';
-import { youtubeIsConnected } from '../utils/youtubeRouting';
+import { youtubeIsConnected } from '../features/youtube/model/routing';
 import { PATHS } from '../routes/paths';
 import { getToolNavGroups } from '../tools/catalog';
 
@@ -61,7 +61,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
     if (!drawerOpen) return undefined;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    closeButtonRef.current?.focus();
+    const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
 
     const onKeyDown = (event) => {
       if (event.key === 'Escape') {
@@ -74,7 +74,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
         ...drawerRef.current.querySelectorAll(
           'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled])'
         ),
-      ];
+      ].filter((element) => element.getClientRects().length > 0);
       if (!focusable.length) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
@@ -92,6 +92,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
     document.addEventListener('keydown', onKeyDown);
     window.addEventListener('resize', onResize);
     return () => {
+      window.cancelAnimationFrame(focusFrame);
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('resize', onResize);

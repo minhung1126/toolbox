@@ -3,6 +3,7 @@ import { BrowserRouter, useInRouterContext } from 'react-router-dom';
 import { ToastProvider, useToast } from './components/Toast';
 import { StatusMessage } from './components/StatusMessage';
 import { api } from './services/api';
+import { workStateApi } from './features/settings/api/workStateApi';
 import { sheetsFilterApi } from './features/sheets/api/sheetsFilterApi';
 import { clearAuthHash, parseAuthHash } from './utils/authHash';
 import { usePageResume } from './hooks/usePageResume';
@@ -171,7 +172,7 @@ export function AppContent() {
         api.getSharedSettings(),
         api.getYoutubeSettings(),
         sheetsFilterApi.getSharedFilter(),
-        api.getWorkState(),
+        workStateApi.get(),
       ];
       const results = await Promise.allSettled(requests);
       const failures = results

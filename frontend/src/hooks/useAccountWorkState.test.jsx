@@ -91,7 +91,7 @@ describe('useAccountWorkState', () => {
     });
 
     await act(async () => {
-      releaseFirst({ state: { fromFirstRequest: true } });
+      releaseFirst({ state: { navigation: { sidebarCollapsed: false } } });
       await firstSave;
       await secondSave;
     });
@@ -119,5 +119,24 @@ describe('useAccountWorkState', () => {
     expect(api.updateWorkState).toHaveBeenCalledTimes(2);
     expect(result.current.error).toBe('');
     expect(result.current.saved).toBe(true);
+  });
+
+  it('does not acknowledge malformed saves and allows retrying the pending change', async () => {
+    api.updateWorkState.mockResolvedValueOnce({ state: [] }).mockResolvedValueOnce({ state: {} });
+    const { result } = renderHook(() => useAccountWorkState('navigation'), { wrapper });
+
+    await act(async () => {
+      await result.current.save({ sidebarCollapsed: true }, { debounceMs: 0 });
+    });
+    expect(result.current.saved).toBe(false);
+    expect(result.current.error).toBe('帳號工作狀態回應格式不正確。');
+    expect(result.current.value).toEqual({ sidebarCollapsed: true });
+
+    await act(async () => {
+      await result.current.retry();
+    });
+    expect(api.updateWorkState).toHaveBeenNthCalledWith(2, 'navigation', { sidebarCollapsed: true });
+    expect(result.current.saved).toBe(true);
+    expect(result.current.error).toBe('');
   });
 });

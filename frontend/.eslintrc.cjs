@@ -1,6 +1,6 @@
 module.exports = {
   env: { browser: true, es2022: true, node: true },
-  ignorePatterns: ['dist', 'node_modules'],
+  ignorePatterns: ['dist', 'node_modules', 'test-results', 'playwright-report'],
   extends: ['eslint:recommended', 'plugin:react/recommended', 'plugin:react-hooks/recommended'],
   plugins: ['react', 'react-hooks'],
   parserOptions: { ecmaVersion: 'latest', sourceType: 'module', ecmaFeatures: { jsx: true } },

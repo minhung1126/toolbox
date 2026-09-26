@@ -12,7 +12,11 @@ import YouTubeVideoEditDialog from '../components/YouTubeVideoEditDialog';
 import ResultStatus from '../components/ResultStatus';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { sortVideosByUploadTime } from '../utils/videoOrder';
-import { getYoutubeAuthContext, youtubeRoutingMode, youtubeRoutingReasonLabel } from '../utils/youtubeRouting';
+import {
+  getYoutubeAuthContext,
+  youtubeRoutingMode,
+  youtubeRoutingReasonLabel,
+} from '../features/youtube/model/routing';
 import {
   YOUTUBE_COPY,
   formatQuotaUnits,

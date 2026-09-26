@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, CheckCircle2, Sparkles } from 'lucide-react';
 import { SourceLinkButton } from '../components/SourceLinkInput';
-import { youtubePreferredUiSlot } from '../utils/youtubeRouting';
+import { youtubePreferredUiSlot } from '../features/youtube/model/routing';
 import { getAllTools } from '../tools/catalog';
 import { Badge, Card, PageHeader } from '../shared/ui';
 import '../features/system/dashboard.css';
