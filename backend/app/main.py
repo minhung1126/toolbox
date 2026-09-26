@@ -144,7 +144,7 @@ def health_check(request: Request = None):
     )
     warnings = []
     tool_health = registry.health_check()
-    failed_tools = [tool_id for tool_id, state in tool_health.items() if state.get("status") != "ok"]
+    failed_tools = [tool_id for tool_id, state in tool_health.items() if state.get("status") not in {"ok", "disabled"}]
     if failed_tools:
         warnings.append("部分工具模組未能初始化")
     if not google_oauth_ready:

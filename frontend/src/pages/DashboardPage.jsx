@@ -3,14 +3,14 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, CheckCircle2, Sparkles } from 'lucide-react';
 import { SourceLinkButton } from '../components/SourceLinkInput';
 import { youtubePreferredUiSlot } from '../features/youtube/model/routing';
-import { getAllTools } from '../tools/catalog';
+import { useToolCatalog } from '../tools/ToolCatalogProvider';
 import { Badge, Card, PageHeader } from '../shared/ui';
 import '../features/system/dashboard.css';
 
 export default function DashboardPage({ authUser, sysSettings = {} }) {
   const activeSlot = youtubePreferredUiSlot(authUser?.youtube);
   const activeYoutube = authUser?.youtube?.slots?.[activeSlot] || {};
-  const allTools = getAllTools();
+  const { status: catalogStatus, tools: allTools } = useToolCatalog();
   const sheetsConnected = Boolean(
     authUser?.authorizations?.sheets?.connected || authUser?.google_scopes?.sheets_readonly
   );
@@ -43,7 +43,7 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
             )}
           </div>
           <h3>{authUser ? authUser.email : '尚未登入控制台'}</h3>
-          <p>{allTools.length} 個工具模組已就緒</p>
+          <p>{catalogStatus === 'ready' ? `${allTools.length} 個工具模組已就緒` : '工具目錄尚未就緒'}</p>
         </Card>
 
         <Card as="div" padding="sm" className="dashboard-status-card">
@@ -98,6 +98,7 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
         </Card>
       </div>
 
+      {catalogStatus === 'loading' && <p role="status">工具目錄載入中…</p>}
       {allTools.map((tool) => {
         const cards = tool.featureCards || [];
         if (!cards.length) return null;

@@ -4,6 +4,7 @@ import { StatusMessage } from '../components/StatusMessage';
 import Navbar from '../components/Navbar';
 import { AccountWorkStateProvider } from '../hooks/useAccountWorkState';
 import { recoverPage } from '../utils/pageRecovery';
+import { useToolCatalog } from '../tools/ToolCatalogProvider';
 
 export default function AppShell({
   authUser,
@@ -19,6 +20,7 @@ export default function AppShell({
   sidebarCollapsed,
   setSidebarCollapsed,
 }) {
+  const { status: catalogStatus, error: catalogError, retry: retryCatalog } = useToolCatalog();
   return (
     <AccountWorkStateProvider key={authUser.sub || authUser.email} initialState={workState}>
       <div className={`app-container${sidebarCollapsed ? ' sidebar-is-collapsed' : ''}`}>
@@ -29,6 +31,19 @@ export default function AppShell({
           setSidebarCollapsed={setSidebarCollapsed}
         />
         <main className="main-content">
+          {catalogStatus === 'error' && (
+            <StatusMessage
+              tone="warning"
+              title="工具目錄載入失敗"
+              action={
+                <button className="btn btn-secondary status-message-action" type="button" onClick={retryCatalog}>
+                  重試
+                </button>
+              }
+            >
+              <span>{catalogError}</span>
+            </StatusMessage>
+          )}
           {updateAvailable && (
             <StatusMessage
               tone="warning"

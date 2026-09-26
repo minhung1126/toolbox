@@ -206,6 +206,7 @@ async function request(endpoint, options = {}) {
 
 export const api = {
   getHealth: () => request('/health', { cache: 'no-store' }),
+  getTools: () => request('/tools', { cache: 'no-store' }),
   getAuthConfig: () => request('/auth/config'),
   getAuthUrl: () => request('/auth/url'),
   getSheetsAuthUrl: () => request('/auth/sheets/url'),

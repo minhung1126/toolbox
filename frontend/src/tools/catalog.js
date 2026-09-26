@@ -103,6 +103,41 @@ export function validateFeatureManifests(manifests) {
   return manifests;
 }
 
+/** Join server-owned availability and metadata to locally controlled views. */
+export function reconcileToolCatalog(payload) {
+  if (!Array.isArray(payload?.tools)) throw new Error('工具目錄回應格式不正確。');
+  const known = new Map(TOOL_MODULES.map((tool) => [tool.id, tool]));
+  const seen = new Set();
+  const available = new Map();
+  for (const metadata of payload.tools) {
+    const manifest = known.get(metadata?.id);
+    if (!manifest) throw new Error(`未知的後端工具 ID：${String(metadata?.id)}`);
+    if (seen.has(metadata.id)) throw new Error(`重複的後端工具 ID：${metadata.id}`);
+    seen.add(metadata.id);
+    if (!['active', 'beta', 'disabled'].includes(metadata.status)) {
+      throw new Error(`工具 ${metadata.id} 的狀態不受支援。`);
+    }
+    if (!/^1\.\d+\.\d+$/.test(metadata.version)) {
+      throw new Error(`工具 ${metadata.id} 的版本不受支援。`);
+    }
+    if (metadata.entry_url !== manifest.entryUrl) {
+      throw new Error(`工具 ${metadata.id} 的入口與前端路由不一致。`);
+    }
+    if (metadata.status === 'disabled') continue;
+    available.set(metadata.id, {
+      ...manifest,
+      name: metadata.name,
+      title: metadata.title,
+      description: metadata.description,
+      category: metadata.category,
+      status: metadata.status,
+      version: metadata.version,
+      requiredScopes: metadata.required_scopes,
+    });
+  }
+  return TOOL_MODULES.flatMap((tool) => (available.has(tool.id) ? [available.get(tool.id)] : []));
+}
+
 /**
  * Return all registered tool modules.
  */
@@ -120,8 +155,8 @@ export function getToolById(toolId) {
 /**
  * Retrieve all navigation groups across tools.
  */
-export function getToolNavGroups() {
-  return TOOL_MODULES.flatMap((tool) => tool.navGroups || []);
+export function getToolNavGroups(tools = TOOL_MODULES) {
+  return tools.flatMap((tool) => tool.navGroups || []);
 }
 
 /** Retrieve direct route definitions contributed by each feature manifest. */

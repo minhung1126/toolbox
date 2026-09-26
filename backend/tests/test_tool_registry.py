@@ -126,6 +126,52 @@ def test_plugin_startup_failure_is_visible_in_health_without_leaking_exception()
     assert registry.health_check()["failing-plugin"] == {"status": "error", "error": "RuntimeError"}
 
 
+def test_disabled_plugin_is_listed_but_never_started_or_mounted():
+    registry = ToolRegistry()
+
+    class DisabledPlugin(ToolPlugin):
+        started = False
+
+        @property
+        def metadata(self) -> ToolMetadata:
+            return ToolMetadata(
+                id="disabled-plugin",
+                name="Disabled Plugin",
+                title="停用外掛",
+                description="Disabled plugin test",
+                status="disabled",
+                entry_url="/disabled",
+            )
+
+        @property
+        def router(self) -> APIRouter:
+            router = APIRouter(prefix="/disabled")
+
+            @router.get("/hello")
+            def hello():
+                return {"unexpected": True}
+
+            return router
+
+        async def on_startup(self, app):
+            self.started = True
+
+    plugin = DisabledPlugin()
+    registry.register(plugin)
+    app = main.create_app(registry=registry)
+
+    with TestClient(app) as client:
+        catalog = client.get("/api/v1/tools").json()
+        assert catalog["tools"][0]["status"] == "disabled"
+        assert client.get("/api/v1/disabled/hello").status_code == 404
+        health = client.get("/api/v1/health").json()
+        assert health["status"] == "healthy"
+        assert health["tools"]["disabled-plugin"] == {"status": "disabled"}
+
+    assert plugin.started is False
+    assert registry.health_check()["disabled-plugin"] == {"status": "disabled"}
+
+
 def test_tools_catalog_api():
     """Verify GET /api/v1/tools and GET /api/v1/tools/{tool_id} return expected data."""
     client = TestClient(main.app)

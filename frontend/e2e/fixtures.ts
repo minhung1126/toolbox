@@ -1,3 +1,17 @@
+import { getAllTools } from '../src/tools/catalog';
+
+export const toolCatalog = getAllTools().map((tool) => ({
+  id: tool.id,
+  name: tool.name,
+  title: tool.title,
+  description: tool.description,
+  category: tool.category,
+  status: tool.status,
+  version: '1.0.0',
+  entry_url: tool.entryUrl,
+  required_scopes: [],
+}));
+
 export async function mockAuthenticatedBackend(page, responseOverrides: Record<string, unknown> = {}) {
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -19,6 +33,7 @@ export async function mockAuthenticatedBackend(page, responseOverrides: Record<s
       '/api/v1/settings/team-person-filter': { configured: false, team: '', selected_people: [] },
       '/api/v1/settings/work-state': { state: {} },
       '/api/v1/health': { commit_sha: 'development' },
+      '/api/v1/tools': { tools: toolCatalog },
       '/api/v1/weverse-uploader/scan': {
         packages: [
           {

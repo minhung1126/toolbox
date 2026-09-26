@@ -3,10 +3,12 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App, { ErrorBoundary, hasVersionMismatch } from './App';
 import { api } from './services/api';
+import { getAllTools } from './tools/catalog';
 
 vi.mock('./services/api', () => ({
   api: {
     getHealth: vi.fn(),
+    getTools: vi.fn(),
     getUserStatus: vi.fn(),
     getSystemInfo: vi.fn(),
     getSharedSettings: vi.fn(),
@@ -59,6 +61,14 @@ describe('App recovery state', () => {
     vi.clearAllMocks();
     setDocumentHidden(false);
     api.getHealth.mockResolvedValue({ commit_sha: 'development' });
+    api.getTools.mockResolvedValue({
+      tools: getAllTools().map((tool) => ({
+        id: tool.id,
+        status: 'active',
+        version: '1.0.0',
+        entry_url: tool.entryUrl,
+      })),
+    });
     api.getUserStatus.mockResolvedValue({ authenticated: false });
     api.getSystemInfo.mockResolvedValue({});
     api.getSharedSettings.mockResolvedValue({});

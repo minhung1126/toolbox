@@ -1,5 +1,20 @@
 import { expect, test } from '@playwright/test';
-import { mockAuthenticatedBackend } from './fixtures';
+import { mockAuthenticatedBackend, toolCatalog } from './fixtures';
+
+test('disabled tools disappear from navigation and reject direct deep links', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/tools': {
+      tools: toolCatalog.map((tool) => (tool.id === 'sticky-notes' ? { ...tool, status: 'disabled' } : tool)),
+    },
+  });
+  await page.goto('/dashboard');
+  await expect(page.getByText('8 個工具模組已就緒')).toBeVisible();
+  await expect(page.getByRole('link', { name: '便利貼' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: '進入便利貼' })).toHaveCount(0);
+
+  await page.goto('/notes');
+  await expect(page.getByText('此工具目前未啟用。')).toBeVisible();
+});
 
 test('desktop collapse does not hide mobile navigation and drawer traps focus', async ({ page }) => {
   await mockAuthenticatedBackend(page);
