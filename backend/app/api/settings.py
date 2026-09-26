@@ -15,11 +15,11 @@ from backend.app.core.account_state import (
     set_account_youtube_routing_mode,
     update_account_work_state,
 )
-from backend.app.core.config import normalize_youtube_slot, settings
+from backend.app.core.config import get_settings, normalize_youtube_slot, settings
 from backend.app.core.dependencies import require_account_subject, require_login_credentials
 from backend.app.core.error_contract import http_error
-from backend.app.core.runtime_config import runtime_config
-from backend.app.core.system_secrets import system_secrets
+from backend.app.core.runtime_config import get_runtime_config, runtime_config
+from backend.app.core.system_secrets import get_system_secrets, system_secrets
 from backend.app.core.youtube_input import normalize_playlist_id
 
 logger = logging.getLogger(__name__)
@@ -141,11 +141,13 @@ def get_shared_settings(
 def get_system_info(creds: Credentials = Depends(require_login_credentials)):
     del creds
     return {
-        "public_base_url": settings.base_url,
-        "bind_host": settings.BIND_HOST,
-        "frontend_url": settings.frontend_url,
-        "redirect_uri": settings.get_redirect_uri(),
-        "google_client_configured": bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET),
+        "public_base_url": get_settings(settings).base_url,
+        "bind_host": get_settings(settings).BIND_HOST,
+        "frontend_url": get_settings(settings).frontend_url,
+        "redirect_uri": get_settings(settings).get_redirect_uri(),
+        "google_client_configured": bool(
+            get_settings(settings).GOOGLE_CLIENT_ID and get_settings(settings).GOOGLE_CLIENT_SECRET
+        ),
     }
 
 
@@ -167,7 +169,7 @@ def get_youtube_settings(
     owner_sub: str = Depends(require_account_subject),
 ):
     del creds
-    primary_limit, primary_buffer = runtime_config.get_youtube_quota_settings("primary")
+    primary_limit, primary_buffer = get_runtime_config(runtime_config).get_youtube_quota_settings("primary")
     raw_playlist_id = get_account_setting(owner_sub, "default_playlist_id", "")
     return {
         "default_playlist_id": normalize_playlist_id(raw_playlist_id),
@@ -186,8 +188,8 @@ def get_youtube_slot_settings(
     """Return non-secret configuration defaults for both YouTube slots."""
     del creds
     slots = {}
-    for slot, slot_config in settings.youtube_oauth_slots.items():
-        limit, buffer = runtime_config.get_youtube_quota_settings(slot)
+    for slot, slot_config in get_settings(settings).youtube_oauth_slots.items():
+        limit, buffer = get_runtime_config(runtime_config).get_youtube_quota_settings(slot)
         slots[slot] = {
             "slot": slot,
             "label": slot_config.label,
@@ -222,14 +224,14 @@ def update_youtube_slot_config(
     del creds
     slot_name = normalize_youtube_slot(slot)
     if payload.label is not None:
-        runtime_config.set(f"youtube_oauth_{slot_name}_label", payload.label.strip())
+        get_runtime_config(runtime_config).set(f"youtube_oauth_{slot_name}_label", payload.label.strip())
     if slot_name == "secondary" and payload.enabled is not None:
-        runtime_config.set("youtube_oauth_secondary_enabled", bool(payload.enabled))
+        get_runtime_config(runtime_config).set("youtube_oauth_secondary_enabled", bool(payload.enabled))
 
     updates = {}
     if slot_name == "primary" and payload.use_system_google_oauth:
-        updates["youtube_primary_client_id"] = settings.GOOGLE_CLIENT_ID
-        updates["youtube_primary_client_secret"] = settings.GOOGLE_CLIENT_SECRET
+        updates["youtube_primary_client_id"] = get_settings(settings).GOOGLE_CLIENT_ID
+        updates["youtube_primary_client_secret"] = get_settings(settings).GOOGLE_CLIENT_SECRET
     else:
         if payload.client_id is not None:
             updates[f"youtube_{slot_name}_client_id"] = payload.client_id.strip()
@@ -239,11 +241,11 @@ def update_youtube_slot_config(
                 updates[f"youtube_{slot_name}_client_secret"] = clean_secret
 
     if updates:
-        system_secrets.update_credentials(updates)
+        get_system_secrets(system_secrets).update_credentials(updates)
 
-    settings.sync_dynamic_config()
-    slot_config = settings.youtube_oauth_slot(slot_name)
-    limit, buffer = runtime_config.get_youtube_quota_settings(slot_name)
+    get_settings(settings).sync_dynamic_config()
+    slot_config = get_settings(settings).youtube_oauth_slot(slot_name)
+    limit, buffer = get_runtime_config(runtime_config).get_youtube_quota_settings(slot_name)
     return {
         "status": "success",
         "slot": slot_name,
@@ -297,7 +299,7 @@ def update_youtube_quota(
     creds: Credentials = Depends(require_login_credentials),
 ):
     del creds
-    runtime_config.update(
+    get_runtime_config(runtime_config).update(
         {
             f"youtube_{payload.slot}_general_quota_limit": payload.quota_limit,
             f"youtube_{payload.slot}_quota_safety_buffer_units": payload.safety_buffer_units,

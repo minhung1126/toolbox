@@ -13,8 +13,8 @@ from fastapi import Depends, HTTPException, Request
 from google.oauth2.credentials import Credentials
 
 from backend.app.core.account_state import get_account_setting
-from backend.app.core.config import settings
-from backend.app.core.credential_store import credential_store
+from backend.app.core.config import get_settings, settings
+from backend.app.core.credential_store import credential_store, get_credential_store
 from backend.app.core.error_contract import http_error
 from backend.app.core.session_store import get_session_store, session_store
 from backend.app.core.youtube_context import YouTubeRequestContext
@@ -63,7 +63,7 @@ def get_authenticated_session(request: Request) -> AuthenticatedSession:
     if isinstance(cached, AuthenticatedSession):
         return cached
 
-    session_id = request.cookies.get(settings.session_cookie_name)
+    session_id = request.cookies.get(get_settings(settings).session_cookie_name)
     session_data = get_session_store(session_store).get(session_id) if session_id else None
     user = session_data.get("user") if isinstance(session_data, dict) else None
     subject = str((user or {}).get("sub") or "").strip()
@@ -77,7 +77,9 @@ def get_authenticated_session(request: Request) -> AuthenticatedSession:
         raise http_error(401, "login_required", "控制台登入已失效，請重新登入 Google 帳號。")
 
     email = str((user or {}).get("email") or "").strip().casefold()
-    if (settings.allowed_google_emails or settings.allowlist_required) and not settings.is_google_email_allowed(email):
+    if (get_settings(settings).allowed_google_emails or get_settings(settings).allowlist_required) and not get_settings(
+        settings
+    ).is_google_email_allowed(email):
         logger.warning("Revoked or disallowed user attempted API access: %s", email)
         raise http_error(403, "access_denied", "此 Google 帳號未列入系統允許名單，存取遭拒。")
 
@@ -162,7 +164,7 @@ def require_sheets_credentials(
     Extract and validate Google Sheets credentials for the authenticated user.
     Raises 403 if Google Sheets authorization has not been granted.
     """
-    session_id = request.cookies.get(settings.session_cookie_name)
+    session_id = request.cookies.get(get_settings(settings).session_cookie_name)
     creds = get_sheets_credentials(session_id=session_id, owner_sub=owner_sub)
     if not creds or not creds.valid or not has_sheets_scope(creds):
         logger.warning("Sheets API access attempted without valid Sheets authorization (sub=%s)", owner_sub)
@@ -183,7 +185,7 @@ def require_drive_credentials(
     Extract and validate Google Drive credentials for the authenticated user.
     Raises 403 if Google Drive authorization has not been granted.
     """
-    session_id = request.cookies.get(settings.session_cookie_name)
+    session_id = request.cookies.get(get_settings(settings).session_cookie_name)
     creds = get_drive_credentials(session_id=session_id, owner_sub=owner_sub)
     if not creds or not creds.valid or not has_drive_read_scope(creds):
         logger.warning("Drive API access attempted without valid Drive authorization (sub=%s)", owner_sub)
@@ -252,7 +254,7 @@ async def require_ytmusic_context(request: Request) -> YouTubeRequestContext:
 
     ytmusic_creds = get_ytmusic_credentials(session_id=session_id, owner_sub=owner_sub)
     if ytmusic_creds and ytmusic_creds.valid and has_youtube_scope(ytmusic_creds):
-        ytmusic_public = credential_store.get_ytmusic_public(owner_sub) or {}
+        ytmusic_public = get_credential_store(credential_store).get_ytmusic_public(owner_sub) or {}
         channel_id = ytmusic_public.get("channel_id")
         limiter = get_youtube_quota_tracker("primary")
 
@@ -313,7 +315,7 @@ async def require_video_uploader_context(request: Request) -> YouTubeRequestCont
             reauthorization_required=True,
         )
 
-    public_record = credential_store.get_video_uploader_public(owner_sub) or {}
+    public_record = get_credential_store(credential_store).get_video_uploader_public(owner_sub) or {}
     channel_id = public_record.get("channel_id")
     limiter = get_youtube_quota_tracker("primary")
 

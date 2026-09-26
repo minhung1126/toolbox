@@ -21,8 +21,9 @@ from ytmusicapi.constants import SUPPORTED_LANGUAGES, SUPPORTED_LOCATIONS
 from ytmusicapi.exceptions import YTMusicError
 from ytmusicapi.helpers import get_authorization
 
-from backend.app.core.credential_store import credential_store
+from backend.app.core.credential_store import credential_store, get_credential_store
 from backend.app.core.youtube_context import YouTubeRequestContext
+from backend.app.services.ytmusic_clients import get_ytmusic_client_factory
 
 logger = logging.getLogger(__name__)
 
@@ -555,12 +556,12 @@ def get_ytmusic_client(
     # 1. Custom token check
     token_to_use = custom_token
     if not token_to_use and sub:
-        token_to_use = credential_store.get_ytmusic_custom_token(sub)
+        token_to_use = get_credential_store(credential_store).get_ytmusic_custom_token(sub)
 
     if token_to_use:
         try:
             parsed_auth = parse_custom_token_input(token_to_use, language=lang, location=loc)
-            return YTMusic(auth=parsed_auth, language=lang, location=loc)
+            return get_ytmusic_client_factory(YTMusic)(auth=parsed_auth, language=lang, location=loc)
         except Exception as e:
             logger.error("Failed to initialize YTMusic with custom token: %s", e)
             if not context or not context.credentials:
@@ -568,7 +569,7 @@ def get_ytmusic_client(
 
     # 2. Unauthenticated YTMusic client
     # Defaults to localized language (zh_TW) and location (TW)
-    return YTMusic(language=lang, location=loc)
+    return get_ytmusic_client_factory(YTMusic)(language=lang, location=loc)
 
 
 def validate_ytmusic_custom_token(
@@ -591,7 +592,7 @@ def validate_ytmusic_custom_token(
 
     parsed_auth = parse_custom_token_input(clean_token, language=resolved_lang, location=resolved_loc)
 
-    client = YTMusic(auth=parsed_auth, language=resolved_lang, location=resolved_loc)
+    client = get_ytmusic_client_factory(YTMusic)(auth=parsed_auth, language=resolved_lang, location=resolved_loc)
     auth_type = getattr(client, "auth_type", None)
     if auth_type != AuthType.BROWSER and not isinstance(auth_type, (MagicMock, type(None))):
         raise ValueError("Token 缺少必要的瀏覽器 Cookie (SID, HSID, SSID, SAPISID) 認證資訊。")

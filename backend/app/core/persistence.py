@@ -57,15 +57,17 @@ def atomic_write_json(
         raise
 
 
-def read_json_file(path: Path, default: Any = None) -> Any:
-    """Safely read and parse a JSON file, returning default on missing or corrupted files."""
+def read_json_file(path: Path, default: Any = None, *, strict: bool = False) -> Any:
+    """Read JSON; strict stores only treat a missing file as empty."""
     target_path = Path(path)
-    if not target_path.is_file():
-        return default
     try:
         with target_path.open("r", encoding="utf-8") as handle:
             return json.load(handle)
+    except FileNotFoundError:
+        return default
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        if strict:
+            raise
         logger.warning("Failed to read JSON from %s: %s", target_path, type(exc).__name__)
         return default
 
