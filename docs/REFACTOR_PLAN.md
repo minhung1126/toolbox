@@ -163,14 +163,21 @@
 
 - 後端停用 plugin 仍列在 `/api/v1/tools` 供查詢，但不啟動、不關閉亦不掛載其 API router；健康資訊明確回傳 `disabled`，不把有意停用視為初始化失敗。
 - 前端登入後載入後端工具目錄，以後端 ID、狀態、入口與版本核對本地 feature manifest；拒絕未知、重複、入口不一致及不支援版本的回應。導覽、Dashboard 與深層網址依後端啟用狀態處理，前端保留圖示、元件與呈現順序。載入失敗會顯示重試入口，不宣稱工具已就緒。
-- 契約與瀏覽器測試覆蓋停用工具在導覽及 Dashboard 隱藏、直接網址不可使用、後端 API 404，以及不支援版本的明確錯誤。後端仍負責實際 API 授權；`required_scopes` 的前端能力呈現與更完整的版本相容策略仍待完成。
+- 契約與瀏覽器測試覆蓋停用工具在導覽及 Dashboard 隱藏、直接網址不可使用、後端 API 404，以及不支援版本的明確錯誤。後端仍負責實際 API 授權；此時 `required_scopes` 的前端能力呈現仍待完成。
 - 驗證：後端 305 項 pytest、Ruff lint／format 通過；前端 72 檔 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過。Edge E2E 中停用工具、側邊導覽與 Dashboard 版型 3 項通過；既有 visual 6 項／9 張基準通過，未更新基準。Windows Playwright runner 在測試完成後仍需停止本次啟動的 Vite 才回傳 exit 0。
+
+本輪接續交付（2026-09-27，工具能力提示）：
+
+- 前端依後端 `required_scopes` 判斷模組層級的授權需求；同為 `youtube` scope 時，Creator／Integrations 對應 YouTube 頻道、YouTube Music 對應音樂庫、Weverse 對應獨立上傳頻道。未知 scope 與工具組合會使目錄進入明確錯誤狀態，不會假設已授權。
+- Dashboard 對缺少的能力顯示連線入口，保留工具頁及其授權設定頁的導覽；真正操作仍由 API 的認證依賴判斷。狀態卡改為顯示「已啟用」模組數，避免把未授權工具誤稱就緒。Playwright 假後端改用內建工具實際 scope 契約，並補上缺少能力時的導覽驗證。
+- 已人工檢視 390／768／1440 px Dashboard 新增提示的版面，並只更新三張 Dashboard 視覺基準。各功能內更細的能力門檻與實際 provider 驗收仍待完成。
+- 驗證：後端 305 項 pytest、Ruff lint／format 通過；前端 73 檔／359 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過；Edge E2E 28 項、visual 6 項／9 張基準通過。Windows Playwright runner 在測試完成後仍需停止本次啟動的 Vite 才回傳 exit 0。未使用真實 Google／YouTube 授權進行 smoke test。
 
 尚待完成：
 
 - 共用 UI 尚未逐頁遷移，固定 inline layout 也仍有保留。舊 index.css／app-theme.css 已移除，樣式分至 app shell、shared UI 與 feature；Stylelint 涵蓋全部 CSS，foundation reset selector 有單檔規則例外。仍需完成剩餘頁面共用元件遷移與 token 統一。
 - Feature hook 已從頁面抽離，但仍有其他 feature 的 API/model 邊界及較完整的 TS 型別尚未完成。E2E 已覆蓋 mock OAuth 導向、排序、Batch Update 與 Publish Cleaner 執行及照片匯出；尚未驗證真實 Google／YouTube OAuth callback 與 Weverse 真實 provider smoke test。
-- 工具目錄已由後端狀態驅動前端啟用呈現；仍需針對 `required_scopes` 顯示缺少能力、測試權限對應，並明確界定跨主版本的相容政策。
+- 工具目錄已由後端狀態驅動前端啟用與模組層級能力呈現；仍需細化各功能的能力要求、驗證缺少授權時的 API 403 契約，並明確界定跨主版本的相容政策。
 - YouTube workflow adapter、Notes、account-state、session、credential repository 與 Weverse worker／store／provider 已可由 app factory 注入；身分驗證政策與 settings 已可注入；配額帳本、速率限制、Google discovery、YTMusic 及 OAuth client 亦可隔離。預設 auth key／store 與 account-state 的匯入時初始化已延後；其他 singleton 的副作用仍待盤點。Account-state／session／credential／settings 的 context 橋接後續可逐步替換為明確 service dependency。
 - Weverse sidecar lock 只承諾在支援作業系統檔案鎖定語意的本機檔案系統上協調合作程序；NFS／網路檔案系統或跨主機多實例仍需驗證鎖語意，或改採資料庫／外部鎖服務。沒有真實 provider smoke test，也未演練 Docker 部署回退。
 - 過去 `npm install` 曾顯示 9 項安全公告；本輪 `npm audit --offline --json` 已完成並回報 0 項漏洞。線上 registry 的即時 advisory 查詢仍需在可連線的 CI／維護環境複核。

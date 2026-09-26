@@ -1,11 +1,46 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import DashboardPage from './DashboardPage';
 import { PATHS } from '../routes/paths';
+import { api } from '../services/api';
+import { getAllTools } from '../tools/catalog';
+import { ToolCatalogProvider } from '../tools/ToolCatalogProvider';
 
 describe('DashboardPage', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('shows missing capabilities with reachable connection pages while leaving tool links available', async () => {
+    vi.spyOn(api, 'getTools').mockResolvedValue({
+      tools: getAllTools().map((tool) => ({
+        id: tool.id,
+        name: tool.name,
+        title: tool.title,
+        description: tool.description,
+        category: tool.category,
+        status: 'active',
+        version: '1.0.0',
+        entry_url: tool.entryUrl,
+        required_scopes: tool.id === 'creator-tools' ? ['youtube', 'sheets_readonly'] : [],
+      })),
+    });
+    render(
+      <MemoryRouter>
+        <ToolCatalogProvider enabled>
+          <DashboardPage authUser={{ email: 'creator@example.com', youtube: { slots: {} } }} />
+        </ToolCatalogProvider>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('link', { name: '連線 YouTube 頻道' })).toHaveAttribute(
+      'href',
+      PATHS.youtubeConnections
+    );
+    expect(screen.getByRole('link', { name: '連線 Google 試算表' })).toHaveAttribute('href', PATHS.googleSettings);
+    expect(screen.getByRole('link', { name: /進入 Video 草稿/ })).toHaveAttribute('href', PATHS.youtubeVideoDrafts);
+  });
+
   it('renders dashboard with user status and tool feature cards', () => {
     render(
       <MemoryRouter>

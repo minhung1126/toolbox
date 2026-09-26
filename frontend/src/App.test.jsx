@@ -67,6 +67,7 @@ describe('App recovery state', () => {
         status: 'active',
         version: '1.0.0',
         entry_url: tool.entryUrl,
+        required_scopes: [],
       })),
     });
     api.getUserStatus.mockResolvedValue({ authenticated: false });

@@ -1,5 +1,13 @@
 import { getAllTools } from '../src/tools/catalog';
 
+const toolScopes: Record<string, string[]> = {
+  'creator-tools': ['youtube', 'sheets_readonly'],
+  'youtube-music': ['youtube'],
+  'sheets-tools': ['sheets_readonly'],
+  'weverse-uploader': ['youtube'],
+  'youtube-integrations': ['youtube'],
+};
+
 export const toolCatalog = getAllTools().map((tool) => ({
   id: tool.id,
   name: tool.name,
@@ -9,7 +17,7 @@ export const toolCatalog = getAllTools().map((tool) => ({
   status: tool.status,
   version: '1.0.0',
   entry_url: tool.entryUrl,
-  required_scopes: [],
+  required_scopes: toolScopes[tool.id] || [],
 }));
 
 export async function mockAuthenticatedBackend(page, responseOverrides: Record<string, unknown> = {}) {

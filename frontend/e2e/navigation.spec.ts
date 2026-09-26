@@ -1,6 +1,21 @@
 import { expect, test } from '@playwright/test';
 import { mockAuthenticatedBackend, toolCatalog } from './fixtures';
 
+test('missing capabilities show their own authorization destinations without hiding tools', async ({ page }) => {
+  await mockAuthenticatedBackend(page);
+  await page.goto('/dashboard');
+  await expect(page.getByRole('link', { name: '連線 YouTube 頻道' }).first()).toHaveAttribute(
+    'href',
+    '/youtube/settings/connections'
+  );
+  await expect(page.getByRole('link', { name: '連線 YouTube Music' })).toHaveAttribute('href', '/ytmusic/settings');
+  await expect(page.getByRole('link', { name: '連線 影片上傳頻道' })).toHaveAttribute('href', '/weverse-uploader');
+  await expect(page.getByRole('link', { name: '進入 Video 草稿' })).toBeVisible();
+
+  await page.getByRole('link', { name: '連線 YouTube 頻道' }).first().click();
+  await expect(page).toHaveURL(/\/youtube\/settings\/connections$/);
+});
+
 test('disabled tools disappear from navigation and reject direct deep links', async ({ page }) => {
   await mockAuthenticatedBackend(page, {
     '/api/v1/tools': {
@@ -8,7 +23,7 @@ test('disabled tools disappear from navigation and reject direct deep links', as
     },
   });
   await page.goto('/dashboard');
-  await expect(page.getByText('8 個工具模組已就緒')).toBeVisible();
+  await expect(page.getByText('8 個工具模組已啟用')).toBeVisible();
   await expect(page.getByRole('link', { name: '便利貼' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: '進入便利貼' })).toHaveCount(0);
 

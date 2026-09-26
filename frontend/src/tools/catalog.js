@@ -8,6 +8,7 @@ import notesManifest from '../features/notes/manifest';
 import youtubeIntegrationsManifest from '../features/youtube-integrations/manifest';
 import systemManifest from '../features/system/manifest';
 import { PATHS } from '../routes/paths';
+import { validateToolScopes } from './capabilities';
 
 /** Aggregated feature manifests used by navigation and dashboard views. */
 export const TOOL_MODULES = Object.freeze(
@@ -123,6 +124,7 @@ export function reconcileToolCatalog(payload) {
     if (metadata.entry_url !== manifest.entryUrl) {
       throw new Error(`工具 ${metadata.id} 的入口與前端路由不一致。`);
     }
+    validateToolScopes(metadata.id, metadata.required_scopes);
     if (metadata.status === 'disabled') continue;
     available.set(metadata.id, {
       ...manifest,

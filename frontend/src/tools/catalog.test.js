@@ -179,7 +179,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     const [creator, music] = getAllTools();
     const tools = reconcileToolCatalog({
       tools: [
-        { id: creator.id, status: 'disabled', version: '1.0.0', entry_url: creator.entryUrl },
+        { id: creator.id, status: 'disabled', version: '1.0.0', entry_url: creator.entryUrl, required_scopes: [] },
         {
           id: music.id,
           status: 'beta',
@@ -200,12 +200,15 @@ describe('Toolbox Frontend Tool Catalog', () => {
 
   it('rejects unknown, duplicate, or incompatible backend catalog entries', () => {
     const tool = getAllTools()[0];
-    const metadata = { id: tool.id, status: 'active', version: '1.0.0', entry_url: tool.entryUrl };
+    const metadata = { id: tool.id, status: 'active', version: '1.0.0', entry_url: tool.entryUrl, required_scopes: [] };
     expect(() => reconcileToolCatalog({ tools: [{ ...metadata, id: 'unknown-tool' }] })).toThrow('未知');
     expect(() => reconcileToolCatalog({ tools: [metadata, metadata] })).toThrow('重複');
     expect(() => reconcileToolCatalog({ tools: [{ ...metadata, entry_url: '/wrong' }] })).toThrow('入口');
     expect(() => reconcileToolCatalog({ tools: [{ ...metadata, status: 'future' }] })).toThrow('狀態');
     expect(() => reconcileToolCatalog({ tools: [{ ...metadata, version: '2.0.0' }] })).toThrow('版本');
+    expect(() => reconcileToolCatalog({ tools: [{ ...metadata, required_scopes: ['future-scope'] }] })).toThrow(
+      '能力需求'
+    );
   });
 
   it('keeps the frontend presentation order when the backend registry order changes', () => {
@@ -215,6 +218,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
       status: 'active',
       version: '1.0.0',
       entry_url: tool.entryUrl,
+      required_scopes: [],
     });
     expect(reconcileToolCatalog({ tools: [metadata(music), metadata(creator)] }).map((tool) => tool.id)).toEqual([
       creator.id,

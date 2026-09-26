@@ -102,6 +102,7 @@ describe('AppRoutes', () => {
         status: tool.id === 'creator-tools' ? 'disabled' : 'active',
         version: '1.0.0',
         entry_url: tool.entryUrl,
+        required_scopes: [],
       })),
     });
     renderRoutes(PATHS.youtubeVideoDrafts);
@@ -116,6 +117,7 @@ describe('AppRoutes', () => {
         status: 'active',
         version: tool.id === 'creator-tools' ? '2.0.0' : '1.0.0',
         entry_url: tool.entryUrl,
+        required_scopes: [],
       })),
     });
     renderRoutes(PATHS.youtubeVideoDrafts);
