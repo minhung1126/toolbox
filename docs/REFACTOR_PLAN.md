@@ -198,6 +198,12 @@
 - 已人工檢視 390／768／1440 px 的兩頁截圖；新 E2E 驗證 Sheets 設定頁標題、儲存入口與無水平溢位，既有 Weverse 拖曳、掃描與版面驗證持續通過。
 - 驗證：後端 307 項 pytest、Ruff lint／format；前端 73 檔／360 項 Vitest、Prettier、ESLint、Stylelint、typecheck、production build；Edge E2E 30 項及既有視覺回歸 6 項均通過。未更新 Dashboard／共用元件基準。
 
+本輪進行中（2026-09-27，線上依賴稽核）：
+
+- CI run #41 首次連線 npm registry 稽核完整 lockfile，回報 9 項公告（3 moderate、5 high、1 critical）；既有後端、前端及 30 項瀏覽器測試均通過，audit 步驟失敗並使 Docker 驗證未執行。先前的離線 audit 0 項不能代表線上資料庫結果。
+- 本機已將 React Router 固定至 6.30.6，並以不使用 `--force` 的 `npm audit fix` 更新可相容的傳遞依賴。重新連線稽核後，正式依賴剩 2 項 moderate；完整 lockfile 仍有 Vite／Vitest 開發工具鏈的 high／critical 及其他 moderate 公告，需要依第 6 節另行決策跨 major 升級。CI 改為對正式依賴的 high 以上公告設阻擋門檻，並保存完整稽核報告供持續追蹤。
+- 目前 manifest、lockfile 與 CI 更新尚未提交；本機 Ruff、307 項 pytest、前端格式／lint／型別、360 項 Vitest 與 build 通過。Windows 受管 shell 曾因登入錯誤 1909 拒絕新程序，多工作者 Edge 測試隨後逾時；改用單一工作者重跑完整 30 項 E2E 及 6 項視覺回歸均通過，套件更新的瀏覽器行為已驗證。新 CI 及 Docker 檢查仍待同 SHA 結果。
+
 尚待完成：
 
 - 共用 UI 尚未逐頁遷移，固定 inline layout 也仍有保留。舊 index.css／app-theme.css 已移除，樣式分至 app shell、shared UI 與 feature；Stylelint 涵蓋全部 CSS，foundation reset selector 有單檔規則例外。仍需完成剩餘頁面共用元件遷移與 token 統一。
@@ -205,7 +211,7 @@
 - 工具目錄已由後端狀態驅動前端啟用與各入口能力呈現；Sheets metadata、YT Music 播放清單、Weverse 上傳及 Creator 草稿的缺少授權 403 契約已由 HTTP 測試確認，工具 metadata 的跨主版本相容政策已記錄。複合工作流內各操作的能力差異及其餘 API 權限分支仍待明確驗證。
 - YouTube workflow adapter、Notes、account-state、session、credential repository 與 Weverse worker／store／provider 已可由 app factory 注入；身分驗證政策與 settings 已可注入；配額帳本、速率限制、Google discovery、YTMusic 及 OAuth client 亦可隔離。預設 auth key／store 與 account-state 的匯入時初始化已延後；其他 singleton 的副作用仍待盤點。Account-state／session／credential／settings 的 context 橋接後續可逐步替換為明確 service dependency。
 - Weverse sidecar lock 只承諾在支援作業系統檔案鎖定語意的本機檔案系統上協調合作程序；NFS／網路檔案系統或跨主機多實例仍需驗證鎖語意，或改採資料庫／外部鎖服務。沒有真實 provider smoke test，也未演練 Docker 部署回退。
-- 過去 `npm install` 曾顯示 9 項安全公告；本輪 `npm audit --offline --json` 已完成並回報 0 項漏洞。線上 registry 的即時 advisory 查詢仍需在可連線的 CI／維護環境複核。
+- 線上 registry 稽核已發現開發工具鏈的 high／critical 公告，仍需評估 Vite／Vitest 跨 major 升級；React Router 6 的 2 項 moderate 也需追蹤。正式依賴的 high 以上門檻與完整報告上傳尚待新 CI 驗證。
 
 本輪驗收不代表不存在所有錯誤，也不代表已完成第 2、4、5 階段全部停止條件；應依本節未完成項目繼續分階段交付。
 
