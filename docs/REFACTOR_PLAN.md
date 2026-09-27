@@ -216,6 +216,7 @@
 - CI run #52 已在 commit `ed5c92a` 通過後端、前端 397 項 Vitest、34 項 Chromium E2E、正式依賴稽核門檻與 Docker／Compose。Weverse 掃描、瀏覽器檔案辨識及最近路徑 API 現驗證回應狀態、套件計數與影片／字幕必要欄位；缺少影片路徑或計數不符會走既有掃描錯誤，不進入可上傳的複查畫面。Edge 使用資料夾測試檔覆蓋瀏覽器檔案正常上傳及格式錯誤，亦保留路徑上傳流程驗證；本項新 CI 尚待確認。
 - CI run #53 已在 commit `a79ead9` 通過後端、前端 405 項 Vitest、37 項 Chromium E2E、正式依賴稽核門檻、audit artifact 與 Docker／Compose，確認前述 Weverse 掃描與瀏覽器檔案流程。
 - Sticky Notes feature API 現驗證清單計數、唯一 ID、必要欄位及新增／更新／刪除回應狀態與目標 ID。格式錯誤的清單會顯示待核對狀態，不再被當成空清單；寫入回應格式錯誤、逾時、網路中斷或 5xx 後會重新讀取清單，避免把結果不明的操作顯示成成功或直接重送新增。新增 wrapper、頁面、卡片測試及 Edge 的格式錯誤與新增對帳流程；本機前端 414 項 Vitest、4 項 Sticky Notes Edge 測試均通過，後端 307 項 pytest、Ruff、前端格式／lint／型別與 production build 通過。本項新 CI 待確認。
+- CI run #54 的 39 項 Chromium E2E 有 38 項通過；共用確認對話框測試的假便利貼漏填 `created_at`／`updated_at`，被新 API 契約正確拒絕，後續稽核與 Docker 步驟因而跳過。已補齊與後端一致的時間欄位，本機 Edge 對應測試通過；完整新 CI 待確認。
 
 尚待完成：
 

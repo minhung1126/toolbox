@@ -7,7 +7,16 @@ test('shared confirmation styles preserve responsive layout and keyboard dismiss
       route.fulfill({
         status: 200,
         json: {
-          notes: [{ id: 'feedback-note', content: '檢查確認對話框', remark: '', pinned: false }],
+          notes: [
+            {
+              id: 'feedback-note',
+              content: '檢查確認對話框',
+              remark: '',
+              pinned: false,
+              created_at: '2026-09-24T00:00:00Z',
+              updated_at: '2026-09-24T00:00:00Z',
+            },
+          ],
           total: 1,
         },
       }),
