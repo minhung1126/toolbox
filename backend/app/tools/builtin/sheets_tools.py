@@ -35,6 +35,7 @@ class SheetsToolsPlugin(ToolPlugin):
                     path="/sheets/settings",
                     label="Sheet 設定",
                     description="管理 Google 試算表存取授權與預設試算表來源",
+                    required_scopes=[],
                 ),
             ],
             required_scopes=["sheets_readonly"],

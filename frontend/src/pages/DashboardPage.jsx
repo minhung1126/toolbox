@@ -102,7 +102,6 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
       {catalogStatus === 'loading' && <p role="status">工具目錄載入中…</p>}
       {allTools.map((tool) => {
         const cards = tool.featureCards || [];
-        const missingCapabilities = getMissingToolCapabilities(tool, authUser);
         if (!cards.length) return null;
         return (
           <section key={tool.id} className="dashboard-module-group">
@@ -112,20 +111,11 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
                 <Badge tone="info">{tool.category}</Badge>
               </div>
               <p className="section-desc dashboard-module-description">{tool.description}</p>
-              {missingCapabilities.length > 0 && (
-                <div className="dashboard-module-capabilities">
-                  <Badge tone="warning">尚缺授權</Badge>
-                  {missingCapabilities.map((capability) => (
-                    <Link key={capability.key} to={capability.settingsPath}>
-                      連線 {capability.label}
-                    </Link>
-                  ))}
-                </div>
-              )}
             </div>
             <div className="feature-grid">
               {cards.map((card) => {
                 const Icon = card.icon;
+                const missingCapabilities = getMissingToolCapabilities(tool, authUser, card.to);
                 return (
                   <Card as="div" key={card.id} className="feature-card">
                     <div className={`icon-box icon-box-${card.colorTheme || 'primary'}`}>
@@ -135,6 +125,16 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
                       <h3>{card.title}</h3>
                       <p>{card.description}</p>
                     </div>
+                    {missingCapabilities.length > 0 && (
+                      <div className="dashboard-card-capabilities">
+                        <Badge tone="warning">尚缺授權</Badge>
+                        {missingCapabilities.map((capability) => (
+                          <Link key={capability.key} to={capability.settingsPath}>
+                            連線 {capability.label}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
                     <Link
                       className={`btn btn-${card.colorTheme === 'primary' ? 'primary' : 'secondary'} feature-card-action`}
                       to={card.to}

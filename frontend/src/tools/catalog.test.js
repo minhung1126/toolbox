@@ -209,6 +209,14 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(() => reconcileToolCatalog({ tools: [{ ...metadata, required_scopes: ['future-scope'] }] })).toThrow(
       '能力需求'
     );
+    expect(() => reconcileToolCatalog({ tools: [{ ...metadata, routes: [{ path: PATHS.ytmusicSettings }] }] })).toThrow(
+      '路由不受支援'
+    );
+    expect(() =>
+      reconcileToolCatalog({
+        tools: [{ ...metadata, routes: [{ path: PATHS.youtubeVideoDrafts, required_scopes: ['future-scope'] }] }],
+      })
+    ).toThrow('能力需求');
   });
 
   it('keeps the frontend presentation order when the backend registry order changes', () => {

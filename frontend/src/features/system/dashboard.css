@@ -176,16 +176,15 @@
   font-size: 0.85rem;
 }
 
-.dashboard-module-capabilities {
+.dashboard-card-capabilities {
   display: flex;
-  flex-basis: 100%;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
   font-size: 0.82rem;
 }
 
-.dashboard-module-capabilities a {
+.dashboard-card-capabilities a {
   color: var(--primary);
   text-decoration: underline;
   text-underline-offset: 0.15em;

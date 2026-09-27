@@ -50,4 +50,21 @@ describe('tool capability presentation', () => {
     expect(() => validateToolScopes('system-utility', ['youtube'])).toThrow('能力需求不受支援');
     expect(() => validateToolScopes('creator-tools', ['unknown-scope'])).toThrow('能力需求不受支援');
   });
+
+  it('uses each route capability override, including an intentionally empty requirement', () => {
+    const creator = {
+      ...tool('creator-tools', ['youtube', 'sheets_readonly']),
+      routeScopes: { [PATHS.youtubePublishCleanup]: ['youtube'] },
+    };
+    const channelOnly = { youtube: { slots: { primary: { authenticated: true } } } };
+    expect(getMissingToolCapabilities(creator, channelOnly, PATHS.youtubeVideoDrafts)).toHaveLength(1);
+    expect(getMissingToolCapabilities(creator, channelOnly, PATHS.youtubePublishCleanup)).toEqual([]);
+    expect(
+      getMissingToolCapabilities(
+        { ...tool('youtube-music', ['youtube']), routeScopes: { [PATHS.ytmusicSettings]: [] } },
+        {},
+        PATHS.ytmusicSettings
+      )
+    ).toEqual([]);
+  });
 });

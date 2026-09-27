@@ -23,6 +23,14 @@ describe('DashboardPage', () => {
         version: '1.0.0',
         entry_url: tool.entryUrl,
         required_scopes: tool.id === 'creator-tools' ? ['youtube', 'sheets_readonly'] : [],
+        routes:
+          tool.id === 'creator-tools'
+            ? [
+                { path: PATHS.youtubeVideoDrafts, required_scopes: ['youtube', 'sheets_readonly'] },
+                { path: PATHS.youtubeShortsDrafts, required_scopes: ['youtube', 'sheets_readonly'] },
+                { path: PATHS.youtubePublishCleanup, required_scopes: ['youtube'] },
+              ]
+            : [],
       })),
     });
     render(
@@ -33,11 +41,17 @@ describe('DashboardPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole('link', { name: '連線 YouTube 頻道' })).toHaveAttribute(
+    expect((await screen.findAllByRole('link', { name: '連線 YouTube 頻道' }))[0]).toHaveAttribute(
       'href',
       PATHS.youtubeConnections
     );
-    expect(screen.getByRole('link', { name: '連線 Google 試算表' })).toHaveAttribute('href', PATHS.googleSettings);
+    expect(screen.getAllByRole('link', { name: '連線 Google 試算表' })[0]).toHaveAttribute(
+      'href',
+      PATHS.googleSettings
+    );
+    const publishCard = screen.getByText('發布草稿').closest('.feature-card');
+    expect(publishCard).toHaveTextContent('連線 YouTube 頻道');
+    expect(publishCard).not.toHaveTextContent('連線 Google 試算表');
     expect(screen.getByRole('link', { name: /進入 Video 草稿/ })).toHaveAttribute('href', PATHS.youtubeVideoDrafts);
   });
 

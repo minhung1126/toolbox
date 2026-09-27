@@ -8,6 +8,13 @@ const toolScopes: Record<string, string[]> = {
   'youtube-integrations': ['youtube'],
 };
 
+const routeScopes: Record<string, Record<string, string[]>> = {
+  'creator-tools': { '/youtube/publish-cleanup': ['youtube'] },
+  'youtube-music': { '/ytmusic/settings': [] },
+  'sheets-tools': { '/sheets/settings': [] },
+  'youtube-integrations': { '/youtube/settings/connections': [] },
+};
+
 export const toolCatalog = getAllTools().map((tool) => ({
   id: tool.id,
   name: tool.name,
@@ -18,6 +25,10 @@ export const toolCatalog = getAllTools().map((tool) => ({
   version: '1.0.0',
   entry_url: tool.entryUrl,
   required_scopes: toolScopes[tool.id] || [],
+  routes: (tool.featureCards || []).map((card) => ({
+    path: card.to,
+    required_scopes: routeScopes[tool.id]?.[card.to] ?? toolScopes[tool.id] ?? [],
+  })),
 }));
 
 export async function mockAuthenticatedBackend(page, responseOverrides: Record<string, unknown> = {}) {

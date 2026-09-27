@@ -29,6 +29,7 @@ class YouTubeIntegrationsPlugin(ToolPlugin):
                     path="/youtube/settings/connections",
                     label="YouTube 授權設定",
                     description="管理主要與次要 YouTube 頻道連線",
+                    required_scopes=[],
                 ),
                 ToolRoute(
                     path="/youtube/settings/routing",

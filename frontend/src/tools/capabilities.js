@@ -49,8 +49,8 @@ export function validateToolScopes(toolId, scopes) {
   }
 }
 
-export function getMissingToolCapabilities(tool, authUser) {
-  const scopes = tool.requiredScopes || [];
+export function getMissingToolCapabilities(tool, authUser, routePath) {
+  const scopes = (routePath && tool.routeScopes?.[routePath]) ?? tool.requiredScopes ?? [];
   validateToolScopes(tool.id, scopes);
   return scopes.flatMap((scope) => {
     const requirement = requirementFor(tool.id, scope);

@@ -125,6 +125,20 @@ export function reconcileToolCatalog(payload) {
       throw new Error(`工具 ${metadata.id} 的入口與前端路由不一致。`);
     }
     validateToolScopes(metadata.id, metadata.required_scopes);
+    const knownRoutes = new Set([
+      ...(manifest.featureCards || []).map((card) => card.to),
+      ...(manifest.navGroups || []).flatMap((group) => (group.items || []).map((item) => item.to)),
+    ]);
+    const routeScopes = {};
+    for (const route of metadata.routes || []) {
+      if (!knownRoutes.has(route.path)) {
+        throw new Error(`工具 ${metadata.id} 的路由不受支援：${route.path}`);
+      }
+      if (Object.hasOwn(routeScopes, route.path)) throw new Error(`工具 ${metadata.id} 的路由重複：${route.path}`);
+      const scopes = route.required_scopes ?? metadata.required_scopes;
+      validateToolScopes(metadata.id, scopes);
+      routeScopes[route.path] = scopes;
+    }
     if (metadata.status === 'disabled') continue;
     available.set(metadata.id, {
       ...manifest,
@@ -135,6 +149,7 @@ export function reconcileToolCatalog(payload) {
       status: metadata.status,
       version: metadata.version,
       requiredScopes: metadata.required_scopes,
+      routeScopes,
     });
   }
   return TOOL_MODULES.flatMap((tool) => (available.has(tool.id) ? [available.get(tool.id)] : []));

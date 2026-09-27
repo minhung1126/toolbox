@@ -179,11 +179,17 @@
 - 新增使用隔離 session／credential store 的 HTTP 測試：純控制台登入可以取得使用者授權狀態，但呼叫 Sheets metadata、YT Music 播放清單與 Weverse 上傳操作，分別回傳 `google_sheets_scope_required`、`ytmusic_scope_required`、`video_uploader_scope_required` 的 403 錯誤。這證明上述操作由 API 拒絕，不能將導覽提示當授權邊界；其他工具端點仍需按功能逐一驗證。
 - 驗證：後端 306 項 pytest、Ruff lint／format 通過；前端 73 檔／359 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過；新增 fallback 的 Edge 導覽測試與原有三項導覽測試共 4 項通過。此輪未改視覺基準。
 
+本輪接續交付（2026-09-27，各功能入口授權需求）：
+
+- 後端 `ToolRoute.required_scopes` 可覆寫模組層級需求；空清單表示該入口只需控制台登入。Video／Shorts 草稿仍需 YouTube 與 Sheets，發布清理只需 YouTube；YouTube Music、Sheets 與 YouTube 頻道的授權設定入口不要求先完成其自身授權。
+- 前端目錄會核對後端路由屬於對應 feature，拒絕重複路由及不支援的能力要求。Dashboard 逐張卡片顯示連線入口；授權設定卡片不再誤報未授權，發布卡片不再誤報需要 Sheets。API 仍執行實際授權檢查。
+- 驗證：後端 306 項 pytest、Ruff lint／format；前端 73 檔／360 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過。Edge E2E 29 項、視覺回歸 6 項通過，已檢視並更新 390／768／1440 px 的 Dashboard 基準。
+
 尚待完成：
 
 - 共用 UI 尚未逐頁遷移，固定 inline layout 也仍有保留。舊 index.css／app-theme.css 已移除，樣式分至 app shell、shared UI 與 feature；Stylelint 涵蓋全部 CSS，foundation reset selector 有單檔規則例外。仍需完成剩餘頁面共用元件遷移與 token 統一。
 - Feature hook 已從頁面抽離，但仍有其他 feature 的 API/model 邊界及較完整的 TS 型別尚未完成。E2E 已覆蓋 mock OAuth 導向、排序、Batch Update 與 Publish Cleaner 執行及照片匯出；尚未驗證真實 Google／YouTube OAuth callback 與 Weverse 真實 provider smoke test。
-- 工具目錄已由後端狀態驅動前端啟用與模組層級能力呈現；Sheets metadata、YT Music 播放清單與 Weverse 上傳的缺少授權 403 契約已由 HTTP 測試確認。仍需細化各功能的能力要求、覆蓋其餘 API 權限分支，並明確界定跨主版本的相容政策。
+- 工具目錄已由後端狀態驅動前端啟用與各入口能力呈現；Sheets metadata、YT Music 播放清單與 Weverse 上傳的缺少授權 403 契約已由 HTTP 測試確認。複合工作流內各操作的能力差異、其餘 API 權限分支及跨主版本相容政策仍待明確驗證。
 - YouTube workflow adapter、Notes、account-state、session、credential repository 與 Weverse worker／store／provider 已可由 app factory 注入；身分驗證政策與 settings 已可注入；配額帳本、速率限制、Google discovery、YTMusic 及 OAuth client 亦可隔離。預設 auth key／store 與 account-state 的匯入時初始化已延後；其他 singleton 的副作用仍待盤點。Account-state／session／credential／settings 的 context 橋接後續可逐步替換為明確 service dependency。
 - Weverse sidecar lock 只承諾在支援作業系統檔案鎖定語意的本機檔案系統上協調合作程序；NFS／網路檔案系統或跨主機多實例仍需驗證鎖語意，或改採資料庫／外部鎖服務。沒有真實 provider smoke test，也未演練 Docker 部署回退。
 - 過去 `npm install` 曾顯示 9 項安全公告；本輪 `npm audit --offline --json` 已完成並回報 0 項漏洞。線上 registry 的即時 advisory 查詢仍需在可連線的 CI／維護環境複核。
