@@ -206,6 +206,9 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(() => reconcileToolCatalog({ tools: [{ ...metadata, entry_url: '/wrong' }] })).toThrow('入口');
     expect(() => reconcileToolCatalog({ tools: [{ ...metadata, status: 'future' }] })).toThrow('狀態');
     expect(() => reconcileToolCatalog({ tools: [{ ...metadata, version: '2.0.0' }] })).toThrow('版本');
+    expect(() => reconcileToolCatalog({ tools: [{ ...metadata, version: '0.9.0' }] })).toThrow('版本');
+    expect(() => reconcileToolCatalog({ tools: [{ ...metadata, version: '1.2.0-beta' }] })).toThrow('版本');
+    expect(() => reconcileToolCatalog({ tools: [{ ...metadata, version: '1.99.0' }] })).not.toThrow();
     expect(() => reconcileToolCatalog({ tools: [{ ...metadata, required_scopes: ['future-scope'] }] })).toThrow(
       '能力需求'
     );

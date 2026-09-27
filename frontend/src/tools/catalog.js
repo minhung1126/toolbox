@@ -10,6 +10,9 @@ import systemManifest from '../features/system/manifest';
 import { PATHS } from '../routes/paths';
 import { validateToolScopes } from './capabilities';
 
+// The catalog contract accepts additive v1 metadata; a new major needs an explicit frontend migration.
+const SUPPORTED_TOOL_MAJOR_VERSION = 1;
+
 /** Aggregated feature manifests used by navigation and dashboard views. */
 export const TOOL_MODULES = Object.freeze(
   validateFeatureManifests([
@@ -118,7 +121,8 @@ export function reconcileToolCatalog(payload) {
     if (!['active', 'beta', 'disabled'].includes(metadata.status)) {
       throw new Error(`工具 ${metadata.id} 的狀態不受支援。`);
     }
-    if (!/^1\.\d+\.\d+$/.test(metadata.version)) {
+    const version = /^(\d+)\.(\d+)\.(\d+)$/.exec(metadata.version);
+    if (!version || Number(version[1]) !== SUPPORTED_TOOL_MAJOR_VERSION) {
       throw new Error(`工具 ${metadata.id} 的版本不受支援。`);
     }
     if (metadata.entry_url !== manifest.entryUrl) {

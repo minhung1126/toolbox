@@ -1,14 +1,17 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
+from backend.app.api import youtube as youtube_api
 from backend.app.core import dependencies
 from backend.app.core.config import settings
 from backend.app.core.credential_store import CredentialStore
 from backend.app.core.session_store import SessionStore
+from backend.app.core.youtube_context import YouTubeRequestContext
 from backend.app.main import create_app
 from backend.app.services import google_auth
 from backend.app.services.google_auth import (
@@ -86,6 +89,64 @@ def test_login_only_session_keeps_connection_pages_available_but_rejects_provide
     for response, code in responses:
         assert response.status_code == 403
         assert response.json()["detail"]["code"] == code
+
+
+def test_creator_workflow_requires_sheets_but_publish_does_not(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(type(settings), "is_google_email_allowed", lambda self, email: True)
+    subject = "creator-without-sheets"
+    credentials = CredentialStore(tmp_path / "credentials.json")
+    sessions = SessionStore(tmp_path / "sessions.json")
+    credentials.save_google_connection(_token_payload(LOGIN_SCOPES, sub=subject), owner_sub=subject)
+    session_id = sessions.create(
+        {"credential_provider": "google_login", "user": {"sub": subject, "email": f"{subject}@example.test"}}
+    )
+    youtube_context = YouTubeRequestContext(
+        slot="primary",
+        credentials=object(),
+        quota_limiter=SimpleNamespace(),
+        owner_sub=subject,
+    )
+    calls = []
+
+    class FakeWorkflowService:
+        def create_batch_metadata_preview(self, *_args, **_kwargs):
+            raise AssertionError("Batch preview must not run without Sheets authorization")
+
+        def run_batch_metadata_update(self, *_args, **_kwargs):
+            raise AssertionError("Batch update must not run without Sheets authorization")
+
+        def run_publish_and_cleanup(self, payload, *, creds):
+            calls.append((payload, creds))
+            return {"status": "provider-fake"}
+
+    app = create_app(
+        session_store=sessions,
+        credential_store=credentials,
+        dependency_overrides={
+            youtube_api.require_youtube_context: lambda: youtube_context,
+            youtube_api.get_youtube_workflow_service: lambda: FakeWorkflowService(),
+        },
+    )
+    client = TestClient(app)
+    client.cookies.set(settings.session_cookie_name, session_id)
+
+    batch_payload = {
+        "worksheet_name": "Videos",
+        "title_column": "Title",
+        "description_column": "Description",
+        "team": "Team",
+        "assignments": [{"video_id": "video-1", "person": "Alice"}],
+    }
+    for route in ("batch-preview", "batch-update"):
+        batch = client.post(f"/api/v1/youtube/{route}", json=batch_payload)
+        assert batch.status_code == 403
+        assert batch.json()["detail"]["code"] == "google_sheets_scope_required"
+
+    publish = client.post("/api/v1/youtube/publish-and-cleanup", json={"playlist_id": "playlist-1"})
+    assert publish.status_code == 200
+    assert publish.json() == {"status": "provider-fake"}
+    assert len(calls) == 1
+    assert calls[0][1] is youtube_context
 
 
 def test_require_sheets_credentials_rejects_login_only_and_accepts_sheets(tmp_path: Path, monkeypatch):

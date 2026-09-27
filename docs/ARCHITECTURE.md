@@ -125,6 +125,8 @@ tool_registry.register(MyToolPlugin())
 4. 頁面使用 `shared/ui` 元件與 `styles/tokens.css` 語意 token，固定版面放 feature CSS。API 契約與包裝器放 feature 的 `api/`，領域純函式放 `model/`。
 5. 補齊 manifest／路由契約、功能互動與需要的 E2E。Navbar 測試已驗證新增 manifest 群組可直接呈現及展開目前路由。
 
+工具目錄目前支援穩定的 `1.x.y` metadata 版本。minor／patch 僅可增加可忽略欄位或已由前端 manifest 支援的路由；既有 ID、`entry_url`、路由與授權語意不得在同一 major 內破壞。前端拒絕 `0.x`、`2.x`、預發版本及未知能力／路由，並顯示目錄錯誤。升級 major 時須先部署同時接受舊／新版的前端與契約測試，再讓後端送出新 major；舊版本前端仍有流量時，不得直接切換後端目錄。`ToolRoute.required_scopes` 可覆寫模組需求，`[]` 表示登入即可進入設定頁，但每項操作仍由 API 授權依賴檢查。
+
 ```javascript
 import { lazy } from 'react';
 import { Wrench } from 'lucide-react';

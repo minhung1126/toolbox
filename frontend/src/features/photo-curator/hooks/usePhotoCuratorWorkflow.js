@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { copyToClipboard } from '../../../utils/clipboard';
-import { exportCuratedZip, generateChecklistText } from '../../../utils/curatorZip';
+import { exportCuratedZip, generateChecklistText } from '../model/curatorZip';
 
 const INITIAL_POSTS = [
   { id: 'post-1', title: 'Post 1', photoIds: [] },
