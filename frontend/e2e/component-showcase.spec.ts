@@ -785,6 +785,7 @@ test('Publish Cleaner confirms the loaded snapshot and completes the publish wor
       skipped_count: 0,
       failed_count: 0,
       not_attempted_count: 0,
+      quota_blocked: false,
       results: [
         { video_id: 'video-older', title: '較早的影片', status: 'succeeded' },
         { video_id: 'video-newer', title: '較新的影片', status: 'succeeded' },

@@ -95,7 +95,18 @@ describe('PublishCleanerPage snapshot safety', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.estimateYoutubeQuota.mockResolvedValue({ projected_units: 200, max_items_today: 2 });
-    api.publishAndCleanup.mockResolvedValue({ completed: true, total_count: 2, succeeded_count: 2 });
+    api.publishAndCleanup.mockResolvedValue({
+      operation: 'youtube.publish_cleanup',
+      completed: true,
+      total_count: 1,
+      succeeded_count: 1,
+      warning_count: 0,
+      skipped_count: 0,
+      failed_count: 0,
+      not_attempted_count: 0,
+      quota_blocked: false,
+      results: [{ video_id: 'video-1', status: 'succeeded', title: '影片一' }],
+    });
     api.updateYoutubeVideoMetadata.mockResolvedValue({});
   });
 
@@ -187,6 +198,49 @@ describe('PublishCleanerPage snapshot safety', () => {
       }),
       previewToken: 'token-playlist-a',
     });
+  });
+
+  it('rejects malformed playlist data instead of showing an empty executable preview', async () => {
+    api.getPlaylistVideos.mockResolvedValue(playlistResponse('playlist-a', [videoOne], { videos: undefined }));
+    renderPage();
+
+    await loadCurrentPlaylist();
+    expect(await screen.findByText('讀取 To-Post 播放清單失敗：播放清單預覽回應格式不正確。')).toBeInTheDocument();
+    expect(screen.queryByText(/播放清單「playlist-a」目前沒有影片/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '設為公開並移出清單' })).not.toBeInTheDocument();
+  });
+
+  it('requires provider reconciliation when a publish request returns an invalid result', async () => {
+    api.getPlaylistVideos.mockResolvedValue(playlistResponse('playlist-a'));
+    api.publishAndCleanup.mockResolvedValueOnce({ completed: true });
+    renderPage();
+
+    await loadCurrentPlaylist();
+    expect(await screen.findByText('影片一')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '設為公開並移出清單' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: '設為公開並移出清單' }));
+
+    expect(await screen.findByText(/伺服器結果格式不正確，發布操作可能已執行/)).toBeInTheDocument();
+    expect(mocks.toast.warning).toHaveBeenCalledWith('發布結果待核對，請先檢查 YouTube Studio');
+    expect(mocks.toast.success).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: '設為公開並移出清單' })).not.toBeInTheDocument();
+  });
+
+  it('requires provider reconciliation after an ambiguous publish timeout', async () => {
+    api.getPlaylistVideos.mockResolvedValue(playlistResponse('playlist-a'));
+    api.publishAndCleanup.mockRejectedValueOnce(Object.assign(new Error('連線逾時'), { code: 'timeout' }));
+    renderPage();
+
+    await loadCurrentPlaylist();
+    expect(await screen.findByText('影片一')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '設為公開並移出清單' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: '設為公開並移出清單' }));
+
+    expect(await screen.findByText(/無法確認發布操作是否已完成/)).toBeInTheDocument();
+    expect(mocks.toast.warning).toHaveBeenCalledWith('發布結果待核對，請先檢查 YouTube Studio');
+    expect(screen.queryByRole('button', { name: '設為公開並移出清單' })).not.toBeInTheDocument();
   });
 
   it('invalidates an open confirmation when the shared setting or authorization changes', async () => {
