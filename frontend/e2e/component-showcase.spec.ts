@@ -405,7 +405,7 @@ test('Weverse upload posts the reviewed package and reaches completed state with
       google_scopes: {},
       youtube: { slots: {} },
     },
-    '/api/v1/weverse-uploader/upload-from-path': { task_id: 'e2e-task-1' },
+    '/api/v1/weverse-uploader/upload-from-path': { status: 'queued', task_id: 'e2e-task-1' },
     '/api/v1/weverse-uploader/tasks/e2e-task-1': {
       task: {
         task_id: 'e2e-task-1',
@@ -440,6 +440,37 @@ test('Weverse upload posts the reviewed package and reaches completed state with
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
+});
+
+test('Weverse upload waits for reconciliation when the queued result is malformed', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/auth/user': {
+      authenticated: true,
+      user: { sub: 'weverse-upload-e2e', email: 'weverse-upload@example.test' },
+      authorizations: {
+        sheets: { connected: false },
+        ytmusic: { connected: false },
+        video_uploader: { connected: true, channel_title: 'Uploader Channel' },
+      },
+      google_scopes: {},
+      youtube: { slots: {} },
+    },
+    '/api/v1/weverse-uploader/upload-from-path': { task_id: 'unconfirmed-task' },
+  });
+
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await page.goto('/weverse-uploader');
+  await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
+  await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
+  await page.getByRole('button', { name: '掃描並辨識' }).click();
+  await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Sample Live');
+  await page.getByRole('button', { name: '確認並開始上傳至 YouTube' }).click();
+  await page.getByRole('button', { name: '立即上傳' }).click();
+
+  await expect(page.getByRole('alert').filter({ hasText: '上傳結果待核對' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '確認並開始上傳至 YouTube' })).toBeDisabled();
+  await expect(page.getByText(/請先檢查下方上傳歷史及 YouTube Studio/)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
 });
 
 test('Google Sheets OAuth uses the backend URL and redirects to the provider', async ({ page }) => {

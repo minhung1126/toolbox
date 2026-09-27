@@ -16,6 +16,7 @@ import './WeverseUploaderPage.css';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ServiceAuthCard from '../components/ServiceAuthCard';
+import { StatusMessage } from '../components/StatusMessage';
 import { PageHeader } from '../shared/ui';
 import { useOAuthConnect } from '../hooks/useOAuthConnect';
 import WeverseUploadHistory from './weverse/WeverseUploadHistory';
@@ -60,6 +61,7 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
     uploadConfirmOpen,
     setUploadConfirmOpen,
     uploadStarting,
+    uploadOutcomeUncertain,
     historyList,
     historyLoading,
     loadHistory,
@@ -463,6 +465,11 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
           </div>
 
           {/* Actions */}
+          {uploadOutcomeUncertain && (
+            <StatusMessage tone="error" title="上傳結果待核對">
+              無法確認任務是否已啟動。請先檢查下方上傳歷史及 YouTube Studio；核對後再重新選擇資料夾，勿直接重送。
+            </StatusMessage>
+          )}
           <div className="weverse-review-actions">
             <button type="button" className="btn btn-secondary" onClick={handleReset}>
               取消
@@ -470,7 +477,7 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
             <button
               type="button"
               className="btn btn-primary"
-              disabled={uploadStarting || !isVideoAuthConnected || !metadata.title.trim()}
+              disabled={uploadStarting || uploadOutcomeUncertain || !isVideoAuthConnected || !metadata.title.trim()}
               onClick={() => setUploadConfirmOpen(true)}
             >
               {uploadStarting ? (

@@ -173,4 +173,36 @@ describe('WeverseUploaderPage', () => {
     // 1600 + 2 * 400 = 2400
     expect(screen.getByText(/YouTube API 配額預估消耗：2,400 單位/)).toBeInTheDocument();
   });
+
+  it.each([
+    { code: 'weverse_upload_result_invalid', message: '回應缺少任務 ID' },
+    { code: 'timeout', message: '請求逾時' },
+    { status: 503, message: '服務暫時不可用' },
+  ])('blocks a direct resend when the upload start result cannot be confirmed: %j', async (uploadError) => {
+    weverseUploadApi.scanFolder.mockResolvedValueOnce({
+      packages: [
+        {
+          package_id: 'sample',
+          suggested_title: 'Sample Live',
+          video: { filename: 'sample.mp4', full_path: 'C:\\sample.mp4', size_formatted: '10 MB' },
+          subtitles: [],
+        },
+      ],
+    });
+    weverseUploadApi.uploadFromPath.mockRejectedValueOnce(uploadError);
+    await renderPage({ authUser: { authorizations: { video_uploader: { connected: true } } } });
+
+    fireEvent.click(screen.getByRole('button', { name: '直接輸入本機路徑' }));
+    fireEvent.change(screen.getByPlaceholderText(/例如：D:\\Weverse/), { target: { value: 'C:\\sample' } });
+    fireEvent.click(screen.getByRole('button', { name: '掃描並辨識' }));
+    const uploadButton = await screen.findByRole('button', { name: '確認並開始上傳至 YouTube' });
+    fireEvent.click(uploadButton);
+    fireEvent.click(screen.getByRole('button', { name: '立即上傳' }));
+
+    expect(await screen.findByText('上傳結果待核對')).toBeInTheDocument();
+    expect(screen.getByText(/請先檢查下方上傳歷史及 YouTube Studio/)).toBeInTheDocument();
+    expect(uploadButton).toBeDisabled();
+    expect(weverseUploadApi.getHistory).toHaveBeenCalledWith(10);
+    expect(mockToast.success).not.toHaveBeenCalledWith('上傳任務已啟動！正在背景傳輸至 YouTube。');
+  });
 });

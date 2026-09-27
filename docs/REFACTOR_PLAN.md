@@ -211,6 +211,7 @@
 - CI run #47 已在 commit `d00ac7f` 通過後端、前端、Chromium E2E、正式依賴稽核門檻、audit artifact 與 Docker／Compose。YouTube Batch Update 的草稿影片清單、簽章預覽計劃／快照和批次執行結果已有 feature API runtime contract；缺少 `videos`／`plan`、快照影片 ID 不符或結果計數不一致會被拒絕。執行後回應格式錯誤、逾時、網路中斷或伺服器錯誤時，撤銷預覽並提示先至 YouTube Studio 核對，不可直接重送。新增 wrapper 與頁面測試；本機後端 307 項 pytest／Ruff、完整前端品質檢查與 build，以及 Edge 的正常批次更新流程通過。CI run #48 已在 commit `363000d` 通過相同 SHA 的後端、前端、Chromium E2E、依賴稽核門檻、audit artifact 與 Docker／Compose。
 - YouTube 配額面板的 feature API 現在檢查回應 slot、狀態、額度整數、方法明細及必要文案；格式錯誤會進入既有錯誤和重試狀態，不會顯示為有效餘額。新增 wrapper 及面板測試。本機 77 檔／382 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與暫存目錄 production build 通過；本項 CI 尚待驗證。
 - CI run #49 在配額 E2E 發現假回應缺少新驗證所需的官方限額、剩餘量、重設時間及方法等欄位，29／30 項瀏覽器測試通過；該假回應現已補齊後端實際提供的欄位，本機 Edge 對應流程通過，待新 CI 完整確認。
+- CI run #50 已在 commit `4f442af` 通過後端、前端、30 項 Chromium E2E、正式依賴稽核門檻、audit artifact 與 Docker／Compose。Weverse 上傳啟動的兩種 API 模式現要求 `status=queued` 且具非空任務 ID，避免已送出的任務回應格式錯誤時，畫面靜默停在複查頁而容許立即重送。若回應格式錯誤、逾時、網路中斷或 5xx，流程會重新讀取歷史、顯示待核對提示並停用當前複查畫面的上傳按鈕，要求先查看歷史與 YouTube Studio。本機正常及結果不明的 Edge 流程、wrapper 與頁面測試已通過；新提交的完整 CI 尚待驗證。
 
 尚待完成：
 

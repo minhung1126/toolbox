@@ -76,6 +76,7 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
   const [taskStatus, setTaskStatus] = useState(null);
   const [uploadConfirmOpen, setUploadConfirmOpen] = useState(false);
   const [uploadStarting, setUploadStarting] = useState(false);
+  const [uploadOutcomeUncertain, setUploadOutcomeUncertain] = useState(false);
 
   // History state
   const [historyList, setHistoryList] = useState([]);
@@ -363,6 +364,8 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
   const handleStartUpload = async () => {
     setUploadConfirmOpen(false);
 
+    if (uploadOutcomeUncertain || uploadStarting) return;
+
     if (!isVideoAuthConnected) {
       toast.error('請先完成專屬影片上傳 YouTube 頻道授權。');
       return;
@@ -429,26 +432,36 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
         res = await weverseUploadApi.uploadFiles(formData);
       }
 
-      if (res?.task_id) {
-        setCurrentTaskId(res.task_id);
-        setTaskStatus({
-          task_id: res.task_id,
-          title: metadata.title.trim(),
-          status: 'pending',
-          progress_percent: 0,
-          current_step: '任務已排入背景上傳佇列...',
-        });
-        setViewStep('uploading');
-        toast.success('上傳任務已啟動！正在背景傳輸至 YouTube。');
-      }
+      setCurrentTaskId(res.task_id);
+      setTaskStatus({
+        task_id: res.task_id,
+        title: metadata.title.trim(),
+        status: 'pending',
+        progress_percent: 0,
+        current_step: '任務已排入背景上傳佇列...',
+      });
+      setViewStep('uploading');
+      toast.success('上傳任務已啟動！正在背景傳輸至 YouTube。');
     } catch (err) {
-      toast.error(`啟動上傳失敗：${err.message || '未知錯誤'}`);
+      if (
+        err?.code === 'weverse_upload_result_invalid' ||
+        err?.code === 'timeout' ||
+        err?.code === 'network_error' ||
+        err?.status >= 500
+      ) {
+        setUploadOutcomeUncertain(true);
+        loadHistory();
+        toast.error('無法確認上傳任務是否已啟動；請先檢查上傳歷史及 YouTube Studio，勿直接重送。');
+      } else {
+        toast.error(`啟動上傳失敗：${err?.message || '未知錯誤'}`);
+      }
     } finally {
       setUploadStarting(false);
     }
   };
 
   const handleReset = () => {
+    setUploadOutcomeUncertain(false);
     setViewStep('pick');
     setVideoInfo(null);
     setSubtitles([]);
@@ -479,6 +492,7 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
     uploadConfirmOpen,
     setUploadConfirmOpen,
     uploadStarting,
+    uploadOutcomeUncertain,
     historyList,
     historyLoading,
     loadHistory,
