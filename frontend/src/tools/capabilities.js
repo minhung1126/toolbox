@@ -18,7 +18,8 @@ const YOUTUBE_REQUIREMENTS = Object.freeze({
     key: 'youtube-music',
     label: 'YouTube Music',
     settingsPath: PATHS.ytmusicSettings,
-    connected: (authUser) => Boolean(authUser?.authorizations?.ytmusic?.connected),
+    connected: (authUser) =>
+      Boolean(authUser?.authorizations?.ytmusic?.connected) || youtubeIsConnected(authUser?.youtube),
   },
   'weverse-uploader': {
     key: 'video-uploader',

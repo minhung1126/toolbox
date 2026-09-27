@@ -16,6 +16,26 @@ test('missing capabilities show their own authorization destinations without hid
   await expect(page).toHaveURL(/\/youtube\/settings\/connections$/);
 });
 
+test('YT Music does not claim missing authorization when the channel fallback is connected', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/auth/user': {
+      authenticated: true,
+      user: { sub: 'fallback-user', email: 'fallback@example.test' },
+      authorizations: {
+        sheets: { connected: false },
+        ytmusic: { connected: false },
+        video_uploader: { connected: false },
+      },
+      google_scopes: {},
+      youtube: { slots: { primary: { authenticated: true } } },
+    },
+  });
+  await page.goto('/dashboard');
+  await expect(page.getByText('9 個工具模組已啟用')).toBeVisible();
+  await expect(page.getByRole('link', { name: '連線 YouTube Music' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: '連線 影片上傳頻道' })).toBeVisible();
+});
+
 test('disabled tools disappear from navigation and reject direct deep links', async ({ page }) => {
   await mockAuthenticatedBackend(page, {
     '/api/v1/tools': {

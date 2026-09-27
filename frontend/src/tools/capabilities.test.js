@@ -25,13 +25,14 @@ describe('tool capability presentation', () => {
     ).toEqual([]);
   });
 
-  it('uses the dedicated YT Music and uploader grants instead of creator channel access', () => {
+  it('honors YT Music channel fallback but keeps uploader authorization independent', () => {
     const user = { youtube: { slots: { primary: { authenticated: true } } } };
-    expect(getMissingToolCapabilities(tool('youtube-music', ['youtube']), user)[0].settingsPath).toBe(
-      PATHS.ytmusicSettings
-    );
+    expect(getMissingToolCapabilities(tool('youtube-music', ['youtube']), user)).toEqual([]);
     expect(getMissingToolCapabilities(tool('weverse-uploader', ['youtube']), user)[0].settingsPath).toBe(
       PATHS.weverseUploader
+    );
+    expect(getMissingToolCapabilities(tool('youtube-music', ['youtube']), {})[0].settingsPath).toBe(
+      PATHS.ytmusicSettings
     );
     expect(
       getMissingToolCapabilities(tool('youtube-music', ['youtube']), {

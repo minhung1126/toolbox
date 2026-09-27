@@ -2,11 +2,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 from backend.app.core import dependencies
+from backend.app.core.config import settings
 from backend.app.core.credential_store import CredentialStore
 from backend.app.core.session_store import SessionStore
+from backend.app.main import create_app
 from backend.app.services import google_auth
 from backend.app.services.google_auth import (
     DRIVE_READONLY_SCOPE,
@@ -45,6 +48,44 @@ def test_scopes_are_strictly_decoupled():
 
     assert DRIVE_READONLY_SCOPE in DRIVE_SCOPES
     assert SHEETS_READONLY_SCOPE not in DRIVE_SCOPES
+
+
+def test_login_only_session_keeps_connection_pages_available_but_rejects_provider_actions(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(type(settings), "is_google_email_allowed", lambda self, email: True)
+    subject = "login-only-capabilities"
+    credentials = CredentialStore(tmp_path / "credentials.json")
+    sessions = SessionStore(tmp_path / "sessions.json")
+    credentials.save_google_connection(_token_payload(LOGIN_SCOPES, sub=subject), owner_sub=subject)
+    session_id = sessions.create(
+        {"credential_provider": "google_login", "user": {"sub": subject, "email": f"{subject}@example.test"}}
+    )
+    client = TestClient(create_app(session_store=sessions, credential_store=credentials))
+    client.cookies.set(settings.session_cookie_name, session_id)
+
+    user = client.get("/api/v1/auth/user")
+    assert user.status_code == 200
+    assert user.json()["authenticated"] is True
+    assert user.json()["authorizations"]["sheets"]["connected"] is False
+    assert user.json()["authorizations"]["ytmusic"]["connected"] is False
+    assert user.json()["authorizations"]["video_uploader"]["connected"] is False
+
+    responses = (
+        (
+            client.post("/api/v1/sheets/metadata", json={"spreadsheet_url_or_id": "sheet-id"}),
+            "google_sheets_scope_required",
+        ),
+        (client.get("/api/v1/playlist-sort/playlists"), "ytmusic_scope_required"),
+        (
+            client.post(
+                "/api/v1/weverse-uploader/upload-from-path",
+                json={"video_path": "missing.mp4", "title": "Test"},
+            ),
+            "video_uploader_scope_required",
+        ),
+    )
+    for response, code in responses:
+        assert response.status_code == 403
+        assert response.json()["detail"]["code"] == code
 
 
 def test_require_sheets_credentials_rejects_login_only_and_accepts_sheets(tmp_path: Path, monkeypatch):
