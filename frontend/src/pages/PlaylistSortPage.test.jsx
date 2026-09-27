@@ -153,6 +153,15 @@ describe('PlaylistSortPage', () => {
     });
   });
 
+  it('reports malformed playlist data without treating it as an empty list', async () => {
+    api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: [{ id: 'pl-1', title: 'Bad', item_count: '3' }] });
+
+    renderWithRouter(<PlaylistSortPage />);
+
+    await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('載入播放清單失敗：播放清單回應格式不正確。'));
+    expect(screen.queryByText('Bad (3 首)')).not.toBeInTheDocument();
+  });
+
   it('uses the YouTube Music feature API to connect a dedicated account', async () => {
     api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: [] });
     ytmusicSettingsApi.getAuthUrl.mockResolvedValueOnce({
