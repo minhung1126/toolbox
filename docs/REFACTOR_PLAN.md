@@ -206,6 +206,7 @@
 - 補齊純控制台登入的 API 拒絕契約：5 個 Sheets 讀取入口、YT Music 清單／預覽／套用，以及 Weverse 路徑／檔案上傳均回傳各自的 403 錯誤碼。完整後端 307 項 pytest 與 Ruff、前端 73 檔／360 項 Vitest 及格式、lint、型別、build 再次通過；這些測試使用隔離 store 與假輸入，不呼叫真實 provider。
 - Playlist Sort 頁首改用共用 `PageHeader`／`Badge`，不再取用 Dashboard 專屬 eyebrow class。390／768／1440 px 頁首截圖已檢視，窄螢幕主要排序操作、完整 30 項 Edge E2E 與既有 6 項視覺回歸通過；前端 73 檔／360 項 Vitest、Prettier、ESLint、Stylelint、typecheck、build 與後端 307 項 pytest／Ruff 均通過，未更新既有視覺基準。
 - Playlist Sort feature API 現在於執行期驗證清單、預覽曲目／配額及套用結果的必要欄位與型別，再交給頁面狀態；型別契約同步收緊。回應格式錯誤會顯示既有載入／預覽／套用錯誤，不會將缺欄位資料當成成功。新增 wrapper 與頁面錯誤回歸測試；前端 74 檔／364 項 Vitest、全部品質檢查與 build、後端 307 項 pytest／Ruff、Playlist Sort Edge 完整預覽到建立新歌單流程通過。真實 provider 回應仍待 smoke test。
+- CI run #45 在完整前端測試的一項既有 YouTube 配額元件測試失敗：測試只等待 API 函式被呼叫，未等待非同步載入完成就查詢授權組合欄位；該次 363／364 項通過，後續 audit／Docker 因前端失敗未執行。測試已改為等待欄位實際出現；本機 CI 模式的該組 6 項及完整 364 項、格式／lint／型別／build 重驗通過，尚待新同 SHA CI 確認。
 
 尚待完成：
 

@@ -63,7 +63,7 @@ describe('YouTubeQuotaBanner', () => {
     api.getYoutubeQuotaUsage.mockResolvedValue(usage());
     render(<YouTubeQuotaBanner activeSlot="secondary" availableSlots={['primary', 'secondary']} />);
     await waitFor(() => expect(api.getYoutubeQuotaUsage).toHaveBeenCalledWith('secondary'));
-    expect(screen.getByLabelText('YouTube 授權組合')).toHaveValue('secondary');
+    expect(await screen.findByLabelText('YouTube 授權組合')).toHaveValue('secondary');
   });
 
   it('does not show the previous slot while the next slot is loading', async () => {
