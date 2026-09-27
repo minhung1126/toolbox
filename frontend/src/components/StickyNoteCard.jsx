@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Check, Copy, Pin, Tag, Trash2 } from 'lucide-react';
-import { notesApi } from '../features/notes/api/notesApi';
+import { isAmbiguousNoteMutation, notesApi } from '../features/notes/api/notesApi';
 import { copyToClipboard } from '../utils/clipboard';
 import { useToast } from './Toast';
 import ConfirmDialog from './ConfirmDialog';
@@ -19,7 +19,7 @@ export function formatNoteDate(isoString) {
   return `${y}/${m}/${d} ${hh}:${mm}:${ss}`;
 }
 
-export default function StickyNoteCard({ note, onUpdated, onDeleted }) {
+export default function StickyNoteCard({ note, onUpdated, onDeleted, onReconcile }) {
   const toast = useToast();
   const [localNote, setLocalNote] = useState(note);
   const [copied, setCopied] = useState(false);
@@ -32,13 +32,16 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted }) {
     compareFn: (a, b) => a.content === b.content && a.remark === b.remark,
     onSave: async (nextData) => {
       const res = await notesApi.updateNote(note.id, nextData);
-      if (res?.note) {
-        setLocalNote((prev) => ({ ...prev, ...res.note }));
-        onUpdated?.(res.note);
-      }
+      setLocalNote((prev) => ({ ...prev, ...res.note }));
+      onUpdated?.(res.note);
     },
     onError: (err) => {
-      toast.error(`便利貼自動儲存失敗：${err.message || '未知錯誤'}`);
+      if (isAmbiguousNoteMutation(err)) {
+        toast.error('無法確認便利貼是否已儲存；請重新整理清單核對內容。');
+        onReconcile?.();
+      } else {
+        toast.error(`便利貼自動儲存失敗：${err?.message || '未知錯誤'}`);
+      }
     },
   });
 
@@ -65,13 +68,16 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted }) {
     setLocalNote((prev) => ({ ...prev, pinned: nextPinned }));
     try {
       const res = await notesApi.updateNote(note.id, { pinned: nextPinned });
-      if (res?.note) {
-        onUpdated?.(res.note);
-      }
+      onUpdated?.(res.note);
       toast.success(nextPinned ? '已置頂便利貼' : '已取消置頂');
     } catch (err) {
-      setLocalNote((prev) => ({ ...prev, pinned: !nextPinned }));
-      toast.error(`置頂設定失敗：${err.message || '未知錯誤'}`);
+      if (isAmbiguousNoteMutation(err)) {
+        toast.error('無法確認置頂設定是否已儲存；請重新整理清單核對。');
+        onReconcile?.();
+      } else {
+        setLocalNote((prev) => ({ ...prev, pinned: !nextPinned }));
+        toast.error(`置頂設定失敗：${err?.message || '未知錯誤'}`);
+      }
     }
   };
 
@@ -94,7 +100,13 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted }) {
       setConfirmDelete(false);
       onDeleted?.(note.id);
     } catch (err) {
-      toast.error(`刪除失敗：${err.message || '未知錯誤'}`);
+      if (isAmbiguousNoteMutation(err) || err?.status === 404) {
+        setConfirmDelete(false);
+        toast.error('無法確認便利貼是否已刪除；請重新整理清單核對，勿直接重送。');
+        onReconcile?.();
+      } else {
+        toast.error(`刪除失敗：${err?.message || '未知錯誤'}`);
+      }
     } finally {
       setDeleting(false);
     }

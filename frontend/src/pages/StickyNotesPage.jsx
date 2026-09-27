@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw, Search, StickyNote } from 'lucide-react';
-import { notesApi } from '../features/notes/api/notesApi';
+import { isAmbiguousNoteMutation, notesApi } from '../features/notes/api/notesApi';
 import StickyNoteCard from '../components/StickyNoteCard';
 import { useToast } from '../components/Toast';
+import { StatusMessage } from '../components/StatusMessage';
 import { Badge, Button, EmptyState, LoadingState, PageHeader } from '../shared/ui';
 import '../features/notes/notes.css';
 
@@ -11,15 +12,23 @@ export default function StickyNotesPage() {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [createUncertain, setCreateUncertain] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   const fetchNotes = useCallback(async () => {
     setLoading(true);
     try {
       const res = await notesApi.getNotes();
-      setNotes(res.notes || []);
+      setNotes(res.notes);
+      setLoadError('');
+      setCreateUncertain(false);
+      return true;
     } catch (err) {
-      toast.error(`載入便利貼失敗：${err.message || '未知錯誤'}`);
+      const message = `載入便利貼失敗：${err?.message || '未知錯誤'}`;
+      setLoadError(message);
+      toast.error(message);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -30,16 +39,20 @@ export default function StickyNotesPage() {
   }, [fetchNotes]);
 
   const handleCreateNote = async () => {
-    if (creating) return;
+    if (creating || createUncertain) return;
     setCreating(true);
     try {
       const res = await notesApi.createNote({ content: '', remark: '', pinned: false });
-      if (res?.note) {
-        setNotes((prev) => [res.note, ...prev]);
-        toast.success('已新增便利貼');
-      }
+      setNotes((prev) => [res.note, ...prev]);
+      toast.success('已新增便利貼');
     } catch (err) {
-      toast.error(`新增便利貼失敗：${err.message || '未知錯誤'}`);
+      if (isAmbiguousNoteMutation(err)) {
+        setCreateUncertain(true);
+        toast.error('無法確認便利貼是否已新增；請先重新讀取清單核對，勿直接重送。');
+        await fetchNotes();
+      } else {
+        toast.error(`新增便利貼失敗：${err?.message || '未知錯誤'}`);
+      }
     } finally {
       setCreating(false);
     }
@@ -71,7 +84,12 @@ export default function StickyNotesPage() {
 
       <div className="sticky-notes-toolbar">
         <div className="sticky-notes-toolbar-left">
-          <Button onClick={handleCreateNote} disabled={creating} loading={creating} icon={Plus}>
+          <Button
+            onClick={handleCreateNote}
+            disabled={loading || creating || createUncertain || Boolean(loadError)}
+            loading={creating}
+            icon={Plus}
+          >
             新增便利貼
           </Button>
 
@@ -120,16 +138,27 @@ export default function StickyNotesPage() {
         </div>
       </div>
 
+      {loadError && (
+        <StatusMessage tone="error" title="便利貼清單待核對">
+          {loadError}；請使用「重新整理」再次讀取，確認新增、編輯或刪除結果。
+        </StatusMessage>
+      )}
+
       {loading && notes.length === 0 ? (
         <LoadingState className="glass-panel sticky-notes-empty">正在載入便利貼…</LoadingState>
-      ) : notes.length === 0 ? (
+      ) : loadError && notes.length === 0 ? null : notes.length === 0 ? (
         <div className="glass-panel">
           <EmptyState
             title="尚未建立任何便利貼"
             description="點擊「新增便利貼」開始記錄您的日常備忘、草稿或剪貼文字。"
             icon={StickyNote}
             action={
-              <Button onClick={handleCreateNote} disabled={creating} loading={creating} icon={Plus}>
+              <Button
+                onClick={handleCreateNote}
+                disabled={loading || creating || createUncertain || Boolean(loadError)}
+                loading={creating}
+                icon={Plus}
+              >
                 立即新增第一張便利貼
               </Button>
             }
@@ -149,7 +178,13 @@ export default function StickyNotesPage() {
       ) : (
         <div className="sticky-notes-grid">
           {filteredNotes.map((note) => (
-            <StickyNoteCard key={note.id} note={note} onUpdated={handleNoteUpdated} onDeleted={handleNoteDeleted} />
+            <StickyNoteCard
+              key={note.id}
+              note={note}
+              onUpdated={handleNoteUpdated}
+              onDeleted={handleNoteDeleted}
+              onReconcile={fetchNotes}
+            />
           ))}
         </div>
       )}

@@ -1158,3 +1158,47 @@ test('Sticky Notes autosaves edits, toggles pin state, and deletes through its A
   await page.getByRole('button', { name: '刪除', exact: true }).click();
   await expect(page.getByRole('heading', { name: '尚未建立任何便利貼' })).toBeVisible();
 });
+
+test('Sticky Notes rejects a malformed list instead of showing an empty notebook', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/notes': { notes: [], total: 1 },
+  });
+
+  await page.goto('/notes');
+  await expect(page.getByText('便利貼清單待核對')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '尚未建立任何便利貼' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '新增便利貼' })).toBeDisabled();
+});
+
+test('Sticky Notes reconciles an ambiguous create without sending a duplicate', async ({ page }) => {
+  const note = {
+    id: 'e2e-created-note',
+    content: '',
+    remark: '',
+    pinned: false,
+    created_at: '2026-09-24T00:00:00Z',
+    updated_at: '2026-09-24T00:00:00Z',
+  };
+  let created = false;
+  let createRequests = 0;
+
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/notes': async (route) => {
+      if (route.request().method() === 'POST') {
+        createRequests += 1;
+        created = true;
+        await route.fulfill({ status: 200, json: {} });
+        return;
+      }
+
+      await route.fulfill({ status: 200, json: { notes: created ? [note] : [], total: created ? 1 : 0 } });
+    },
+  });
+
+  await page.goto('/notes');
+  await expect(page.getByRole('heading', { name: '尚未建立任何便利貼' })).toBeVisible();
+  await page.getByRole('button', { name: '新增便利貼', exact: true }).click();
+  await expect(page.locator('[data-note-id="e2e-created-note"]')).toBeVisible();
+  await expect(page.getByText('共 1 張便籤')).toBeVisible();
+  expect(createRequests).toBe(1);
+});
