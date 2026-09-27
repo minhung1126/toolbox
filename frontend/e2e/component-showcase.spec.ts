@@ -114,12 +114,15 @@ test('system settings use feature styles and remain usable on supported widths',
   }
 });
 
-test('Quick Token Drawer uses its feature styles on supported widths', async ({ page }) => {
+test('Quick Token Drawer uses its feature styles on supported widths', async ({ page }, testInfo) => {
   await mockAuthenticatedBackend(page);
 
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/ytmusic/playlist-sort');
+    const pageHeader = page.locator('.ui-page-header');
+    await expect(pageHeader.getByRole('heading', { level: 1, name: 'YouTube Music 播放清單排序' })).toBeVisible();
+    await pageHeader.screenshot({ path: testInfo.outputPath(`playlist-sort-header-${width}.png`) });
     await page.getByRole('button', { name: /貼上 Token 啟用 0 配額/ }).click();
 
     const drawer = page.getByTestId('quick-token-drawer');

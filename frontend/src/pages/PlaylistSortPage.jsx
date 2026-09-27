@@ -27,6 +27,7 @@ import QuickTokenDrawer from '../components/QuickTokenDrawer';
 import { useOAuthConnect } from '../hooks/useOAuthConnect';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { PATHS } from '../routes/paths';
+import { Badge, PageHeader } from '../shared/ui';
 
 import {
   SORT_FIELDS,
@@ -446,18 +447,15 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
 
   return (
     <div className="section-gap">
-      {/* Page Header */}
-      <header className="glass-panel page-header card-padding">
-        <div className="badge badge-info dashboard-eyebrow">
-          <Sparkles size={14} aria-hidden="true" /> YouTube Music
-        </div>
-        <h1>YouTube Music 播放清單排序</h1>
-        <p className="section-desc">
-          讀取個人 YouTube Music
-          播放清單，以歌手／藝人、專輯名稱、歌曲曲目順序、歌名等多重規則自訂排序。支援拖曳順序與即時快取動態模擬比對，零配額消耗（0
-          API Credit）。
-        </p>
-      </header>
+      <PageHeader
+        title="YouTube Music 播放清單排序"
+        eyebrow={
+          <Badge tone="info">
+            <Sparkles size={14} aria-hidden="true" /> YouTube Music
+          </Badge>
+        }
+        description="讀取個人 YouTube Music 播放清單，以歌手／藝人、專輯名稱、歌曲曲目順序、歌名等多重規則自訂排序。支援拖曳順序與即時快取動態模擬比對，零配額消耗（0 API Credit）。"
+      />
 
       {/* YouTube Music In-Place Authorization Status */}
       <section className="glass-panel card-padding">

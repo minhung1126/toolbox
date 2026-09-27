@@ -204,10 +204,11 @@
 - 本機已將 React Router 固定至 6.30.6，並以不使用 `--force` 的 `npm audit fix` 更新可相容的傳遞依賴。重新連線稽核後，正式依賴剩 2 項 moderate；完整 lockfile 仍有 Vite／Vitest 開發工具鏈的 high／critical 及其他 moderate 公告，需要依第 6 節另行決策跨 major 升級。CI 改為對正式依賴的 high 以上公告設阻擋門檻，並保存完整稽核報告供持續追蹤。
 - 本機 Ruff、307 項 pytest、前端格式／lint／型別、360 項 Vitest 與 build 通過。Windows 受管 shell 曾因登入錯誤 1909 拒絕新程序，多工作者 Edge 測試隨後逾時；改用單一工作者重跑完整 30 項 E2E 及 6 項視覺回歸均通過。CI run #42 在 commit `b8255af` 通過相同 SHA 的後端、前端、Chromium E2E、正式依賴 high 以上線上稽核及 Docker／Compose；完整 audit JSON 已保存於該 run 的 `frontend-dependency-audit` artifact。完整依賴仍有 7 項公告（5 moderate、1 high、1 critical），不宣稱全部修復。
 - 補齊純控制台登入的 API 拒絕契約：5 個 Sheets 讀取入口、YT Music 清單／預覽／套用，以及 Weverse 路徑／檔案上傳均回傳各自的 403 錯誤碼。完整後端 307 項 pytest 與 Ruff、前端 73 檔／360 項 Vitest 及格式、lint、型別、build 再次通過；這些測試使用隔離 store 與假輸入，不呼叫真實 provider。
+- Playlist Sort 頁首改用共用 `PageHeader`／`Badge`，不再取用 Dashboard 專屬 eyebrow class。390／768／1440 px 頁首截圖已檢視，窄螢幕主要排序操作、完整 30 項 Edge E2E 與既有 6 項視覺回歸通過；前端 73 檔／360 項 Vitest、Prettier、ESLint、Stylelint、typecheck、build 與後端 307 項 pytest／Ruff 均通過，未更新既有視覺基準。
 
 尚待完成：
 
-- 共用 UI 尚未逐頁遷移，固定 inline layout 也仍有保留。舊 index.css／app-theme.css 已移除，樣式分至 app shell、shared UI 與 feature；Stylelint 涵蓋全部 CSS，foundation reset selector 有單檔規則例外。仍需完成剩餘頁面共用元件遷移與 token 統一。
+- 共用 UI 尚未逐頁遷移，固定 inline layout 也仍有保留。舊 index.css／app-theme.css 已移除，樣式分至 app shell、shared UI 與 feature；Stylelint 涵蓋全部 CSS，foundation reset selector 有單檔規則例外。Sheets 設定、Weverse、Playlist Sort 頁首已使用共用元件；仍需完成剩餘頁面共用元件遷移與 token 統一。
 - Feature hook 已從頁面抽離，但仍有其他 feature 的 API/model 邊界及較完整的 TS 型別尚未完成。E2E 已覆蓋 mock OAuth 導向、排序、Batch Update 與 Publish Cleaner 執行及照片匯出；尚未驗證真實 Google／YouTube OAuth callback 與 Weverse 真實 provider smoke test。
 - 工具目錄已由後端狀態驅動前端啟用與各入口能力呈現；Sheets 全部讀取入口、YT Music 排序三個操作、Weverse 兩種上傳及 Creator 草稿的缺少授權 403 契約已由 HTTP 測試確認，工具 metadata 的跨主版本相容政策已記錄。複合工作流內各操作的能力差異及其餘 API 權限分支仍待明確驗證。
 - YouTube workflow adapter、Notes、account-state、session、credential repository 與 Weverse worker／store／provider 已可由 app factory 注入；身分驗證政策與 settings 已可注入；配額帳本、速率限制、Google discovery、YTMusic 及 OAuth client 亦可隔離。預設 auth key／store 與 account-state 的匯入時初始化已延後；其他 singleton 的副作用仍待盤點。Account-state／session／credential／settings 的 context 橋接後續可逐步替換為明確 service dependency。
