@@ -21,8 +21,9 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { ytmusicSettingsApi } from '../features/ytmusic/api/ytmusicSettingsApi';
+import { isAmbiguousYtmusicSettingsMutation, ytmusicSettingsApi } from '../features/ytmusic/api/ytmusicSettingsApi';
 import { useToast } from '../components/Toast';
+import { StatusMessage } from '../components/StatusMessage';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ServiceAuthCard from '../components/ServiceAuthCard';
 import { useOAuthConnect } from '../hooks/useOAuthConnect';
@@ -124,6 +125,7 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
 
   const [customTokenInput, setCustomTokenInput] = useState('');
   const [savingToken, setSavingToken] = useState(false);
+  const [tokenMutationUncertain, setTokenMutationUncertain] = useState(false);
   const [validatingToken, setValidatingToken] = useState(false);
   const [tokenValidationResult, setTokenValidationResult] = useState(null);
   const [showClearTokenConfirm, setShowClearTokenConfirm] = useState(false);
@@ -240,9 +242,24 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
       toast.success('YouTube Music 自訂 Token 已成功儲存！');
       setCustomTokenInput('');
       setTokenValidationResult(null);
-      await refreshAuthUser?.();
+      try {
+        await refreshAuthUser?.();
+      } catch {
+        toast.warning('Token 已儲存，但授權狀態無法重新讀取；請重新整理頁面。');
+      }
     } catch (err) {
-      toast.error(`儲存 Token 失敗：${err.message || '格式不正確'}`);
+      if (isAmbiguousYtmusicSettingsMutation(err)) {
+        setTokenMutationUncertain(true);
+        toast.error('無法確認 Token 是否已儲存；請先核對授權狀態，勿直接重送。');
+        try {
+          await refreshAuthUser?.();
+          if (refreshAuthUser) setTokenMutationUncertain(false);
+        } catch {
+          // Keep the result uncertain when account status cannot be refreshed.
+        }
+      } else {
+        toast.error(`儲存 Token 失敗：${err.message || '格式不正確'}`);
+      }
     } finally {
       setSavingToken(false);
     }
@@ -255,9 +272,24 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
       await ytmusicSettingsApi.clear();
       toast.success('已清除 YouTube Music 自訂 Token');
       setTokenValidationResult(null);
-      await refreshAuthUser?.();
+      try {
+        await refreshAuthUser?.();
+      } catch {
+        toast.warning('Token 已清除，但授權狀態無法重新讀取；請重新整理頁面。');
+      }
     } catch (err) {
-      toast.error(`清除 Token 失敗：${err.message || '未知錯誤'}`);
+      if (isAmbiguousYtmusicSettingsMutation(err)) {
+        setTokenMutationUncertain(true);
+        toast.error('無法確認 Token 是否已清除；請先核對授權狀態，勿直接重送。');
+        try {
+          await refreshAuthUser?.();
+          if (refreshAuthUser) setTokenMutationUncertain(false);
+        } catch {
+          // Keep the result uncertain when account status cannot be refreshed.
+        }
+      } else {
+        toast.error(`清除 Token 失敗：${err.message || '未知錯誤'}`);
+      }
     } finally {
       setSavingToken(false);
     }
@@ -327,6 +359,12 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
           )}
         </div>
 
+        {tokenMutationUncertain && (
+          <StatusMessage tone="error" title="Token 狀態待核對">
+            授權狀態重新讀取失敗；請重新整理頁面確認結果，再決定是否重新送出。
+          </StatusMessage>
+        )}
+
         {tokenValidationResult && (
           <div
             data-testid="token-validation-result"
@@ -392,7 +430,7 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
                 type="button"
                 className="btn btn-secondary btn-sm ytmusic-settings-inline-button ytmusic-token-clear-button"
                 onClick={() => setShowClearTokenConfirm(true)}
-                disabled={savingToken || validatingToken}
+                disabled={savingToken || validatingToken || tokenMutationUncertain}
               >
                 <Trash2 size={14} /> 清除自訂 Token
               </button>
@@ -522,7 +560,7 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
                 type="button"
                 className="btn btn-primary btn-sm ytmusic-settings-inline-button"
                 onClick={handleSaveCustomToken}
-                disabled={savingToken || validatingToken || !customTokenInput.trim()}
+                disabled={savingToken || validatingToken || tokenMutationUncertain || !customTokenInput.trim()}
               >
                 {savingToken ? <Loader2 size={14} className="spin" /> : <Key size={14} />}
                 儲存自訂 Token

@@ -217,6 +217,8 @@
 - CI run #53 已在 commit `a79ead9` 通過後端、前端 405 項 Vitest、37 項 Chromium E2E、正式依賴稽核門檻、audit artifact 與 Docker／Compose，確認前述 Weverse 掃描與瀏覽器檔案流程。
 - Sticky Notes feature API 現驗證清單計數、唯一 ID、必要欄位及新增／更新／刪除回應狀態與目標 ID。格式錯誤的清單會顯示待核對狀態，不再被當成空清單；寫入回應格式錯誤、逾時、網路中斷或 5xx 後會重新讀取清單，避免把結果不明的操作顯示成成功或直接重送新增。新增 wrapper、頁面、卡片測試及 Edge 的格式錯誤與新增對帳流程；本機前端 414 項 Vitest、4 項 Sticky Notes Edge 測試均通過，後端 307 項 pytest、Ruff、前端格式／lint／型別與 production build 通過。本項新 CI 待確認。
 - CI run #54 的 39 項 Chromium E2E 有 38 項通過；共用確認對話框測試的假便利貼漏填 `created_at`／`updated_at`，被新 API 契約正確拒絕，後續稽核與 Docker 步驟因而跳過。已補齊與後端一致的時間欄位，本機 Edge 對應測試通過；完整新 CI 待確認。
+- CI run #55 已在 commit `89d3b45` 通過後端、前端 414 項 Vitest、39 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 及 Docker／Compose，確認 Sticky Notes 回應驗證與假資料修正。
+- YouTube Music 設定 API 現驗證 OAuth HTTPS 網址、解除授權狀態、Token 儲存／清除確認及 Token 有效性回應；缺少 `valid: true` 或狀態錯誤不會顯示驗證成功。Token 寫入結果不明時重新讀取授權狀態，無法核對則停用再次寫入並顯示待核對提示。另區分「已寫入成功但授權狀態重新讀取失敗」與真正寫入失敗。新增 wrapper／頁面測試及 Edge 格式錯誤驗證流程；本機前端 418 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與 production build 通過；新 CI 待確認。
 
 尚待完成：
 

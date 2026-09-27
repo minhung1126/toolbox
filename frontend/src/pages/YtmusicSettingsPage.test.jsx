@@ -15,6 +15,7 @@ vi.mock('../services/api', () => ({
 }));
 
 vi.mock('../features/ytmusic/api/ytmusicSettingsApi', () => ({
+  isAmbiguousYtmusicSettingsMutation: (error) => error?.code === 'ytmusic_settings_response_invalid',
   ytmusicSettingsApi: {
     getAuthUrl: vi.fn(),
     disconnect: vi.fn(),
@@ -327,5 +328,29 @@ describe('YtmusicSettingsPage', () => {
     const closeBtn = screen.getByRole('button', { name: '關閉' });
     fireEvent.click(closeBtn);
     expect(screen.queryByText('Token 驗證失敗')).not.toBeInTheDocument();
+  });
+
+  it('keeps token writes disabled when an uncertain save cannot be reconciled', async () => {
+    ytmusicSettingsApi.save.mockRejectedValue(
+      Object.assign(new Error('回應格式不正確'), { code: 'ytmusic_settings_response_invalid' })
+    );
+    const refreshAuthUser = vi.fn().mockRejectedValue(new Error('無法讀取授權狀態'));
+
+    render(
+      <MemoryRouter>
+        <YtmusicSettingsPage
+          authUser={{ authorizations: { ytmusic: { connected: false } } }}
+          refreshAuthUser={refreshAuthUser}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText(/貼上 Token 代碼/), { target: { value: 'cookie: SAPISID=value' } });
+    fireEvent.click(screen.getByRole('button', { name: '儲存自訂 Token' }));
+
+    expect(await screen.findByText('Token 狀態待核對')).toBeInTheDocument();
+    expect(refreshAuthUser).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: '儲存自訂 Token' })).toBeDisabled();
+    expect(ytmusicSettingsApi.save).toHaveBeenCalledTimes(1);
   });
 });
