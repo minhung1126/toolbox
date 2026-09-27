@@ -14,7 +14,9 @@ test('missing capabilities show their own authorization destinations without hid
   await expect(
     page.locator('.feature-card').filter({ hasText: '發布草稿' }).getByRole('link', { name: '連線 Google 試算表' })
   ).toHaveCount(0);
-  await expect(page.locator('.feature-card').filter({ hasText: 'YouTube Music 設定' }).locator('.dashboard-card-capabilities')).toHaveCount(0);
+  await expect(
+    page.locator('.feature-card').filter({ hasText: 'YouTube Music 設定' }).locator('.dashboard-card-capabilities')
+  ).toHaveCount(0);
 
   await page.getByRole('link', { name: '連線 YouTube 頻道' }).first().click();
   await expect(page).toHaveURL(/\/youtube\/settings\/connections$/);
@@ -84,4 +86,49 @@ test('desktop collapse does not hide mobile navigation and drawer traps focus', 
   await expect(open).toBeFocused();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(page.getByRole('button', { name: '展開側邊選單' })).toBeVisible();
+});
+
+test('a delayed settings refresh does not undo a newer sidebar toggle', async ({ page }) => {
+  let workStateReads = 0;
+  let releaseRefresh: (() => void) | undefined;
+  const savedNavigation: Array<{ sidebarCollapsed?: boolean }> = [];
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/settings/work-state': async (route) => {
+      if (route.request().method() === 'PUT') {
+        const { key, value } = route.request().postDataJSON();
+        if (key === 'navigation') savedNavigation.push(value);
+        await route.fulfill({ status: 200, json: { version: 1, state: { [key]: value } } });
+        return;
+      }
+
+      workStateReads += 1;
+      if (workStateReads > 1) {
+        await new Promise<void>((resolve) => {
+          releaseRefresh = resolve;
+        });
+      }
+      await route.fulfill({ status: 200, json: { version: 1, state: { navigation: { sidebarCollapsed: false } } } });
+    },
+  });
+
+  await page.goto('/dashboard');
+  await expect(page.getByRole('button', { name: '收起側邊選單' })).toBeVisible();
+  await page.evaluate(() => {
+    const event = new Event('pageshow');
+    Object.defineProperty(event, 'persisted', { value: true });
+    window.dispatchEvent(event);
+  });
+  await expect.poll(() => workStateReads).toBe(2);
+
+  await page.getByRole('button', { name: '收起側邊選單' }).click();
+  await expect(page.locator('.sidebar')).toHaveClass(/is-collapsed/);
+  const refreshed = page.waitForResponse(
+    (response) => response.url().endsWith('/api/v1/settings/work-state') && response.request().method() === 'GET'
+  );
+  releaseRefresh?.();
+  await refreshed;
+  await page.waitForTimeout(350);
+
+  await expect(page.locator('.sidebar')).toHaveClass(/is-collapsed/);
+  expect(savedNavigation.at(-1)?.sidebarCollapsed).toBe(true);
 });

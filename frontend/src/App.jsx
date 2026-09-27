@@ -93,13 +93,27 @@ export function AppContent() {
   const authUserRef = useRef(null);
   const authRequestRef = useRef(null);
   const initStartedRef = useRef(false);
+  const sidebarTouchedRef = useRef(false);
+  const settingsRequestIdRef = useRef(0);
   const toast = useToast();
+
+  const setSidebarCollapsedByUser = useCallback((nextValue) => {
+    sidebarTouchedRef.current = true;
+    setSidebarCollapsed(nextValue);
+  }, []);
 
   const setAuthStatus = useCallback((nextStatus) => {
     setAuthStatusState(nextStatus);
   }, []);
 
   const updateAuthUser = useCallback((nextUser) => {
+    const currentSubject = authUserRef.current?.sub || authUserRef.current?.email || null;
+    const nextSubject = nextUser?.sub || nextUser?.email || null;
+    if (currentSubject !== nextSubject) {
+      sidebarTouchedRef.current = false;
+      setWorkState({});
+      setSidebarCollapsed(false);
+    }
     authUserRef.current = nextUser;
     setAuthUser(nextUser);
   }, []);
@@ -165,6 +179,8 @@ export function AppContent() {
   );
 
   const fetchSettings = useCallback(async () => {
+    const requestId = ++settingsRequestIdRef.current;
+    const requestSubject = authUserRef.current?.sub || authUserRef.current?.email || null;
     setSettingsRefreshing(true);
     try {
       const requests = [
@@ -175,6 +191,12 @@ export function AppContent() {
         workStateApi.get(),
       ];
       const results = await Promise.allSettled(requests);
+      if (
+        requestId !== settingsRequestIdRef.current ||
+        requestSubject !== (authUserRef.current?.sub || authUserRef.current?.email || null)
+      ) {
+        return { failures: [] };
+      }
       const failures = results
         .map((result, index) =>
           result.status === 'rejected' ? { label: SETTING_LABELS[index], error: result.reason } : null
@@ -198,7 +220,7 @@ export function AppContent() {
       if (workStateResponse) {
         const nextWorkState = workStateResponse.state || {};
         setWorkState(nextWorkState);
-        setSidebarCollapsed(nextWorkState.navigation?.sidebarCollapsed ?? false);
+        if (!sidebarTouchedRef.current) setSidebarCollapsed(nextWorkState.navigation?.sidebarCollapsed ?? false);
       }
 
       if (!failures.length) {
@@ -216,6 +238,7 @@ export function AppContent() {
       }
       return { failures };
     } catch (error) {
+      if (requestId !== settingsRequestIdRef.current) return { failures: [] };
       console.error('Failed to fetch system settings:', error);
       setSettingsStatus({
         tone: 'error',
@@ -224,7 +247,7 @@ export function AppContent() {
       });
       return { failures: [{ label: '設定服務', error }] };
     } finally {
-      setSettingsRefreshing(false);
+      if (requestId === settingsRequestIdRef.current) setSettingsRefreshing(false);
     }
   }, []);
 
@@ -391,7 +414,7 @@ export function AppContent() {
       pageResume={pageResume}
       onLogout={handleLogout}
       sidebarCollapsed={sidebarCollapsed}
-      setSidebarCollapsed={setSidebarCollapsed}
+      setSidebarCollapsed={setSidebarCollapsedByUser}
       oauthReturnPath={oauthReturnPath}
       clearOAuthReturnPath={() => setOauthReturnPath(null)}
       sysSettings={sysSettings}

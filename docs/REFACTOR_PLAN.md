@@ -225,6 +225,8 @@
 - 工作狀態提供者現只將 PUT 回應中屬於該次寫入 key 的值套用至畫面，避免兩個工具並行儲存時，較晚到達的舊全量快照覆蓋另一工具已更新或尚待儲存的值。新增交錯回應測試，同時保留單一 key 的新編輯保護；本機前端 422 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與 production build 通過；本項新 CI 待確認。
 - CI run #58 已在 commit `44e6cae` 通過後端、前端 422 項 Vitest、41 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 及 Docker／Compose，確認並行工作狀態回應合併。
 - 工作狀態提供者現在接收 App 在重新連線或設定重試後提供的新伺服器狀態；未在本次登入編輯的 key 會更新，已編輯 key 則保留本機最新值，避免延遲讀取覆蓋待儲存內容。新增伺服器刷新、待儲存與已儲存交錯測試；本機前端 423 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與 production build 通過；本項新 CI 待確認。
+- CI run #59 已在 commit `c07b80d` 通過後端、前端 423 項 Vitest、41 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認工作狀態刷新同步。
+- App 的側邊欄收合狀態現保護本次登入的使用者操作，避免較晚到達的設定讀取將畫面復原並把舊值再存回去；帳號切換會清除本機保護與上一帳號狀態，重疊設定請求也只採用最新請求的結果。新增 App 與 Edge 延遲讀取回歸測試；本機前端 424 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與 production build 通過；本項新 CI 待確認。
 
 尚待完成：
 
