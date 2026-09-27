@@ -208,7 +208,8 @@
 - Playlist Sort feature API 現在於執行期驗證清單、預覽曲目／配額及套用結果的必要欄位與型別，再交給頁面狀態；型別契約同步收緊。回應格式錯誤會顯示既有載入／預覽／套用錯誤，不會將缺欄位資料當成成功。新增 wrapper 與頁面錯誤回歸測試；前端 74 檔／364 項 Vitest、全部品質檢查與 build、後端 307 項 pytest／Ruff、Playlist Sort Edge 完整預覽到建立新歌單流程通過。真實 provider 回應仍待 smoke test。
 - CI run #45 在完整前端測試的一項既有 YouTube 配額元件測試失敗：測試只等待 API 函式被呼叫，未等待非同步載入完成就查詢授權組合欄位；該次 363／364 項通過，後續 audit／Docker 因前端失敗未執行。測試已改為等待欄位實際出現；本機 CI 模式的該組 6 項及完整 364 項、格式／lint／型別／build 重驗通過，尚待新同 SHA CI 確認。
 - CI run #46 已在 commit `d06f774` 通過後端、前端、Chromium E2E、正式依賴 high 以上稽核、完整 audit artifact 與 Docker／Compose。Publish Cleaner feature API 後續新增預覽清單、快照影片 ID 與發布結果格式／計數驗證，避免缺少影片陣列被誤當空清單，或缺少結果被誤報成功。已送出發布後若回應格式不正確、逾時、網路中斷或伺服器錯誤，頁面撤銷執行快照並提示先至 YouTube Studio 核對，不可直接重送；單元與頁面回歸測試覆蓋這些分支。本機後端 307 項 pytest／Ruff、完整前端品質檢查與 build，以及 Edge 的正常發布流程通過；本項新 CI 尚待驗證。
-- CI run #47 已在 commit `d00ac7f` 通過後端、前端、Chromium E2E、正式依賴稽核門檻、audit artifact 與 Docker／Compose。YouTube Batch Update 的草稿影片清單、簽章預覽計劃／快照和批次執行結果已有 feature API runtime contract；缺少 `videos`／`plan`、快照影片 ID 不符或結果計數不一致會被拒絕。執行後回應格式錯誤、逾時、網路中斷或伺服器錯誤時，撤銷預覽並提示先至 YouTube Studio 核對，不可直接重送。新增 wrapper 與頁面測試；本機後端 307 項 pytest／Ruff、完整前端品質檢查與 build，以及 Edge 的正常批次更新流程通過；本項新 CI 尚待驗證。
+- CI run #47 已在 commit `d00ac7f` 通過後端、前端、Chromium E2E、正式依賴稽核門檻、audit artifact 與 Docker／Compose。YouTube Batch Update 的草稿影片清單、簽章預覽計劃／快照和批次執行結果已有 feature API runtime contract；缺少 `videos`／`plan`、快照影片 ID 不符或結果計數不一致會被拒絕。執行後回應格式錯誤、逾時、網路中斷或伺服器錯誤時，撤銷預覽並提示先至 YouTube Studio 核對，不可直接重送。新增 wrapper 與頁面測試；本機後端 307 項 pytest／Ruff、完整前端品質檢查與 build，以及 Edge 的正常批次更新流程通過。CI run #48 已在 commit `363000d` 通過相同 SHA 的後端、前端、Chromium E2E、依賴稽核門檻、audit artifact 與 Docker／Compose。
+- YouTube 配額面板的 feature API 現在檢查回應 slot、狀態、額度整數、方法明細及必要文案；格式錯誤會進入既有錯誤和重試狀態，不會顯示為有效餘額。新增 wrapper 及面板測試。本機 77 檔／382 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與暫存目錄 production build 通過；本項 CI 尚待驗證。
 
 尚待完成：
 
