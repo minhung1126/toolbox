@@ -2,6 +2,7 @@ import { createContext, createElement, useCallback, useContext, useEffect, useMe
 import { workStateApi } from '../features/settings/api/workStateApi';
 
 const AccountWorkStateContext = createContext(null);
+const EMPTY_WORK_STATE = Object.freeze({});
 
 function asObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -16,11 +17,25 @@ function emptyStatus() {
   };
 }
 
-export function AccountWorkStateProvider({ initialState = {}, children }) {
+export function AccountWorkStateProvider({ initialState = EMPTY_WORK_STATE, children }) {
   const [state, setState] = useState(() => asObject(initialState));
   const [statuses, setStatuses] = useState({});
   const recordsRef = useRef(new Map());
   const mountedRef = useRef(true);
+  const initialStateRef = useRef(initialState);
+
+  useEffect(() => {
+    if (initialStateRef.current === initialState) return;
+    initialStateRef.current = initialState;
+    setState((current) => {
+      const next = { ...asObject(initialState) };
+      // A delayed settings read must not replace local edits from this session.
+      recordsRef.current.forEach((record, key) => {
+        if (record.desiredVersion > 0 && Object.hasOwn(current, key)) next[key] = current[key];
+      });
+      return next;
+    });
+  }, [initialState]);
 
   const updateStatus = useCallback((key, changes) => {
     if (!mountedRef.current) return;

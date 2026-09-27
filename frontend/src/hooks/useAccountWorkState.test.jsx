@@ -195,4 +195,50 @@ describe('useAccountWorkState', () => {
     expect(result.current.navigation.value).toEqual({ sidebarCollapsed: true });
     expect(result.current.sheetCopy.value).toEqual({ query: 'new' });
   });
+
+  it('hydrates refreshed server values while preserving keys edited in this session', async () => {
+    let serverState = { navigation: { sidebarCollapsed: false }, sheet_copy: { query: 'old' } };
+    const ServerWrapper = ({ children }) => (
+      <AccountWorkStateProvider initialState={serverState}>{children}</AccountWorkStateProvider>
+    );
+    const { result, rerender } = renderHook(
+      () => ({
+        navigation: useAccountWorkState('navigation'),
+        sheetCopy: useAccountWorkState('sheet_copy'),
+      }),
+      { wrapper: ServerWrapper }
+    );
+
+    serverState = { navigation: { sidebarCollapsed: true }, sheet_copy: { query: 'from server' } };
+    rerender();
+    expect(result.current.navigation.value).toEqual({ sidebarCollapsed: true });
+    expect(result.current.sheetCopy.value).toEqual({ query: 'from server' });
+
+    let resolveSave;
+    api.updateWorkState.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        })
+    );
+    let savePromise;
+    await act(async () => {
+      savePromise = result.current.navigation.save({ sidebarCollapsed: false }, { debounceMs: 0 });
+      await Promise.resolve();
+    });
+
+    serverState = { navigation: { sidebarCollapsed: true }, sheet_copy: { query: 'newer server value' } };
+    rerender();
+    expect(result.current.navigation.value).toEqual({ sidebarCollapsed: false });
+    expect(result.current.sheetCopy.value).toEqual({ query: 'newer server value' });
+
+    await act(async () => {
+      resolveSave({ state: { navigation: { sidebarCollapsed: false } } });
+      await savePromise;
+    });
+    serverState = { navigation: { sidebarCollapsed: true }, sheet_copy: { query: 'latest server value' } };
+    rerender();
+    expect(result.current.navigation.value).toEqual({ sidebarCollapsed: false });
+    expect(result.current.sheetCopy.value).toEqual({ query: 'latest server value' });
+  });
 });
