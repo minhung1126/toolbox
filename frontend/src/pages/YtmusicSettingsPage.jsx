@@ -174,15 +174,22 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
 
     setSavingPrefs(true);
     try {
-      await savePreferences({
-        ...preferences,
-        defaultPreset: preset,
-        regionPreset: reg,
-        language: lang,
-        location: loc,
-        customLanguage: cLang.trim(),
-        customLocation: cLoc.trim().toUpperCase(),
-      });
+      const saved = await savePreferences(
+        {
+          ...preferences,
+          defaultPreset: preset,
+          regionPreset: reg,
+          language: lang,
+          location: loc,
+          customLanguage: cLang.trim(),
+          customLocation: cLoc.trim().toUpperCase(),
+        },
+        { debounceMs: 0 }
+      );
+      if (!saved) {
+        toast.error('偏好設定尚未確認儲存，請檢查連線後重試。');
+        return;
+      }
       toast.success('YouTube Music 偏好設定已成功儲存！');
     } catch (err) {
       toast.error(`儲存偏好設定失敗：${err.message || '未知錯誤'}`);

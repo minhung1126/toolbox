@@ -219,6 +219,8 @@
 - CI run #54 的 39 項 Chromium E2E 有 38 項通過；共用確認對話框測試的假便利貼漏填 `created_at`／`updated_at`，被新 API 契約正確拒絕，後續稽核與 Docker 步驟因而跳過。已補齊與後端一致的時間欄位，本機 Edge 對應測試通過；完整新 CI 待確認。
 - CI run #55 已在 commit `89d3b45` 通過後端、前端 414 項 Vitest、39 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 及 Docker／Compose，確認 Sticky Notes 回應驗證與假資料修正。
 - YouTube Music 設定 API 現驗證 OAuth HTTPS 網址、解除授權狀態、Token 儲存／清除確認及 Token 有效性回應；缺少 `valid: true` 或狀態錯誤不會顯示驗證成功。Token 寫入結果不明時重新讀取授權狀態，無法核對則停用再次寫入並顯示待核對提示。另區分「已寫入成功但授權狀態重新讀取失敗」與真正寫入失敗。新增 wrapper／頁面測試及 Edge 格式錯誤驗證流程；本機前端 418 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與 production build 通過；新 CI 待確認。
+- CI run #56 已在 commit `7aa5e42` 通過後端、前端 418 項 Vitest、40 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 及 Docker／Compose，確認 YouTube Music 設定回應契約。
+- 帳號工作狀態的 PUT 回應現核對寫入 key 與送出的值，允許伺服器加入欄位，但拒絕缺失或不一致的寫入確認。YouTube Music 偏好設定改為即時提交，只有收到已核對回應才顯示儲存成功；失敗時顯示待重試提示。新增 API、hook、頁面與 Edge 失敗流程測試；本機前端 421 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與 production build 通過；新 CI 待確認。
 
 尚待完成：
 

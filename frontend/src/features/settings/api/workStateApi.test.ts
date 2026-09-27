@@ -46,4 +46,16 @@ describe('workStateApi', () => {
     await expect(workStateApi.get()).rejects.toBe(error);
     await expect(workStateApi.update('navigation', {})).rejects.toBe(error);
   });
+
+  it('rejects a write response that omits or changes the submitted value', async () => {
+    api.updateWorkState.mockResolvedValueOnce({ version: 1, state: {} });
+    await expect(workStateApi.update('navigation', { sidebarCollapsed: true })).rejects.toThrow(
+      '帳號工作狀態寫入結果不一致'
+    );
+
+    api.updateWorkState.mockResolvedValueOnce({ version: 1, state: { navigation: { sidebarCollapsed: false } } });
+    await expect(workStateApi.update('navigation', { sidebarCollapsed: true })).rejects.toThrow(
+      '帳號工作狀態寫入結果不一致'
+    );
+  });
 });

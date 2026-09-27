@@ -53,7 +53,7 @@ describe('useAccountWorkState', () => {
   });
 
   it('keeps command references stable when the stored state changes', async () => {
-    api.updateWorkState.mockResolvedValue({ state: {} });
+    api.updateWorkState.mockResolvedValue({ state: { navigation: { sidebarCollapsed: true } } });
     const { result } = renderHook(() => useAccountWorkState('navigation'), { wrapper });
     const initialSave = result.current.save;
     const initialRetry = result.current.retry;
@@ -75,7 +75,7 @@ describe('useAccountWorkState', () => {
             releaseFirst = resolve;
           })
       )
-      .mockResolvedValueOnce({ state: {} });
+      .mockResolvedValueOnce({ state: { navigation: { sidebarCollapsed: true } } });
     const { result } = renderHook(() => useAccountWorkState('navigation'), { wrapper });
 
     let firstSave;
@@ -103,7 +103,9 @@ describe('useAccountWorkState', () => {
   });
 
   it('exposes a failed save and retries the latest desired value', async () => {
-    api.updateWorkState.mockRejectedValueOnce(new Error('伺服器忙碌')).mockResolvedValueOnce({ state: {} });
+    api.updateWorkState
+      .mockRejectedValueOnce(new Error('伺服器忙碌'))
+      .mockResolvedValueOnce({ state: { navigation: { sidebarCollapsed: true } } });
     const { result } = renderHook(() => useAccountWorkState('navigation'), { wrapper });
 
     await act(async () => {
@@ -122,7 +124,9 @@ describe('useAccountWorkState', () => {
   });
 
   it('does not acknowledge malformed saves and allows retrying the pending change', async () => {
-    api.updateWorkState.mockResolvedValueOnce({ state: [] }).mockResolvedValueOnce({ state: {} });
+    api.updateWorkState
+      .mockResolvedValueOnce({ state: [] })
+      .mockResolvedValueOnce({ state: { navigation: { sidebarCollapsed: true } } });
     const { result } = renderHook(() => useAccountWorkState('navigation'), { wrapper });
 
     await act(async () => {
@@ -138,5 +142,17 @@ describe('useAccountWorkState', () => {
     expect(api.updateWorkState).toHaveBeenNthCalledWith(2, 'navigation', { sidebarCollapsed: true });
     expect(result.current.saved).toBe(true);
     expect(result.current.error).toBe('');
+  });
+
+  it('does not acknowledge a write response that omits the saved key', async () => {
+    api.updateWorkState.mockResolvedValue({ state: {} });
+    const { result } = renderHook(() => useAccountWorkState('navigation'), { wrapper });
+
+    await act(async () => {
+      await result.current.save({ sidebarCollapsed: true }, { debounceMs: 0 });
+    });
+
+    expect(result.current.saved).toBe(false);
+    expect(result.current.error).toBe('帳號工作狀態寫入結果不一致，請重新整理核對。');
   });
 });

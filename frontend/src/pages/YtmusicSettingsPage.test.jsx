@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import YtmusicSettingsPage from './YtmusicSettingsPage';
 import { ytmusicSettingsApi } from '../features/ytmusic/api/ytmusicSettingsApi';
+import { AccountWorkStateProvider } from '../hooks/useAccountWorkState';
+import { api } from '../services/api';
+
+const toastSpies = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }));
 
 vi.mock('../utils/navigation', () => ({ redirectToAuth: vi.fn() }));
 
@@ -26,7 +30,7 @@ vi.mock('../features/ytmusic/api/ytmusicSettingsApi', () => ({
 }));
 
 vi.mock('../components/Toast', () => ({
-  useToast: () => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
+  useToast: () => toastSpies,
 }));
 
 describe('YtmusicSettingsPage', () => {
@@ -128,6 +132,23 @@ describe('YtmusicSettingsPage', () => {
       fireEvent.change(select, { target: { value: 'artist-desc' } });
     });
     expect(select.value).toBe('artist-desc');
+  });
+
+  it('does not report preference save success when work-state persistence fails', async () => {
+    api.updateWorkState.mockRejectedValueOnce(new Error('伺服器忙碌'));
+    render(
+      <MemoryRouter>
+        <AccountWorkStateProvider>
+          <YtmusicSettingsPage authUser={{ authorizations: { ytmusic: { connected: true } } }} />
+        </AccountWorkStateProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '儲存偏好設定' }));
+
+    await waitFor(() => expect(toastSpies.error).toHaveBeenCalledWith('偏好設定尚未確認儲存，請檢查連線後重試。'));
+    expect(toastSpies.success).not.toHaveBeenCalledWith('YouTube Music 偏好設定已成功儲存！');
+    expect(api.updateWorkState).toHaveBeenCalledWith('ytmusic_preferences', expect.any(Object));
   });
 
   it('allows disconnecting YouTube Music via confirm dialog', async () => {
