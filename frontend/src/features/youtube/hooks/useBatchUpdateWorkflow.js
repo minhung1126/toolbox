@@ -775,6 +775,23 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
         toast.warning('預覽已過期，批次更新已安全停止');
         return;
       }
+      if (
+        err.code === 'batch_result_invalid' ||
+        err.code === 'timeout' ||
+        err.code === 'network_error' ||
+        err.status >= 500
+      ) {
+        setResult(null);
+        setBatchPreview(null);
+        setPreviewToken('');
+        setPreviewSnapshot(null);
+        setPreviewFingerprint('');
+        setErrorMsg(
+          '無法確認批次更新是否已完成；請先至 YouTube Studio 核對影片標題與描述，再重新讀取並預覽。勿直接重送。'
+        );
+        toast.warning('批次更新結果待核對，請先檢查 YouTube Studio');
+        return;
+      }
       setErrorMsg(`批次更新執行失敗：${err.message}`);
       toast.error('批次更新執行失敗');
     } finally {

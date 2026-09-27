@@ -617,6 +617,7 @@ test('YouTube Batch Update checks a full preview before executing the update', a
     '/api/v1/sheets/people': { people: ['人物甲'] },
     '/api/v1/sheets/random-member-preview': { person: '人物甲', values: {} },
     '/api/v1/youtube/playlist-items': {
+      playlist_id: 'playlist-a',
       videos: [
         { video_id: 'video-1', title: '舊標題一', description: '舊描述一\n第二行' },
         { video_id: 'video-2', title: '保留標題', description: '保留描述' },
@@ -656,11 +657,19 @@ test('YouTube Batch Update checks a full preview before executing the update', a
       can_complete_today: true,
     },
     '/api/v1/youtube/batch-update': {
+      operation: 'youtube.metadata_update',
       completed: true,
       total_count: 2,
       succeeded_count: 1,
+      warning_count: 0,
       skipped_count: 1,
       failed_count: 0,
+      not_attempted_count: 0,
+      quota_blocked: false,
+      results: [
+        { video_id: 'video-1', status: 'succeeded' },
+        { video_id: 'video-2', status: 'skipped' },
+      ],
     },
   });
 
