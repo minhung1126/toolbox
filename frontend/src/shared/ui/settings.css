@@ -69,7 +69,8 @@
 
 @media (max-width: 767px) {
   .settings-card-actions .btn,
-  .settings-page-actions .btn {
+  .settings-page-actions .btn,
+  .settings-page-actions .ui-button {
     width: 100%;
   }
 }

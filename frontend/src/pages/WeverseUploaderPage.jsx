@@ -16,6 +16,7 @@ import './WeverseUploaderPage.css';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ServiceAuthCard from '../components/ServiceAuthCard';
+import { PageHeader } from '../shared/ui';
 import { useOAuthConnect } from '../hooks/useOAuthConnect';
 import WeverseUploadHistory from './weverse/WeverseUploadHistory';
 import {
@@ -79,15 +80,14 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
 
   return (
     <div className="section-gap weverse-uploader-container">
-      {/* Page Header */}
-      <header className="page-header">
-        <h1 className="weverse-page-title">
-          <FolderUp size={28} color="var(--primary)" /> Weverse 影片與字幕上傳
-        </h1>
-        <p className="section-desc">
-          本機 Weverse 結構化資料夾自動辨識影片與 16 語系字幕，複查調整後直傳獨立授權之 YouTube 頻道。
-        </p>
-      </header>
+      <PageHeader
+        title={
+          <span className="weverse-page-title">
+            <FolderUp size={28} color="var(--primary)" aria-hidden="true" /> Weverse 影片與字幕上傳
+          </span>
+        }
+        description="本機 Weverse 結構化資料夾自動辨識影片與 16 語系字幕，複查調整後直傳獨立授權之 YouTube 頻道。"
+      />
 
       {/* 1. Independent YouTube Channel Authorization Card */}
       <ServiceAuthCard

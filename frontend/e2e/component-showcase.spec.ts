@@ -223,6 +223,24 @@ test('sheet copy feature styles load and stay within supported viewport widths',
   }
 });
 
+test('Google Sheets settings stay usable on supported viewport widths', async ({ page }, testInfo) => {
+  await mockAuthenticatedBackend(page);
+
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/sheets/settings');
+    await expect(page.getByRole('heading', { level: 1, name: 'Google 試算表設定' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '立即儲存帳號設定' })).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+    await page.screenshot({
+      path: testInfo.outputPath(`sheets-settings-${width}.png`),
+      fullPage: true,
+      animations: 'disabled',
+    });
+  }
+});
+
 test('sticky notes feature styles load without viewport overflow', async ({ page }) => {
   await mockAuthenticatedBackend(page);
 
@@ -324,13 +342,18 @@ test('YouTube batch feature styles load without viewport overflow', async ({ pag
   }
 });
 
-test('Weverse folder picker styles stay usable across viewport widths', async ({ page }) => {
+test('Weverse folder picker styles stay usable across viewport widths', async ({ page }, testInfo) => {
   await mockAuthenticatedBackend(page);
 
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/weverse-uploader');
     await expect(page.getByRole('heading', { level: 1, name: /Weverse 影片與字幕上傳/ })).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath(`weverse-header-${width}.png`),
+      fullPage: true,
+      animations: 'disabled',
+    });
 
     const dropzonePadding = await page
       .locator('.weverse-dropzone')

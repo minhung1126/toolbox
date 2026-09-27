@@ -7,6 +7,7 @@ import SourceLinkInput from '../components/SourceLinkInput';
 import ServiceAuthCard from '../components/ServiceAuthCard';
 import { useDebouncedAutosave } from '../hooks/useDebouncedAutosave';
 import { useOAuthConnect } from '../hooks/useOAuthConnect';
+import { Badge, Button, PageHeader } from '../shared/ui';
 import '../features/settings/account-settings.css';
 
 export function initialGoogleSheetForm(defaultSpreadsheetId) {
@@ -79,12 +80,14 @@ export default function GoogleSheetSettingsPage({ sysSettings = {}, refreshSetti
 
   return (
     <div className="section-gap settings-page-section google-sheet-settings-page">
-      <header className="page-header">
-        <h1 className="google-sheet-settings-title">
-          <FileSpreadsheet size={26} aria-hidden="true" /> Google 試算表設定
-        </h1>
-        <p className="section-desc">管理 Google 試算表存取授權與目前帳號預設試算表來源。</p>
-      </header>
+      <PageHeader
+        title={
+          <span className="google-sheet-settings-title">
+            <FileSpreadsheet size={26} aria-hidden="true" /> Google 試算表設定
+          </span>
+        }
+        description="管理 Google 試算表存取授權與目前帳號預設試算表來源。"
+      />
       {msg && (
         <div className="info-banner">
           {msg.type === 'success' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
@@ -133,19 +136,19 @@ export default function GoogleSheetSettingsPage({ sysSettings = {}, refreshSetti
             </p>
           </div>
           {saving && (
-            <span className="badge badge-info">
+            <Badge tone="info">
               <RefreshCw size={12} className="spin" /> 自動儲存中...
-            </span>
+            </Badge>
           )}
           {!saving && msg?.type === 'success' && (
-            <span className="badge badge-connected">
+            <Badge tone="success">
               <CheckCircle2 size={12} /> 已自動儲存
-            </span>
+            </Badge>
           )}
           {!saving && msg?.type === 'error' && (
-            <span className="badge badge-disconnected">
+            <Badge tone="danger">
               <XCircle size={12} /> 自動儲存失敗
-            </span>
+            </Badge>
           )}
         </div>
         <div className="form-group">
@@ -160,9 +163,9 @@ export default function GoogleSheetSettingsPage({ sysSettings = {}, refreshSetti
           <p className="section-desc">修改後會自動儲存至目前登入的 Google 帳號；換瀏覽器或重新登入仍可取回。</p>
         </div>
         <div className="page-actions settings-page-actions">
-          <button className="btn btn-success" type="submit" disabled={saving}>
-            <Save size={18} /> {saving ? '儲存中...' : '立即儲存帳號設定'}
-          </button>
+          <Button type="submit" loading={saving} icon={Save}>
+            {saving ? '儲存中...' : '立即儲存帳號設定'}
+          </Button>
         </div>
       </form>
     </div>

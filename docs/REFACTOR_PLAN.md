@@ -192,6 +192,12 @@
 - 工具目錄的版本政策明定為穩定 `1.x.y`；minor／patch 僅新增相容 metadata，跨 major 或預發版本須更新前端契約並受明確拒絕。架構文件已記錄部署順序與路由、能力語意限制。
 - 驗證：後端 307 項 pytest、Ruff lint／format 通過；前端 73 檔／360 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過。Edge 的 Photo Curator ZIP 下載及四項導覽 E2E 通過；本輪未變更版面與視覺基準。
 
+本輪接續交付（2026-09-27，設定與上傳頁共用 UI）：
+
+- Google 試算表設定頁改用共用 `PageHeader`、`Badge` 與 `Button`，保留獨立 OAuth 狀態卡與自動儲存流程；共用設定樣式支援新按鈕在窄螢幕滿寬顯示。Weverse 上傳頁頁首也改用共用 `PageHeader`，390 px 標題字級調整後不再落單換行。
+- 已人工檢視 390／768／1440 px 的兩頁截圖；新 E2E 驗證 Sheets 設定頁標題、儲存入口與無水平溢位，既有 Weverse 拖曳、掃描與版面驗證持續通過。
+- 驗證：後端 307 項 pytest、Ruff lint／format；前端 73 檔／360 項 Vitest、Prettier、ESLint、Stylelint、typecheck、production build；Edge E2E 30 項及既有視覺回歸 6 項均通過。未更新 Dashboard／共用元件基準。
+
 尚待完成：
 
 - 共用 UI 尚未逐頁遷移，固定 inline layout 也仍有保留。舊 index.css／app-theme.css 已移除，樣式分至 app shell、shared UI 與 feature；Stylelint 涵蓋全部 CSS，foundation reset selector 有單檔規則例外。仍需完成剩餘頁面共用元件遷移與 token 統一。
