@@ -72,21 +72,43 @@ def test_login_only_session_keeps_connection_pages_available_but_rejects_provide
     assert user.json()["authorizations"]["ytmusic"]["connected"] is False
     assert user.json()["authorizations"]["video_uploader"]["connected"] is False
 
-    responses = (
-        (
-            client.post("/api/v1/sheets/metadata", json={"spreadsheet_url_or_id": "sheet-id"}),
-            "google_sheets_scope_required",
-        ),
-        (client.get("/api/v1/playlist-sort/playlists"), "ytmusic_scope_required"),
-        (
-            client.post(
-                "/api/v1/weverse-uploader/upload-from-path",
-                json={"video_path": "missing.mp4", "title": "Test"},
+    sheet_input = {"spreadsheet_url_or_id": "sheet-id", "worksheet_name": "Videos", "team": "Team", "columns": []}
+    requests = [
+        ("google_sheets_scope_required", client.post(f"/api/v1/sheets/{route}", json=sheet_input))
+        for route in ("metadata", "parse-options", "people", "random-member-preview", "copy-table")
+    ]
+    requests.extend(
+        [
+            ("ytmusic_scope_required", client.get("/api/v1/playlist-sort/playlists")),
+            (
+                "ytmusic_scope_required",
+                client.post("/api/v1/playlist-sort/preview", json={"playlist_id": "playlist-1", "sort_keys": []}),
             ),
-            "video_uploader_scope_required",
-        ),
+            (
+                "ytmusic_scope_required",
+                client.post(
+                    "/api/v1/playlist-sort/apply",
+                    json={"playlist_id": "playlist-1", "sort_keys": [], "preview_token": "invalid"},
+                ),
+            ),
+            (
+                "video_uploader_scope_required",
+                client.post(
+                    "/api/v1/weverse-uploader/upload-from-path",
+                    json={"video_path": "missing.mp4", "title": "Test"},
+                ),
+            ),
+            (
+                "video_uploader_scope_required",
+                client.post(
+                    "/api/v1/weverse-uploader/upload-files",
+                    data={"metadata": '{"title":"Test"}'},
+                    files={"video": ("sample.mp4", b"test", "video/mp4")},
+                ),
+            ),
+        ]
     )
-    for response, code in responses:
+    for code, response in requests:
         assert response.status_code == 403
         assert response.json()["detail"]["code"] == code
 

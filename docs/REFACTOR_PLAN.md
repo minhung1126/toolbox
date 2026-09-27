@@ -198,20 +198,21 @@
 - 已人工檢視 390／768／1440 px 的兩頁截圖；新 E2E 驗證 Sheets 設定頁標題、儲存入口與無水平溢位，既有 Weverse 拖曳、掃描與版面驗證持續通過。
 - 驗證：後端 307 項 pytest、Ruff lint／format；前端 73 檔／360 項 Vitest、Prettier、ESLint、Stylelint、typecheck、production build；Edge E2E 30 項及既有視覺回歸 6 項均通過。未更新 Dashboard／共用元件基準。
 
-本輪進行中（2026-09-27，線上依賴稽核）：
+本輪接續交付（2026-09-27，線上依賴稽核）：
 
 - CI run #41 首次連線 npm registry 稽核完整 lockfile，回報 9 項公告（3 moderate、5 high、1 critical）；既有後端、前端及 30 項瀏覽器測試均通過，audit 步驟失敗並使 Docker 驗證未執行。先前的離線 audit 0 項不能代表線上資料庫結果。
 - 本機已將 React Router 固定至 6.30.6，並以不使用 `--force` 的 `npm audit fix` 更新可相容的傳遞依賴。重新連線稽核後，正式依賴剩 2 項 moderate；完整 lockfile 仍有 Vite／Vitest 開發工具鏈的 high／critical 及其他 moderate 公告，需要依第 6 節另行決策跨 major 升級。CI 改為對正式依賴的 high 以上公告設阻擋門檻，並保存完整稽核報告供持續追蹤。
-- 目前 manifest、lockfile 與 CI 更新尚未提交；本機 Ruff、307 項 pytest、前端格式／lint／型別、360 項 Vitest 與 build 通過。Windows 受管 shell 曾因登入錯誤 1909 拒絕新程序，多工作者 Edge 測試隨後逾時；改用單一工作者重跑完整 30 項 E2E 及 6 項視覺回歸均通過，套件更新的瀏覽器行為已驗證。新 CI 及 Docker 檢查仍待同 SHA 結果。
+- 本機 Ruff、307 項 pytest、前端格式／lint／型別、360 項 Vitest 與 build 通過。Windows 受管 shell 曾因登入錯誤 1909 拒絕新程序，多工作者 Edge 測試隨後逾時；改用單一工作者重跑完整 30 項 E2E 及 6 項視覺回歸均通過。CI run #42 在 commit `b8255af` 通過相同 SHA 的後端、前端、Chromium E2E、正式依賴 high 以上線上稽核及 Docker／Compose；完整 audit JSON 已保存於該 run 的 `frontend-dependency-audit` artifact。完整依賴仍有 7 項公告（5 moderate、1 high、1 critical），不宣稱全部修復。
+- 補齊純控制台登入的 API 拒絕契約：5 個 Sheets 讀取入口、YT Music 清單／預覽／套用，以及 Weverse 路徑／檔案上傳均回傳各自的 403 錯誤碼。完整後端 307 項 pytest 與 Ruff、前端 73 檔／360 項 Vitest 及格式、lint、型別、build 再次通過；這些測試使用隔離 store 與假輸入，不呼叫真實 provider。
 
 尚待完成：
 
 - 共用 UI 尚未逐頁遷移，固定 inline layout 也仍有保留。舊 index.css／app-theme.css 已移除，樣式分至 app shell、shared UI 與 feature；Stylelint 涵蓋全部 CSS，foundation reset selector 有單檔規則例外。仍需完成剩餘頁面共用元件遷移與 token 統一。
 - Feature hook 已從頁面抽離，但仍有其他 feature 的 API/model 邊界及較完整的 TS 型別尚未完成。E2E 已覆蓋 mock OAuth 導向、排序、Batch Update 與 Publish Cleaner 執行及照片匯出；尚未驗證真實 Google／YouTube OAuth callback 與 Weverse 真實 provider smoke test。
-- 工具目錄已由後端狀態驅動前端啟用與各入口能力呈現；Sheets metadata、YT Music 播放清單、Weverse 上傳及 Creator 草稿的缺少授權 403 契約已由 HTTP 測試確認，工具 metadata 的跨主版本相容政策已記錄。複合工作流內各操作的能力差異及其餘 API 權限分支仍待明確驗證。
+- 工具目錄已由後端狀態驅動前端啟用與各入口能力呈現；Sheets 全部讀取入口、YT Music 排序三個操作、Weverse 兩種上傳及 Creator 草稿的缺少授權 403 契約已由 HTTP 測試確認，工具 metadata 的跨主版本相容政策已記錄。複合工作流內各操作的能力差異及其餘 API 權限分支仍待明確驗證。
 - YouTube workflow adapter、Notes、account-state、session、credential repository 與 Weverse worker／store／provider 已可由 app factory 注入；身分驗證政策與 settings 已可注入；配額帳本、速率限制、Google discovery、YTMusic 及 OAuth client 亦可隔離。預設 auth key／store 與 account-state 的匯入時初始化已延後；其他 singleton 的副作用仍待盤點。Account-state／session／credential／settings 的 context 橋接後續可逐步替換為明確 service dependency。
 - Weverse sidecar lock 只承諾在支援作業系統檔案鎖定語意的本機檔案系統上協調合作程序；NFS／網路檔案系統或跨主機多實例仍需驗證鎖語意，或改採資料庫／外部鎖服務。沒有真實 provider smoke test，也未演練 Docker 部署回退。
-- 線上 registry 稽核已發現開發工具鏈的 high／critical 公告，仍需評估 Vite／Vitest 跨 major 升級；React Router 6 的 2 項 moderate 也需追蹤。正式依賴的 high 以上門檻與完整報告上傳尚待新 CI 驗證。
+- 線上 registry 稽核已發現開發工具鏈的 high／critical 公告，仍需評估 Vite／Vitest 跨 major 升級；React Router 6 的 2 項 moderate 也需追蹤。CI 已驗證正式依賴的 high 以上門檻並上傳完整報告，不可將 CI 通過解讀為全依賴零公告。
 
 本輪驗收不代表不存在所有錯誤，也不代表已完成第 2、4、5 階段全部停止條件；應依本節未完成項目繼續分階段交付。
 
