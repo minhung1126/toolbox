@@ -407,11 +407,14 @@ test('Weverse upload posts the reviewed package and reaches completed state with
     },
     '/api/v1/weverse-uploader/upload-from-path': { status: 'queued', task_id: 'e2e-task-1' },
     '/api/v1/weverse-uploader/tasks/e2e-task-1': {
+      status: 'success',
       task: {
         task_id: 'e2e-task-1',
         title: 'Sample Live',
         status: 'completed',
         progress_percent: 100,
+        current_step: '上傳完成',
+        video_id: 'e2e-video',
         video_url: 'https://youtube.example/watch?v=e2e-video',
         studio_url: 'https://studio.youtube.example/video/e2e-video',
       },
@@ -471,6 +474,100 @@ test('Weverse upload waits for reconciliation when the queued result is malforme
   await expect(page.getByRole('button', { name: '確認並開始上傳至 YouTube' })).toBeDisabled();
   await expect(page.getByText(/請先檢查下方上傳歷史及 YouTube Studio/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+});
+
+test('Weverse upload does not report success for a task without a video ID', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/auth/user': {
+      authenticated: true,
+      user: { sub: 'weverse-upload-e2e', email: 'weverse-upload@example.test' },
+      authorizations: {
+        sheets: { connected: false },
+        ytmusic: { connected: false },
+        video_uploader: { connected: true, channel_title: 'Uploader Channel' },
+      },
+      google_scopes: {},
+      youtube: { slots: {} },
+    },
+    '/api/v1/weverse-uploader/upload-from-path': { status: 'queued', task_id: 'task-without-video' },
+    '/api/v1/weverse-uploader/tasks/task-without-video': {
+      status: 'success',
+      task: {
+        task_id: 'task-without-video',
+        title: 'Sample Live',
+        status: 'completed',
+        progress_percent: 100,
+        current_step: '上傳完成',
+      },
+    },
+  });
+
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await page.goto('/weverse-uploader');
+  await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
+  await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
+  await page.getByRole('button', { name: '掃描並辨識' }).click();
+  await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Sample Live');
+  await page.getByRole('button', { name: '確認並開始上傳至 YouTube' }).click();
+  await page.getByRole('button', { name: '立即上傳' }).click();
+
+  await expect(page.getByRole('alert').filter({ hasText: '上傳狀態待核對' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '上傳成功！' })).toHaveCount(0);
+  await expect(page.getByRole('progressbar', { name: '上傳進度' })).toHaveCount(0);
+});
+
+test('Weverse history reports malformed records instead of showing an empty list', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/weverse-uploader/history': {
+      status: 'success',
+      tasks: [{ task_id: 'incomplete-task', title: 'Sample Live', status: 'completed' }],
+    },
+  });
+
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await page.goto('/weverse-uploader');
+  await expect(page.getByRole('alert').filter({ hasText: '無法讀取上傳歷史' })).toBeVisible();
+  await expect(page.getByText('尚未有任何上傳紀錄。')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+});
+
+test('Weverse upload stops showing progress when a task is interrupted', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/auth/user': {
+      authenticated: true,
+      user: { sub: 'weverse-upload-e2e', email: 'weverse-upload@example.test' },
+      authorizations: {
+        sheets: { connected: false },
+        ytmusic: { connected: false },
+        video_uploader: { connected: true, channel_title: 'Uploader Channel' },
+      },
+      google_scopes: {},
+      youtube: { slots: {} },
+    },
+    '/api/v1/weverse-uploader/upload-from-path': { status: 'queued', task_id: 'interrupted-task' },
+    '/api/v1/weverse-uploader/tasks/interrupted-task': {
+      status: 'success',
+      task: {
+        task_id: 'interrupted-task',
+        title: 'Sample Live',
+        status: 'interrupted',
+        progress_percent: 80,
+        current_step: '服務停止，請檢查 YouTube Studio',
+      },
+    },
+  });
+
+  await page.goto('/weverse-uploader');
+  await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
+  await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
+  await page.getByRole('button', { name: '掃描並辨識' }).click();
+  await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Sample Live');
+  await page.getByRole('button', { name: '確認並開始上傳至 YouTube' }).click();
+  await page.getByRole('button', { name: '立即上傳' }).click();
+
+  await expect(page.getByRole('alert').filter({ hasText: '上傳狀態待核對' })).toBeVisible();
+  await expect(page.getByRole('progressbar', { name: '上傳進度' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '上傳成功！' })).toHaveCount(0);
 });
 
 test('Google Sheets OAuth uses the backend URL and redirects to the provider', async ({ page }) => {

@@ -48,4 +48,12 @@ describe('WeverseUploadHistory', () => {
 
     expect(onRefresh).toHaveBeenCalledOnce();
   });
+
+  it('shows a read error instead of an empty history', () => {
+    render(<WeverseUploadHistory items={[]} error="回應格式不正確" onRefresh={vi.fn()} />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('無法讀取上傳歷史');
+    expect(screen.getByRole('alert')).toHaveTextContent('回應格式不正確');
+    expect(screen.queryByText('尚未有任何上傳紀錄。')).not.toBeInTheDocument();
+  });
 });

@@ -72,6 +72,9 @@ export interface WeverseUploadTask {
   progress_percent: number;
   current_step: string;
   error_message?: string;
+  video_id?: string;
+  video_url?: string;
+  studio_url?: string;
   subtitles_count?: number;
   [field: string]: unknown;
 }

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../../services/api';
-import { weverseUploadApi, WeverseUploadResultError } from './weverseUploadApi';
+import { weverseUploadApi, WeverseTaskContractError, WeverseUploadResultError } from './weverseUploadApi';
 
 vi.mock('../../../services/api', () => ({
   api: {
@@ -8,6 +8,8 @@ vi.mock('../../../services/api', () => ({
     disconnectVideoUploader: vi.fn(),
     uploadWeverseFromPath: vi.fn(),
     uploadWeverseFiles: vi.fn(),
+    getWeverseUploadTask: vi.fn(),
+    getWeverseUploadHistory: vi.fn(),
   },
 }));
 
@@ -26,6 +28,50 @@ describe('weverseUploadApi uploader authorization', () => {
     await expect(weverseUploadApi.disconnectUploader()).resolves.toBe(disconnected);
     expect(api.getVideoUploaderAuthUrl).toHaveBeenCalledOnce();
     expect(api.disconnectVideoUploader).toHaveBeenCalledOnce();
+  });
+});
+
+const completedTask = () => ({
+  task_id: 'task-123',
+  title: 'Sample Live',
+  status: 'completed' as const,
+  progress_percent: 100,
+  current_step: '上傳完成',
+  video_id: 'video-123',
+  video_url: 'https://youtu.be/video-123',
+});
+
+describe('weverseUploadApi task and history contracts', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('accepts a completed task only with provider video evidence', async () => {
+    const response = { status: 'success' as const, task: completedTask() };
+    vi.mocked(api.getWeverseUploadTask).mockResolvedValue(response);
+    await expect(weverseUploadApi.getTask('task-123')).resolves.toEqual(response);
+  });
+
+  it.each([
+    { task: { ...completedTask(), video_id: undefined } },
+    { task: { ...completedTask(), task_id: 'another-task' } },
+    { task: { ...completedTask(), progress_percent: 140 } },
+    { task: { ...completedTask(), status: 'unknown' } },
+  ])('rejects an untrustworthy task response: %j', async (patch) => {
+    vi.mocked(api.getWeverseUploadTask).mockResolvedValue({
+      status: 'success',
+      ...patch,
+    } as Awaited<ReturnType<typeof api.getWeverseUploadTask>>);
+    await expect(weverseUploadApi.getTask('task-123')).rejects.toBeInstanceOf(WeverseTaskContractError);
+  });
+
+  it('rejects malformed history instead of displaying incomplete records', async () => {
+    vi.mocked(api.getWeverseUploadHistory).mockResolvedValue({ status: 'success', tasks: [completedTask()] });
+    await expect(weverseUploadApi.getHistory(10)).resolves.toMatchObject({ tasks: [completedTask()] });
+
+    vi.mocked(api.getWeverseUploadHistory).mockResolvedValue({
+      status: 'success',
+      tasks: [{ ...completedTask(), video_url: undefined }],
+    } as Awaited<ReturnType<typeof api.getWeverseUploadHistory>>);
+    await expect(weverseUploadApi.getHistory(10)).rejects.toBeInstanceOf(WeverseTaskContractError);
   });
 });
 

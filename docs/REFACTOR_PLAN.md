@@ -212,6 +212,7 @@
 - YouTube 配額面板的 feature API 現在檢查回應 slot、狀態、額度整數、方法明細及必要文案；格式錯誤會進入既有錯誤和重試狀態，不會顯示為有效餘額。新增 wrapper 及面板測試。本機 77 檔／382 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與暫存目錄 production build 通過；本項 CI 尚待驗證。
 - CI run #49 在配額 E2E 發現假回應缺少新驗證所需的官方限額、剩餘量、重設時間及方法等欄位，29／30 項瀏覽器測試通過；該假回應現已補齊後端實際提供的欄位，本機 Edge 對應流程通過，待新 CI 完整確認。
 - CI run #50 已在 commit `4f442af` 通過後端、前端、30 項 Chromium E2E、正式依賴稽核門檻、audit artifact 與 Docker／Compose。Weverse 上傳啟動的兩種 API 模式現要求 `status=queued` 且具非空任務 ID，避免已送出的任務回應格式錯誤時，畫面靜默停在複查頁而容許立即重送。若回應格式錯誤、逾時、網路中斷或 5xx，流程會重新讀取歷史、顯示待核對提示並停用當前複查畫面的上傳按鈕，要求先查看歷史與 YouTube Studio。本機正常及結果不明的 Edge 流程、wrapper 與頁面測試已通過；新提交的完整 CI 尚待驗證。
+- CI run #51 已在 commit `f5f19e6` 通過後端、前端 390 項 Vitest、31 項 Chromium E2E、稽核門檻與 Docker／Compose。Weverse 任務輪詢與歷史回應現驗證任務 ID、狀態、進度及完成時的影片 ID／網址；缺少成功證據不會顯示上傳成功。歷史格式錯誤會顯示讀取錯誤，不再偽裝空紀錄；任務格式錯誤、404、持續讀取失敗、失敗或中斷會停止進度動畫並提示先核對上傳歷史與 YouTube Studio。單元與 Edge 正常／異常流程已驗證；本項新 CI 尚待確認。
 
 尚待完成：
 

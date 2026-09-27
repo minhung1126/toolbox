@@ -1,4 +1,5 @@
 import { Clock, ExternalLink, RefreshCw } from 'lucide-react';
+import { StatusMessage } from '../../components/StatusMessage';
 import './WeverseUploadHistory.css';
 
 function uploadStatus(item) {
@@ -17,7 +18,7 @@ function formatCreatedAt(value) {
   return value ? new Date(value).toLocaleString() : '-';
 }
 
-export default function WeverseUploadHistory({ items = [], loading = false, onRefresh }) {
+export default function WeverseUploadHistory({ items = [], loading = false, error = '', onRefresh }) {
   return (
     <section className="glass-panel weverse-upload-history" aria-labelledby="weverse-history-title">
       <div className="weverse-upload-history-header">
@@ -30,7 +31,11 @@ export default function WeverseUploadHistory({ items = [], loading = false, onRe
         </button>
       </div>
 
-      {items.length === 0 ? (
+      {error ? (
+        <StatusMessage tone="error" title="無法讀取上傳歷史">
+          {error}
+        </StatusMessage>
+      ) : items.length === 0 ? (
         <p className="weverse-upload-history-empty" role="status">
           {loading ? '正在載入上傳紀錄…' : '尚未有任何上傳紀錄。'}
         </p>

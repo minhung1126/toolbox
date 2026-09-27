@@ -77,6 +77,8 @@ export async function mockAuthenticatedBackend(page, responseOverrides: Record<s
           },
         ],
       },
+      '/api/v1/weverse-uploader/history': { status: 'success', tasks: [] },
+      '/api/v1/weverse-uploader/recent-paths': { status: 'success', paths: [] },
       ...responseOverrides,
     };
 

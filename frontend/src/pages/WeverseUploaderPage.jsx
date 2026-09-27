@@ -58,12 +58,14 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
     metadata,
     setMetadata,
     taskStatus,
+    taskPollingError,
     uploadConfirmOpen,
     setUploadConfirmOpen,
     uploadStarting,
     uploadOutcomeUncertain,
     historyList,
     historyLoading,
+    historyError,
     loadHistory,
     folderInputRef,
     handleScanPath,
@@ -505,30 +507,33 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
       {/* 4. Step: Uploading / Progress */}
       {viewStep === 'uploading' && taskStatus && (
         <div className="glass-panel weverse-upload-progress-panel">
-          <Loader2 size={48} color="var(--primary)" className="animate-spin weverse-upload-spinner" />
-          <h3 className="weverse-upload-progress-title">影片與字幕正在上傳至 YouTube...</h3>
-          <p className="weverse-upload-progress-description">{taskStatus.current_step || '處理中，請勿關閉視窗...'}</p>
+          {taskPollingError ? (
+            <StatusMessage tone="error" title="上傳狀態待核對">
+              {taskPollingError}
+            </StatusMessage>
+          ) : (
+            <>
+              <Loader2 size={48} color="var(--primary)" className="animate-spin weverse-upload-spinner" />
+              <h3 className="weverse-upload-progress-title">影片與字幕正在上傳至 YouTube...</h3>
+              <p className="weverse-upload-progress-description">
+                {taskStatus.current_step || '處理中，請勿關閉視窗...'}
+              </p>
 
-          {/* Progress bar */}
-          <div
-            className="weverse-progress-track"
-            role="progressbar"
-            aria-label="上傳進度"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={taskStatus.progress_percent || 0}
-          >
-            <div
-              style={{
-                width: `${taskStatus.progress_percent || 0}%`,
-              }}
-              className="weverse-progress-fill"
-            />
-          </div>
-
-          <div className="weverse-progress-percent" aria-hidden="true">
-            {taskStatus.progress_percent || 0}%
-          </div>
+              <div
+                className="weverse-progress-track"
+                role="progressbar"
+                aria-label="上傳進度"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={taskStatus.progress_percent || 0}
+              >
+                <div style={{ width: `${taskStatus.progress_percent || 0}%` }} className="weverse-progress-fill" />
+              </div>
+              <div className="weverse-progress-percent" aria-hidden="true">
+                {taskStatus.progress_percent || 0}%
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -570,7 +575,7 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
         </div>
       )}
 
-      <WeverseUploadHistory items={historyList} loading={historyLoading} onRefresh={loadHistory} />
+      <WeverseUploadHistory items={historyList} loading={historyLoading} error={historyError} onRefresh={loadHistory} />
     </div>
   );
 }
