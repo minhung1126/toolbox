@@ -54,24 +54,36 @@ export async function mockAuthenticatedBackend(page, responseOverrides: Record<s
       '/api/v1/health': { commit_sha: 'development' },
       '/api/v1/tools': { tools: toolCatalog },
       '/api/v1/weverse-uploader/scan': {
+        status: 'success',
+        scanned_path: 'C:\\weverse\\sample',
+        packages_count: 1,
         packages: [
           {
             package_id: 'sample-live',
+            folder_path: 'C:\\weverse\\sample',
+            folder_name: 'sample',
             suggested_title: 'Sample Live',
+            suggested_description: '',
             video: {
               filename: 'sample-live.mp4',
               full_path: 'C:\\weverse\\sample-live.mp4',
+              size_bytes: 1048576,
               size_formatted: '1 MB',
+              extension: '.mp4',
             },
+            other_videos: [],
             subtitles: [
               {
                 id: 'sample-subtitle',
                 filename: 'sample-live.zh_TW.vtt',
                 full_path: 'C:\\weverse\\sample-live.zh_TW.vtt',
+                relative_path: 'sample-live.zh_TW.vtt',
+                size_bytes: 1024,
                 raw_lang: 'zh_TW',
                 bcp47: 'zh-TW',
                 label: '繁體中文',
                 size_formatted: '1 KB',
+                enabled: true,
               },
             ],
           },

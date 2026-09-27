@@ -5,6 +5,9 @@ import type {
   WeverseUploadQueuedResponse,
   WeverseUploadTask,
   WeverseUploadTaskResponse,
+  WeversePackageListResponse,
+  WeverseRecentPathsResponse,
+  WeverseScanResponse,
 } from './types';
 
 export type * from './types';
@@ -17,8 +20,98 @@ export class WeverseTaskContractError extends Error {
   code = 'weverse_task_invalid';
 }
 
+export class WeversePackageContractError extends Error {
+  code = 'weverse_package_invalid';
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNonnegativeInteger(value: unknown): boolean {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isVideoFile(value: unknown, source: 'path' | 'browser'): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.filename === 'string' &&
+    value.filename.length > 0 &&
+    isNonnegativeInteger(value.size_bytes) &&
+    typeof value.size_formatted === 'string' &&
+    typeof value.extension === 'string' &&
+    (source === 'path'
+      ? typeof value.full_path === 'string' && value.full_path.length > 0
+      : typeof value.relative_path === 'string' && value.relative_path.length > 0)
+  );
+}
+
+function isSubtitleFile(value: unknown, source: 'path' | 'browser'): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.filename === 'string' &&
+    value.filename.length > 0 &&
+    isNonnegativeInteger(value.size_bytes) &&
+    typeof value.size_formatted === 'string' &&
+    typeof value.raw_lang === 'string' &&
+    typeof value.bcp47 === 'string' &&
+    typeof value.label === 'string' &&
+    typeof value.enabled === 'boolean' &&
+    (source === 'path'
+      ? typeof value.full_path === 'string' && value.full_path.length > 0
+      : typeof value.relative_path === 'string' && value.relative_path.length > 0)
+  );
+}
+
+function isPackage(value: unknown, source: 'path' | 'browser'): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.package_id === 'string' &&
+    value.package_id.length > 0 &&
+    typeof value.folder_name === 'string' &&
+    typeof value.suggested_title === 'string' &&
+    typeof value.suggested_description === 'string' &&
+    (value.folder_path == null || typeof value.folder_path === 'string') &&
+    (value.video === null || isVideoFile(value.video, source)) &&
+    Array.isArray(value.other_videos) &&
+    value.other_videos.every((video) => isVideoFile(video, source)) &&
+    Array.isArray(value.subtitles) &&
+    value.subtitles.every((subtitle) => isSubtitleFile(subtitle, source))
+  );
+}
+
+function parsePackages(value: unknown, source: 'path' | 'browser'): WeversePackageListResponse {
+  if (
+    !isRecord(value) ||
+    value.status !== 'success' ||
+    !isNonnegativeInteger(value.packages_count) ||
+    !Array.isArray(value.packages) ||
+    value.packages_count !== value.packages.length ||
+    !value.packages.every((pkg) => isPackage(pkg, source))
+  ) {
+    throw new WeversePackageContractError('Weverse 檔案辨識回應格式不正確。');
+  }
+  return value as unknown as WeversePackageListResponse;
+}
+
+function parseScan(value: unknown): WeverseScanResponse {
+  parsePackages(value, 'path');
+  if (!isRecord(value) || typeof value.scanned_path !== 'string' || value.scanned_path.length === 0) {
+    throw new WeversePackageContractError('Weverse 掃描路徑回應格式不正確。');
+  }
+  return value as unknown as WeverseScanResponse;
+}
+
+function parseRecentPaths(value: unknown): WeverseRecentPathsResponse {
+  if (
+    !isRecord(value) ||
+    value.status !== 'success' ||
+    !Array.isArray(value.paths) ||
+    !value.paths.every((path) => typeof path === 'string' && path.length > 0)
+  ) {
+    throw new WeversePackageContractError('Weverse 最近路徑回應格式不正確。');
+  }
+  return value as unknown as WeverseRecentPathsResponse;
 }
 
 function isTask(value: unknown): value is WeverseUploadTask {
@@ -83,11 +176,11 @@ function parseQueuedUpload(value: unknown): WeverseUploadQueuedResponse {
 export const weverseUploadApi: WeverseUploadApi = {
   getUploaderAuthUrl: () => api.getVideoUploaderAuthUrl(),
   disconnectUploader: () => api.disconnectVideoUploader(),
-  getRecentPaths: () => api.getWeverseRecentPaths(),
+  getRecentPaths: async () => parseRecentPaths(await api.getWeverseRecentPaths()),
   getHistory: async (limit) => parseHistoryResponse(await api.getWeverseUploadHistory(limit)),
   getTask: async (taskId) => parseTaskResponse(await api.getWeverseUploadTask(taskId), taskId),
-  scanFolder: (folderPath) => api.scanWeverseFolder(folderPath),
-  parseFiles: (files) => api.parseWeverseFiles(files),
+  scanFolder: async (folderPath) => parseScan(await api.scanWeverseFolder(folderPath)),
+  parseFiles: async (files) => parsePackages(await api.parseWeverseFiles(files), 'browser'),
   uploadFromPath: async (payload) => parseQueuedUpload(await api.uploadWeverseFromPath(payload)),
   uploadFiles: async (formData) => parseQueuedUpload(await api.uploadWeverseFiles(formData)),
 };

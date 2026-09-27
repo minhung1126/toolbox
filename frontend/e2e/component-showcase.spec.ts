@@ -388,6 +388,25 @@ test('Weverse folder picker styles stay usable across viewport widths', async ({
   }
 });
 
+test('Weverse scan rejects an inconsistent package count before review', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/weverse-uploader/scan': {
+      status: 'success',
+      scanned_path: 'C:\\weverse\\sample',
+      packages_count: 1,
+      packages: [],
+    },
+  });
+
+  await page.goto('/weverse-uploader');
+  await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
+  await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
+  await page.getByRole('button', { name: '掃描並辨識' }).click();
+
+  await expect(page.getByText(/掃描失敗：Weverse 檔案辨識回應格式不正確/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /步驟二：辨識結果複查與編輯/ })).toHaveCount(0);
+});
+
 test('Weverse upload posts the reviewed package and reaches completed state with a provider fake', async ({ page }) => {
   await mockAuthenticatedBackend(page, {
     '/api/v1/auth/user': {
@@ -443,6 +462,82 @@ test('Weverse upload posts the reviewed package and reaches completed state with
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
+});
+
+test('Weverse browser file parsing reaches review and queues the selected video', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/auth/user': {
+      authenticated: true,
+      user: { sub: 'weverse-upload-e2e', email: 'weverse-upload@example.test' },
+      authorizations: {
+        sheets: { connected: false },
+        ytmusic: { connected: false },
+        video_uploader: { connected: true, channel_title: 'Uploader Channel' },
+      },
+      google_scopes: {},
+      youtube: { slots: {} },
+    },
+    '/api/v1/weverse-uploader/parse-files': {
+      status: 'success',
+      packages_count: 1,
+      packages: [
+        {
+          package_id: 'weverse-folder',
+          folder_name: 'weverse-folder',
+          video: {
+            filename: 'browser-live.mp4',
+            relative_path: 'weverse-folder/browser-live.mp4',
+            size_bytes: 11,
+            size_formatted: '11 B',
+            extension: '.mp4',
+          },
+          other_videos: [],
+          subtitles: [],
+          suggested_title: 'Browser Live',
+          suggested_description: '',
+        },
+      ],
+    },
+    '/api/v1/weverse-uploader/upload-files': { status: 'queued', task_id: 'browser-task' },
+    '/api/v1/weverse-uploader/tasks/browser-task': {
+      status: 'success',
+      task: {
+        task_id: 'browser-task',
+        title: 'Browser Live',
+        status: 'completed',
+        progress_percent: 100,
+        current_step: '上傳完成',
+        video_id: 'browser-video',
+        video_url: 'https://youtu.be/browser-video',
+      },
+    },
+  });
+
+  await page.goto('/weverse-uploader');
+  await page.locator('input[type="file"]').setInputFiles('e2e/fixtures/weverse-folder');
+  await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Browser Live');
+  const uploadRequestPromise = page.waitForRequest((request) =>
+    request.url().includes('/api/v1/weverse-uploader/upload-files')
+  );
+  await page.getByRole('button', { name: '確認並開始上傳至 YouTube' }).click();
+  await page.getByRole('button', { name: '立即上傳' }).click();
+
+  const uploadRequest = await uploadRequestPromise;
+  expect(uploadRequest.method()).toBe('POST');
+  expect(uploadRequest.postData()).toContain('browser-live.mp4');
+  await expect(page.getByRole('heading', { name: '上傳成功！' })).toBeVisible();
+});
+
+test('Weverse browser file parsing rejects an inconsistent package count', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/weverse-uploader/parse-files': { status: 'success', packages_count: 1, packages: [] },
+  });
+
+  await page.goto('/weverse-uploader');
+  await page.locator('input[type="file"]').setInputFiles('e2e/fixtures/weverse-folder');
+
+  await expect(page.getByText(/辨識失敗：Weverse 檔案辨識回應格式不正確/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /步驟二：辨識結果複查與編輯/ })).toHaveCount(0);
 });
 
 test('Weverse upload waits for reconciliation when the queued result is malformed', async ({ page }) => {
