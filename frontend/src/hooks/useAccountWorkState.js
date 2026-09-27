@@ -70,9 +70,8 @@ export function AccountWorkStateProvider({ initialState = {}, children }) {
 
           if (mountedRef.current) {
             setState((current) => {
-              const next = { ...current, ...result.state };
-              if (record.desiredVersion > version) next[key] = record.desiredValue;
-              return next;
+              if (record.desiredVersion > version) return current;
+              return { ...current, [key]: result.state[key] };
             });
           }
 

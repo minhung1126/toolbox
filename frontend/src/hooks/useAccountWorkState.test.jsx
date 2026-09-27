@@ -155,4 +155,44 @@ describe('useAccountWorkState', () => {
     expect(result.current.saved).toBe(false);
     expect(result.current.error).toBe('帳號工作狀態寫入結果不一致，請重新整理核對。');
   });
+
+  it('keeps newer values for other keys when full-state write responses arrive out of order', async () => {
+    const pending = {};
+    api.updateWorkState.mockImplementation(
+      (key) =>
+        new Promise((resolve) => {
+          pending[key] = resolve;
+        })
+    );
+    const { result } = renderHook(
+      () => ({
+        navigation: useAccountWorkState('navigation'),
+        sheetCopy: useAccountWorkState('sheet_copy'),
+      }),
+      { wrapper }
+    );
+
+    let navigationSave;
+    let sheetSave;
+    await act(async () => {
+      navigationSave = result.current.navigation.save({ sidebarCollapsed: true }, { debounceMs: 0 });
+      sheetSave = result.current.sheetCopy.save({ query: 'new' }, { debounceMs: 0 });
+      await Promise.resolve();
+    });
+    expect(api.updateWorkState).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      pending.sheet_copy({ state: { navigation: { sidebarCollapsed: false }, sheet_copy: { query: 'new' } } });
+      await sheetSave;
+    });
+    expect(result.current.navigation.value).toEqual({ sidebarCollapsed: true });
+    expect(result.current.sheetCopy.value).toEqual({ query: 'new' });
+
+    await act(async () => {
+      pending.navigation({ state: { navigation: { sidebarCollapsed: true }, sheet_copy: { query: 'old' } } });
+      await navigationSave;
+    });
+    expect(result.current.navigation.value).toEqual({ sidebarCollapsed: true });
+    expect(result.current.sheetCopy.value).toEqual({ query: 'new' });
+  });
 });
