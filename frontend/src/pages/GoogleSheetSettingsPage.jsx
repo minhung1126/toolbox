@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { CheckCircle2, FileSpreadsheet, RefreshCw, Save, XCircle } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, CheckCircle2, FileSpreadsheet, RefreshCw, Save, XCircle } from 'lucide-react';
 import { sheetsSettingsApi } from '../features/sheets/api/sheetsSettingsApi';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -21,6 +21,7 @@ function sameGoogleSheetForm(left, right) {
 export default function GoogleSheetSettingsPage({ sysSettings = {}, refreshSettings, authUser, refreshAuthUser }) {
   const toast = useToast();
   const [formData, setFormData] = useState(() => initialGoogleSheetForm(sysSettings.default_spreadsheet_id));
+  const confirmedSheetIdRef = useRef(null);
   const [msg, setMsg] = useState(null);
 
   const {
@@ -43,20 +44,35 @@ export default function GoogleSheetSettingsPage({ sysSettings = {}, refreshSetti
     compareFn: sameGoogleSheetForm,
     onSave: async (nextData) => {
       await sheetsSettingsApi.updateSettings(nextData);
+      confirmedSheetIdRef.current = nextData.default_spreadsheet_id;
     },
     onSuccess: async (nextData, { notify }) => {
       await refreshSettings?.();
       setMsg({ type: 'success', text: '目前帳號的 Google Sheet 設定已自動儲存。' });
       if (notify) toast.success('設定已儲存');
     },
-    onError: (error, { notify }) => {
+    onError: (error, { notify, saveConfirmed }) => {
+      if (saveConfirmed) {
+        const warning = '設定已儲存，但畫面更新失敗。請重新整理頁面核對最新狀態。';
+        setMsg({ type: 'warning', text: warning });
+        if (notify) toast.warning(warning);
+        return;
+      }
       setMsg({ type: 'error', text: error.message || '伺服器儲存失敗，請稍後重試。' });
       if (notify) toast.error(`儲存失敗：${error.message || '未知錯誤'}`);
     },
   });
 
   useEffect(() => {
+    confirmedSheetIdRef.current = null;
+  }, [authUser?.sub]);
+
+  useEffect(() => {
     if (!dirty) {
+      if (confirmedSheetIdRef.current !== null) {
+        if (sysSettings.default_spreadsheet_id !== confirmedSheetIdRef.current) return;
+        confirmedSheetIdRef.current = null;
+      }
       const nextData = initialGoogleSheetForm(sysSettings.default_spreadsheet_id);
       setFormData(nextData);
       reset(nextData);
@@ -90,7 +106,13 @@ export default function GoogleSheetSettingsPage({ sysSettings = {}, refreshSetti
       />
       {msg && (
         <div className="info-banner">
-          {msg.type === 'success' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
+          {msg.type === 'success' ? (
+            <CheckCircle2 size={18} />
+          ) : msg.type === 'warning' ? (
+            <AlertTriangle size={18} />
+          ) : (
+            <XCircle size={18} />
+          )}
           {msg.text}
         </div>
       )}

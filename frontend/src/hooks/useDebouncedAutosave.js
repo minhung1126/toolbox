@@ -31,22 +31,26 @@ export function useDebouncedAutosave({ value, onSave, delay = 500, compareFn, on
     const request = saveChainRef.current
       .catch(() => undefined)
       .then(async () => {
-        if (version !== editVersionRef.current) return;
+        if (version !== editVersionRef.current) return { status: 'superseded' };
         if (mountedRef.current) {
           setSaving(true);
         }
+        let saveConfirmed = false;
         try {
           await callbacksRef.current.onSave(nextData);
-          if (version !== editVersionRef.current) return;
+          saveConfirmed = true;
+          if (version !== editVersionRef.current) return { status: 'superseded' };
           dirtyRef.current = false;
           if (mountedRef.current) {
             setDirty(false);
           }
-          if (!mountedRef.current) return;
+          if (!mountedRef.current) return { status: 'saved' };
           await callbacksRef.current.onSuccess?.(nextData, { notify });
+          return { status: 'saved' };
         } catch (error) {
-          if (version !== editVersionRef.current || !mountedRef.current) return;
-          callbacksRef.current.onError?.(error, { notify });
+          if (version !== editVersionRef.current) return { status: 'superseded' };
+          if (mountedRef.current) callbacksRef.current.onError?.(error, { notify, saveConfirmed });
+          return { status: saveConfirmed ? 'saved' : 'failed', error };
         } finally {
           if (version === editVersionRef.current && mountedRef.current) {
             setSaving(false);

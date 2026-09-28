@@ -1,5 +1,5 @@
 import '../features/youtube/youtube-shared.css';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { normalizeYoutubePlaylistInput } from '../features/youtube/api/youtubeBatchApi';
@@ -99,6 +99,7 @@ export default function YouTubeSettingsPage({
     [youtube]
   );
   const [playlistId, setPlaylistId] = useState(initial.playlistId);
+  const confirmedPlaylistIdRef = useRef(null);
   const [slotDrafts, setSlotDrafts] = useState(() =>
     Object.fromEntries(
       SLOT_ORDER.map((slot) => [
@@ -136,8 +137,9 @@ export default function YouTubeSettingsPage({
     compareFn: (a, b) => normalizeYoutubePlaylistInput(a) === normalizeYoutubePlaylistInput(b),
     onSave: async (nextValue) => {
       const normalized = normalizeYoutubePlaylistInput(nextValue);
-      if (!normalized) return;
+      if (nextValue.trim() && !normalized) throw new Error('請輸入合法的 YouTube 播放清單網址或 ID。');
       await youtubeSettingsApi.updatePlaylist({ playlistId: normalized });
+      confirmedPlaylistIdRef.current = normalized;
     },
     onSuccess: async (_nextValue, { notify } = {}) => {
       const refreshed = await refreshAfterConfirmedWrite({ settings: true });
@@ -148,8 +150,13 @@ export default function YouTubeSettingsPage({
         toast.warning(REFRESH_WARNING);
       }
     },
-    onError: (error, { notify } = {}) => {
-      setPlaylistAutosaveStatus('error');
+    onError: (error, { notify, saveConfirmed } = {}) => {
+      if (saveConfirmed) {
+        setPlaylistAutosaveStatus('saved');
+        if (notify) reportConfirmedWrite('預設播放清單已儲存。', false, true);
+        return;
+      }
+      setPlaylistAutosaveStatus(error.message?.includes('請輸入合法的 YouTube 播放清單') ? 'invalid' : 'error');
       if (notify) {
         setMsg({ type: 'error', text: error.message || '儲存失敗。' });
         toast.error(mutationFailureMessage(error));
@@ -207,7 +214,15 @@ export default function YouTubeSettingsPage({
   };
 
   useEffect(() => {
+    confirmedPlaylistIdRef.current = null;
+  }, [authUser?.sub]);
+
+  useEffect(() => {
     if (!isPlaylistDirty) {
+      if (confirmedPlaylistIdRef.current !== null) {
+        if (initial.playlistId !== confirmedPlaylistIdRef.current) return;
+        confirmedPlaylistIdRef.current = null;
+      }
       setPlaylistId(initial.playlistId);
       resetPlaylistAutosave(initial.playlistId);
     }
@@ -292,8 +307,8 @@ export default function YouTubeSettingsPage({
     setBusyAction({ kind: 'playlist' });
     setMsg(null);
     try {
-      await flushPlaylistAutosave({ notify: true });
-      setPlaylistId(normalizedPlaylistId);
+      const result = await flushPlaylistAutosave({ notify: true });
+      if (result?.status === 'saved') setPlaylistId(normalizedPlaylistId);
     } catch (error) {
       setMsg({ type: 'error', text: error.message || '儲存失敗。' });
       toast.error(mutationFailureMessage(error));
@@ -305,12 +320,12 @@ export default function YouTubeSettingsPage({
   const handlePlaylistChange = (value) => {
     setPlaylistId(value);
     const normalized = normalizeYoutubePlaylistInput(value);
+    mutatePlaylistAutosave(value);
     if (value.trim() && !normalized) {
       setPlaylistAutosaveStatus('invalid');
       return;
     }
     setPlaylistAutosaveStatus('saving');
-    mutatePlaylistAutosave(value);
   };
 
   const isQuotaDirty = (slot) => {

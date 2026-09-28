@@ -191,6 +191,24 @@ describe('YouTubeSettingsPage', () => {
     expect(screen.queryByText(/儲存失敗：refresh unavailable/)).not.toBeInTheDocument();
   });
 
+  it('keeps a failed manual playlist save unsaved and allows clearing the saved playlist', async () => {
+    api.updateYoutubePlaylist.mockRejectedValueOnce(new Error('write rejected'));
+    renderPage({ section: 'playlist' });
+
+    fireEvent.change(screen.getByPlaceholderText('YouTube Playlist ID 或網址'), {
+      target: { value: 'PL_new' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '儲存預設播放清單' }));
+    expect(await screen.findByText('自動儲存失敗，請手動儲存')).toBeInTheDocument();
+    expect(screen.queryByText('已自動儲存')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('YouTube Playlist ID 或網址'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: '儲存預設播放清單' }));
+    await waitFor(() => expect(api.updateYoutubePlaylist).toHaveBeenLastCalledWith({ playlistId: '' }));
+    expect(await screen.findByText('已自動儲存')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('YouTube Playlist ID 或網址')).toHaveValue('');
+  });
+
   it('confirms every disconnect and explains the active-slot impact', async () => {
     renderPage({
       authUser: {

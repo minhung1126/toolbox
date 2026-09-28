@@ -15,7 +15,7 @@ vi.mock('../features/sheets/api/sheetsSettingsApi', () => ({
 }));
 
 vi.mock('../components/Toast', () => ({
-  useToast: () => ({ success: vi.fn(), error: vi.fn() }),
+  useToast: () => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }),
 }));
 
 vi.mock('../components/SourceLinkInput', () => ({
@@ -87,5 +87,21 @@ describe('GoogleSheetSettingsPage autosave lifecycle', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+  });
+
+  it('shows a refresh warning after a confirmed settings write', async () => {
+    renderPage(vi.fn().mockRejectedValue(new Error('refresh failed')));
+    fireEvent.change(screen.getByLabelText('Google Sheet'), { target: { value: 'new-sheet' } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '立即儲存帳號設定' }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(sheetsSettingsApi.updateSettings).toHaveBeenCalledWith({ default_spreadsheet_id: 'new-sheet' });
+    expect(screen.getByText(/設定已儲存，但畫面更新失敗/)).toBeInTheDocument();
+    expect(screen.queryByText('自動儲存失敗')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Google Sheet')).toHaveValue('new-sheet');
   });
 });
