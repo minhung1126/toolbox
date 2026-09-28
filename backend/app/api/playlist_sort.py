@@ -79,11 +79,14 @@ class SortApplyInput(BaseModel):
 @router.get("/playlists")
 async def get_playlists(
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
+    token_store: CredentialStore = Depends(get_playlist_credential_store),
     language: Optional[str] = None,
     location: Optional[str] = None,
 ):
     try:
-        playlists = await run_in_threadpool(fetch_user_playlists, context, language=language, location=location)
+        playlists = await run_in_threadpool(
+            fetch_user_playlists, context, language=language, location=location, token_store=token_store
+        )
         return {"playlists": playlists}
     except YouTubeQuotaUnavailable as exc:
         raise _quota_http_exception(exc) from exc
@@ -115,6 +118,7 @@ async def preview_sort(
             use_ytdlp_fallback=needs_year_fallback,
             language=input_data.language,
             location=input_data.location,
+            token_store=token_store,
         )
 
         sort_keys_dict = [{"field": k.field, "direction": k.direction} for k in input_data.sort_keys]
@@ -194,6 +198,7 @@ async def apply_sort(
             use_ytdlp_fallback=False,
             language=input_data.language,
             location=input_data.location,
+            token_store=token_store,
         )
         snapshot = playlist_snapshot_from_preview(original_items)
 
@@ -237,6 +242,7 @@ async def apply_sort(
             language=input_data.language,
             location=input_data.location,
             allow_quota_fallback=effective_fallback,
+            token_store=token_store,
         )
         return result
     except YouTubeQuotaUnavailable as exc:

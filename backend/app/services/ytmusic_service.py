@@ -21,7 +21,7 @@ from ytmusicapi.constants import SUPPORTED_LANGUAGES, SUPPORTED_LOCATIONS
 from ytmusicapi.exceptions import YTMusicError
 from ytmusicapi.helpers import get_authorization
 
-from backend.app.core.credential_store import credential_store, get_credential_store
+from backend.app.core.credential_store import CredentialStore, credential_store, get_credential_store
 from backend.app.core.youtube_context import YouTubeRequestContext
 from backend.app.services.ytmusic_clients import get_ytmusic_client_factory
 
@@ -542,12 +542,13 @@ def get_ytmusic_client(
     custom_token: str | None = None,
     language: str | None = None,
     location: str | None = None,
+    token_store: CredentialStore | None = None,
 ) -> YTMusic:
     """Instantiate a configured YTMusic client with localized language and location.
 
     Priority:
     1. Explicit custom_token parameter
-    2. Stored custom_token in credential_store (owner_sub or context.owner_sub)
+    2. Stored custom_token in the supplied repository, falling back to request context for standalone callers
     3. Unauthenticated YTMusic() fallback (0 quota read access for public/unlisted playlists)
     """
     sub = owner_sub or (context.owner_sub if context else None)
@@ -556,14 +557,15 @@ def get_ytmusic_client(
     # 1. Custom token check
     token_to_use = custom_token
     if not token_to_use and sub:
-        token_to_use = get_credential_store(credential_store).get_ytmusic_custom_token(sub)
+        repository = token_store if token_store is not None else get_credential_store(credential_store)
+        token_to_use = repository.get_ytmusic_custom_token(sub)
 
     if token_to_use:
         try:
             parsed_auth = parse_custom_token_input(token_to_use, language=lang, location=loc)
             return get_ytmusic_client_factory(YTMusic)(auth=parsed_auth, language=lang, location=loc)
         except Exception as e:
-            logger.error("Failed to initialize YTMusic with custom token: %s", e)
+            logger.error("Failed to initialize YTMusic with custom token: %s", type(e).__name__)
             if not context or not context.credentials:
                 raise
 
@@ -634,6 +636,7 @@ def fetch_ytmusic_playlists(
     owner_sub: str | None = None,
     language: str | None = None,
     location: str | None = None,
+    token_store: CredentialStore | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch user's YouTube Music playlists using YTMusic API (0 API credit)."""
     client = get_ytmusic_client(
@@ -641,6 +644,7 @@ def fetch_ytmusic_playlists(
         owner_sub=owner_sub,
         language=language,
         location=location,
+        token_store=token_store,
     )
     try:
         raw_playlists = client.get_library_playlists(limit=None)
@@ -684,6 +688,7 @@ def fetch_ytmusic_playlist_tracks(
     fetch_album_details: bool = True,
     language: str | None = None,
     location: str | None = None,
+    token_store: CredentialStore | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch full playlist track items including artists, album, track number, and duration.
 
@@ -695,6 +700,7 @@ def fetch_ytmusic_playlist_tracks(
         owner_sub=owner_sub,
         language=language,
         location=location,
+        token_store=token_store,
     )
     try:
         playlist_data = client.get_playlist(playlist_id, limit=None)
@@ -844,6 +850,7 @@ def apply_ytmusic_sort_in_place(
     owner_sub: str | None = None,
     language: str | None = None,
     location: str | None = None,
+    token_store: CredentialStore | None = None,
 ) -> dict[str, Any]:
     """Sort a YouTube Music playlist in-place using edit_playlist(moveItem=...).
 
@@ -855,6 +862,7 @@ def apply_ytmusic_sort_in_place(
         owner_sub=owner_sub,
         language=language,
         location=location,
+        token_store=token_store,
     )
 
     auth_type = getattr(client, "auth_type", None)
@@ -936,6 +944,7 @@ def create_sorted_ytmusic_playlist(
     owner_sub: str | None = None,
     language: str | None = None,
     location: str | None = None,
+    token_store: CredentialStore | None = None,
 ) -> dict[str, Any]:
     """Create a brand new YouTube Music playlist with tracks already in sorted order.
 
@@ -947,6 +956,7 @@ def create_sorted_ytmusic_playlist(
         owner_sub=owner_sub,
         language=language,
         location=location,
+        token_store=token_store,
     )
     auth_type = getattr(client, "auth_type", None)
     if auth_type != AuthType.BROWSER and not isinstance(auth_type, (MagicMock, type(None))):

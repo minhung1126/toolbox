@@ -138,6 +138,38 @@ def test_playlist_api_does_not_expose_provider_exception_text(tmp_path, monkeypa
     assert all("access_token=private-provider-value" not in response.text for response in responses)
 
 
+def test_playlist_provider_uses_explicit_store_without_credential_context(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from backend.app.core.dependencies import require_ytmusic_context
+    from backend.app.services import ytmusic_service
+
+    store = CredentialStore(tmp_path / "explicit-playlist-token.json")
+    store.save_ytmusic_custom_token(
+        "SID=abc12345; HSID=def67890; SAPISID=ghi13579; SSID=xyz24680", owner_sub="same-user"
+    )
+    monkeypatch.setattr(ytmusic_service, "get_credential_store", lambda *_args: pytest.fail("Implicit store used"))
+    factory_calls = []
+
+    def factory(**kwargs):
+        factory_calls.append(kwargs)
+        return SimpleNamespace(get_library_playlists=lambda **_kwargs: [{"playlistId": "owned", "title": "Owned"}])
+
+    app = create_app(
+        credential_store=store,
+        ytmusic_client_factory=factory,
+        dependency_overrides={
+            require_ytmusic_context: lambda: SimpleNamespace(owner_sub="same-user", credentials=object())
+        },
+    )
+    response = TestClient(app).get("/api/v1/playlist-sort/playlists")
+
+    assert response.status_code == 200
+    assert response.json()["playlists"][0]["id"] == "owned"
+    assert len(factory_calls) == 1
+    assert "SAPISID=ghi13579" in factory_calls[0]["auth"]["cookie"]
+
+
 def test_refresh_uses_and_persists_only_injected_credentials(tmp_path, monkeypatch):
     stores = [CredentialStore(tmp_path / f"{i}.json") for i in range(2)]
     for i, store in enumerate(stores):

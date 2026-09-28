@@ -236,6 +236,8 @@
 - YouTube Primary／Secondary 頻道不一致時，前端共用連線判斷現在依後端的 `channel_mismatch`／`can_be_active` 顯示未連線，並把狀態納入預覽授權指紋；YT Music fallback 不再把衝突中的創作者頻道當作可用授權。後端 HTTP 測試確認 Creator 播放清單、單片編輯、發布及批次預覽在進入 provider 前均回傳 409；前端單元與 Edge 導覽測試確認提示，完整 CI 待確認。
 - CI run #64 已在 commit `a9bd82e` 通過後端、前端 428 項 Vitest、44 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認頻道衝突狀態契約。
 - Playlist Sort 預覽與套用現在由 FastAPI 依賴明確取得 app 所屬 CredentialStore，Token 模式與配額 fallback 依同一 repository 決定；兩個 app 的 HTTP 測試驗證彼此隔離。一般 provider 失敗與 Token fallback 阻擋不再回傳原始例外文字，保留既有錯誤碼與阻擋行為；完整 CI 待確認。
+- CI run #65 已在 commit `30c4429` 通過後端、前端 428 項 Vitest、44 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認 Playlist Sort 入口依賴與錯誤回應。
+- Playlist Sort 的清單、預覽與套用現把所屬 CredentialStore 明確傳至排序 service 與 YTMusic client；HTTP 測試使隱式 credential context 讀取失敗，仍能由注入 repository 建立帶 Token 的 client。獨立 helper 的相容 fallback 仍保留，其他模組的 context 橋接待後續替換；完整 CI 待確認。
 
 尚待完成：
 

@@ -6,6 +6,7 @@ import re
 import unicodedata
 from typing import Any
 
+from backend.app.core.credential_store import CredentialStore
 from backend.app.core.youtube_context import YouTubeRequestContext
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
 from backend.app.services.youtube_service import (
@@ -62,6 +63,7 @@ def fetch_user_playlists(
     context: YouTubeRequestContext,
     language: str | None = None,
     location: str | None = None,
+    token_store: CredentialStore | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch user playlists. First attempts YouTube Music API (0 quota),
 
@@ -77,6 +79,7 @@ def fetch_user_playlists(
             context=context,
             language=lang,
             location=loc,
+            token_store=token_store,
         )
         if ytm_playlists:
             logger.info("Retrieved %d playlists via YouTube Music client", len(ytm_playlists))
@@ -134,6 +137,7 @@ def fetch_playlist_items_for_sort(
     use_ytdlp_fallback: bool = True,
     language: str | None = None,
     location: str | None = None,
+    token_store: CredentialStore | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch playlist items for sorting.
 
@@ -154,6 +158,7 @@ def fetch_playlist_items_for_sort(
             fetch_album_details=fetch_album_details,
             language=lang,
             location=loc,
+            token_store=token_store,
         )
         if ytm_items:
             logger.info("Retrieved %d tracks for playlist %s via YouTube Music client", len(ytm_items), playlist_id)
@@ -566,6 +571,7 @@ def apply_sort_to_playlist(
     language: str | None = None,
     location: str | None = None,
     allow_quota_fallback: bool = True,
+    token_store: CredentialStore | None = None,
 ) -> dict[str, Any]:
     """Apply sorting to the playlist.
 
@@ -585,6 +591,7 @@ def apply_sort_to_playlist(
                     context=context,
                     language=language,
                     location=location,
+                    token_store=token_store,
                 )
             else:
                 orig = original_items or sorted(
@@ -597,6 +604,7 @@ def apply_sort_to_playlist(
                     context=context,
                     language=language,
                     location=location,
+                    token_store=token_store,
                 )
                 if res.get("failed", 0) > 0 and res.get("succeeded", 0) == 0 and res.get("moved", 0) > 0:
                     raise RuntimeError(f"YTMusic in-place sort failed: {res.get('failed_items')}")
