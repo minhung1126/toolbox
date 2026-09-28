@@ -42,20 +42,25 @@ test('YT Music does not claim missing authorization when the channel fallback is
   await expect(page.getByRole('link', { name: '連線 影片上傳頻道' })).toBeVisible();
 });
 
-test('disabled tools disappear from navigation and reject direct deep links', async ({ page }) => {
-  await mockAuthenticatedBackend(page, {
-    '/api/v1/tools': {
-      tools: toolCatalog.map((tool) => (tool.id === 'sticky-notes' ? { ...tool, status: 'disabled' } : tool)),
-    },
-  });
-  await page.goto('/dashboard');
-  await expect(page.getByText('8 個工具模組已啟用')).toBeVisible();
-  await expect(page.getByRole('link', { name: '便利貼' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: '進入便利貼' })).toHaveCount(0);
+for (const [label, override] of [
+  ['disabled', { status: 'disabled' }],
+  ['startup failed', { runtime_status: 'startup_failed' }],
+] as const) {
+  test(`${label} tools disappear from navigation and reject direct deep links`, async ({ page }) => {
+    await mockAuthenticatedBackend(page, {
+      '/api/v1/tools': {
+        tools: toolCatalog.map((tool) => (tool.id === 'sticky-notes' ? { ...tool, ...override } : tool)),
+      },
+    });
+    await page.goto('/dashboard');
+    await expect(page.getByText('8 個工具模組已啟用')).toBeVisible();
+    await expect(page.getByRole('link', { name: '便利貼' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: '進入便利貼' })).toHaveCount(0);
 
-  await page.goto('/notes');
-  await expect(page.getByText('此工具目前未啟用。')).toBeVisible();
-});
+    await page.goto('/notes');
+    await expect(page.getByText('此工具目前無法使用。')).toBeVisible();
+  });
+}
 
 test('desktop collapse does not hide mobile navigation and drawer traps focus', async ({ page }) => {
   await mockAuthenticatedBackend(page);

@@ -229,6 +229,7 @@
 - App 的側邊欄收合狀態現保護本次登入的使用者操作，避免較晚到達的設定讀取將畫面復原並把舊值再存回去；帳號切換會清除本機保護與上一帳號狀態，重疊設定請求也只採用最新請求的結果。新增 App 與 Edge 延遲讀取回歸測試；本機前端 424 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與 production build 通過；本項新 CI 待確認。
 - CI run #60 已在 commit `7a02251` 通過後端、前端 424 項 Vitest、42 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認側邊欄狀態修正。
 - 工具目錄現回報與宣告狀態分離的 `runtime_status`：`ready`、`disabled`、`startup_failed`、`unhealthy`。啟動失敗或健康檢查異常的工具不再出現在導覽與 Dashboard，深層網址也被阻止；目錄不會洩漏啟動例外內容。新增後端目錄及前端目錄／路由測試；完整驗證及 CI 待確認。
+- CI run #61 的後端與 426 項 Vitest 通過，42 項 Chromium E2E 有 41 項通過；唯一失敗是停用工具測試仍比對舊的深層網址文案。已更新斷言並增加啟動失敗工具案例，本機 Edge 兩項對應測試通過；後續稽核與 Docker 步驟待新 CI 完整確認。
 
 尚待完成：
 
