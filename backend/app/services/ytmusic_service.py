@@ -978,6 +978,11 @@ def create_sorted_ytmusic_playlist(
         )
 
     video_ids = [item["video_id"] for item in sorted_items if item.get("video_id")]
+    missing_video_ids = [
+        {"playlist_item_id": item.get("playlist_item_id", ""), "error": "缺少影片 ID，無法加入新播放清單。"}
+        for item in sorted_items
+        if not item.get("video_id")
+    ]
 
     # Clean title according to ytmusic requirements
     safe_title = re.sub(r"[<>]", "", title).strip() or "已排序播放清單"
@@ -1000,8 +1005,8 @@ def create_sorted_ytmusic_playlist(
         "new_playlist_url": f"https://music.youtube.com/playlist?list={new_playlist_id}",
         "total": len(sorted_items),
         "moved": len(sorted_items),
-        "succeeded": len(sorted_items),
-        "failed": 0,
-        "failed_items": [],
+        "succeeded": len(video_ids),
+        "failed": len(missing_video_ids),
+        "failed_items": missing_video_ids,
         "quota_used": 0,
     }

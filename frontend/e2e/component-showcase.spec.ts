@@ -766,6 +766,7 @@ test('Playlist Sort previews and confirms creation of a sorted playlist', async 
       moved: 3,
       succeeded: 3,
       failed: 0,
+      failed_items: [],
       quota_used: 0,
     },
   });

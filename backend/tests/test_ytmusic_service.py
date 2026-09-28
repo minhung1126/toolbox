@@ -224,6 +224,25 @@ def test_create_sorted_ytmusic_playlist(mock_get_client):
     )
 
 
+@patch("backend.app.services.ytmusic_service.get_ytmusic_client")
+def test_create_sorted_ytmusic_playlist_reports_missing_video_id(mock_get_client):
+    mock_client = MagicMock()
+    mock_client.create_playlist.return_value = "PL_NEW_123"
+    mock_get_client.return_value = mock_client
+
+    result = create_sorted_ytmusic_playlist(
+        "Sorted",
+        "Description",
+        [{"playlist_item_id": "missing-video"}, {"playlist_item_id": "valid", "video_id": "v1"}],
+    )
+
+    assert (result["total"], result["moved"], result["succeeded"], result["failed"]) == (2, 2, 1, 1)
+    assert result["failed_items"] == [
+        {"playlist_item_id": "missing-video", "error": "缺少影片 ID，無法加入新播放清單。"}
+    ]
+    assert mock_client.create_playlist.call_args.kwargs["video_ids"] == ["v1"]
+
+
 def test_parse_custom_token_input_curl():
     curl_input = """curl 'https://music.youtube.com/youtubei/v1/browse' \\
       -H 'accept: */*' \\

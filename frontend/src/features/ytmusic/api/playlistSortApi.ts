@@ -97,10 +97,27 @@ function parseSortPreview(value: unknown): PlaylistSortPreviewResponse {
 function parseSortApply(value: unknown): PlaylistSortApplyResponse {
   if (
     !isRecord(value) ||
+    (value.mode !== 'in_place' && value.mode !== 'new_playlist') ||
+    !isCount(value.total) ||
+    !isCount(value.moved) ||
     !isCount(value.succeeded) ||
     !isCount(value.failed) ||
     !isCount(value.quota_used) ||
-    (value.mode != null && value.mode !== 'in_place' && value.mode !== 'new_playlist') ||
+    value.moved > value.total ||
+    value.succeeded + value.failed !== value.moved ||
+    !Array.isArray(value.failed_items) ||
+    value.failed_items.length !== value.failed ||
+    !value.failed_items.every(
+      (item) =>
+        isRecord(item) &&
+        (typeof item.playlist_item_id === 'string' || typeof item.video_id === 'string') &&
+        typeof item.error === 'string' &&
+        item.error.length > 0
+    ) ||
+    (value.mode === 'new_playlist' &&
+      (value.moved !== value.total ||
+        typeof value.new_playlist_url !== 'string' ||
+        !value.new_playlist_url.startsWith('https://'))) ||
     (value.new_playlist_url != null && typeof value.new_playlist_url !== 'string')
   ) {
     throw new Error('排序套用回應格式不正確。');

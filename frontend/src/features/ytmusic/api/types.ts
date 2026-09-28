@@ -43,9 +43,12 @@ export interface PlaylistSortApplyRequest extends PlaylistSortPreviewRequest {
 }
 
 export interface PlaylistSortApplyResponse {
-  mode?: PlaylistSortApplyMode;
+  mode: PlaylistSortApplyMode;
+  total: number;
+  moved: number;
   succeeded: number;
   failed: number;
+  failed_items: Array<{ playlist_item_id?: string; video_id?: string; error: string }>;
   quota_used: number;
   new_playlist_url?: string;
   [field: string]: unknown;

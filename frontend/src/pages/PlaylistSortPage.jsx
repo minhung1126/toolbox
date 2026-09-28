@@ -949,7 +949,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
           >
             <div>
               <span>
-                成功移動 <strong>{applyResult.succeeded}</strong> 首，
+                {applyResult.mode === 'new_playlist' ? '成功加入' : '成功移動'} <strong>{applyResult.succeeded}</strong>{' '}
+                首，
                 {applyResult.failed > 0 && (
                   <>
                     失敗 <strong>{applyResult.failed}</strong> 首，
@@ -957,6 +958,18 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                 )}
                 消耗 <strong>{applyResult.quota_used?.toLocaleString() ?? 0}</strong> API 配額點數。
               </span>
+              {applyResult.failed_items.length > 0 && (
+                <div className="playlist-sort-failed-items">
+                  <strong>需要核對的曲目</strong>
+                  <ul>
+                    {applyResult.failed_items.map((item, index) => (
+                      <li key={`${item.playlist_item_id || item.video_id}-${index}`}>
+                        {item.playlist_item_id || item.video_id}：{item.error}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {applyResult.new_playlist_url && (
                 <div className="playlist-sort-result-link-row">
                   <a

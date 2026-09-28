@@ -649,6 +649,13 @@ def apply_sort_to_playlist(
         for item in sorted_items:
             vid = item.get("video_id")
             if not vid:
+                failed += 1
+                failed_items.append(
+                    {
+                        "playlist_item_id": item.get("playlist_item_id", ""),
+                        "error": "缺少影片 ID，無法加入新播放清單。",
+                    }
+                )
                 continue
             try:
                 add_req = service.playlistItems().insert(

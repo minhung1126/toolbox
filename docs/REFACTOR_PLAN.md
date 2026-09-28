@@ -240,6 +240,8 @@
 - Playlist Sort 的清單、預覽與套用現把所屬 CredentialStore 明確傳至排序 service 與 YTMusic client；HTTP 測試使隱式 credential context 讀取失敗，仍能由注入 repository 建立帶 Token 的 client。獨立 helper 的相容 fallback 仍保留，其他模組的 context 橋接待後續替換；完整 CI 待確認。
 - CI run #66 已在 commit `36f70d4` 通過後端、前端 428 項 Vitest、44 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認 Playlist Sort service 的明確 repository 資料流。
 - Playlist Sort 的部分成功回應現在保留計數與失敗項目 ID，但以固定核對訊息取代 provider 原始例外；YT Music Token 遠端驗證失敗也不再將例外文字送回 API。新增 YTMusic 及 YouTube Data API 混合成功／失敗測試與 Token 驗證 HTTP 測試，確認敏感字串不出現在回應；完整 CI 待確認。
+- CI run #67 已在 commit `36cf01a` 通過後端、前端 428 項 Vitest、44 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認部分成功及 Token 驗證的錯誤訊息保護。
+- Playlist Sort 套用回應現檢查總數、移動數、成功／失敗數與失敗項目是否一致；YTMusic 與 Data API 新增歌單時缺少影片 ID 的曲目會計入失敗，畫面列出需要核對的曲目 ID 和安全錯誤訊息。前端拒絕缺漏或互相矛盾的回應，避免誤報成功；本機對應測試通過，完整 CI 待確認。
 
 尚待完成：
 

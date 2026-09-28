@@ -615,6 +615,36 @@ def test_apply_sort_to_playlist_new_playlist_via_data_api(monkeypatch):
     assert added_videos == ["v1", "v2"]
 
 
+def test_new_playlist_reports_item_without_video_id_as_failure(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import backend.app.services.playlist_sort_service as service
+    from backend.app.core.youtube_context import YouTubeRequestContext
+
+    context = YouTubeRequestContext(
+        slot="primary", credentials=object(), quota_limiter=SimpleNamespace(), owner_sub="test-user"
+    )
+    youtube = MagicMock()
+    youtube.playlists().insert().execute.return_value = {"id": "new-playlist"}
+    youtube.playlistItems().insert().execute.return_value = {"id": "added"}
+    monkeypatch.setattr(service, "get_youtube_service", lambda _context: youtube)
+    monkeypatch.setattr(service, "_execute_with_quota", lambda request, _operation, _context: request.execute())
+
+    result = apply_sort_to_playlist(
+        context,
+        "source",
+        [{"playlist_item_id": "missing-video"}, {"playlist_item_id": "valid", "video_id": "v1"}],
+        mode="new_playlist",
+        use_youtube_api=True,
+    )
+
+    assert (result["total"], result["moved"], result["succeeded"], result["failed"]) == (2, 2, 1, 1)
+    assert result["failed_items"] == [
+        {"playlist_item_id": "missing-video", "error": "缺少影片 ID，無法加入新播放清單。"}
+    ]
+
+
 def test_partial_data_api_sort_does_not_return_provider_exception(monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import MagicMock
