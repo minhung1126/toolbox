@@ -210,6 +210,16 @@ def test_creator_operations_reject_mismatched_youtube_channels_before_provider_c
                 "assignments": [{"video_id": "video-1", "person": "Alice"}],
             },
         ),
+        client.post(
+            "/api/v1/youtube/batch-update",
+            json={
+                "worksheet_name": "Videos",
+                "title_column": "Title",
+                "description_column": "Description",
+                "team": "Team",
+                "assignments": [{"video_id": "video-1", "person": "Alice"}],
+            },
+        ),
     ]
     for response in requests:
         assert response.status_code == 409

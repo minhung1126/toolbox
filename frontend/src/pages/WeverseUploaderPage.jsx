@@ -17,7 +17,7 @@ import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ServiceAuthCard from '../components/ServiceAuthCard';
 import { StatusMessage } from '../components/StatusMessage';
-import { PageHeader } from '../shared/ui';
+import { PageHeader, Button } from '../shared/ui';
 import { useOAuthConnect } from '../hooks/useOAuthConnect';
 import WeverseUploadHistory from './weverse/WeverseUploadHistory';
 import {
@@ -175,7 +175,8 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
                   支援包含 <code className="weverse-dropzone-extension">.mp4</code> 影片與多國語系{' '}
                   <code className="weverse-dropzone-extension">.vtt</code> 字幕檔的 Weverse 資料夾
                 </p>
-                <button
+                <Button
+                  variant="primary"
                   type="button"
                   className="btn btn-primary"
                   onClick={(e) => {
@@ -191,7 +192,7 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
                   ) : (
                     '選擇資料夾'
                   )}
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
@@ -207,7 +208,8 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
                   }}
                   className="input-field weverse-manual-path-input"
                 />
-                <button
+                <Button
+                  variant="primary"
                   type="button"
                   className="btn btn-primary"
                   onClick={() => handleScanPath()}
@@ -220,7 +222,7 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
                   ) : (
                     '掃描並辨識'
                   )}
-                </button>
+                </Button>
               </div>
 
               {recentPaths.length > 0 && (
@@ -228,7 +230,9 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
                   <span className="weverse-recent-paths-label">最近掃描路徑：</span>
                   <div className="weverse-recent-path-list">
                     {recentPaths.map((p) => (
-                      <button
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         key={p}
                         type="button"
                         className="btn btn-sm btn-secondary weverse-recent-path"
@@ -238,7 +242,7 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
                         }}
                       >
                         <Folder size={12} className="weverse-recent-path-icon" /> {p}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
@@ -255,9 +259,15 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
             <h3 className="weverse-review-title">
               <FileText size={20} color="var(--primary)" /> 步驟二：辨識結果複查與編輯
             </h3>
-            <button type="button" className="btn btn-sm btn-secondary" onClick={handleReset}>
+            <Button
+              variant="secondary"
+              size="sm"
+              type="button"
+              className="btn btn-sm btn-secondary"
+              onClick={handleReset}
+            >
               重新選擇資料夾
-            </button>
+            </Button>
           </div>
 
           {/* Video summary card */}
@@ -372,12 +382,24 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
                 </h4>
               </div>
               <div className="weverse-subtitle-actions">
-                <button type="button" className="btn btn-sm btn-secondary" onClick={() => handleToggleAllSubs(true)}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  type="button"
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => handleToggleAllSubs(true)}
+                >
                   全選
-                </button>
-                <button type="button" className="btn btn-sm btn-secondary" onClick={() => handleToggleAllSubs(false)}>
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  type="button"
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => handleToggleAllSubs(false)}
+                >
                   全消
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -473,10 +495,11 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
             </StatusMessage>
           )}
           <div className="weverse-review-actions">
-            <button type="button" className="btn btn-secondary" onClick={handleReset}>
+            <Button variant="secondary" type="button" className="btn btn-secondary" onClick={handleReset}>
               取消
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary"
               type="button"
               className="btn btn-primary"
               disabled={uploadStarting || uploadOutcomeUncertain || !isVideoAuthConnected || !metadata.title.trim()}
@@ -489,7 +512,7 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
               ) : (
                 '確認並開始上傳至 YouTube'
               )}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -569,9 +592,9 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
             )}
           </div>
 
-          <button type="button" className="btn btn-secondary" onClick={handleReset}>
+          <Button variant="secondary" type="button" className="btn btn-secondary" onClick={handleReset}>
             上傳另一部影片
-          </button>
+          </Button>
         </div>
       )}
 

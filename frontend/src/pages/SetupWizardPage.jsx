@@ -1,3 +1,4 @@
+import { Button } from '../shared/ui';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Check, CheckCircle2, Copy, Eye, EyeOff, Key, Lock, RefreshCw, Shield, Video } from 'lucide-react';
@@ -117,9 +118,9 @@ export default function SetupWizardPage() {
             此系統已完成初始設定與憑證綁定。若需修改設定，請使用管理員帳號登入後前往「系統設定」頁面。
           </p>
           <div className="login-actions login-actions-stacked">
-            <button type="button" className="btn btn-primary" onClick={() => navigate(PATHS.login)}>
+            <Button variant="primary" type="button" className="btn btn-primary" onClick={() => navigate(PATHS.login)}>
               前往登入頁面
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -150,10 +151,16 @@ export default function SetupWizardPage() {
         <div className="setup-redirect">
           <div className="setup-redirect-heading">
             <span>步驟 1：Google Cloud 授權的重新導向 URI (Authorized Redirect URI)</span>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={handleCopyRedirectUri}>
+            <Button
+              variant="secondary"
+              size="sm"
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={handleCopyRedirectUri}
+            >
               {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
               {copied ? '已複製' : '複製網址'}
-            </button>
+            </Button>
           </div>
           <code className="setup-redirect-code">{redirectUri}</code>
           <p className="setup-redirect-hint">
@@ -260,7 +267,7 @@ export default function SetupWizardPage() {
           )}
 
           <div>
-            <button type="submit" className="btn btn-primary setup-submit" disabled={submitting}>
+            <Button variant="primary" type="submit" className="btn btn-primary setup-submit" disabled={submitting}>
               {submitting ? (
                 <>
                   <span className="ui-inline-spinner" aria-hidden="true"></span>
@@ -272,7 +279,7 @@ export default function SetupWizardPage() {
                   儲存並完成系統初始化
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

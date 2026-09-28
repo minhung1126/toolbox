@@ -34,7 +34,7 @@ class WeverseUploaderPlugin(ToolPlugin):
                     description="本機資料夾辨識、字幕複查與 YouTube 上傳工作台",
                 ),
             ],
-            required_scopes=["youtube"],
+            required_scopes=["video_uploader"],
             tags=["weverse", "youtube", "video", "subtitle", "vtt", "upload", "creator"],
         )
         self._router = weverse_router

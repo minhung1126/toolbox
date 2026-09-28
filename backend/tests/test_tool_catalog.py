@@ -98,7 +98,7 @@ def test_backend_tool_catalog_matches_frontend_manifest_contract():
         "creator-tools": ["youtube", "sheets_readonly"],
         "youtube-music": ["youtube"],
         "sheets-tools": ["sheets_readonly"],
-        "weverse-uploader": ["youtube"],
+        "weverse-uploader": ["video_uploader"],
         "youtube-integrations": ["youtube"],
     }
 

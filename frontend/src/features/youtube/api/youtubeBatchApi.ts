@@ -1,6 +1,14 @@
 import { api } from '../../../services/api';
-import type { YoutubeBatchApi, YoutubeBatchPreviewResponse, YoutubeBatchUpdateResponse } from './youtubeBatchTypes';
+import type {
+  YoutubeBatchApi,
+  YoutubeBatchPreviewResponse,
+  YoutubeBatchUpdateResponse,
+  YoutubeDraftConfig,
+  YoutubeDraftSettingsResponse,
+  YoutubeDraftSettingsUpdateResponse,
+} from './youtubeBatchTypes';
 import type { PlaylistPreviewResponse } from './publishCleanupTypes';
+import { youtubeSettingsApi } from './youtubeSettingsApi';
 
 export type * from './youtubeBatchTypes';
 
@@ -14,6 +22,46 @@ function isCount(value: unknown): value is number {
 
 function isOptionalText(value: unknown): boolean {
   return value == null || typeof value === 'string';
+}
+
+class DraftSettingsContractError extends Error {
+  code = 'youtube_draft_settings_response_invalid';
+
+  constructor() {
+    super('草稿設定結果無法確認，請重新整理後核對。');
+  }
+}
+
+const DRAFT_FIELDS = ['spreadsheet_id', 'playlist_id', 'worksheet_name', 'title_column', 'description_column'] as const;
+
+function isDraftConfig(value: unknown): value is Record<(typeof DRAFT_FIELDS)[number], string> {
+  return isRecord(value) && DRAFT_FIELDS.every((field) => typeof value[field] === 'string');
+}
+
+function isPartialDraftConfig(value: unknown): boolean {
+  return isRecord(value) && DRAFT_FIELDS.every((field) => value[field] === undefined || typeof value[field] === 'string');
+}
+
+function parseDraftSettings(value: unknown): YoutubeDraftSettingsResponse {
+  if (!isRecord(value) || !isPartialDraftConfig(value.video) || !isPartialDraftConfig(value.shorts)) {
+    throw new DraftSettingsContractError();
+  }
+  return value as YoutubeDraftSettingsResponse;
+}
+
+function parseDraftUpdate(
+  value: unknown,
+  videoType: string,
+  config: YoutubeDraftConfig
+): YoutubeDraftSettingsUpdateResponse {
+  if (!isRecord(value) || value.status !== 'success' || value.video_type !== videoType || !isDraftConfig(value.config)) {
+    throw new DraftSettingsContractError();
+  }
+  const savedConfig = value.config;
+  if (DRAFT_FIELDS.some((field) => field !== 'playlist_id' && savedConfig[field] !== config[field])) {
+    throw new DraftSettingsContractError();
+  }
+  return value as unknown as YoutubeDraftSettingsUpdateResponse;
 }
 
 function planVideoId(item: Record<string, unknown>): unknown {
@@ -119,9 +167,13 @@ function parseBatchResult(value: unknown): YoutubeBatchUpdateResponse {
 }
 
 const client: YoutubeBatchApi = {
-  getDraftSettings: () => api.getYoutubeDraftSettings(),
-  updateDraftSettings: (videoType, config) => api.updateYoutubeDraftSettings(videoType, config),
-  updatePlaylist: ({ playlistId }) => api.updateYoutubePlaylist({ playlistId }),
+  async getDraftSettings() {
+    return parseDraftSettings(await api.getYoutubeDraftSettings());
+  },
+  async updateDraftSettings(videoType, config) {
+    return parseDraftUpdate(await api.updateYoutubeDraftSettings(videoType, config), videoType, config);
+  },
+  updatePlaylist: (request) => youtubeSettingsApi.updatePlaylist(request),
   getRandomMemberPreview: (spreadsheetUrlOrId, worksheetName, team, columns) =>
     api.getRandomMemberPreview(spreadsheetUrlOrId, worksheetName, team, columns),
   getSpreadsheetMetadata: (spreadsheetUrlOrId) => api.getSpreadsheetMetadata(spreadsheetUrlOrId),

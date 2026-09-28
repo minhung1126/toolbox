@@ -47,6 +47,7 @@ describe('SystemSettingsPage', () => {
       allowed_emails: ['admin@example.com', 'user@example.com'],
       current_user_email: 'admin@example.com',
       allowlist_required: true,
+      allow_new_users: true,
     });
 
     renderPage();
@@ -75,6 +76,7 @@ describe('SystemSettingsPage', () => {
     systemSettingsApi.getAllowlist.mockResolvedValueOnce({
       allowed_emails: ['admin@example.com'],
       current_user_email: 'admin@example.com',
+      allow_new_users: true,
     });
     systemSettingsApi.updateCredentials.mockResolvedValueOnce({
       status: 'success',
@@ -118,6 +120,7 @@ describe('SystemSettingsPage', () => {
     systemSettingsApi.getAllowlist.mockResolvedValueOnce({
       allowed_emails: ['admin@example.com'],
       current_user_email: 'admin@example.com',
+      allow_new_users: true,
     });
     systemSettingsApi.addAllowlistEmail.mockResolvedValueOnce({
       status: 'success',
@@ -202,5 +205,20 @@ describe('SystemSettingsPage', () => {
     });
     await screen.findByText('已啟用');
     expect(screen.getByPlaceholderText('輸入要允許登入的 Google Email...')).not.toBeDisabled();
+  });
+
+  it('shows a retry state when settings cannot be confirmed', async () => {
+    systemSettingsApi.getCredentials.mockRejectedValueOnce(new Error('回應格式不正確'));
+    systemSettingsApi.getAllowlist.mockResolvedValueOnce({
+      allowed_emails: [],
+      current_user_email: 'admin@example.com',
+      allow_new_users: true,
+    });
+
+    renderPage();
+
+    await screen.findByText('系統設定待核對');
+    expect(screen.queryByRole('button', { name: '新增成員' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '重新讀取' })).toBeInTheDocument();
   });
 });

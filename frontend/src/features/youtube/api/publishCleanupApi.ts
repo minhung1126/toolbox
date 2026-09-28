@@ -1,5 +1,11 @@
 import { api } from '../../../services/api';
-import type { PlaylistPreviewResponse, PublishCleanupApi, PublishCleanupResult } from './publishCleanupTypes';
+import type {
+  PlaylistPreviewResponse,
+  PublishCleanupApi,
+  PublishCleanupMetadataUpdate,
+  PublishCleanupMetadataUpdateResponse,
+  PublishCleanupResult,
+} from './publishCleanupTypes';
 
 export type * from './publishCleanupTypes';
 
@@ -104,6 +110,24 @@ function parsePublishResult(value: unknown): PublishCleanupResult {
   return value as unknown as PublishCleanupResult;
 }
 
+function parseMetadataUpdate(
+  value: unknown,
+  request: PublishCleanupMetadataUpdate
+): PublishCleanupMetadataUpdateResponse {
+  if (
+    !isRecord(value) ||
+    value.status !== 'succeeded' ||
+    value.video_id !== request.videoId ||
+    value.title !== request.title ||
+    value.description !== request.description
+  ) {
+    const error = new Error('影片資訊更新結果無法確認，請重新讀取影片後核對。') as Error & { code: string };
+    error.code = 'video_metadata_result_invalid';
+    throw error;
+  }
+  return value as unknown as PublishCleanupMetadataUpdateResponse;
+}
+
 export const publishCleanupApi: PublishCleanupApi = {
   async getPlaylistVideos(playlistId) {
     const response: unknown = await api.getPlaylistVideos(playlistId);
@@ -114,5 +138,7 @@ export const publishCleanupApi: PublishCleanupApi = {
     const response: unknown = await api.publishAndCleanup(playlistId, options);
     return parsePublishResult(response);
   },
-  updateVideoMetadata: (request) => api.updateYoutubeVideoMetadata(request),
+  async updateVideoMetadata(request) {
+    return parseMetadataUpdate(await api.updateYoutubeVideoMetadata(request), request);
+  },
 };

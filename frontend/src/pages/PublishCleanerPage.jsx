@@ -1,3 +1,4 @@
+import { Button } from '../shared/ui';
 import '../features/youtube/youtube-shared.css';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import '../features/youtube/publish-cleaner.css';
@@ -595,14 +596,15 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
             （修改後會自動儲存）。
           </p>
         </div>
-        <button
+        <Button
+          variant="primary"
           className="btn btn-primary publish-action-button"
           onClick={handleLoadPlaylist}
           disabled={loading || executing || estimateLoading}
         >
           <RefreshCw size={16} className={loading ? 'spin' : ''} />
           {loading ? YOUTUBE_COPY.readLoading : '讀取 To-Post 播放清單'}
-        </button>
+        </Button>
       </div>
 
       {workStateError && (
@@ -685,7 +687,8 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
                     <span className="badge badge-info publish-remove-badge">
                       <Trash2 size={12} aria-hidden="true" /> {YOUTUBE_COPY.removeFromToPost}
                     </span>
-                    <button
+                    <Button
+                      variant="secondary"
                       type="button"
                       className="btn btn-secondary publish-edit-button"
                       onClick={() => setEditingVideo(video)}
@@ -693,7 +696,7 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
                       aria-label={`編輯標題與描述：${video.title || video.video_id}`}
                     >
                       <Pencil size={14} aria-hidden="true" /> 編輯標題與描述
-                    </button>
+                    </Button>
                   </div>
                 </li>
               ))}
@@ -702,13 +705,14 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
 
           <div className="glass-panel execution-bar">
             <span>確認上傳時間、標題與描述無誤後，啟動發布流程：</span>
-            <button
+            <Button
+              variant="primary"
               className="btn btn-primary publish-action-button"
               onClick={requestPublish}
               disabled={executing || loading || estimateLoading || !currentSnapshot || !videos.length}
             >
               <Send size={18} /> {executing ? YOUTUBE_COPY.updateLoading : YOUTUBE_COPY.publishConfirmAction}
-            </button>
+            </Button>
           </div>
         </div>
       )}

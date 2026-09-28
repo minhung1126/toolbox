@@ -71,6 +71,14 @@ export interface PublishCleanupMetadataUpdate {
   description: string;
 }
 
+export interface PublishCleanupMetadataUpdateResponse {
+  video_id: string;
+  title: string;
+  description: string;
+  status: 'succeeded';
+  [field: string]: unknown;
+}
+
 export interface PublishCleanupApi {
   getPlaylistVideos(playlistId: string): Promise<PlaylistPreviewResponse>;
   estimateQuota(request: {
@@ -79,5 +87,5 @@ export interface PublishCleanupApi {
     slot?: string;
   }): Promise<PublishCleanupQuotaEstimate>;
   publishAndCleanup(playlistId: string, options: PublishCleanupOptions): Promise<PublishCleanupResult>;
-  updateVideoMetadata(request: PublishCleanupMetadataUpdate): Promise<unknown>;
+  updateVideoMetadata(request: PublishCleanupMetadataUpdate): Promise<PublishCleanupMetadataUpdateResponse>;
 }

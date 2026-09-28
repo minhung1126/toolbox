@@ -1,3 +1,4 @@
+import { Button } from '../shared/ui';
 import '../features/youtube/youtube-shared.css';
 import React from 'react';
 import '../features/youtube/batch-update.css';
@@ -227,9 +228,15 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
           </span>
         </div>
         <div className="page-actions settings-card-actions batch-settings-actions">
-          <button type="button" className="btn btn-secondary" onClick={saveDraftConfig} disabled={configSaving}>
+          <Button
+            variant="secondary"
+            type="button"
+            className="btn btn-secondary"
+            onClick={saveDraftConfig}
+            disabled={configSaving}
+          >
             <Save size={16} /> {configSaving ? '儲存中...' : '立即儲存草稿設定'}
-          </button>
+          </Button>
         </div>
       </SheetDataSourcePanel>
 
@@ -294,14 +301,15 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
             </p>
           </div>
           <div className="page-actions">
-            <button
+            <Button
+              variant="primary"
               className="btn btn-primary"
               onClick={loadRandomPreview}
               disabled={randomPreviewLoading || !visibleSelectedTeam}
             >
               <RefreshCw size={16} className={randomPreviewLoading ? 'spin' : ''} />{' '}
               {randomPreviewLoading ? '抽查中...' : randomPreview ? '換一位成員' : '隨機抽查'}
-            </button>
+            </Button>
           </div>
         </div>
         {previewError && (
@@ -344,10 +352,10 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
         </div>
       )}
       <div className="page-actions">
-        <button className="btn btn-primary" onClick={handleLoadVideos} disabled={loadingVideos}>
+        <Button variant="primary" className="btn btn-primary" onClick={handleLoadVideos} disabled={loadingVideos}>
           <RefreshCw size={16} className={loadingVideos ? 'spin' : ''} />{' '}
           {loadingVideos ? YOUTUBE_COPY.readLoading : `讀取 ${videoType} 草稿影片`}
-        </button>
+        </Button>
       </div>
 
       {videos.length > 0 && (
@@ -387,13 +395,14 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
                   ))}
                 </select>
               </div>
-              <button
+              <Button
+                variant="primary"
                 className="btn btn-primary"
                 onClick={applyBulkAssignment}
                 disabled={!selectedVideoIds.length || !bulkPerson}
               >
                 套用到已勾選影片
-              </button>
+              </Button>
             </div>
           </div>
           <div className="video-card-grid">
@@ -478,9 +487,9 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
               <strong>將處理目前清單中的 {formatVideoCount(videos.length)}</strong>
               <p>人物為「不編輯」的影片會安全略過。</p>
             </div>
-            <button className="btn btn-success" onClick={requestExecute} disabled={executing}>
+            <Button variant="success" className="btn btn-success" onClick={requestExecute} disabled={executing}>
               <Send size={18} /> {executing ? YOUTUBE_COPY.updateLoading : `檢查並${YOUTUBE_COPY.updateMetadata}`}
-            </button>
+            </Button>
           </div>
         </div>
       )}

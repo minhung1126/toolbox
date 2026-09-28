@@ -1,11 +1,7 @@
 import { defineConfig } from '@playwright/test';
 import base from './playwright.config';
 
-// Baselines are reviewed on Windows + Edge. Keep other platforms explicit:
-// generating snapshots on CI would silently accept a visual regression.
-if (process.platform !== 'win32') throw new Error('Visual baselines require Windows and Microsoft Edge.');
-
-// defineConfig concatenates webServer entries; visual tests need only their own server.
+// Linux Chromium uses its own reviewed snapshots and a fixed CJK font in CI.
 const { webServer: _baseWebServer, ...sharedConfig } = base;
 
 export default defineConfig(sharedConfig, {
@@ -13,9 +9,9 @@ export default defineConfig(sharedConfig, {
   testMatch: '**/*.visual.spec.ts',
   workers: 2,
   updateSnapshots: 'none',
-  snapshotPathTemplate: '{testDir}/visual-baselines/{arg}{ext}',
+  snapshotPathTemplate: '{testDir}/visual-baselines-linux/{arg}{ext}',
   use: {
-    channel: 'msedge',
+    browserName: 'chromium',
     baseURL: 'http://127.0.0.1:4174',
     locale: 'zh-TW',
     timezoneId: 'Asia/Taipei',
@@ -26,7 +22,7 @@ export default defineConfig(sharedConfig, {
   webServer: {
     command: 'node ./node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4174 --strictPort',
     url: 'http://127.0.0.1:4174',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 60_000,
   },
 });

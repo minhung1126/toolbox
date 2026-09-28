@@ -1,0 +1,99 @@
+name: Browser tests on main
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chromium:
+    name: Linux Chromium end-to-end tests
+    uses: ./.github/workflows/validate-container.yml
+
+  edge-visual:
+    name: Windows Edge visual tests
+    runs-on: windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend and Edge
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install msedge
+
+      - name: Run visual tests against reviewed Edge baselines
+        working-directory: frontend
+        run: npm run test:visual
+
+      - name: Upload visual test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-windows-results
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+          if-no-files-found: ignore
+
+  chromium-visual:
+    name: Linux Chromium visual tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install fixed CJK font
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+
+      - name: Install frontend and Chromium
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run build
+
+      - name: Compare reviewed Linux baselines
+        working-directory: frontend
+        run: |
+          if [ ! -d e2e/visual-baselines-linux ]; then
+            npx playwright test --config playwright.visual.linux.config.ts --update-snapshots
+            echo '::error::Review the generated Linux snapshots artifact and commit approved images.'
+            exit 1
+          fi
+          npx playwright test --config playwright.visual.linux.config.ts
+
+      - name: Upload Linux snapshots and differences
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-linux-results
+          path: |
+            frontend/e2e/visual-baselines-linux/
+            frontend/test-results/
+            frontend/playwright-report/
+          if-no-files-found: ignore

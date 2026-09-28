@@ -4,7 +4,7 @@ export interface LoginAuthConfig {
 }
 
 export interface LoginAuthUrlResponse {
-  auth_url?: string;
+  auth_url: string;
 }
 
 export interface SetupStatusResponse {
@@ -26,7 +26,7 @@ export interface SetupRequest {
 export interface SetupResponse {
   status: 'success';
   message: string;
-  admin_email?: string;
+  admin_email: string;
   redirect_uri?: string;
 }
 

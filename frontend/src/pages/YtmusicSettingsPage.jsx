@@ -1,3 +1,4 @@
+import { Button } from '../shared/ui';
 import React, { useEffect, useState } from 'react';
 import '../features/ytmusic/ytmusic-settings.css';
 import {
@@ -396,13 +397,15 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
                 )}
               </div>
             </div>
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               type="button"
               className="btn btn-secondary btn-sm ytmusic-token-validation-close"
               onClick={() => setTokenValidationResult(null)}
             >
               關閉
-            </button>
+            </Button>
           </div>
         )}
 
@@ -417,7 +420,9 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
               </p>
             </div>
             <div className="ytmusic-token-active-actions">
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 type="button"
                 className="btn btn-secondary btn-sm ytmusic-settings-inline-button"
                 onClick={() => handleValidateCustomToken()}
@@ -425,22 +430,26 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
               >
                 {validatingToken ? <Loader2 size={14} className="spin" /> : <ShieldCheck size={14} />}
                 檢查目前 Token 有效性
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 type="button"
                 className="btn btn-secondary btn-sm"
                 onClick={() => setShowTokenUpdateForm(!showTokenUpdateForm)}
               >
                 {showTokenUpdateForm ? '收合教學與輸入框' : '更換 / 重新設定 Token'}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 type="button"
                 className="btn btn-secondary btn-sm ytmusic-settings-inline-button ytmusic-token-clear-button"
                 onClick={() => setShowClearTokenConfirm(true)}
                 disabled={savingToken || validatingToken || tokenMutationUncertain}
               >
                 <Trash2 size={14} /> 清除自訂 Token
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -563,7 +572,9 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
               />
             </div>
             <div className="ytmusic-token-form-actions">
-              <button
+              <Button
+                variant="primary"
+                size="sm"
                 type="button"
                 className="btn btn-primary btn-sm ytmusic-settings-inline-button"
                 onClick={handleSaveCustomToken}
@@ -571,8 +582,10 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
               >
                 {savingToken ? <Loader2 size={14} className="spin" /> : <Key size={14} />}
                 儲存自訂 Token
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 type="button"
                 className="btn btn-secondary btn-sm ytmusic-settings-inline-button"
                 onClick={() => handleValidateCustomToken(customTokenInput.trim())}
@@ -580,7 +593,7 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
               >
                 {validatingToken ? <Loader2 size={14} className="spin" /> : <ShieldCheck size={14} />}
                 檢查此 Token 是否有效
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -732,7 +745,9 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
 
         {/* Explicit Save Button */}
         <div className="ytmusic-preferences-actions">
-          <button
+          <Button
+            variant="primary"
+            size="sm"
             type="button"
             className="btn btn-primary btn-sm ytmusic-settings-inline-button"
             onClick={() => handleSavePreferences()}
@@ -740,7 +755,7 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
           >
             {savingPrefs ? <Loader2 size={14} className="spin" /> : <Save size={14} />}
             儲存偏好設定
-          </button>
+          </Button>
         </div>
       </div>
 

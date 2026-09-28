@@ -1,3 +1,4 @@
+import { Button } from '../shared/ui';
 import React from 'react';
 import '../features/settings/account-settings.css';
 import {
@@ -148,9 +149,9 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
           </div>
         )}
         <div className="page-actions settings-card-actions">
-          <button className="btn btn-primary" onClick={handleStartLoginOAuth} type="button">
+          <Button variant="primary" className="btn btn-primary" onClick={handleStartLoginOAuth} type="button">
             <RefreshCw size={16} /> 重新連結控制台 Google 帳號
-          </button>
+          </Button>
         </div>
       </div>
 

@@ -4,6 +4,7 @@ import { authApi } from '../features/auth/api/authApi';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
 import { PATHS } from '../routes/paths';
 import { Video, LogIn, CheckCircle2, AlertCircle, Lock, RefreshCw } from 'lucide-react';
+import { Badge, Button, Card } from '../shared/ui';
 import '../features/auth/auth.css';
 
 export default function LoginPage({ initialError, returnTo }) {
@@ -58,7 +59,7 @@ export default function LoginPage({ initialError, returnTo }) {
 
   return (
     <div className="auth-page">
-      <div className="login-card glass-panel">
+      <Card className="login-card glass-panel" padding="none">
         {/* Header Branding */}
         <div className="login-header">
           <div className="login-logo-box">
@@ -69,9 +70,9 @@ export default function LoginPage({ initialError, returnTo }) {
         </div>
 
         {/* Security Badge */}
-        <div className="login-badge">
+        <Badge className="login-badge" tone="info">
           <Lock size={14} /> 需要授權存取
-        </div>
+        </Badge>
 
         {/* Description */}
         <p className="login-description">
@@ -118,10 +119,10 @@ export default function LoginPage({ initialError, returnTo }) {
                   <Link to={PATHS.setup} className="btn btn-primary btn-sm">
                     前往初次安裝精靈
                   </Link>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={checkLoginReadiness}>
+                  <Button variant="secondary" size="sm" onClick={checkLoginReadiness}>
                     <RefreshCw size={14} />
                     重新檢查
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -130,8 +131,8 @@ export default function LoginPage({ initialError, returnTo }) {
 
         {/* Login Action Button */}
         <div className="login-actions">
-          <button
-            className="btn btn-primary login-btn"
+          <Button
+            className="login-btn"
             onClick={handleGoogleLogin}
             disabled={loggingIn || checkingConfig || !loginReady}
           >
@@ -151,14 +152,14 @@ export default function LoginPage({ initialError, returnTo }) {
                 使用 Google 帳號登入
               </>
             )}
-          </button>
+          </Button>
         </div>
 
         <p className="login-footer">
           點擊登入會使用 Google OAuth 2.0 登入控制台；各項工具功能（試算表、雲端硬碟、YouTube
           等）可在登入後分別獨立授權。
         </p>
-      </div>
+      </Card>
     </div>
   );
 }

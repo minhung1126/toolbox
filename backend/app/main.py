@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -64,6 +65,7 @@ async def lifespan(app: FastAPI):
         ytmusic_client_context(app.state.ytmusic_client_factory),
         oauth_client_context(app.state.oauth_client_factories),
     ):
+        _initialize_app_config(app)
         await app.state.tool_registry.run_startup(app)
         try:
             yield
@@ -111,6 +113,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 
 async def security_headers(request, call_next):
+    _initialize_app_config(request.app)
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
@@ -178,6 +181,19 @@ def health_check(request: Request = None):
 frontend_dist = (Path(__file__).resolve().parents[2] / "frontend" / "dist").resolve()
 
 
+def _initialize_app_config(application: FastAPI) -> None:
+    if application.state.config_initialized:
+        return
+    with application.state.config_init_lock:
+        if application.state.config_initialized:
+            return
+        config = application.state.settings
+        with settings_context(config):
+            config.initialize_keys()
+            config.sync_dynamic_config()
+        application.state.config_initialized = True
+
+
 def resolve_frontend_path(full_path: str) -> Path:
     """Resolve a frontend request only when it remains inside the build output."""
     requested_path = (frontend_dist / full_path).resolve()
@@ -204,6 +220,7 @@ def create_app(
     oauth_client_factories=None,
     registry=None,
     dependency_overrides=None,
+    initialize_config=True,
 ) -> FastAPI:
     """Compose per-app repositories, workflow adapters, registry and worker lifecycle."""
     if youtube_quota_trackers is not None:
@@ -213,9 +230,10 @@ def create_app(
         if any(tracker.slot != slot for slot, tracker in youtube_quota_trackers.items()):
             raise ValueError("YouTube quota ledger slots must match their mapping keys")
     config = settings if app_settings is None else app_settings
-    with settings_context(config):
-        config.initialize_keys()
-        config.sync_dynamic_config()
+    if initialize_config:
+        with settings_context(config):
+            config.initialize_keys()
+            config.sync_dynamic_config()
     if registry is None:
         registry = ToolRegistry()
         register_builtin_tools(registry)
@@ -231,6 +249,8 @@ def create_app(
         lifespan=lifespan,
     )
     application.state.settings = config
+    application.state.config_initialized = initialize_config
+    application.state.config_init_lock = threading.Lock()
     application.state.oauth_client_factories = oauth_client_factories
     application.add_middleware(OAuthClientMiddleware, factories=oauth_client_factories)
     application.state.google_client_factory = google_client_factory
@@ -300,7 +320,7 @@ def create_app(
     return application
 
 
-app = create_app(registry=tool_registry)
+app = create_app(registry=tool_registry, initialize_config=False)
 
 
 if __name__ == "__main__":

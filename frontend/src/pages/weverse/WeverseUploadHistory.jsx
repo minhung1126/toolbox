@@ -1,17 +1,18 @@
 import { Clock, ExternalLink, RefreshCw } from 'lucide-react';
 import { StatusMessage } from '../../components/StatusMessage';
+import { Badge, Button } from '../../shared/ui';
 import './WeverseUploadHistory.css';
 
 function uploadStatus(item) {
-  if (item.status === 'completed') return <span className="badge badge-connected">已完成</span>;
-  if (item.status === 'failed') return <span className="badge badge-disconnected">失敗</span>;
+  if (item.status === 'completed') return <Badge tone="success">已完成</Badge>;
+  if (item.status === 'failed') return <Badge tone="danger">失敗</Badge>;
   if (item.status === 'interrupted') {
-    return <span className="badge badge-warning">已中斷，請確認 YouTube 狀態</span>;
+    return <Badge tone="warning">已中斷，請確認 YouTube 狀態</Badge>;
   }
   if (['pending', 'uploading_video', 'uploading_captions'].includes(item.status)) {
-    return <span className="badge badge-warning">上傳中</span>;
+    return <Badge tone="warning">上傳中</Badge>;
   }
-  return <span className="badge badge-info">{item.status || '未知'}</span>;
+  return <Badge tone="info">{item.status || '未知'}</Badge>;
 }
 
 function formatCreatedAt(value) {
@@ -25,10 +26,10 @@ export default function WeverseUploadHistory({ items = [], loading = false, erro
         <h2 id="weverse-history-title" className="weverse-upload-history-title">
           <Clock size={18} aria-hidden="true" /> 近期上傳紀錄
         </h2>
-        <button type="button" className="btn btn-sm btn-secondary" onClick={onRefresh} disabled={loading}>
+        <Button variant="secondary" size="sm" onClick={onRefresh} disabled={loading}>
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} aria-hidden="true" />
           重新整理
-        </button>
+        </Button>
       </div>
 
       {error ? (
@@ -60,7 +61,7 @@ export default function WeverseUploadHistory({ items = [], loading = false, erro
                     <div className="weverse-history-video-filename">{item.video_filename}</div>
                   </td>
                   <td>
-                    <span className="badge badge-secondary">{item.privacy_status || 'private'}</span>
+                    <Badge>{item.privacy_status || 'private'}</Badge>
                   </td>
                   <td>{item.subtitles_count || 0}</td>
                   <td>{uploadStatus(item)}</td>

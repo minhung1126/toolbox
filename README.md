@@ -42,7 +42,7 @@ toolbox/
 │   └── styles/              # 共用設計 token、基礎樣式與主題
 ├── docs/                    # 架構、部署、Google API 與配額說明手冊
 ├── data/                    # 執行期持久化資料 (憑證、Session、配額帳本，Git 不提交)
-├── Dockerfile               # Node 20 + Python 3.11 兩階段高效率容器映像建置
+├── Dockerfile               # Node 22 + Python 3.11 兩階段高效率容器映像建置
 ├── docker-compose.yml       # 本機運行與 GHCR 映像拉取 Compose 配置
 └── .github/workflows/       # GitHub Actions (validate-container, publish-container)
 ```

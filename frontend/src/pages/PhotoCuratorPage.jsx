@@ -1,3 +1,4 @@
+import { Button } from '../shared/ui';
 import React from 'react';
 import {
   ArrowRight,
@@ -80,7 +81,8 @@ export default function PhotoCuratorPage() {
               打造的批次分組工作台。解決「分組分到忘記」與「順序常常搞混」，支援照片批次分流、首圖橫排預覽與一鍵結構化打包。
             </p>
           </div>
-          <button
+          <Button
+            variant="secondary"
             type="button"
             className="btn btn-secondary btn-icon"
             onClick={() => setShowHelp(!showHelp)}
@@ -88,7 +90,7 @@ export default function PhotoCuratorPage() {
             aria-label="說明"
           >
             <HelpCircle size={18} aria-hidden="true" />
-          </button>
+          </Button>
         </div>
 
         {showHelp && (
@@ -110,7 +112,9 @@ export default function PhotoCuratorPage() {
       {/* Toolbar & Action Bar */}
       <div className="photo-curator-toolbar glass-panel">
         <div className="toolbar-left">
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             type="button"
             className="btn btn-secondary btn-sm"
             onClick={handleAutoDistribute}
@@ -119,9 +123,11 @@ export default function PhotoCuratorPage() {
           >
             <Clock size={14} aria-hidden="true" />
             <span>按時間均分</span>
-          </button>
+          </Button>
 
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             type="button"
             className="btn btn-secondary btn-sm"
             onClick={handleCopyChecklist}
@@ -130,11 +136,13 @@ export default function PhotoCuratorPage() {
           >
             <Copy size={14} aria-hidden="true" />
             <span>複製對照表</span>
-          </button>
+          </Button>
         </div>
 
         <div className="toolbar-right">
-          <button
+          <Button
+            variant="primary"
+            size="sm"
             type="button"
             className="btn btn-primary btn-sm"
             onClick={handleExportZip}
@@ -147,10 +155,12 @@ export default function PhotoCuratorPage() {
               <Download size={14} aria-hidden="true" />
             )}
             <span>一鍵結構化打包 (ZIP)</span>
-          </button>
+          </Button>
 
           {photos.length > 0 && (
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               type="button"
               className="btn btn-secondary btn-sm text-danger"
               onClick={() => setResetConfirmOpen(true)}
@@ -158,7 +168,7 @@ export default function PhotoCuratorPage() {
             >
               <RotateCcw size={14} aria-hidden="true" />
               <span>清空重置</span>
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -209,7 +219,7 @@ export default function PhotoCuratorPage() {
           ref={fileInputRef}
           multiple
           accept="image/*"
-          style={{ display: 'none' }}
+          hidden
           onChange={(e) => handleFilesSelected(e.target.files)}
         />
         <div className="dropzone-content">

@@ -19,7 +19,13 @@ describe('systemSettingsApi', () => {
   });
 
   it('forwards credential reads and updates through the typed system API', async () => {
-    const credentials = { status: 'success', credentials: {}, public_base_url: '', redirect_uri: '' };
+    const summary = { client_id: 'client-id', has_client_secret: true, client_secret_masked: '****', configured: true };
+    const credentials = {
+      status: 'success',
+      credentials: { google: summary, youtube_primary: summary, youtube_secondary: summary },
+      public_base_url: '',
+      redirect_uri: '',
+    };
     vi.mocked(api.getSystemCredentials).mockResolvedValueOnce(credentials);
     vi.mocked(api.updateSystemCredentials).mockResolvedValueOnce(credentials);
 
@@ -39,20 +45,43 @@ describe('systemSettingsApi', () => {
       allow_new_users: true,
     };
     const mutation = { status: 'success', ...allowlist };
+    const removed = { ...mutation, allowed_emails: [] };
     const policy = { status: 'success', allow_new_users: false, message: 'updated' };
     vi.mocked(api.getAllowlist).mockResolvedValueOnce(allowlist);
     vi.mocked(api.addAllowlistEmail).mockResolvedValueOnce(mutation);
-    vi.mocked(api.removeAllowlistEmail).mockResolvedValueOnce(mutation);
+    vi.mocked(api.removeAllowlistEmail).mockResolvedValueOnce(removed);
     vi.mocked(api.updateAllowNewUsers).mockResolvedValueOnce(policy);
 
     await expect(systemSettingsApi.getAllowlist()).resolves.toBe(allowlist);
     await expect(systemSettingsApi.addAllowlistEmail('admin@example.test')).resolves.toBe(mutation);
-    await expect(systemSettingsApi.removeAllowlistEmail('admin@example.test')).resolves.toBe(mutation);
+    await expect(systemSettingsApi.removeAllowlistEmail('admin@example.test')).resolves.toBe(removed);
     await expect(systemSettingsApi.updateAllowNewUsers(false)).resolves.toBe(policy);
 
     expect(api.getAllowlist).toHaveBeenCalledOnce();
     expect(api.addAllowlistEmail).toHaveBeenCalledWith('admin@example.test');
     expect(api.removeAllowlistEmail).toHaveBeenCalledWith('admin@example.test');
     expect(api.updateAllowNewUsers).toHaveBeenCalledWith(false);
+  });
+
+  it('rejects malformed confirmations instead of reporting a setting change as saved', async () => {
+    vi.mocked(api.updateSystemCredentials).mockResolvedValueOnce({ status: 'success', credentials: {} });
+    vi.mocked(api.addAllowlistEmail).mockResolvedValueOnce({ status: 'success', allowed_emails: [] });
+    vi.mocked(api.updateAllowNewUsers).mockResolvedValueOnce({ status: 'success', allow_new_users: true });
+
+    await expect(systemSettingsApi.updateCredentials({ google_client_id: 'new' })).rejects.toMatchObject({
+      code: 'system_settings_response_invalid',
+    });
+    await expect(systemSettingsApi.addAllowlistEmail('admin@example.test')).rejects.toMatchObject({
+      code: 'system_settings_response_invalid',
+    });
+    await expect(systemSettingsApi.updateAllowNewUsers(false)).rejects.toMatchObject({
+      code: 'system_settings_response_invalid',
+    });
+  });
+
+  it('passes through timeout errors so callers can reconcile an unknown write result', async () => {
+    const timeout = Object.assign(new Error('request timed out'), { code: 'timeout' });
+    vi.mocked(api.updateSystemCredentials).mockRejectedValueOnce(timeout);
+    await expect(systemSettingsApi.updateCredentials({ google_client_id: 'new' })).rejects.toBe(timeout);
   });
 });

@@ -46,7 +46,7 @@ describe('tool capability presentation', () => {
   it('honors YT Music channel fallback but keeps uploader authorization independent', () => {
     const user = { youtube: { slots: { primary: { authenticated: true } } } };
     expect(getMissingToolCapabilities(tool('youtube-music', ['youtube']), user)).toEqual([]);
-    expect(getMissingToolCapabilities(tool('weverse-uploader', ['youtube']), user)[0].settingsPath).toBe(
+    expect(getMissingToolCapabilities(tool('weverse-uploader', ['video_uploader']), user)[0].settingsPath).toBe(
       PATHS.weverseUploader
     );
     expect(getMissingToolCapabilities(tool('youtube-music', ['youtube']), {})[0].settingsPath).toBe(
@@ -58,7 +58,7 @@ describe('tool capability presentation', () => {
       })
     ).toEqual([]);
     expect(
-      getMissingToolCapabilities(tool('weverse-uploader', ['youtube']), {
+      getMissingToolCapabilities(tool('weverse-uploader', ['video_uploader']), {
         authorizations: { video_uploader: { connected: true } },
       })
     ).toEqual([]);

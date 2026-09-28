@@ -65,4 +65,13 @@ describe('publishCleanupApi', () => {
       '發布草稿結果計數不一致。'
     );
   });
+
+  it('requires a matching single-video update confirmation', async () => {
+    const request = { videoId: 'video-1', title: 'New', description: 'Updated description' };
+    const result = { video_id: 'video-1', title: 'New', description: 'Updated description', status: 'succeeded' };
+    vi.mocked(api.updateYoutubeVideoMetadata).mockResolvedValueOnce(result);
+    await expect(publishCleanupApi.updateVideoMetadata(request)).resolves.toEqual(result);
+    vi.mocked(api.updateYoutubeVideoMetadata).mockResolvedValueOnce({ ...result, title: 'Other' });
+    await expect(publishCleanupApi.updateVideoMetadata(request)).rejects.toThrow('結果無法確認');
+  });
 });

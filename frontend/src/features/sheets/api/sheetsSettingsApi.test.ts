@@ -41,4 +41,19 @@ describe('sheetsSettingsApi', () => {
     expect(api.getSharedSettings).toHaveBeenCalledOnce();
     expect(api.updateSharedSettings).toHaveBeenCalledWith(settings);
   });
+
+  it('rejects malformed responses and mismatched write confirmations', async () => {
+    vi.mocked(api.getSharedSettings).mockResolvedValueOnce({});
+    vi.mocked(api.updateSharedSettings).mockResolvedValueOnce({
+      status: 'success',
+      settings: { default_spreadsheet_id: 'previous-sheet' },
+    });
+    vi.mocked(api.disconnectSheets).mockResolvedValueOnce({});
+
+    await expect(sheetsSettingsApi.getSettings()).rejects.toMatchObject({ code: 'sheets_settings_response_invalid' });
+    await expect(sheetsSettingsApi.updateSettings({ default_spreadsheet_id: 'new-sheet' })).rejects.toMatchObject({
+      code: 'sheets_settings_response_invalid',
+    });
+    await expect(sheetsSettingsApi.disconnect()).rejects.toMatchObject({ code: 'sheets_settings_response_invalid' });
+  });
 });

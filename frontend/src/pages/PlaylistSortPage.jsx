@@ -27,7 +27,7 @@ import QuickTokenDrawer from '../components/QuickTokenDrawer';
 import { useOAuthConnect } from '../hooks/useOAuthConnect';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { PATHS } from '../routes/paths';
-import { Badge, PageHeader } from '../shared/ui';
+import { Badge, PageHeader, Button } from '../shared/ui';
 
 import {
   SORT_FIELDS,
@@ -496,21 +496,25 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
           </div>
           <div className="playlist-sort-auth-actions">
             {hasCustomToken ? (
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 type="button"
                 className="btn btn-secondary btn-sm playlist-sort-auth-action"
                 onClick={() => setShowTokenDrawer(!showTokenDrawer)}
               >
                 <Key size={14} /> {showTokenDrawer ? '收合 Token 面板' : '更換 / 管理 Token'}
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
+                variant="primary"
+                size="sm"
                 type="button"
                 className="btn btn-primary btn-sm playlist-sort-auth-action"
                 onClick={() => setShowTokenDrawer(!showTokenDrawer)}
               >
                 <Key size={14} /> ⚡ 貼上 Token 啟用 0 配額
-              </button>
+              </Button>
             )}
             <Link
               to={PATHS.ytmusicSettings}
@@ -523,24 +527,30 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             </Link>
             {isYtmusicConnected ? (
               <>
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   type="button"
                   className="btn btn-secondary btn-sm"
                   onClick={ytmusicOAuth.handleConnect}
                   disabled={ytmusicOAuth.connecting}
                 >
                   <RefreshCw size={14} className={ytmusicOAuth.connecting ? 'spin' : ''} /> 重新授權
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   type="button"
                   className="btn btn-secondary btn-sm playlist-sort-disconnect"
                   onClick={() => ytmusicOAuth.setConfirmDisconnect(true)}
                 >
                   解除授權
-                </button>
+                </Button>
               </>
             ) : (
-              <button
+              <Button
+                variant="primary"
+                size="sm"
                 type="button"
                 className="btn btn-primary btn-sm"
                 onClick={ytmusicOAuth.handleConnect}
@@ -548,7 +558,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
               >
                 {ytmusicOAuth.connecting ? <Loader2 size={14} className="spin" /> : <Disc3 size={14} />} 連結 YouTube
                 Music 專屬帳號
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -692,7 +702,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             <Pin size={14} className={isSelectedPinned ? 'playlist-sort-pin-icon-active' : undefined} />
             {isSelectedPinned ? '已釘選' : '釘選'}
           </button>
-          <button
+          <Button
+            variant="secondary"
             type="button"
             className="btn btn-secondary"
             aria-label="重新整理清單"
@@ -701,7 +712,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             title="重新整理清單"
           >
             <RefreshCw size={14} className={loadingPlaylists ? 'spin' : ''} />
-          </button>
+          </Button>
         </div>
         {selectedPlaylist && (
           <p className="playlist-sort-selected-description">
@@ -779,15 +790,21 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
               />
             ))}
             {customKeys.length < 5 && (
-              <button type="button" className="btn btn-secondary playlist-sort-add-rule" onClick={handleAddCustomKey}>
+              <Button
+                variant="secondary"
+                type="button"
+                className="btn btn-secondary playlist-sort-add-rule"
+                onClick={handleAddCustomKey}
+              >
                 <Plus size={14} /> 新增排序順位
-              </button>
+              </Button>
             )}
           </div>
         )}
 
         <div className="playlist-sort-actions">
-          <button
+          <Button
+            variant="primary"
             type="button"
             className="btn btn-primary playlist-sort-action"
             onClick={handlePreview}
@@ -795,9 +812,10 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
           >
             {previewing ? <Loader2 size={15} className="spin" /> : <ArrowUpDown size={15} />}
             {previewing ? '預覽中…' : '模擬預覽'}
-          </button>
+          </Button>
           {cachedOriginalTracks && (
-            <button
+            <Button
+              variant="secondary"
               type="button"
               className="btn btn-secondary playlist-sort-action playlist-sort-refresh-cache"
               onClick={handlePreview}
@@ -805,7 +823,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
               title="重新向伺服器拉取最新歌曲資料並更新快取"
             >
               <RefreshCw size={14} className={previewing ? 'spin' : ''} /> 重新讀取歌曲快取
-            </button>
+            </Button>
           )}
         </div>
       </section>
@@ -866,13 +884,15 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                       {quotaEstimate.units_per_move} 點）。
                     </span>
                     {!hasCustomToken && (
-                      <button
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         type="button"
                         className="btn btn-secondary btn-sm playlist-sort-quota-token-button"
                         onClick={() => setShowTokenDrawer(true)}
                       >
                         <Key size={13} /> 展開面板配置 Token 免消耗配額
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </StatusMessage>
@@ -927,7 +947,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
           )}
 
           <div>
-            <button
+            <Button
+              variant="primary"
               type="button"
               className="btn btn-primary playlist-sort-action"
               onClick={handleApplyClick}
@@ -935,7 +956,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             >
               {applying ? <Loader2 size={15} className="spin" /> : <Check size={15} />}
               {applying ? '套用中…' : applyMode === 'new_playlist' ? '建立新排序歌單' : '套用排序'}
-            </button>
+            </Button>
           </div>
         </section>
       )}

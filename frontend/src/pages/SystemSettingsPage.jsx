@@ -17,6 +17,7 @@ import {
 import { systemSettingsApi } from '../features/settings/api/systemSettingsApi';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { StatusMessage } from '../components/StatusMessage';
 import { copyToClipboard } from '../utils/clipboard';
 import { Badge, Button, Card, LoadingState, PageHeader } from '../shared/ui';
 import './SystemSettingsPage.css';
@@ -25,6 +26,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
   const toast = useToast();
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [credentials, setCredentials] = useState(null);
   const [allowlist, setAllowlist] = useState([]);
   const [currentUserEmail, setCurrentUserEmail] = useState('');
@@ -45,28 +47,23 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const [credsRes, allowlistRes] = await Promise.all([
-        systemSettingsApi.getCredentials().catch(() => null),
-        systemSettingsApi.getAllowlist().catch(() => null),
+        systemSettingsApi.getCredentials(),
+        systemSettingsApi.getAllowlist(),
       ]);
-      if (credsRes) {
-        setCredentials(credsRes);
-        setEditClientId(credsRes.credentials?.google?.client_id || credsRes.google?.client_id || '');
-      }
-      if (allowlistRes) {
-        setAllowlist(allowlistRes.allowed_emails || []);
-        setCurrentUserEmail(allowlistRes.current_user_email || '');
-        if (typeof allowlistRes.allow_new_users === 'boolean') {
-          setAllowNewUsers(allowlistRes.allow_new_users);
-        }
-      }
+      setCredentials(credsRes);
+      setEditClientId(credsRes.credentials?.google?.client_id || credsRes.google?.client_id || '');
+      setAllowlist(allowlistRes.allowed_emails);
+      setCurrentUserEmail(allowlistRes.current_user_email);
+      setAllowNewUsers(allowlistRes.allow_new_users);
     } catch (err) {
-      toast.error(`載入系統設定失敗：${err.message}`);
+      setLoadError(`載入系統設定失敗：${err.message}`);
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -183,6 +180,19 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
     return (
       <div className="section-gap">
         <LoadingState>正在載入系統設定...</LoadingState>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="section-gap system-settings-page">
+        <StatusMessage tone="error" title="系統設定待核對">
+          {loadError}
+        </StatusMessage>
+        <Button variant="secondary" onClick={loadData}>
+          重新讀取
+        </Button>
       </div>
     );
   }

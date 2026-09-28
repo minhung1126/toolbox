@@ -1,3 +1,4 @@
+import { Button } from '../shared/ui';
 import React from 'react';
 import {
   AlertCircle,
@@ -127,7 +128,8 @@ export default function FfmpegGeneratorPage() {
               ）與進階編碼選項，一鍵複製跨平台 FFmpeg 指令。
             </p>
           </div>
-          <button
+          <Button
+            variant="secondary"
             type="button"
             className="btn btn-secondary btn-icon"
             onClick={() => setShowHelp(!showHelp)}
@@ -135,7 +137,7 @@ export default function FfmpegGeneratorPage() {
             aria-label="說明"
           >
             <HelpCircle size={18} aria-hidden="true" />
-          </button>
+          </Button>
         </div>
 
         {showHelp && (
@@ -180,7 +182,8 @@ export default function FfmpegGeneratorPage() {
             </div>
             {videoFile && (
               <div className="player-top-actions">
-                <button
+                <Button
+                  variant="secondary"
                   type="button"
                   className="btn btn-secondary btn-xs"
                   onClick={() => {
@@ -190,7 +193,7 @@ export default function FfmpegGeneratorPage() {
                   }}
                 >
                   更換影片
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -211,7 +214,7 @@ export default function FfmpegGeneratorPage() {
                 type="file"
                 ref={fileInputRef}
                 accept="video/*,.mp4,.webm,.mov,.mkv,.avi,.ts,.flv,.wmv,.m4v,.m2ts"
-                style={{ display: 'none' }}
+                hidden
                 onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
                     handleSelectFile(e.target.files[0]);
@@ -343,48 +346,57 @@ export default function FfmpegGeneratorPage() {
                 {/* Primary Button Bar */}
                 <div className="player-btn-bar">
                   <div className="playback-group">
-                    <button
+                    <Button
+                      variant="primary"
                       type="button"
                       className="btn btn-primary btn-icon"
                       onClick={togglePlay}
                       aria-label={isPlaying ? '暫停' : '播放'}
                     >
                       {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-                    </button>
+                    </Button>
 
                     {/* Step buttons */}
-                    <button
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       type="button"
                       className="btn btn-secondary btn-sm"
                       onClick={() => seekRelative(-1)}
                       title="後退 1 秒"
                     >
                       -1s
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       type="button"
                       className="btn btn-secondary btn-sm"
                       onClick={() => seekRelative(-0.1)}
                       title="後退 0.1 秒（逐影格微調）"
                     >
                       -0.1s
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       type="button"
                       className="btn btn-secondary btn-sm"
                       onClick={() => seekRelative(0.1)}
                       title="前進 0.1 秒（逐影格微調）"
                     >
                       +0.1s
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       type="button"
                       className="btn btn-secondary btn-sm"
                       onClick={() => seekRelative(1)}
                       title="前進 1 秒"
                     >
                       +1s
-                    </button>
+                    </Button>
                   </div>
 
                   {/* Playback speed */}
@@ -449,7 +461,8 @@ export default function FfmpegGeneratorPage() {
                     <Scissors size={15} className="rotate-180" /> Cut 前（起始時間 -ss）
                   </label>
                 </div>
-                <button
+                <Button
+                  variant="secondary"
                   type="button"
                   className="btn btn-secondary btn-xs"
                   onClick={handleSetStartTimeToCurrent}
@@ -457,7 +470,7 @@ export default function FfmpegGeneratorPage() {
                   title="將目前播放進度設為起點"
                 >
                   設為目前進度
-                </button>
+                </Button>
               </div>
 
               <div className="cut-card-body">
@@ -471,7 +484,9 @@ export default function FfmpegGeneratorPage() {
                     placeholder="00:00:00.000"
                     aria-label="剪輯起始時間"
                   />
-                  <button
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     type="button"
                     className="btn btn-secondary btn-sm"
                     onClick={() => seekTo(parseHmsToSeconds(startTime))}
@@ -479,7 +494,7 @@ export default function FfmpegGeneratorPage() {
                     title="跳至起點影格預覽"
                   >
                     跳至起點
-                  </button>
+                  </Button>
                 </div>
 
                 {/* Seeking Mode */}
@@ -523,7 +538,8 @@ export default function FfmpegGeneratorPage() {
                     <Scissors size={15} /> Cut 後（結束或長度）
                   </label>
                 </div>
-                <button
+                <Button
+                  variant="secondary"
                   type="button"
                   className="btn btn-secondary btn-xs"
                   onClick={handleSetEndTimeToCurrent}
@@ -531,7 +547,7 @@ export default function FfmpegGeneratorPage() {
                   title="將目前播放進度設為結束點"
                 >
                   設為目前進度
-                </button>
+                </Button>
               </div>
 
               <div className="cut-card-body">
@@ -565,7 +581,9 @@ export default function FfmpegGeneratorPage() {
                     placeholder="00:00:10.000"
                     aria-label="剪輯結束時間或長度"
                   />
-                  <button
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     type="button"
                     className="btn btn-secondary btn-sm"
                     onClick={() => {
@@ -579,7 +597,7 @@ export default function FfmpegGeneratorPage() {
                     title="跳至終點影格預覽"
                   >
                     跳至終點
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>

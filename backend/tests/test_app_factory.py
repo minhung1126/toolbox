@@ -1,3 +1,6 @@
+import os
+import subprocess
+import sys
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -11,6 +14,20 @@ from backend.app.core.notes_store import NotesStore
 from backend.app.core.weverse_upload_store import WeverseUploadStore
 from backend.app.main import create_app
 from backend.app.services.weverse_uploader_service import UploadWorker
+
+
+def test_importing_default_app_does_not_initialize_persistent_state(tmp_path):
+    data_dir = tmp_path / "import-only"
+    env = {**os.environ, "TOOLBOX_DATA_DIR": str(data_dir)}
+    subprocess.run(
+        [sys.executable, "-c", "import backend.app.main"],
+        check=True,
+        env=env,
+        cwd=os.getcwd(),
+        capture_output=True,
+        text=True,
+    )
+    assert not data_dir.exists() or not any(data_dir.iterdir())
 
 
 def test_factory_isolates_repositories_workers_and_provider_calls(tmp_path):

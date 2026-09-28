@@ -20,6 +20,12 @@ export interface YoutubeDraftSettingsResponse {
   shorts?: Partial<YoutubeDraftConfig>;
 }
 
+export interface YoutubeDraftSettingsUpdateResponse {
+  status: 'success';
+  video_type: YoutubeDraftVideoType;
+  config: YoutubeDraftConfig;
+}
+
 export interface RandomMemberPreviewResponse {
   spreadsheet_id: string;
   worksheet_name: string;
@@ -122,7 +128,10 @@ export interface YoutubeQuotaEstimateRequest {
 
 export interface YoutubeBatchApi {
   getDraftSettings(): Promise<YoutubeDraftSettingsResponse>;
-  updateDraftSettings(videoType: YoutubeDraftVideoType, config: YoutubeDraftConfig): Promise<unknown>;
+  updateDraftSettings(
+    videoType: YoutubeDraftVideoType,
+    config: YoutubeDraftConfig
+  ): Promise<YoutubeDraftSettingsUpdateResponse>;
   updatePlaylist(request: { playlistId: string }): Promise<unknown>;
   getRandomMemberPreview(
     spreadsheetUrlOrId: string,

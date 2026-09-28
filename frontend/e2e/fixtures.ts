@@ -4,7 +4,7 @@ const toolScopes: Record<string, string[]> = {
   'creator-tools': ['youtube', 'sheets_readonly'],
   'youtube-music': ['youtube'],
   'sheets-tools': ['sheets_readonly'],
-  'weverse-uploader': ['youtube'],
+  'weverse-uploader': ['video_uploader'],
   'youtube-integrations': ['youtube'],
 };
 

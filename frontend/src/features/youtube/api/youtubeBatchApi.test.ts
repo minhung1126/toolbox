@@ -4,6 +4,9 @@ import { youtubeBatchApi } from './youtubeBatchApi';
 
 vi.mock('../../../services/api', () => ({
   api: {
+    getYoutubeDraftSettings: vi.fn(),
+    updateYoutubeDraftSettings: vi.fn(),
+    updateYoutubePlaylist: vi.fn(),
     getPlaylistVideos: vi.fn(),
     getBatchPreview: vi.fn(),
     batchUpdateMetadata: vi.fn(),
@@ -55,6 +58,35 @@ const result = {
 
 describe('youtubeBatchApi', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('validates draft settings and confirms saved values before reporting success', async () => {
+    const config = {
+      spreadsheet_id: 'sheet-1',
+      playlist_id: 'playlist-1',
+      worksheet_name: 'Videos',
+      title_column: 'Title',
+      description_column: 'Description',
+    };
+    vi.mocked(api.getYoutubeDraftSettings).mockResolvedValueOnce({ video: config, shorts: {} });
+    await expect(youtubeBatchApi.getDraftSettings()).resolves.toEqual({ video: config, shorts: {} });
+    vi.mocked(api.getYoutubeDraftSettings).mockResolvedValueOnce({ video: null, shorts: {} } as unknown as Awaited<
+      ReturnType<typeof api.getYoutubeDraftSettings>
+    >);
+    await expect(youtubeBatchApi.getDraftSettings()).rejects.toThrow('草稿設定結果無法確認');
+
+    const saved = { status: 'success', video_type: 'Video', config };
+    vi.mocked(api.updateYoutubeDraftSettings).mockResolvedValueOnce(saved);
+    await expect(youtubeBatchApi.updateDraftSettings('Video', config)).resolves.toEqual(saved);
+    vi.mocked(api.updateYoutubeDraftSettings).mockResolvedValueOnce({ ...saved, config: { ...config, title_column: 'Other' } });
+    await expect(youtubeBatchApi.updateDraftSettings('Video', config)).rejects.toThrow('草稿設定結果無法確認');
+  });
+
+  it('uses the validated playlist setting response', async () => {
+    vi.mocked(api.updateYoutubePlaylist).mockResolvedValueOnce({ status: 'success', default_playlist_id: 'playlist-1' });
+    await expect(youtubeBatchApi.updatePlaylist({ playlistId: 'playlist-1' })).resolves.toMatchObject({ status: 'success' });
+    vi.mocked(api.updateYoutubePlaylist).mockResolvedValueOnce({ status: 'success' });
+    await expect(youtubeBatchApi.updatePlaylist({ playlistId: 'playlist-1' })).rejects.toThrow('操作結果無法確認');
+  });
 
   it('rejects a missing draft video list instead of treating it as empty', async () => {
     const response = { playlist_id: 'playlist-1', videos: [{ video_id: 'video-1', title: 'Draft' }] };
