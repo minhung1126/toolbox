@@ -54,9 +54,7 @@ export const authApi: AuthApi = {
     return requireResponse<SetupResponse>(
       await api.performSetup(request),
       (value) =>
-        value.status === 'success' &&
-        typeof value.message === 'string' &&
-        value.admin_email === request.adminEmail
+        value.status === 'success' && typeof value.message === 'string' && value.admin_email === request.adminEmail
     );
   },
 };

@@ -25,7 +25,9 @@ describe('authApi response contracts', () => {
     });
 
     await expect(authApi.getLoginConfig()).resolves.toMatchObject({ has_client_id: true });
-    await expect(authApi.getLoginUrl()).resolves.toMatchObject({ auth_url: expect.stringContaining('accounts.google.com') });
+    await expect(authApi.getLoginUrl()).resolves.toMatchObject({
+      auth_url: expect.stringContaining('accounts.google.com'),
+    });
     await expect(authApi.getSetupStatus()).resolves.toMatchObject({ needs_pin: true });
   });
 

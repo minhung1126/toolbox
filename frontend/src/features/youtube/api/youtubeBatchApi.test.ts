@@ -77,13 +77,21 @@ describe('youtubeBatchApi', () => {
     const saved = { status: 'success', video_type: 'Video', config };
     vi.mocked(api.updateYoutubeDraftSettings).mockResolvedValueOnce(saved);
     await expect(youtubeBatchApi.updateDraftSettings('Video', config)).resolves.toEqual(saved);
-    vi.mocked(api.updateYoutubeDraftSettings).mockResolvedValueOnce({ ...saved, config: { ...config, title_column: 'Other' } });
+    vi.mocked(api.updateYoutubeDraftSettings).mockResolvedValueOnce({
+      ...saved,
+      config: { ...config, title_column: 'Other' },
+    });
     await expect(youtubeBatchApi.updateDraftSettings('Video', config)).rejects.toThrow('草稿設定結果無法確認');
   });
 
   it('uses the validated playlist setting response', async () => {
-    vi.mocked(api.updateYoutubePlaylist).mockResolvedValueOnce({ status: 'success', default_playlist_id: 'playlist-1' });
-    await expect(youtubeBatchApi.updatePlaylist({ playlistId: 'playlist-1' })).resolves.toMatchObject({ status: 'success' });
+    vi.mocked(api.updateYoutubePlaylist).mockResolvedValueOnce({
+      status: 'success',
+      default_playlist_id: 'playlist-1',
+    });
+    await expect(youtubeBatchApi.updatePlaylist({ playlistId: 'playlist-1' })).resolves.toMatchObject({
+      status: 'success',
+    });
     vi.mocked(api.updateYoutubePlaylist).mockResolvedValueOnce({ status: 'success' });
     await expect(youtubeBatchApi.updatePlaylist({ playlistId: 'playlist-1' })).rejects.toThrow('操作結果無法確認');
   });

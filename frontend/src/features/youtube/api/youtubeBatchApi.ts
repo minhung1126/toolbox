@@ -39,7 +39,9 @@ function isDraftConfig(value: unknown): value is Record<(typeof DRAFT_FIELDS)[nu
 }
 
 function isPartialDraftConfig(value: unknown): boolean {
-  return isRecord(value) && DRAFT_FIELDS.every((field) => value[field] === undefined || typeof value[field] === 'string');
+  return (
+    isRecord(value) && DRAFT_FIELDS.every((field) => value[field] === undefined || typeof value[field] === 'string')
+  );
 }
 
 function parseDraftSettings(value: unknown): YoutubeDraftSettingsResponse {
@@ -54,7 +56,12 @@ function parseDraftUpdate(
   videoType: string,
   config: YoutubeDraftConfig
 ): YoutubeDraftSettingsUpdateResponse {
-  if (!isRecord(value) || value.status !== 'success' || value.video_type !== videoType || !isDraftConfig(value.config)) {
+  if (
+    !isRecord(value) ||
+    value.status !== 'success' ||
+    value.video_type !== videoType ||
+    !isDraftConfig(value.config)
+  ) {
     throw new DraftSettingsContractError();
   }
   const savedConfig = value.config;
