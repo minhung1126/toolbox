@@ -6,20 +6,28 @@
 
 | Issue | 工作 | 驗收重點 |
 | --- | --- | --- |
-| [#3](https://github.com/minhung1126/toolbox/issues/3) | 共用 UI 與語意樣式 | 剩餘頁面採用共用元件、清理固定 inline layout 與重複樣式，三種視窗寬度及鍵盤操作驗收 |
-| [#4](https://github.com/minhung1126/toolbox/issues/4) | Feature API 契約與 TypeScript | 盤點剩餘 API/model 邊界；格式錯誤與結果不明不得顯示為成功；補相關測試 |
-| [#5](https://github.com/minhung1126/toolbox/issues/5) | 能力矩陣與授權分支 | 複合工作流逐操作核對前端提示、`required_scopes` 與 API 端拒絕行為 |
-| [#6](https://github.com/minhung1126/toolbox/issues/6) | 後端組裝與依賴傳遞 | 清理剩餘匯入副作用，逐條以明確 dependency 取代隱式 request context |
 | [#7](https://github.com/minhung1126/toolbox/issues/7) | 真實 provider smoke test | 專用帳號驗證 OAuth callback、token refresh 與 Weverse 流程；記錄對帳結果 |
 | [#8](https://github.com/minhung1126/toolbox/issues/8) | 部署與回退演練 | 隔離環境用固定 SHA 與資料副本演練中斷、備份、回退及舊版讀取 |
-| [#9](https://github.com/minhung1126/toolbox/issues/9) | 依賴公告處理 | 重新稽核並評估 Vite／Vitest 升級及 React Router 公告 |
-| [#10](https://github.com/minhung1126/toolbox/issues/10) | 視覺 CI 與測試收尾 | Linux Chromium 建立獨立基準，修正 Windows Playwright／Vite 收尾 |
+
+#7 與 #8 依使用者指示暫緩，等待專用 provider 測試帳號及隔離部署環境與資料副本。
+
+## 已完成
+
+| Issue | 交付紀錄 |
+| --- | --- |
+| [#3](https://github.com/minhung1126/toolbox/issues/3) | [共用 UI 盤點](SHARED_UI_AUDIT.md) |
+| [#4](https://github.com/minhung1126/toolbox/issues/4) | [API 契約盤點](API_CONTRACT_AUDIT.md) |
+| [#5](https://github.com/minhung1126/toolbox/issues/5) | [能力矩陣](CAPABILITY_MATRIX.md) |
+| [#6](https://github.com/minhung1126/toolbox/issues/6) | [App context 盤點](APP_CONTEXT_AUDIT.md) |
+| [#9](https://github.com/minhung1126/toolbox/issues/9) | [依賴稽核](DEPENDENCY_AUDIT_2026-09-29.md) |
+| [#10](https://github.com/minhung1126/toolbox/issues/10) | [瀏覽器測試與視覺基準](../frontend/e2e/README.md) |
+
+上述工作已由 [GitHub CI](https://github.com/minhung1126/toolbox/actions/workflows/browser-tests-main.yml) 驗證，瀏覽器測試均在 GitHub 執行。
 
 ## 執行順序
 
-1. #3、#4、#5、#6、#9、#10 可分批平行處理；每批限定一個頁面、功能流程或明確的依賴邊界。
-2. #7 在對應 API 契約與權限分支可驗證後執行，真實操作使用專用帳號與事先定義的測試資料。
-3. #8 使用已通過同 SHA CI 的映像與資料副本，並把演練發現的限制寫回部署文件。
+1. #7 取得專用帳號後，使用事先定義的測試資料執行真實 provider 流程。
+2. #8 取得隔離環境與資料副本後，使用已通過同 SHA CI 的映像演練，並把限制寫回部署文件。
 
 ## 每批交付的共同要求
 
