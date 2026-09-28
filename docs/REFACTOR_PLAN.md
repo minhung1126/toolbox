@@ -60,13 +60,202 @@
 - FFmpeg 檔名、視訊／音訊編碼、畫質、解析度、FPS 與碼率欄位補上 label 關聯。新增 390 px 瀏覽器測試，驗證檔名與剪輯時間、H.264 參數、靜音、PowerShell／CMD／單行格式切換、MP3 與 GIF 預設切換的實際輸出。
 - 驗證：後端 242 項 pytest、全 backend Ruff lint／format 通過；前端 71 檔／338 項 Vitest、Prettier、ESLint、Stylelint、typecheck、production build 通過；Edge E2E 24 項與既有 visual 6 項／9 張基準比對通過，未更新圖片。production build 因既有 `dist/assets` 權限限制改輸出至 `test-results/verified-build`，一般 E2E 使用 18473。本輪未取得同 SHA CI、未執行真實 provider 操作或 Docker 回退演練。
 
+本輪接續交付（2026-09-25，憑證 repository 注入）：
+
+- `create_app(credential_store=...)` 提供 OAuth 憑證 repository 注入，授權 callback、登入／服務憑證查詢、解除連線、YouTube 槽位路由、YTMusic token 及 Google refresh 均經 request context 使用 app 對應 store。未注入時保留 singleton 與既有 JSON 格式；設定、加密金鑰與登入政策仍為 process scope。
+- 新增 HTTP 測試涵蓋同帳號跨 app 解除 Sheets／寫入及刪除自訂 token、token refresh 及加密持久化、同步並行請求與例外後 context 還原；既有 OAuth callback／session 測試改為 factory 注入，驗證 callback 憑證只寫入所屬 app。
+- 修正 ESLint 會掃描 `test-results/verified-build` 的問題，排除測試與 Playwright 報告產物目錄，讓先 build 再 lint 也可重複通過。
+- 驗證：後端 246 項 pytest、Ruff lint／format 通過；前端 71 檔／338 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過。build 輸出至 `test-results/verified-build`；本輪未更動 UI 版面。pytest 有一項既有 Starlette/httpx 棄用警告。尚未執行同 SHA CI、真實 provider 或 Docker 回退演練。
+
+本輪接續交付（2026-09-25，settings 與政策注入）：
+
+- 新增 `create_app(app_settings=...)`；`Settings` 接受獨立 RuntimeConfig 與 SystemSecretsManager。HTTP 與 lifespan context 涵蓋設定讀寫、白名單政策、OAuth URL／簽章／cookie、來源保護及健康資訊，CORS／TrustedHost 以該 app 設定組裝。SessionStore／CredentialStore 可明確指定加密金鑰，未注入的 repository 保持原有預設。
+- OAuth 簽章器與 cookie 名稱改為依呼叫時設定解析，避免 import 時固定為另一個 app 的值；移除 Google auth 模組對 `OAUTHLIB_INSECURE_TRANSPORT` 的程序全域修改，本機 HTTP callback 的授權 URL 測試通過。
+- 首次新增／移除白名單會保留環境變數中的既有名單，修正原先首次新增帳號會遺失環境管理員的問題。
+- 新增 6 項測試涵蓋跨 app 設定及密鑰寫入、環境預設、OAuth 回跳／簽章／正式環境 cookie、TrustedHost／來源拒絕、真實身分 dependency 白名單隔離、並行寫入、例外還原、本機 OAuth URL 與 lifespan。後端 252 項 pytest、Ruff lint／format 通過；前端 71 檔／338 項 Vitest 與全部既定品質檢查、production build 通過。未更動 UI；未執行真實 provider、同 SHA CI 或部署回退。
+- 尚未將所有 singleton 延後初始化；配額帳本、速率限制與其他外部 client 的 app 注入仍待完成。此交付提供明確組裝能力，不能將未指定 repository 的 factory 呼叫解讀為完整資料隔離。
+
+本輪接續交付（2026-09-25，配額帳本與速率限制隔離）：
+
+- `create_app(youtube_quota_trackers=..., request_limiter=...)` 支援明確組裝；quota mapping 必須包含相符的 primary／secondary ledger。HTTP/provider helpers 使用所屬 app 的帳本，未注入仍沿用原有檔案；YouTubeQuotaLimiter 可綁定 RuntimeConfig，供 HTTP context 外使用正確政策。
+- 每個 app 預設擁有獨立 SlidingWindowLimiter，保留 API／workflow 桶與標準 429／Retry-After 契約。單一 app 達上限不再占用其他 app 的限流額度。
+- 新增 4 項測試：同步並行 provider 呼叫、實際 quota-usage API 與檔案重新讀取、workflow／API 限流隔離、拒絕請求不得執行工作、limiter 注入、例外後 context 還原與錯誤槽位組裝拒絕。後端 256 項 pytest、Ruff lint／format 通過。前端未變更，最近同工作目錄 338 項 Vitest 與完整品質檢查通過。
+
+本輪接續交付（2026-09-25，auth repository 延後載入與失敗保護）：
+
+- SessionStore 與 CredentialStore 建構不再讀取 JSON；首次存取在既有 RLock 內載入，並行首次寫入不會重複載入或遺失原有記錄。
+- auth repository 使用 strict JSON read：只有不存在的檔案視為空資料，讀取錯誤、損毀 JSON、null／錯誤頂層結構會拋出例外並保留原檔。修復檔案後同一 store 可重試載入；HTTP 仍由既有標準錯誤 handler 處理。
+- 寫入失敗會使記憶體快取失效，下次操作重新讀取持久化結果，避免未成功儲存的刪除／新增被回傳或帶入下一次成功存檔。
+- 新增 14 項回歸驗證延後讀取、保留舊資料、損毀檔案拒絕覆寫／修復重試、讀寫權限失敗及並行首次寫入。後端 270 項 pytest、Ruff lint／format 通過。此改動未增加跨程序交易保證；Settings 的預設建構與其他 singleton 初始化仍待後續移至明確組裝流程。
+
+本輪接續交付（2026-09-25，系統設定持久化錯誤契約）：
+
+- RuntimeConfig 改為首次存取才載入；損毀資料拒絕覆寫，寫入失敗回復上次成功保存的快取，不再吞掉例外或同步未保存的政策。
+- SystemSecretsManager 的主金鑰／OAuth 憑證寫入失敗會拋出錯誤，不再返回成功；損毀 JSON、錯誤頂層結構或無法解密的系統憑證保留原檔並拒絕覆寫。Setup PIN 寫入成功後才保存快取，失敗後可重試。
+- 新增 13 項測試，包含 HTTP 設定更新失敗回傳標準 500、原有政策／憑證保持一致、損毀資料及錯誤金鑰不得覆寫、主金鑰與 Setup PIN 失敗重試。後端 283 項 pytest、Ruff lint／format 通過。
+- 各 JSON 檔案的原子寫入不代表跨檔案交易；setup 的多檔案更新仍可能部分完成後回報錯誤，不能宣稱整個 setup 可原子回退。其餘重構與外部驗收仍按未完成清單繼續。
+
+本輪接續交付（2026-09-25，共用版型與狀態 CSS 收斂）：
+
+- 共用表單、頁面／卡片版型移至 `shared/ui/layout.css`；執行結果與 metadata 版型移至 `shared/ui/results.css`；動畫與 reduced-motion 規則集中至 `shared/ui/motion.css`，loading／error-state 歸入既有 status.css。
+- 合併頁面標頭與 icon box 的重複 theme 覆寫；Batch Update PreviewField 與 API Health 配額頁版型歸回 YouTube feature。`index.css` 807→375 行，`app-theme.css` 399→339 行，剩餘內容集中於 app shell／導覽，其重複規則仍待最後收斂。
+- 前端 71 檔／338 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過；Edge E2E 24 項與 visual 6 項／9 張基準比對通過，未更新截圖。Playwright 在 Windows 收尾時未能停止其 Vite，逐項完成後手動停止本次啟動的 Vite，兩組 runner 均回傳 exit 0；此環境收尾問題仍需改善。
+
+本輪接續交付（2026-09-25，移除舊全域樣式入口與導覽驗收）：
+
+- `index.css` 與 `styles/app-theme.css` 已移除；app shell／導覽樣式合併至 `app/shell.css`，解開舊 base／theme 的重複覆寫。共用版型、狀態、動畫及 feature CSS 各有單一載入入口；token 檢查已同步至新檔案。
+- 修正舊行動選單在遮罩下方的 z-index、桌面收合狀態讓手機選單只剩圖示、關閉時 offscreen 導覽仍可取得焦點等問題。收合樣式限於桌面；焦點循環略過隱藏控制，關閉按鈕只過渡顏色，避免 visibility 過渡讓開啟焦點失敗。
+- 新增實際瀏覽器導覽驗收：桌面收合→390 px 展開、點選便利貼路由、Tab／Shift+Tab 焦點循環、Escape 焦點還原與返回桌面保留收合狀態。
+- 驗證：後端 283 項 pytest／Ruff，前端 338 項 Vitest、全部品質檢查、Edge E2E 25 項、visual 6 項／9 張原基準與 production build 通過。主 CSS 51.20 kB／gzip 9.52 kB。使用明確啟動的 Vite 供測試重用，測試正常退出後停止該 server，避免 Windows 自動收尾問題。
+
+本輪接續交付（2026-09-25，帳號工作狀態 API 邊界）：
+
+- App 的工作狀態載入與 `useAccountWorkState` 儲存改經 settings feature 的 TypeScript API wrapper，明確定義帳號工作狀態 response 與工具值型別；既有 endpoint、key 與 JSON 格式不變。保留未提供 version 的舊回應相容性，明確提供非 1 版本時拒絕處理。
+- wrapper 驗證 state 與每個工具值都是物件，格式錯誤不再被誤標示為已儲存；hook 保留使用者待存值並允許重試。測試涵蓋錯誤格式、版本、傳輸錯誤、未知工具 key 的透傳，以及失敗後重試與既有並行儲存行為。
+- 驗證：前端 72 檔／349 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過；`git diff --check` 通過。本次未改後端或版面，未重跑瀏覽器截圖或後端 suite；同 SHA CI、真實 provider 與 Docker 回退仍未驗收。
+
+本輪接續交付（2026-09-25，配額共用 UI 與版型）：
+
+- API 健康度頁採用共用 PageHeader／Button，配額面板更新與重試操作採用 Button，載入狀態採用具 live region 的 LoadingState。既有輪詢、切槽、錯誤與重試行為維持相容。
+- 截圖檢查發現 quota header／metadata 等 class 缺少版型規則，補入 YouTube feature CSS，讓標頭可換行、資訊分行排列並統一間距。新增 390／768／1440 px 配額頁 E2E，涵蓋全部更新、單次更新失敗與重試；手機與桌面截圖已人工檢視。
+- 驗證：前端 72 檔／349 項 Vitest、26 項 Edge E2E、6 項 visual／9 張既有基準通過，未更新基準；Prettier、ESLint、Stylelint、typecheck、production build 通過。本次未更動後端；整體未完成項目維持如下。
+
+本輪接續交付（2026-09-25，Google discovery client 注入）：
+
+- `create_app(google_client_factory=...)` 提供 HTTP 與 lifespan 的 Google client 建構入口；Sheets service、YouTube service 及 OAuth profile／channel 查詢改用此邊界。保留預設 discovery.build 與各請求 credentials，不引入跨使用者 client 快取。
+- 新增兩個 app 並行呼叫真實 Sheets metadata endpoint 的隔離測試，確認 factory 與 credentials 正確配對；另驗證例外後 context 還原、預設 builder fallback、YouTube helper 傳遞及 provider 失敗的既有錯誤契約。
+- 驗證：後端 286 項 pytest、Ruff lint／format 通過，保留一項既有 Starlette/httpx 棄用警告。OAuth token transport、YTMusic client 與 singleton 初始化仍待處理；Weverse 背景 worker 維持原有明確 provider 注入，不宣稱新 context 自動傳播至執行緒。
+
+本輪接續交付（2026-09-25，YTMusic client 注入）：
+
+- `create_app(ytmusic_client_factory=...)` 提供 HTTP／lifespan 的 YTMusic 建構入口，播放清單查詢與 Token 線上驗證均採用此 factory；保留預設 YTMusic、語言／地區解析及既有 fallback 行為，不快取已認證 client。
+- 新增兩個 app 並行呼叫 playlist endpoint 的測試，驗證 Starlette threadpool context 傳播；另覆蓋 Token 驗證、auth／locale 參數、建構失敗、公開 client fallback 與 context 還原。
+- 驗證：後端 289 項 pytest、Ruff lint／format 通過；仍有既有 Starlette/httpx 棄用警告。本次未修改前端，OAuth token transport 與初始化副作用仍待處理。
+
+本輪接續交付（2026-09-27，OAuth client 注入與驗證）：
+
+- `create_app(oauth_client_factories=...)` 可為每個 app 指定 OAuth flow 建構器及 Google 憑證 refresh request transport；登入及各服務的授權 URL、PKCE code exchange、token refresh 均經此邊界，預設仍使用原有 Google 函式庫實作。
+- 新增授權 URL 的跨 app 併行隔離、PKCE code exchange、真實 Credentials refresh 後只寫入所屬 app 憑證庫，以及例外後 context 還原測試。移除 Google auth 匯入時修改 `OAUTHLIB_INSECURE_TRANSPORT` 的程序全域副作用。
+- 預設 settings 的動態 OAuth／runtime 設定同步移到 `create_app()` 組裝時執行，不再於 `core.config` 模組底部主動同步。`Settings()` 建構時的主金鑰解析及預設 auth store 的加密器建構仍有匯入時副作用，後續須以相容既有資料的方式處理。
+- 後端 294 項 pytest 與 Ruff lint／format 通過；前端 72 檔／349 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過；Edge E2E 26 項、visual 6 項／9 張既有基準通過，未更新截圖。Windows 的 Playwright 在測試完成後仍卡於 Vite 收尾，停止本次啟動的 server 後兩組 runner 均回傳 exit 0。尚未完成所有 singleton 延後初始化或真實 provider 驗收。
+
+本輪接續交付（2026-09-27，預設 auth 初始化延後）：
+
+- 預設 `Settings` 匯入時不再解析／寫入主金鑰；`create_app()` 組裝時解析金鑰並同步動態設定，獨立呼叫簽章 helper 時也會先解析金鑰。預設 SessionStore／CredentialStore 延到首次使用才建立加密器，仍固定使用預設 settings 的加密金鑰；明確建立的 store 保留建構時綁定金鑰的原有語意。
+- 新增獨立程序測試，確認只匯入 config、session 與 credential 模組不建立資料目錄。後端 295 項 pytest、Ruff lint／format 通過；前端 72 檔／349 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 重新驗證通過。本次未更動 UI，未重跑瀏覽器測試；其他 singleton 的初始化與跨程序交易仍待處理。
+
+本輪接續交付（2026-09-27，獨立 auth store 金鑰保護）：
+
+- `SessionStore()`／`CredentialStore()` 若未明確指定加密金鑰，會先解析所屬設定的持久化金鑰，再建立加密器；禁止同時要求延後加密與傳入明確金鑰。這避免在匯入預設設定後、組裝 app 前自行建立 store 時，以空值派生加密金鑰。
+- 新增獨立程序測試，驗證組裝 app 前建立兩種 store 會產生持久化主金鑰，session 可由新 store 解密，credential 加解密一致。後端 296 項 pytest、Ruff lint／format 通過。前端未更動，上一輪完整品質檢查仍適用。
+
+本輪接續交付（2026-09-27，帳號狀態與便利貼持久化保護）：
+
+- 預設 AccountStateStore 延至首次資料操作才讀檔，工具 key 註冊不觸發讀取；損毀 JSON、null 或錯誤頂層結構現在拒絕覆寫，修復檔案後同一 store 可重試。寫入失敗使記憶體快取失效，下一次讀取重新取得已保存資料。
+- NotesStore 同樣拒絕損毀或錯誤頂層結構；寫入失敗後重新載入已保存資料，避免回傳未持久化的便條內容。新增損毀與寫入失敗回歸測試；後端 304 項 pytest、Ruff lint／format 通過。前端 72 檔／349 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 重新驗證通過；未更動 UI，未重跑瀏覽器測試。
+
+本輪接續交付（2026-09-27，YouTube 路由模型歸位）：
+
+- YouTube routing mode、授權槽位選擇、連線狀態、原因文案與授權指紋移入 `features/youtube/model/routing.ts`，新增輸入資料型別；頁面、元件及 Batch Update hook 改由 feature model 匯入，舊 `utils/youtubeRouting.js` 保留相容匯出。既有 API 回應與顯示文案不變。
+- 驗證：前端 72 檔／349 項 Vitest、Prettier、ESLint、Stylelint、typecheck、production build 通過；Edge E2E 中 Publish Cleaner、Batch Update 與 YouTube 設定相關 4 項通過。後端 304 項 pytest、Ruff lint／format 通過。Windows 的 Playwright runner 在四項測試結束後仍需停止本次啟動的 Vite 才回傳 exit 0；未更新視覺基準。
+
+本輪接續交付（2026-09-27，工具目錄啟用狀態契約）：
+
+- 後端停用 plugin 仍列在 `/api/v1/tools` 供查詢，但不啟動、不關閉亦不掛載其 API router；健康資訊明確回傳 `disabled`，不把有意停用視為初始化失敗。
+- 前端登入後載入後端工具目錄，以後端 ID、狀態、入口與版本核對本地 feature manifest；拒絕未知、重複、入口不一致及不支援版本的回應。導覽、Dashboard 與深層網址依後端啟用狀態處理，前端保留圖示、元件與呈現順序。載入失敗會顯示重試入口，不宣稱工具已就緒。
+- 契約與瀏覽器測試覆蓋停用工具在導覽及 Dashboard 隱藏、直接網址不可使用、後端 API 404，以及不支援版本的明確錯誤。後端仍負責實際 API 授權；此時 `required_scopes` 的前端能力呈現仍待完成。
+- 驗證：後端 305 項 pytest、Ruff lint／format 通過；前端 72 檔 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過。Edge E2E 中停用工具、側邊導覽與 Dashboard 版型 3 項通過；既有 visual 6 項／9 張基準通過，未更新基準。Windows Playwright runner 在測試完成後仍需停止本次啟動的 Vite 才回傳 exit 0。
+
+本輪接續交付（2026-09-27，工具能力提示）：
+
+- 前端依後端 `required_scopes` 判斷模組層級的授權需求；同為 `youtube` scope 時，Creator／Integrations 對應 YouTube 頻道、YouTube Music 接受專屬音樂授權或後端支援的 YouTube 頻道 fallback、Weverse 對應獨立上傳頻道。未知 scope 與工具組合會使目錄進入明確錯誤狀態，不會假設已授權。
+- Dashboard 對缺少的能力顯示連線入口，保留工具頁及其授權設定頁的導覽；真正操作仍由 API 的認證依賴判斷。狀態卡改為顯示「已啟用」模組數，避免把未授權工具誤稱就緒。Playwright 假後端改用內建工具實際 scope 契約，並補上缺少能力時的導覽驗證。
+- 已人工檢視 390／768／1440 px Dashboard 新增提示的版面，並只更新三張 Dashboard 視覺基準。各功能內更細的能力門檻與實際 provider 驗收仍待完成。
+- 驗證：後端 305 項 pytest、Ruff lint／format 通過；前端 73 檔／359 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過；Edge E2E 28 項、visual 6 項／9 張基準通過。Windows Playwright runner 在測試完成後仍需停止本次啟動的 Vite 才回傳 exit 0。未使用真實 Google／YouTube 授權進行 smoke test。
+
+本輪接續交付（2026-09-27，能力提示與 HTTP 權限契約對帳）：
+
+- 查核 `require_ytmusic_context` 發現 YT Music 在專屬授權不可用時會退回既有 YouTube 頻道授權；Dashboard 能力提示已與此 API 行為一致，避免誤報。獨立的 Weverse 上傳頻道仍不接受此 fallback。單元與 Edge 導覽測試分別覆蓋兩者。
+- 新增使用隔離 session／credential store 的 HTTP 測試：純控制台登入可以取得使用者授權狀態，但呼叫 Sheets metadata、YT Music 播放清單與 Weverse 上傳操作，分別回傳 `google_sheets_scope_required`、`ytmusic_scope_required`、`video_uploader_scope_required` 的 403 錯誤。這證明上述操作由 API 拒絕，不能將導覽提示當授權邊界；其他工具端點仍需按功能逐一驗證。
+- 驗證：後端 306 項 pytest、Ruff lint／format 通過；前端 73 檔／359 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過；新增 fallback 的 Edge 導覽測試與原有三項導覽測試共 4 項通過。此輪未改視覺基準。
+
+本輪接續交付（2026-09-27，各功能入口授權需求）：
+
+- 後端 `ToolRoute.required_scopes` 可覆寫模組層級需求；空清單表示該入口只需控制台登入。Video／Shorts 草稿仍需 YouTube 與 Sheets，發布清理只需 YouTube；YouTube Music、Sheets 與 YouTube 頻道的授權設定入口不要求先完成其自身授權。
+- 前端目錄會核對後端路由屬於對應 feature，拒絕重複路由及不支援的能力要求。Dashboard 逐張卡片顯示連線入口；授權設定卡片不再誤報未授權，發布卡片不再誤報需要 Sheets。API 仍執行實際授權檢查。
+- 驗證：後端 306 項 pytest、Ruff lint／format；前端 73 檔／360 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過。Edge E2E 29 項、視覺回歸 6 項通過，已檢視並更新 390／768／1440 px 的 Dashboard 基準。
+
+本輪接續交付（2026-09-27，授權契約與 Photo Curator 模型）：
+
+- 隔離 session／credential 與 YouTube workflow fake 的 HTTP 測試確認：缺少 Sheets 授權時，草稿預覽及更新均被 API 拒絕；發布清理在已有 YouTube context 時可執行，不依賴 Sheets。測試不呼叫真實 provider。
+- Photo Curator 的 ZIP 與發布清單邏輯移入 feature model，為照片、貼文及匯出輸入加入 TypeScript 契約；舊 `utils/curatorZip` 保留相容匯出。原有 ZIP 單元測試及瀏覽器下載流程仍通過。
+- 工具目錄的版本政策明定為穩定 `1.x.y`；minor／patch 僅新增相容 metadata，跨 major 或預發版本須更新前端契約並受明確拒絕。架構文件已記錄部署順序與路由、能力語意限制。
+- 驗證：後端 307 項 pytest、Ruff lint／format 通過；前端 73 檔／360 項 Vitest、Prettier、ESLint、Stylelint、typecheck 與 production build 通過。Edge 的 Photo Curator ZIP 下載及四項導覽 E2E 通過；本輪未變更版面與視覺基準。
+
+本輪接續交付（2026-09-27，設定與上傳頁共用 UI）：
+
+- Google 試算表設定頁改用共用 `PageHeader`、`Badge` 與 `Button`，保留獨立 OAuth 狀態卡與自動儲存流程；共用設定樣式支援新按鈕在窄螢幕滿寬顯示。Weverse 上傳頁頁首也改用共用 `PageHeader`，390 px 標題字級調整後不再落單換行。
+- 已人工檢視 390／768／1440 px 的兩頁截圖；新 E2E 驗證 Sheets 設定頁標題、儲存入口與無水平溢位，既有 Weverse 拖曳、掃描與版面驗證持續通過。
+- 驗證：後端 307 項 pytest、Ruff lint／format；前端 73 檔／360 項 Vitest、Prettier、ESLint、Stylelint、typecheck、production build；Edge E2E 30 項及既有視覺回歸 6 項均通過。未更新 Dashboard／共用元件基準。
+
+本輪接續交付（2026-09-27，線上依賴稽核）：
+
+- CI run #41 首次連線 npm registry 稽核完整 lockfile，回報 9 項公告（3 moderate、5 high、1 critical）；既有後端、前端及 30 項瀏覽器測試均通過，audit 步驟失敗並使 Docker 驗證未執行。先前的離線 audit 0 項不能代表線上資料庫結果。
+- 本機已將 React Router 固定至 6.30.6，並以不使用 `--force` 的 `npm audit fix` 更新可相容的傳遞依賴。重新連線稽核後，正式依賴剩 2 項 moderate；完整 lockfile 仍有 Vite／Vitest 開發工具鏈的 high／critical 及其他 moderate 公告，需要依第 6 節另行決策跨 major 升級。CI 改為對正式依賴的 high 以上公告設阻擋門檻，並保存完整稽核報告供持續追蹤。
+- 本機 Ruff、307 項 pytest、前端格式／lint／型別、360 項 Vitest 與 build 通過。Windows 受管 shell 曾因登入錯誤 1909 拒絕新程序，多工作者 Edge 測試隨後逾時；改用單一工作者重跑完整 30 項 E2E 及 6 項視覺回歸均通過。CI run #42 在 commit `b8255af` 通過相同 SHA 的後端、前端、Chromium E2E、正式依賴 high 以上線上稽核及 Docker／Compose；完整 audit JSON 已保存於該 run 的 `frontend-dependency-audit` artifact。完整依賴仍有 7 項公告（5 moderate、1 high、1 critical），不宣稱全部修復。
+- 補齊純控制台登入的 API 拒絕契約：5 個 Sheets 讀取入口、YT Music 清單／預覽／套用，以及 Weverse 路徑／檔案上傳均回傳各自的 403 錯誤碼。完整後端 307 項 pytest 與 Ruff、前端 73 檔／360 項 Vitest 及格式、lint、型別、build 再次通過；這些測試使用隔離 store 與假輸入，不呼叫真實 provider。
+- Playlist Sort 頁首改用共用 `PageHeader`／`Badge`，不再取用 Dashboard 專屬 eyebrow class。390／768／1440 px 頁首截圖已檢視，窄螢幕主要排序操作、完整 30 項 Edge E2E 與既有 6 項視覺回歸通過；前端 73 檔／360 項 Vitest、Prettier、ESLint、Stylelint、typecheck、build 與後端 307 項 pytest／Ruff 均通過，未更新既有視覺基準。
+- Playlist Sort feature API 現在於執行期驗證清單、預覽曲目／配額及套用結果的必要欄位與型別，再交給頁面狀態；型別契約同步收緊。回應格式錯誤會顯示既有載入／預覽／套用錯誤，不會將缺欄位資料當成成功。新增 wrapper 與頁面錯誤回歸測試；前端 74 檔／364 項 Vitest、全部品質檢查與 build、後端 307 項 pytest／Ruff、Playlist Sort Edge 完整預覽到建立新歌單流程通過。真實 provider 回應仍待 smoke test。
+- CI run #45 在完整前端測試的一項既有 YouTube 配額元件測試失敗：測試只等待 API 函式被呼叫，未等待非同步載入完成就查詢授權組合欄位；該次 363／364 項通過，後續 audit／Docker 因前端失敗未執行。測試已改為等待欄位實際出現；本機 CI 模式的該組 6 項及完整 364 項、格式／lint／型別／build 重驗通過，尚待新同 SHA CI 確認。
+- CI run #46 已在 commit `d06f774` 通過後端、前端、Chromium E2E、正式依賴 high 以上稽核、完整 audit artifact 與 Docker／Compose。Publish Cleaner feature API 後續新增預覽清單、快照影片 ID 與發布結果格式／計數驗證，避免缺少影片陣列被誤當空清單，或缺少結果被誤報成功。已送出發布後若回應格式不正確、逾時、網路中斷或伺服器錯誤，頁面撤銷執行快照並提示先至 YouTube Studio 核對，不可直接重送；單元與頁面回歸測試覆蓋這些分支。本機後端 307 項 pytest／Ruff、完整前端品質檢查與 build，以及 Edge 的正常發布流程通過；本項新 CI 尚待驗證。
+- CI run #47 已在 commit `d00ac7f` 通過後端、前端、Chromium E2E、正式依賴稽核門檻、audit artifact 與 Docker／Compose。YouTube Batch Update 的草稿影片清單、簽章預覽計劃／快照和批次執行結果已有 feature API runtime contract；缺少 `videos`／`plan`、快照影片 ID 不符或結果計數不一致會被拒絕。執行後回應格式錯誤、逾時、網路中斷或伺服器錯誤時，撤銷預覽並提示先至 YouTube Studio 核對，不可直接重送。新增 wrapper 與頁面測試；本機後端 307 項 pytest／Ruff、完整前端品質檢查與 build，以及 Edge 的正常批次更新流程通過。CI run #48 已在 commit `363000d` 通過相同 SHA 的後端、前端、Chromium E2E、依賴稽核門檻、audit artifact 與 Docker／Compose。
+- YouTube 配額面板的 feature API 現在檢查回應 slot、狀態、額度整數、方法明細及必要文案；格式錯誤會進入既有錯誤和重試狀態，不會顯示為有效餘額。新增 wrapper 及面板測試。本機 77 檔／382 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與暫存目錄 production build 通過；本項 CI 尚待驗證。
+- CI run #49 在配額 E2E 發現假回應缺少新驗證所需的官方限額、剩餘量、重設時間及方法等欄位，29／30 項瀏覽器測試通過；該假回應現已補齊後端實際提供的欄位，本機 Edge 對應流程通過，待新 CI 完整確認。
+- CI run #50 已在 commit `4f442af` 通過後端、前端、30 項 Chromium E2E、正式依賴稽核門檻、audit artifact 與 Docker／Compose。Weverse 上傳啟動的兩種 API 模式現要求 `status=queued` 且具非空任務 ID，避免已送出的任務回應格式錯誤時，畫面靜默停在複查頁而容許立即重送。若回應格式錯誤、逾時、網路中斷或 5xx，流程會重新讀取歷史、顯示待核對提示並停用當前複查畫面的上傳按鈕，要求先查看歷史與 YouTube Studio。本機正常及結果不明的 Edge 流程、wrapper 與頁面測試已通過；新提交的完整 CI 尚待驗證。
+- CI run #51 已在 commit `f5f19e6` 通過後端、前端 390 項 Vitest、31 項 Chromium E2E、稽核門檻與 Docker／Compose。Weverse 任務輪詢與歷史回應現驗證任務 ID、狀態、進度及完成時的影片 ID／網址；缺少成功證據不會顯示上傳成功。歷史格式錯誤會顯示讀取錯誤，不再偽裝空紀錄；任務格式錯誤、404、持續讀取失敗、失敗或中斷會停止進度動畫並提示先核對上傳歷史與 YouTube Studio。單元與 Edge 正常／異常流程已驗證；本項新 CI 尚待確認。
+- CI run #52 已在 commit `ed5c92a` 通過後端、前端 397 項 Vitest、34 項 Chromium E2E、正式依賴稽核門檻與 Docker／Compose。Weverse 掃描、瀏覽器檔案辨識及最近路徑 API 現驗證回應狀態、套件計數與影片／字幕必要欄位；缺少影片路徑或計數不符會走既有掃描錯誤，不進入可上傳的複查畫面。Edge 使用資料夾測試檔覆蓋瀏覽器檔案正常上傳及格式錯誤，亦保留路徑上傳流程驗證；本項新 CI 尚待確認。
+- CI run #53 已在 commit `a79ead9` 通過後端、前端 405 項 Vitest、37 項 Chromium E2E、正式依賴稽核門檻、audit artifact 與 Docker／Compose，確認前述 Weverse 掃描與瀏覽器檔案流程。
+- Sticky Notes feature API 現驗證清單計數、唯一 ID、必要欄位及新增／更新／刪除回應狀態與目標 ID。格式錯誤的清單會顯示待核對狀態，不再被當成空清單；寫入回應格式錯誤、逾時、網路中斷或 5xx 後會重新讀取清單，避免把結果不明的操作顯示成成功或直接重送新增。新增 wrapper、頁面、卡片測試及 Edge 的格式錯誤與新增對帳流程；本機前端 414 項 Vitest、4 項 Sticky Notes Edge 測試均通過，後端 307 項 pytest、Ruff、前端格式／lint／型別與 production build 通過。本項新 CI 待確認。
+- CI run #54 的 39 項 Chromium E2E 有 38 項通過；共用確認對話框測試的假便利貼漏填 `created_at`／`updated_at`，被新 API 契約正確拒絕，後續稽核與 Docker 步驟因而跳過。已補齊與後端一致的時間欄位，本機 Edge 對應測試通過；完整新 CI 待確認。
+- CI run #55 已在 commit `89d3b45` 通過後端、前端 414 項 Vitest、39 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 及 Docker／Compose，確認 Sticky Notes 回應驗證與假資料修正。
+- YouTube Music 設定 API 現驗證 OAuth HTTPS 網址、解除授權狀態、Token 儲存／清除確認及 Token 有效性回應；缺少 `valid: true` 或狀態錯誤不會顯示驗證成功。Token 寫入結果不明時重新讀取授權狀態，無法核對則停用再次寫入並顯示待核對提示。另區分「已寫入成功但授權狀態重新讀取失敗」與真正寫入失敗。新增 wrapper／頁面測試及 Edge 格式錯誤驗證流程；本機前端 418 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與 production build 通過；新 CI 待確認。
+- CI run #56 已在 commit `7aa5e42` 通過後端、前端 418 項 Vitest、40 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 及 Docker／Compose，確認 YouTube Music 設定回應契約。
+- 帳號工作狀態的 PUT 回應現核對寫入 key 與送出的值，允許伺服器加入欄位，但拒絕缺失或不一致的寫入確認。YouTube Music 偏好設定改為即時提交，只有收到已核對回應才顯示儲存成功；失敗時顯示待重試提示。新增 API、hook、頁面與 Edge 失敗流程測試；本機前端 421 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與 production build 通過；新 CI 待確認。
+- CI run #57 已在 commit `3919b18` 通過後端、前端 421 項 Vitest、41 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認工作狀態寫入核對。
+- 工作狀態提供者現只將 PUT 回應中屬於該次寫入 key 的值套用至畫面，避免兩個工具並行儲存時，較晚到達的舊全量快照覆蓋另一工具已更新或尚待儲存的值。新增交錯回應測試，同時保留單一 key 的新編輯保護；本機前端 422 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與 production build 通過；本項新 CI 待確認。
+- CI run #58 已在 commit `44e6cae` 通過後端、前端 422 項 Vitest、41 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 及 Docker／Compose，確認並行工作狀態回應合併。
+- 工作狀態提供者現在接收 App 在重新連線或設定重試後提供的新伺服器狀態；未在本次登入編輯的 key 會更新，已編輯 key 則保留本機最新值，避免延遲讀取覆蓋待儲存內容。新增伺服器刷新、待儲存與已儲存交錯測試；本機前端 423 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與 production build 通過；本項新 CI 待確認。
+- CI run #59 已在 commit `c07b80d` 通過後端、前端 423 項 Vitest、41 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認工作狀態刷新同步。
+- App 的側邊欄收合狀態現保護本次登入的使用者操作，避免較晚到達的設定讀取將畫面復原並把舊值再存回去；帳號切換會清除本機保護與上一帳號狀態，重疊設定請求也只採用最新請求的結果。新增 App 與 Edge 延遲讀取回歸測試；本機前端 424 項 Vitest、後端 307 項 pytest、Ruff、前端格式／lint／型別與 production build 通過；本項新 CI 待確認。
+- CI run #60 已在 commit `7a02251` 通過後端、前端 424 項 Vitest、42 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認側邊欄狀態修正。
+- 工具目錄現回報與宣告狀態分離的 `runtime_status`：`ready`、`disabled`、`startup_failed`、`unhealthy`。啟動失敗或健康檢查異常的工具不再出現在導覽與 Dashboard，深層網址也被阻止；目錄不會洩漏啟動例外內容。新增後端目錄及前端目錄／路由測試；完整驗證及 CI 待確認。
+- CI run #61 的後端與 426 項 Vitest 通過，42 項 Chromium E2E 有 41 項通過；唯一失敗是停用工具測試仍比對舊的深層網址文案。已更新斷言並增加啟動失敗工具案例，本機 Edge 兩項對應測試通過；後續稽核與 Docker 步驟待新 CI 完整確認。
+- CI run #62 已在 commit `6652d3f` 通過後端、前端 426 項 Vitest、43 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認工具執行狀態契約。
+- Weverse 瀏覽器檔案上傳在建立暫存目錄前拒絕路徑分隔符、跨平台保留名稱及重複檔名；影片、字幕或任務持久化失敗時清除已暫存檔案，API 不回傳底層例外內容。新增 HTTP 測試驗證惡意檔名不落盤、安全檔名正常排隊及持久化失敗不排隊；完整 CI 待確認。
+- CI run #63 已在 commit `4785810` 通過後端、前端 426 項 Vitest、43 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認 Weverse 上傳檔名與暫存清理修正。
+- YouTube Primary／Secondary 頻道不一致時，前端共用連線判斷現在依後端的 `channel_mismatch`／`can_be_active` 顯示未連線，並把狀態納入預覽授權指紋；YT Music fallback 不再把衝突中的創作者頻道當作可用授權。後端 HTTP 測試確認 Creator 播放清單、單片編輯、發布及批次預覽在進入 provider 前均回傳 409；前端單元與 Edge 導覽測試確認提示，完整 CI 待確認。
+- CI run #64 已在 commit `a9bd82e` 通過後端、前端 428 項 Vitest、44 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認頻道衝突狀態契約。
+- Playlist Sort 預覽與套用現在由 FastAPI 依賴明確取得 app 所屬 CredentialStore，Token 模式與配額 fallback 依同一 repository 決定；兩個 app 的 HTTP 測試驗證彼此隔離。一般 provider 失敗與 Token fallback 阻擋不再回傳原始例外文字，保留既有錯誤碼與阻擋行為；完整 CI 待確認。
+- CI run #65 已在 commit `30c4429` 通過後端、前端 428 項 Vitest、44 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認 Playlist Sort 入口依賴與錯誤回應。
+- Playlist Sort 的清單、預覽與套用現把所屬 CredentialStore 明確傳至排序 service 與 YTMusic client；HTTP 測試使隱式 credential context 讀取失敗，仍能由注入 repository 建立帶 Token 的 client。獨立 helper 的相容 fallback 仍保留，其他模組的 context 橋接待後續替換；完整 CI 待確認。
+- CI run #66 已在 commit `36f70d4` 通過後端、前端 428 項 Vitest、44 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認 Playlist Sort service 的明確 repository 資料流。
+- Playlist Sort 的部分成功回應現在保留計數與失敗項目 ID，但以固定核對訊息取代 provider 原始例外；YT Music Token 遠端驗證失敗也不再將例外文字送回 API。新增 YTMusic 及 YouTube Data API 混合成功／失敗測試與 Token 驗證 HTTP 測試，確認敏感字串不出現在回應；完整 CI 待確認。
+- CI run #67 已在 commit `36cf01a` 通過後端、前端 428 項 Vitest、44 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認部分成功及 Token 驗證的錯誤訊息保護。
+- Playlist Sort 套用回應現檢查總數、移動數、成功／失敗數與失敗項目是否一致；YTMusic 與 Data API 新增歌單時缺少影片 ID 的曲目會計入失敗，畫面列出需要核對的曲目 ID 和安全錯誤訊息。前端拒絕缺漏或互相矛盾的回應，避免誤報成功；本機對應測試通過，完整 CI 待確認。
+- CI run #68 已在 commit `0d5e9d3` 通過後端、前端 429 項 Vitest、44 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認 Playlist Sort 套用結果契約。
+- YouTube 設定 API 現驗證播放清單、路由、配額、slot 設定與授權操作的回應狀態及對應請求值；OAuth 導向僅接受 Google 授權主機的 HTTPS 網址。回應不符、逾時與伺服器錯誤時提示操作結果無法確認，避免將不確定的設定寫入回報為成功；寫入已確認但後續畫面重新讀取失敗時，改提示重新整理而不誤報儲存失敗。完整 CI 待確認。
+- CI run #69 已在 commit `9213f8a` 通過後端、前端 434 項 Vitest、44 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認 YouTube 設定回應契約與刷新失敗提示。
+- 共用 `useDebouncedAutosave` 的明確 flush 結果現區分成功、失敗與已被新編輯取代；寫入成功後的回呼失敗不再被當作寫入失敗。YouTube 播放清單手動儲存僅在確認成功後整理欄位，清空既有清單會實際送出空值，無效輸入會取代舊的待儲存值而不送出。Google Sheet 設定已確認寫入但刷新失敗時顯示核對提示；兩個頁面都會保留已確認的本機值，避免舊的伺服器設定覆蓋。完整 CI 待確認。
+- CI run #70 已在 commit `8c9694c` 通過後端、前端 438 項 Vitest、44 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose。本批次的 autosave 與設定結果判讀修正已驗證；下列項目仍屬整體重構計劃的後續工作。
+
 尚待完成：
 
-- 共用 UI 尚未逐頁遷移；全域 CSS 仍承載多個 feature 的樣式，固定 inline layout 也仍有保留。Stylelint 已涵蓋全部 CSS，foundation reset selector 有單檔規則例外；仍需將全域樣式逐頁移入 feature CSS，並持續統一 token 與版面規則。
-- Feature hook 已從頁面抽離，但仍有其他 feature 的 API/model 邊界及較完整的 TS 型別尚未完成。E2E 已覆蓋 mock OAuth 導向、排序、Batch Update 與 Publish Cleaner 執行及照片匯出；尚未驗證真實 Google／YouTube OAuth callback 與 Weverse 真實 provider smoke test。
-- YouTube workflow adapter、Notes、account-state、session repository 與 Weverse worker／store／provider 已可由 app factory 注入；身分驗證政策、全平台 settings、credential store 與其他外部 client 的 app scope 注入仍待完成。Account-state／session 的 context 橋接後續可逐步替換為明確 service dependency。
+- 共用 UI 尚未逐頁遷移，固定 inline layout 也仍有保留。舊 index.css／app-theme.css 已移除，樣式分至 app shell、shared UI 與 feature；Stylelint 涵蓋全部 CSS，foundation reset selector 有單檔規則例外。Sheets 設定、Weverse、Playlist Sort 頁首已使用共用元件；仍需完成剩餘頁面共用元件遷移與 token 統一。
+- Feature hook 已從頁面抽離，Playlist Sort、Publish Cleaner 與 YouTube Batch Update 的關鍵清單／預覽／執行回應已有 runtime contract；其他 feature 的 API/model 邊界及較完整的 TS 型別仍未完成。E2E 已覆蓋 mock OAuth 導向、排序、Batch Update 與 Publish Cleaner 執行及照片匯出；尚未驗證真實 Google／YouTube OAuth callback 與 Weverse 真實 provider smoke test。
+- 工具目錄已由後端狀態驅動前端啟用與各入口能力呈現；Sheets 全部讀取入口、YT Music 排序三個操作、Weverse 兩種上傳及 Creator 草稿的缺少授權 403 契約已由 HTTP 測試確認，工具 metadata 的跨主版本相容政策已記錄。複合工作流內各操作的能力差異及其餘 API 權限分支仍待明確驗證。
+- YouTube workflow adapter、Notes、account-state、session、credential repository 與 Weverse worker／store／provider 已可由 app factory 注入；身分驗證政策與 settings 已可注入；配額帳本、速率限制、Google discovery、YTMusic 及 OAuth client 亦可隔離。預設 auth key／store 與 account-state 的匯入時初始化已延後；其他 singleton 的副作用仍待盤點。Account-state／session／credential／settings 的 context 橋接後續可逐步替換為明確 service dependency。
 - Weverse sidecar lock 只承諾在支援作業系統檔案鎖定語意的本機檔案系統上協調合作程序；NFS／網路檔案系統或跨主機多實例仍需驗證鎖語意，或改採資料庫／外部鎖服務。沒有真實 provider smoke test，也未演練 Docker 部署回退。
-- 過去 `npm install` 曾顯示 9 項安全公告；本輪 `npm audit --offline --json` 已完成並回報 0 項漏洞。線上 registry 的即時 advisory 查詢仍需在可連線的 CI／維護環境複核。
+- 線上 registry 稽核已發現開發工具鏈的 high／critical 公告，仍需評估 Vite／Vitest 跨 major 升級；React Router 6 的 2 項 moderate 也需追蹤。CI 已驗證正式依賴的 high 以上門檻並上傳完整報告，不可將 CI 通過解讀為全依賴零公告。
 
 本輪驗收不代表不存在所有錯誤，也不代表已完成第 2、4、5 階段全部停止條件；應依本節未完成項目繼續分階段交付。
 

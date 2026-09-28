@@ -1,7 +1,8 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../services/api';
+import { workStateApi } from '../features/settings/api/workStateApi';
 
 const AccountWorkStateContext = createContext(null);
+const EMPTY_WORK_STATE = Object.freeze({});
 
 function asObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -16,11 +17,25 @@ function emptyStatus() {
   };
 }
 
-export function AccountWorkStateProvider({ initialState = {}, children }) {
+export function AccountWorkStateProvider({ initialState = EMPTY_WORK_STATE, children }) {
   const [state, setState] = useState(() => asObject(initialState));
   const [statuses, setStatuses] = useState({});
   const recordsRef = useRef(new Map());
   const mountedRef = useRef(true);
+  const initialStateRef = useRef(initialState);
+
+  useEffect(() => {
+    if (initialStateRef.current === initialState) return;
+    initialStateRef.current = initialState;
+    setState((current) => {
+      const next = { ...asObject(initialState) };
+      // A delayed settings read must not replace local edits from this session.
+      recordsRef.current.forEach((record, key) => {
+        if (record.desiredVersion > 0 && Object.hasOwn(current, key)) next[key] = current[key];
+      });
+      return next;
+    });
+  }, [initialState]);
 
   const updateStatus = useCallback((key, changes) => {
     if (!mountedRef.current) return;
@@ -62,7 +77,7 @@ export function AccountWorkStateProvider({ initialState = {}, children }) {
       updateStatus(key, { saving: true, saved: false, error: '' });
 
       const request = Promise.resolve()
-        .then(() => api.updateWorkState(key, value))
+        .then(() => workStateApi.update(key, value))
         .then((result) => {
           record.inFlightPromise = null;
           record.lastSavedVersion = version;
@@ -70,10 +85,8 @@ export function AccountWorkStateProvider({ initialState = {}, children }) {
 
           if (mountedRef.current) {
             setState((current) => {
-              const serverState = result?.state && typeof result.state === 'object' ? result.state : {};
-              const next = { ...current, ...serverState };
-              if (record.desiredVersion > version) next[key] = record.desiredValue;
-              return next;
+              if (record.desiredVersion > version) return current;
+              return { ...current, [key]: result.state[key] };
             });
           }
 

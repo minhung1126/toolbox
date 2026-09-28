@@ -74,14 +74,18 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
   // Upload task state
   const [currentTaskId, setCurrentTaskId] = useState(null);
   const [taskStatus, setTaskStatus] = useState(null);
+  const [taskPollingError, setTaskPollingError] = useState('');
   const [uploadConfirmOpen, setUploadConfirmOpen] = useState(false);
   const [uploadStarting, setUploadStarting] = useState(false);
+  const [uploadOutcomeUncertain, setUploadOutcomeUncertain] = useState(false);
 
   // History state
   const [historyList, setHistoryList] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
 
   const folderInputRef = useRef(null);
+  const historyRequestIdRef = useRef(0);
 
   // Load recent paths & history on mount
   const loadRecentPaths = useCallback(async () => {
@@ -94,14 +98,20 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
   }, []);
 
   const loadHistory = useCallback(async () => {
+    const requestId = historyRequestIdRef.current + 1;
+    historyRequestIdRef.current = requestId;
     setHistoryLoading(true);
     try {
       const res = await weverseUploadApi.getHistory(10);
-      if (res?.tasks) setHistoryList(res.tasks);
-    } catch {
-      // Ignore background error
+      if (requestId !== historyRequestIdRef.current) return;
+      setHistoryList(res.tasks);
+      setHistoryError('');
+    } catch (err) {
+      if (requestId !== historyRequestIdRef.current) return;
+      setHistoryList([]);
+      setHistoryError(err?.message || '無法讀取上傳歷史，請重試。');
     } finally {
-      setHistoryLoading(false);
+      if (requestId === historyRequestIdRef.current) setHistoryLoading(false);
     }
   }, []);
 
@@ -121,28 +131,44 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
       return undefined;
     }
 
+    let active = true;
+    let polling = false;
+    let consecutiveFailures = 0;
     const interval = setInterval(async () => {
+      if (polling) return;
+      polling = true;
       try {
         const res = await weverseUploadApi.getTask(currentTaskId);
-        if (res?.task) {
-          setTaskStatus(res.task);
-          if (res.task.status === 'completed') {
-            setViewStep('completed');
-            toast.success('影片與字幕已成功上傳至 YouTube！');
-            loadHistory();
-          } else if (res.task.status === 'failed') {
-            toast.error(`上傳失敗：${res.task.error_message || '未知錯誤'}`);
-          }
+        if (!active) return;
+        consecutiveFailures = 0;
+        setTaskStatus(res.task);
+        if (res.task.status === 'completed') {
+          clearInterval(interval);
+          setViewStep('completed');
+          toast.success('影片與字幕已成功上傳至 YouTube！');
+          loadHistory();
+        } else if (res.task.status === 'failed' || res.task.status === 'interrupted') {
+          clearInterval(interval);
+          setTaskPollingError('任務已停止，可能已有部分內容上傳。請先檢查上傳歷史與 YouTube Studio。');
+          loadHistory();
         }
       } catch (err) {
-        // Stop polling on 404 or terminal error
-        if (err?.status === 404) {
+        if (!active) return;
+        consecutiveFailures += 1;
+        if (err?.status === 404 || err?.code === 'weverse_task_invalid' || consecutiveFailures >= 3) {
           clearInterval(interval);
+          setTaskPollingError('無法確認上傳任務狀態。請先檢查上傳歷史與 YouTube Studio，勿直接重送。');
+          loadHistory();
         }
+      } finally {
+        polling = false;
       }
     }, 2000);
 
-    return () => clearInterval(interval);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, [currentTaskId, taskStatus?.status, toast, loadHistory]);
 
   // Handle scanned package setup
@@ -363,6 +389,8 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
   const handleStartUpload = async () => {
     setUploadConfirmOpen(false);
 
+    if (uploadOutcomeUncertain || uploadStarting) return;
+
     if (!isVideoAuthConnected) {
       toast.error('請先完成專屬影片上傳 YouTube 頻道授權。');
       return;
@@ -429,26 +457,38 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
         res = await weverseUploadApi.uploadFiles(formData);
       }
 
-      if (res?.task_id) {
-        setCurrentTaskId(res.task_id);
-        setTaskStatus({
-          task_id: res.task_id,
-          title: metadata.title.trim(),
-          status: 'pending',
-          progress_percent: 0,
-          current_step: '任務已排入背景上傳佇列...',
-        });
-        setViewStep('uploading');
-        toast.success('上傳任務已啟動！正在背景傳輸至 YouTube。');
-      }
+      setCurrentTaskId(res.task_id);
+      setTaskPollingError('');
+      setTaskStatus({
+        task_id: res.task_id,
+        title: metadata.title.trim(),
+        status: 'pending',
+        progress_percent: 0,
+        current_step: '任務已排入背景上傳佇列...',
+      });
+      setViewStep('uploading');
+      toast.success('上傳任務已啟動！正在背景傳輸至 YouTube。');
     } catch (err) {
-      toast.error(`啟動上傳失敗：${err.message || '未知錯誤'}`);
+      if (
+        err?.code === 'weverse_upload_result_invalid' ||
+        err?.code === 'timeout' ||
+        err?.code === 'network_error' ||
+        err?.status >= 500
+      ) {
+        setUploadOutcomeUncertain(true);
+        loadHistory();
+        toast.error('無法確認上傳任務是否已啟動；請先檢查上傳歷史及 YouTube Studio，勿直接重送。');
+      } else {
+        toast.error(`啟動上傳失敗：${err?.message || '未知錯誤'}`);
+      }
     } finally {
       setUploadStarting(false);
     }
   };
 
   const handleReset = () => {
+    setUploadOutcomeUncertain(false);
+    setTaskPollingError('');
     setViewStep('pick');
     setVideoInfo(null);
     setSubtitles([]);
@@ -476,11 +516,14 @@ export function useWeverseUploadWorkflow({ isVideoAuthConnected, toast }) {
     setMetadata,
     currentTaskId,
     taskStatus,
+    taskPollingError,
     uploadConfirmOpen,
     setUploadConfirmOpen,
     uploadStarting,
+    uploadOutcomeUncertain,
     historyList,
     historyLoading,
+    historyError,
     loadHistory,
     folderInputRef,
     handleScanPath,

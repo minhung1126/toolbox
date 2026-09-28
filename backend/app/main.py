@@ -19,9 +19,15 @@ from backend.app.core.account_state_store import (
 from backend.app.core.account_state_store import (
     account_state_store as default_account_state_store,
 )
-from backend.app.core.config import settings
+from backend.app.core.config import SettingsMiddleware, get_settings, settings, settings_context
+from backend.app.core.credential_store import CredentialStoreMiddleware
 from backend.app.core.error_contract import http_error, normalize_http_detail, validation_field_errors
+from backend.app.core.request_protection import SlidingWindowLimiter
 from backend.app.core.session_store import SessionStoreMiddleware
+from backend.app.services.google_clients import GoogleClientMiddleware, google_client_context
+from backend.app.services.oauth_clients import OAuthClientMiddleware, oauth_client_context
+from backend.app.services.youtube_quota_service import YouTubeQuotaMiddleware
+from backend.app.services.ytmusic_clients import YtmusicClientMiddleware, ytmusic_client_context
 from backend.app.tools.builtin import register_builtin_tools
 from backend.app.tools.registry import ToolRegistry, tool_registry
 
@@ -52,11 +58,17 @@ def frontend_cache_control(path: str, content_type: str | None) -> str | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await app.state.tool_registry.run_startup(app)
-    try:
-        yield
-    finally:
-        await app.state.tool_registry.run_shutdown(app)
+    with (
+        settings_context(app.state.settings),
+        google_client_context(app.state.google_client_factory),
+        ytmusic_client_context(app.state.ytmusic_client_factory),
+        oauth_client_context(app.state.oauth_client_factories),
+    ):
+        await app.state.tool_registry.run_startup(app)
+        try:
+            yield
+        finally:
+            await app.state.tool_registry.run_shutdown(app)
 
 
 async def request_validation_error_handler(request: Request, exc: RequestValidationError):
@@ -111,7 +123,7 @@ async def security_headers(request, call_next):
         "media-src 'self' data: blob:; "
         "style-src 'self' 'unsafe-inline'; script-src 'self'",
     )
-    if settings.is_production:
+    if get_settings(settings).is_production:
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     cache_control = frontend_cache_control(request.url.path, response.headers.get("content-type"))
     if cache_control:
@@ -121,16 +133,18 @@ async def security_headers(request, call_next):
 
 def health_check(request: Request = None):
     registry = request.app.state.tool_registry if request is not None else tool_registry
-    google_oauth_ready = bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET)
-    youtube_primary = settings.youtube_oauth_slot("primary")
-    youtube_secondary = settings.youtube_oauth_slot("secondary")
+    google_oauth_ready = bool(get_settings(settings).GOOGLE_CLIENT_ID and get_settings(settings).GOOGLE_CLIENT_SECRET)
+    youtube_primary = get_settings(settings).youtube_oauth_slot("primary")
+    youtube_secondary = get_settings(settings).youtube_oauth_slot("secondary")
     youtube_login_ready = google_oauth_ready
     youtube_primary_ready = youtube_primary.configured
     youtube_secondary_ready = youtube_secondary.configured
-    access_allowlist_ready = bool(settings.allowed_google_emails) or not settings.allowlist_required
+    access_allowlist_ready = (
+        bool(get_settings(settings).allowed_google_emails) or not get_settings(settings).allowlist_required
+    )
     warnings = []
     tool_health = registry.health_check()
-    failed_tools = [tool_id for tool_id, state in tool_health.items() if state.get("status") != "ok"]
+    failed_tools = [tool_id for tool_id, state in tool_health.items() if state.get("status") not in {"ok", "disabled"}]
     if failed_tools:
         warnings.append("部分工具模組未能初始化")
     if not google_oauth_ready:
@@ -143,8 +157,8 @@ def health_check(request: Request = None):
         "status": "degraded" if failed_tools else "healthy",
         "ready": google_oauth_ready and youtube_primary_ready and access_allowlist_ready and not failed_tools,
         "service": "Toolbox Backend",
-        "host": settings.base_url,
-        "redirect_uri": settings.get_redirect_uri(),
+        "host": get_settings(settings).base_url,
+        "redirect_uri": get_settings(settings).get_redirect_uri(),
         "configuration": {
             "google_oauth_ready": google_oauth_ready,
             "access_allowlist_ready": access_allowlist_ready,
@@ -176,15 +190,32 @@ def resolve_frontend_path(full_path: str) -> Path:
 
 def create_app(
     *,
+    app_settings=None,
     notes_store=None,
     account_state_store=None,
     session_store=None,
+    credential_store=None,
     upload_worker=None,
     youtube_workflow_adapters=None,
+    youtube_quota_trackers=None,
+    request_limiter=None,
+    google_client_factory=None,
+    ytmusic_client_factory=None,
+    oauth_client_factories=None,
     registry=None,
     dependency_overrides=None,
 ) -> FastAPI:
     """Compose per-app repositories, workflow adapters, registry and worker lifecycle."""
+    if youtube_quota_trackers is not None:
+        youtube_quota_trackers = dict(youtube_quota_trackers)
+        if set(youtube_quota_trackers) != {"primary", "secondary"}:
+            raise ValueError("youtube_quota_trackers must provide primary and secondary ledgers")
+        if any(tracker.slot != slot for slot, tracker in youtube_quota_trackers.items()):
+            raise ValueError("YouTube quota ledger slots must match their mapping keys")
+    config = settings if app_settings is None else app_settings
+    with settings_context(config):
+        config.initialize_keys()
+        config.sync_dynamic_config()
     if registry is None:
         registry = ToolRegistry()
         register_builtin_tools(registry)
@@ -199,6 +230,16 @@ def create_app(
         version="1.1.0",
         lifespan=lifespan,
     )
+    application.state.settings = config
+    application.state.oauth_client_factories = oauth_client_factories
+    application.add_middleware(OAuthClientMiddleware, factories=oauth_client_factories)
+    application.state.google_client_factory = google_client_factory
+    application.state.ytmusic_client_factory = ytmusic_client_factory
+    application.add_middleware(YtmusicClientMiddleware, factory=ytmusic_client_factory)
+    application.add_middleware(GoogleClientMiddleware, factory=google_client_factory)
+    application.state.request_limiter = SlidingWindowLimiter() if request_limiter is None else request_limiter
+    application.state.youtube_quota_trackers = youtube_quota_trackers
+    application.add_middleware(YouTubeQuotaMiddleware, trackers=youtube_quota_trackers)
     application.state.tool_registry = registry
     application.state.notes_store = notes_store
     application.state.account_state_store = (
@@ -207,6 +248,8 @@ def create_app(
     application.add_middleware(AccountStateMiddleware, store=application.state.account_state_store)
     application.state.session_store = session_store
     application.add_middleware(SessionStoreMiddleware, store=session_store)
+    application.state.credential_store = credential_store
+    application.add_middleware(CredentialStoreMiddleware, store=credential_store)
     application.state.upload_worker = upload_worker
     application.state.youtube_workflow_adapters = dict(youtube_workflow_adapters or {})
     application.dependency_overrides.update(dependency_overrides or {})
@@ -215,8 +258,8 @@ def create_app(
     application.add_exception_handler(Exception, unhandled_exception_handler)
     application.middleware("http")(security_headers)
     application.get("/api/v1/health")(health_check)
-    origins = {settings.frontend_url, settings.base_url}
-    if not settings.is_production:
+    origins = {config.frontend_url, config.base_url}
+    if not config.is_production:
         origins.update(
             {
                 "http://localhost:3000",
@@ -227,7 +270,7 @@ def create_app(
         )
     origins.discard("")
 
-    application.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.trusted_hosts))
+    application.add_middleware(TrustedHostMiddleware, allowed_hosts=list(config.trusted_hosts))
 
     application.add_middleware(
         CORSMiddleware,
@@ -237,6 +280,7 @@ def create_app(
         allow_headers=["*"],
     )
 
+    application.add_middleware(SettingsMiddleware, config=config)
     application.include_router(create_api_router(registry))
 
     if frontend_dist.is_dir():
@@ -262,4 +306,6 @@ app = create_app(registry=tool_registry)
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("backend.app.main:app", host=settings.BIND_HOST, port=settings.PORT, reload=True)
+    uvicorn.run(
+        "backend.app.main:app", host=get_settings(settings).BIND_HOST, port=get_settings(settings).PORT, reload=True
+    )

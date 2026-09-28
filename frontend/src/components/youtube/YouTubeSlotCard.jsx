@@ -1,6 +1,6 @@
 import React from 'react';
 import { AlertCircle, CheckCircle2, ExternalLink, Eye, EyeOff, Key, Save, XCircle, Youtube } from 'lucide-react';
-import { YOUTUBE_ROUTING_MODES } from '../../utils/youtubeRouting';
+import { YOUTUBE_ROUTING_MODES } from '../../features/youtube/model/routing';
 import { formatTokenDate, tokenStatusLabel } from '../../utils/formatters';
 
 export default function YouTubeSlotCard({

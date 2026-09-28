@@ -125,6 +125,10 @@ tool_registry.register(MyToolPlugin())
 4. 頁面使用 `shared/ui` 元件與 `styles/tokens.css` 語意 token，固定版面放 feature CSS。API 契約與包裝器放 feature 的 `api/`，領域純函式放 `model/`。
 5. 補齊 manifest／路由契約、功能互動與需要的 E2E。Navbar 測試已驗證新增 manifest 群組可直接呈現及展開目前路由。
 
+工具目錄目前支援穩定的 `1.x.y` metadata 版本。minor／patch 僅可增加可忽略欄位或已由前端 manifest 支援的路由；既有 ID、`entry_url`、路由與授權語意不得在同一 major 內破壞。前端拒絕 `0.x`、`2.x`、預發版本及未知能力／路由，並顯示目錄錯誤。升級 major 時須先部署同時接受舊／新版的前端與契約測試，再讓後端送出新 major；舊版本前端仍有流量時，不得直接切換後端目錄。`ToolRoute.required_scopes` 可覆寫模組需求，`[]` 表示登入即可進入設定頁，但每項操作仍由 API 授權依賴檢查。
+
+目錄另外提供即時 `runtime_status`：`ready`、`disabled`、`startup_failed` 或 `unhealthy`。宣告的 `status`（`active`／`beta`／`disabled`）仍表示配置與發布階段；執行狀態由 plugin 啟動結果及健康檢查產生，不包含例外訊息。前端只顯示執行狀態為 `ready` 的工具；舊版目錄若未提供此欄位，維持原有宣告狀態判斷。深層網址遇到不可用工具會顯示無法使用訊息。
+
 ```javascript
 import { lazy } from 'react';
 import { Wrench } from 'lucide-react';
@@ -153,11 +157,11 @@ export default manifest;
 
 ### 應用組裝與測試隔離
 
-`backend.app.main.create_app()` 接受 `notes_store`、`account_state_store`、`session_store`、`upload_worker`、`youtube_workflow_adapters`、`registry` 與 `dependency_overrides`。每次呼叫預設建立獨立 registry 及上傳 worker；有資料隔離需求時傳入不同路徑的 repository。上傳 worker 的 provider factory 可替換成 fake，HTTP 整合測試會確認兩個 app 的 notes、上傳歷史及 provider 呼叫相互隔離。身分驗證政策、credential store 與系統設定目前仍沿用既有 process-level store／settings，不能宣稱整個平台已支援不同設定的多租戶 app。
+`backend.app.main.create_app()` 接受 `app_settings`、`notes_store`、`account_state_store`、`session_store`、`credential_store`、`upload_worker`、`youtube_workflow_adapters`、`youtube_quota_trackers`、`request_limiter`、`registry` 與 `dependency_overrides`。每次呼叫預設建立獨立 registry 及上傳 worker；有資料隔離需求時傳入不同路徑的 repository。上傳 worker 的 provider factory 可替換成 fake，HTTP 整合測試會確認兩個 app 的 notes、上傳歷史及 provider 呼叫相互隔離。傳入 `app_settings` 可隔離設定與身分驗證政策；未注入的持久化 repository 與配額帳本仍可能共用，不能只傳入 settings 就宣稱整個平台已隔離。
 
 `account_state_store` 注入後，HTTP middleware 以 ContextVar 將既有 account helpers、動態 key 驗證與 YTMusic 地區偏好導向該 app 的 repository；同步 endpoint 的 threadpool 會繼承此 context，請求結束或失敗都會還原。工具 startup 也會向該 repository 登錄 key。未注入時保留預設 singleton；手動建立的背景執行緒需明確接收 repository，不能假設會繼承 HTTP context。此橋接保留既有函式契約，後續可逐步改為明確 service dependency。
 
-`session_store` 使用相同 request context 機制，涵蓋登入 callback 建立／輪替 session、身分驗證、服務授權 owner 查詢與登出。兩個 app 即使接收到同一 cookie，也只會讀寫各自 session repository；未注入時仍使用既有 singleton。Session 加密金鑰、credential repository 與登入允許政策尚未隔離，不能將 session 隔離解讀為完整多租戶安全邊界。
+`session_store` 使用相同 request context 機制，涵蓋登入 callback 建立／輪替 session、身分驗證、服務授權 owner 查詢與登出。兩個 app 即使接收到同一 cookie，也只會讀寫各自 session repository；未注入時仍使用既有 singleton。SessionStore 與 CredentialStore 可用 `encryption_key=` 明確傳入各 app 的加密金鑰；未指定時保留既有設定來源。
 
 所有預設資料路徑統一由 `core/data_paths.py` 解析；`TOOLBOX_DATA_DIR` 未設定時仍使用專案的 `data/`。pytest 的 `conftest.py` 會在應用匯入前配置暫存資料目錄，並禁止第三方網路連線（保留 Windows asyncio 所需的 loopback socket）。預設測試不需要复制整個 repository 才能保護正式資料。
 
@@ -206,3 +210,51 @@ volumes:
 - `youtube_quota.json`: YouTube API 當日呼叫量雙桶計帳紀錄。
 - `youtube_jobs.json`: 背景影片上傳工作的斷點續傳進度狀態。
 
+
+`credential_store` 注入涵蓋 OAuth callback、服務授權查詢／解除、YouTube 槽位路由、YTMusic 自訂 token 與 Google token refresh 的讀寫。HTTP request context 會傳入 FastAPI 同步 threadpool，並在例外後還原；獨立背景執行緒須明確傳入 repository。未注入時維持既有 singleton 及 JSON 格式。獨立設定與金鑰透過下列組裝方式注入；未指定的 repository 仍可能使用預設路徑。
+
+Playlist Sort API 的清單、預覽與套用在入口透過 `get_playlist_credential_store` 明確取得該 app 的 CredentialStore，並將 repository 傳至排序 service 與 YTMusic client 建立處；瀏覽器 Token 是否存在以及是否容許配額 fallback 都由同一 repository 判定。獨立呼叫 YTMusic helper 而未傳入 repository 時仍保留既有 request context fallback，其他服務仍待逐步替換。Playlist Sort 的一般 provider 例外只回傳固定錯誤訊息，不將原始例外文字送回瀏覽器；嚴格 Token fallback 阻擋仍保留原錯誤碼。
+
+排序逐曲目執行失敗時仍回傳成功／失敗計數及失敗的曲目或影片 ID，但 `failed_items.error` 使用固定核對指示，不包含 provider 原始例外。YT Music Token 驗證只向使用者顯示本地輸入格式錯誤；遠端驗證失敗使用固定訊息，避免 Cookie、Token 或請求細節出現在 API 回應。
+
+
+`Settings(runtime_store=RuntimeConfig(...), secrets_store=SystemSecretsManager(...))` 使用指定 repository 讀取動態設定、系統 OAuth 憑證、初次設定狀態與主金鑰。RuntimeConfig 綁定該 Settings，避免直接寫入 repository 時通知其他 app。`create_app(app_settings=config)` 將設定套用於 HTTP context、lifespan、CORS／TrustedHost、來源保護、OAuth URL／簽章／cookie、登入白名單與健康資訊。同步 endpoint 繼承 context，例外後會還原；手動背景執行緒應明確取得設定或使用 `settings_context(config)`。
+
+```python
+from backend.app.core.config import Settings
+from backend.app.core.credential_store import CredentialStore
+from backend.app.core.runtime_config import RuntimeConfig
+from backend.app.core.session_store import SessionStore
+from backend.app.core.system_secrets import SystemSecretsManager
+from backend.app.main import create_app
+
+config = Settings(
+    runtime_store=RuntimeConfig(data_dir / "runtime_config.json"),
+    secrets_store=SystemSecretsManager(data_dir),
+)
+application = create_app(
+    app_settings=config,
+    session_store=SessionStore(
+        data_dir / "sessions.json", encryption_key=config.CREDENTIAL_ENCRYPTION_KEY
+    ),
+    credential_store=CredentialStore(
+        data_dir / "credential_store.json", encryption_key=config.CREDENTIAL_ENCRYPTION_KEY
+    ),
+    # 需要完整資料隔離時，也須注入其餘各 repository 與 worker。
+)
+```
+
+OAuth provider URL 固定使用 HTTPS；本機 HTTP callback 的授權 URL 產生不需要修改程序的 `OAUTHLIB_INSECURE_TRANSPORT`。未使用真實 provider 驗收 token exchange。預設模組 singleton 仍於 import 時建構，全面延後初始化仍是後續工作。
+
+`create_app(google_client_factory=...)` 可指定符合 `(service, version, *, credentials)` 的 discovery client 建構器，套用於 HTTP／lifespan 中的 Sheets、YouTube 查詢及 OAuth profile／channel 查詢。預設仍使用 Google discovery.build；每次傳入目前請求的 credentials，不快取不同使用者的 client。Context 在例外後還原，並行 app 不共用 factory。自行建立的背景執行緒不自動繼承此 scope；Weverse 上傳仍使用 UploadWorker 的顯式 provider 注入。OAuth token exchange／refresh transport 尚未納入此建構器。
+
+`create_app(ytmusic_client_factory=...)` 接受與 YTMusic 相容的 keyword arguments（`language`、`location`，有瀏覽器 Token 時含 `auth`），同時涵蓋一般查詢與線上 Token 驗證。同步 endpoint 與 Starlette `run_in_threadpool` 繼承此 context；每次操作重新建構 client，不共用認證狀態。Token 解析仍為純函式，既有自訂 Token 優先與公開查詢 fallback 策略維持相容。
+
+
+`youtube_quota_trackers` 接受含 `primary`、`secondary` 的 YouTubeQuotaLimiter mapping；factory 拒絕缺少槽位或 key 與 ledger.slot 不一致的組裝。每個 ledger 使用獨立檔案路徑；可透過 `runtime_store=` 綁定其 app 的 RuntimeConfig，讓背景呼叫也使用正確配額政策。HTTP 的 OAuth／YouTube service helpers 經 context 取得對應帳本，未注入則保留預設帳本。每個 app 預設建立獨立 SlidingWindowLimiter，亦可注入 `request_limiter`；API 與 workflow 限制分桶，回應仍為含 Retry-After 的標準 429。此限制仍為程序內狀態，並未增加跨程序分散式限流保證。
+
+SessionStore 與 CredentialStore 在首次使用時才載入 JSON，受各自的 RLock 保護。只有檔案不存在視為空資料；無法讀取或 JSON／頂層結構損毀時拒絕繼續寫入，保留原檔供修復。寫入失敗使快取失效，下次操作重讀持久化狀態。這些 store 仍是程序內快取，沒有增加多程序 read-modify-write 交易保證。
+
+RuntimeConfig 同樣採首次存取載入；寫入失敗回復已保存的快取並拋出例外。SystemSecretsManager 對持久化／解密錯誤採明確失敗，Setup PIN 只在寫入成功後快取。設定 HTTP endpoint 使用既有標準錯誤回應，不將儲存失敗回報為成功；setup 的多檔案步驟仍非跨檔案交易。
+
+前端樣式由 `styles/tokens.css`、`styles/foundation.css`、`app/shell.css`、shared UI 與各 feature 管理。舊 `index.css`／`styles/app-theme.css` 已移除；新增頁面不得重建全域覆寫檔。桌面側欄收合與手機 drawer 使用不同響應式規則，drawer 開啟時位於遮罩上方並維持鍵盤焦點循環。

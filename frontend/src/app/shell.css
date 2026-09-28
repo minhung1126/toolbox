@@ -1,19 +1,49 @@
-/* ==========================================================================
-   Toolbox shared component themes — 簡約大方 (Minimalist, Refined & Spacious)
-   ========================================================================== */
+/* Application shell and navigation. Shared page primitives live in shared/ui. */
 
-/* --------------------------------------------------------------------------
-   Shared Surfaces
-   -------------------------------------------------------------------------- */
-
-.page-header.glass-panel {
-  padding: clamp(1rem, 2.5vw, 1.35rem);
+.app-container {
+  display: flex;
+  min-height: 100dvh;
 }
 
-/* --------------------------------------------------------------------------
-   Sidebar & App Navigation
-   -------------------------------------------------------------------------- */
+.main-content {
+  width: 100%;
+  margin-left: var(--sidebar-width);
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--page-padding);
+  padding-bottom: calc(var(--page-padding) + env(safe-area-inset-bottom));
+  max-width: none;
+  transition: margin-left 0.25s ease;
+}
+
+.mobile-app-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.nav-item span {
+  min-width: 0;
+  flex: 1;
+}
+
+.nav-group {
+  min-width: 0;
+}
+/* stylelint-disable-next-line selector-max-universal -- The route root may be any feature page element. */
+.main-content > * {
+  width: min(100%, var(--content-max-width));
+  min-width: 0;
+  margin-inline: auto;
+}
+
 .sidebar {
+  width: var(--sidebar-width);
+  min-height: 0;
+  position: fixed;
+  height: 100dvh;
+  overflow: hidden;
   background: #101114;
   border-right: 1px solid var(--border-subtle);
   padding: 1.25rem 0.875rem;
@@ -27,6 +57,7 @@
 }
 
 .sidebar-brand {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -35,6 +66,7 @@
 }
 
 .brand-mark {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -55,6 +87,7 @@
 }
 
 .sidebar-brand-copy h2 {
+  white-space: nowrap;
   font-size: 1.15rem;
   font-weight: 700;
   color: #fff;
@@ -62,6 +95,7 @@
 }
 
 .sidebar-brand-copy p {
+  margin-top: 2px;
   font-size: 0.78rem;
   color: var(--text-dim);
   white-space: nowrap;
@@ -88,6 +122,8 @@
 }
 
 .sidebar-nav {
+  min-height: 0;
+  scrollbar-width: thin;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -97,6 +133,11 @@
 }
 
 .nav-item {
+  width: 100%;
+  min-height: 44px;
+  flex: 0 0 auto;
+  font: inherit;
+  text-align: left;
   display: flex;
   align-items: center;
   gap: 11px;
@@ -120,6 +161,7 @@
 }
 
 .nav-item:hover {
+  border-left: 3px solid var(--primary);
   background: rgb(255 255 255 / 5%);
   color: var(--text-main);
   border-color: rgb(255 255 255 / 6%);
@@ -130,6 +172,7 @@
 }
 
 .nav-item.active {
+  border-left: 3px solid var(--primary);
   background: rgb(99 102 241 / 14%);
   color: #c7d2fe;
   border-color: rgb(99 102 241 / 28%);
@@ -142,11 +185,14 @@
 }
 
 .nav-item-child {
+  min-height: 42px;
+  padding: 0.625rem 0.875rem;
   padding-left: 28px;
   font-size: 0.88rem;
 }
 
 .nav-submenu {
+  margin: 0.25rem 0 0.125rem 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -169,6 +215,7 @@
 }
 
 .nav-group-chevron {
+  flex: 0 0 auto;
   margin-left: auto;
   transition: transform 0.2s ease;
 }
@@ -177,13 +224,15 @@
   transform: rotate(180deg);
 }
 
-/* Sidebar Footer & Account Card */
 .sidebar-footer {
+  min-width: 0;
   margin-top: auto;
   padding-top: 0.5rem;
 }
 
 .account-card {
+  min-width: 0;
+  font-size: 0.85rem;
   background: var(--surface-inset);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -231,10 +280,13 @@
 }
 
 .account-title {
+  color: #fff;
   display: none;
 }
 
 .account-email {
+  width: 100%;
+  overflow-wrap: anywhere;
   font-size: 0.8rem;
   color: var(--text-main);
   white-space: nowrap;
@@ -253,8 +305,15 @@
   gap: 4px;
 }
 
-.account-status,
+.account-status {
+  max-width: 100%;
+  align-self: flex-start;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+}
+
 .account-youtube-status {
+  max-width: 100%;
   align-self: flex-start;
   font-size: 0.7rem;
   padding: 2px 6px;
@@ -283,102 +342,13 @@
   color: #fda4af;
 }
 
-/* Collapsed Sidebar Adjustments */
-.sidebar.is-collapsed {
-  width: var(--sidebar-collapsed-width);
-  padding: 1.25rem 0.5rem;
-  align-items: center;
-}
-
-.sidebar.is-collapsed .sidebar-brand-copy,
-.sidebar.is-collapsed .nav-item span,
-.sidebar.is-collapsed .nav-group-chevron,
-.sidebar.is-collapsed .account-title,
-.sidebar.is-collapsed .account-email,
-.sidebar.is-collapsed .account-badges-row,
-.sidebar.is-collapsed .account-youtube-status,
-.sidebar.is-collapsed .logout-button {
-  display: none;
-}
-
-.sidebar.is-collapsed .account-header-row {
-  justify-content: center;
-}
-
-.sidebar.is-collapsed .account-user-badge {
-  justify-content: center;
-  flex: none;
-}
-
-.sidebar.is-collapsed .nav-item {
-  justify-content: center;
-  padding: 10px;
-  width: 44px;
-  height: 44px;
-}
-
-.sidebar.is-collapsed .nav-submenu {
-  border-left: none;
-  margin-left: 0;
-  padding-left: 0;
-}
-
-.sidebar.is-collapsed .account-card {
-  padding: 8px;
-  border: none;
-  background: transparent;
-}
-
-/* --------------------------------------------------------------------------
-   Badges & Status Tags
-   -------------------------------------------------------------------------- */
-
-.icon-box {
-  width: 38px;
-  height: 38px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.icon-box-primary {
-  background: var(--primary-subtle);
-  color: var(--primary);
-  border: 1px solid var(--primary-border);
-}
-
-.icon-box-secondary {
-  background: var(--surface-raised);
-  color: var(--text-main);
-  border: 1px solid var(--border-color);
-}
-
-.icon-box-accent {
-  background: var(--surface-raised);
-  color: var(--primary);
-  border: 1px solid var(--border-color);
-}
-
-.preview-field {
-  background: var(--surface-inset);
-  border: 1px solid var(--border-color);
-  border-left: 3px solid var(--primary);
-  border-radius: var(--radius-sm);
-  padding: 0.75rem 1rem;
-}
-
-/* --------------------------------------------------------------------------
-   Mobile App Bar & Responsive Rules
-   -------------------------------------------------------------------------- */
 .mobile-app-bar {
+  display: none;
   background: #101114;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.app-bar-menu,
-.drawer-close {
+.app-bar-menu {
   background: var(--surface-raised);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
@@ -387,13 +357,208 @@
   transition: all 0.18s ease;
 }
 
-.app-bar-menu:hover,
+.drawer-close {
+  display: none;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.app-bar-menu:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+}
+
 .drawer-close:hover {
   background: var(--bg-card-hover);
   border-color: var(--border-hover);
 }
 
 .drawer-backdrop {
+  display: none;
   background: rgb(14 15 18 / 78%);
   backdrop-filter: blur(8px);
+}
+
+@media (min-width: 768px) {
+  .sidebar-toggle {
+    flex: 0 0 auto;
+  }
+
+  .sidebar.is-collapsed {
+    padding-inline: 0.5rem;
+    width: var(--sidebar-collapsed-width);
+    padding: 1.25rem 0.5rem;
+    align-items: center;
+  }
+
+  .sidebar.is-collapsed .sidebar-brand {
+    justify-content: center;
+    flex-direction: column;
+  }
+
+  .sidebar.is-collapsed .sidebar-brand-copy {
+    display: none;
+  }
+
+  .sidebar.is-collapsed .nav-item span {
+    display: none;
+  }
+
+  .sidebar.is-collapsed .nav-group-chevron {
+    display: none;
+  }
+
+  .sidebar.is-collapsed .account-title {
+    display: none;
+  }
+
+  .sidebar.is-collapsed .account-email {
+    display: none;
+  }
+
+  .sidebar.is-collapsed .account-youtube-status {
+    display: none;
+  }
+
+  .sidebar.is-collapsed .logout-button {
+    display: none;
+  }
+
+  .sidebar.is-collapsed .sidebar-toggle {
+    margin-left: 0;
+  }
+
+  .sidebar.is-collapsed .nav-item {
+    padding-inline: 0.5rem;
+    justify-content: center;
+    padding: 10px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .sidebar.is-collapsed .nav-item-child {
+    padding-inline: 0.25rem;
+  }
+
+  .sidebar.is-collapsed .nav-submenu {
+    border-left: none;
+    margin-left: 0;
+    padding-left: 0;
+  }
+
+  .sidebar.is-collapsed .account-card {
+    align-items: center;
+    padding: 8px;
+    border: none;
+    background: transparent;
+  }
+
+  .sidebar.is-collapsed .account-status {
+    min-width: 32px;
+    min-height: 32px;
+    justify-content: center;
+    padding: 0.25rem;
+    font-size: 0;
+  }
+
+  .app-container.sidebar-is-collapsed .main-content {
+    margin-left: var(--sidebar-collapsed-width);
+  }
+
+  .sidebar.is-collapsed .account-badges-row {
+    display: none;
+  }
+
+  .sidebar.is-collapsed .account-header-row {
+    justify-content: center;
+  }
+
+  .sidebar.is-collapsed .account-user-badge {
+    justify-content: center;
+    flex: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .mobile-app-bar {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: var(--mobile-shell-offset);
+    padding: env(safe-area-inset-top) max(0.75rem, env(safe-area-inset-right)) 0 max(0.75rem, env(safe-area-inset-left));
+    backdrop-filter: blur(20px);
+  }
+
+  .mobile-app-brand strong {
+    font-size: 1rem;
+  }
+
+  .app-bar-menu {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+  }
+
+  .drawer-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+  }
+
+  .sidebar {
+    width: min(20rem, calc(100vw - 1rem));
+    transform: translateX(-110%);
+    box-shadow: 18px 0 50px rgb(0 0 0 / 45%);
+    z-index: 110;
+    visibility: hidden;
+    transition: transform 0.25s ease;
+  }
+
+  .sidebar.is-open {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  .sidebar-brand {
+    justify-content: flex-start;
+    flex-direction: row;
+  }
+
+  .sidebar-brand .drawer-close {
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+
+  .drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 105;
+    display: block;
+    border: 0;
+  }
+
+  .main-content {
+    margin-left: 0;
+    padding: calc(var(--mobile-shell-offset) + var(--page-padding)) var(--page-padding)
+      calc(var(--page-padding) + env(safe-area-inset-bottom));
+  }
+
+  .sidebar-toggle {
+    display: none;
+  }
 }

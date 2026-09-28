@@ -53,7 +53,7 @@ describe('useAccountWorkState', () => {
   });
 
   it('keeps command references stable when the stored state changes', async () => {
-    api.updateWorkState.mockResolvedValue({ state: {} });
+    api.updateWorkState.mockResolvedValue({ state: { navigation: { sidebarCollapsed: true } } });
     const { result } = renderHook(() => useAccountWorkState('navigation'), { wrapper });
     const initialSave = result.current.save;
     const initialRetry = result.current.retry;
@@ -75,7 +75,7 @@ describe('useAccountWorkState', () => {
             releaseFirst = resolve;
           })
       )
-      .mockResolvedValueOnce({ state: {} });
+      .mockResolvedValueOnce({ state: { navigation: { sidebarCollapsed: true } } });
     const { result } = renderHook(() => useAccountWorkState('navigation'), { wrapper });
 
     let firstSave;
@@ -91,7 +91,7 @@ describe('useAccountWorkState', () => {
     });
 
     await act(async () => {
-      releaseFirst({ state: { fromFirstRequest: true } });
+      releaseFirst({ state: { navigation: { sidebarCollapsed: false } } });
       await firstSave;
       await secondSave;
     });
@@ -103,7 +103,9 @@ describe('useAccountWorkState', () => {
   });
 
   it('exposes a failed save and retries the latest desired value', async () => {
-    api.updateWorkState.mockRejectedValueOnce(new Error('伺服器忙碌')).mockResolvedValueOnce({ state: {} });
+    api.updateWorkState
+      .mockRejectedValueOnce(new Error('伺服器忙碌'))
+      .mockResolvedValueOnce({ state: { navigation: { sidebarCollapsed: true } } });
     const { result } = renderHook(() => useAccountWorkState('navigation'), { wrapper });
 
     await act(async () => {
@@ -119,5 +121,124 @@ describe('useAccountWorkState', () => {
     expect(api.updateWorkState).toHaveBeenCalledTimes(2);
     expect(result.current.error).toBe('');
     expect(result.current.saved).toBe(true);
+  });
+
+  it('does not acknowledge malformed saves and allows retrying the pending change', async () => {
+    api.updateWorkState
+      .mockResolvedValueOnce({ state: [] })
+      .mockResolvedValueOnce({ state: { navigation: { sidebarCollapsed: true } } });
+    const { result } = renderHook(() => useAccountWorkState('navigation'), { wrapper });
+
+    await act(async () => {
+      await result.current.save({ sidebarCollapsed: true }, { debounceMs: 0 });
+    });
+    expect(result.current.saved).toBe(false);
+    expect(result.current.error).toBe('帳號工作狀態回應格式不正確。');
+    expect(result.current.value).toEqual({ sidebarCollapsed: true });
+
+    await act(async () => {
+      await result.current.retry();
+    });
+    expect(api.updateWorkState).toHaveBeenNthCalledWith(2, 'navigation', { sidebarCollapsed: true });
+    expect(result.current.saved).toBe(true);
+    expect(result.current.error).toBe('');
+  });
+
+  it('does not acknowledge a write response that omits the saved key', async () => {
+    api.updateWorkState.mockResolvedValue({ state: {} });
+    const { result } = renderHook(() => useAccountWorkState('navigation'), { wrapper });
+
+    await act(async () => {
+      await result.current.save({ sidebarCollapsed: true }, { debounceMs: 0 });
+    });
+
+    expect(result.current.saved).toBe(false);
+    expect(result.current.error).toBe('帳號工作狀態寫入結果不一致，請重新整理核對。');
+  });
+
+  it('keeps newer values for other keys when full-state write responses arrive out of order', async () => {
+    const pending = {};
+    api.updateWorkState.mockImplementation(
+      (key) =>
+        new Promise((resolve) => {
+          pending[key] = resolve;
+        })
+    );
+    const { result } = renderHook(
+      () => ({
+        navigation: useAccountWorkState('navigation'),
+        sheetCopy: useAccountWorkState('sheet_copy'),
+      }),
+      { wrapper }
+    );
+
+    let navigationSave;
+    let sheetSave;
+    await act(async () => {
+      navigationSave = result.current.navigation.save({ sidebarCollapsed: true }, { debounceMs: 0 });
+      sheetSave = result.current.sheetCopy.save({ query: 'new' }, { debounceMs: 0 });
+      await Promise.resolve();
+    });
+    expect(api.updateWorkState).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      pending.sheet_copy({ state: { navigation: { sidebarCollapsed: false }, sheet_copy: { query: 'new' } } });
+      await sheetSave;
+    });
+    expect(result.current.navigation.value).toEqual({ sidebarCollapsed: true });
+    expect(result.current.sheetCopy.value).toEqual({ query: 'new' });
+
+    await act(async () => {
+      pending.navigation({ state: { navigation: { sidebarCollapsed: true }, sheet_copy: { query: 'old' } } });
+      await navigationSave;
+    });
+    expect(result.current.navigation.value).toEqual({ sidebarCollapsed: true });
+    expect(result.current.sheetCopy.value).toEqual({ query: 'new' });
+  });
+
+  it('hydrates refreshed server values while preserving keys edited in this session', async () => {
+    let serverState = { navigation: { sidebarCollapsed: false }, sheet_copy: { query: 'old' } };
+    const ServerWrapper = ({ children }) => (
+      <AccountWorkStateProvider initialState={serverState}>{children}</AccountWorkStateProvider>
+    );
+    const { result, rerender } = renderHook(
+      () => ({
+        navigation: useAccountWorkState('navigation'),
+        sheetCopy: useAccountWorkState('sheet_copy'),
+      }),
+      { wrapper: ServerWrapper }
+    );
+
+    serverState = { navigation: { sidebarCollapsed: true }, sheet_copy: { query: 'from server' } };
+    rerender();
+    expect(result.current.navigation.value).toEqual({ sidebarCollapsed: true });
+    expect(result.current.sheetCopy.value).toEqual({ query: 'from server' });
+
+    let resolveSave;
+    api.updateWorkState.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        })
+    );
+    let savePromise;
+    await act(async () => {
+      savePromise = result.current.navigation.save({ sidebarCollapsed: false }, { debounceMs: 0 });
+      await Promise.resolve();
+    });
+
+    serverState = { navigation: { sidebarCollapsed: true }, sheet_copy: { query: 'newer server value' } };
+    rerender();
+    expect(result.current.navigation.value).toEqual({ sidebarCollapsed: false });
+    expect(result.current.sheetCopy.value).toEqual({ query: 'newer server value' });
+
+    await act(async () => {
+      resolveSave({ state: { navigation: { sidebarCollapsed: false } } });
+      await savePromise;
+    });
+    serverState = { navigation: { sidebarCollapsed: true }, sheet_copy: { query: 'latest server value' } };
+    rerender();
+    expect(result.current.navigation.value).toEqual({ sidebarCollapsed: false });
+    expect(result.current.sheetCopy.value).toEqual({ query: 'latest server value' });
   });
 });

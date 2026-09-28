@@ -1,9 +1,8 @@
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-import googleapiclient.discovery
-
 from backend.app.core.youtube_context import YouTubeRequestContext
+from backend.app.services.google_clients import build_google_client
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
 
 logger = logging.getLogger(__name__)
@@ -12,7 +11,7 @@ MAX_VIDEO_IDS = 5_000
 
 
 def get_youtube_service(context: YouTubeRequestContext):
-    return googleapiclient.discovery.build("youtube", "v3", credentials=context.credentials)
+    return build_google_client("youtube", "v3", credentials=context.credentials)
 
 
 def _execute_with_quota(request, method: str, context: YouTubeRequestContext):

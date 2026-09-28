@@ -114,12 +114,15 @@ test('system settings use feature styles and remain usable on supported widths',
   }
 });
 
-test('Quick Token Drawer uses its feature styles on supported widths', async ({ page }) => {
+test('Quick Token Drawer uses its feature styles on supported widths', async ({ page }, testInfo) => {
   await mockAuthenticatedBackend(page);
 
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/ytmusic/playlist-sort');
+    const pageHeader = page.locator('.ui-page-header');
+    await expect(pageHeader.getByRole('heading', { level: 1, name: 'YouTube Music 播放清單排序' })).toBeVisible();
+    await pageHeader.screenshot({ path: testInfo.outputPath(`playlist-sort-header-${width}.png`) });
     await page.getByRole('button', { name: /貼上 Token 啟用 0 配額/ }).click();
 
     const drawer = page.getByTestId('quick-token-drawer');
@@ -220,6 +223,24 @@ test('sheet copy feature styles load and stay within supported viewport widths',
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+  }
+});
+
+test('Google Sheets settings stay usable on supported viewport widths', async ({ page }, testInfo) => {
+  await mockAuthenticatedBackend(page);
+
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/sheets/settings');
+    await expect(page.getByRole('heading', { level: 1, name: 'Google 試算表設定' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '立即儲存帳號設定' })).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+    await page.screenshot({
+      path: testInfo.outputPath(`sheets-settings-${width}.png`),
+      fullPage: true,
+      animations: 'disabled',
+    });
   }
 });
 
@@ -324,13 +345,18 @@ test('YouTube batch feature styles load without viewport overflow', async ({ pag
   }
 });
 
-test('Weverse folder picker styles stay usable across viewport widths', async ({ page }) => {
+test('Weverse folder picker styles stay usable across viewport widths', async ({ page }, testInfo) => {
   await mockAuthenticatedBackend(page);
 
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/weverse-uploader');
     await expect(page.getByRole('heading', { level: 1, name: /Weverse 影片與字幕上傳/ })).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath(`weverse-header-${width}.png`),
+      fullPage: true,
+      animations: 'disabled',
+    });
 
     const dropzonePadding = await page
       .locator('.weverse-dropzone')
@@ -362,6 +388,25 @@ test('Weverse folder picker styles stay usable across viewport widths', async ({
   }
 });
 
+test('Weverse scan rejects an inconsistent package count before review', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/weverse-uploader/scan': {
+      status: 'success',
+      scanned_path: 'C:\\weverse\\sample',
+      packages_count: 1,
+      packages: [],
+    },
+  });
+
+  await page.goto('/weverse-uploader');
+  await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
+  await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
+  await page.getByRole('button', { name: '掃描並辨識' }).click();
+
+  await expect(page.getByText(/掃描失敗：Weverse 檔案辨識回應格式不正確/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /步驟二：辨識結果複查與編輯/ })).toHaveCount(0);
+});
+
 test('Weverse upload posts the reviewed package and reaches completed state with a provider fake', async ({ page }) => {
   await mockAuthenticatedBackend(page, {
     '/api/v1/auth/user': {
@@ -379,13 +424,16 @@ test('Weverse upload posts the reviewed package and reaches completed state with
       google_scopes: {},
       youtube: { slots: {} },
     },
-    '/api/v1/weverse-uploader/upload-from-path': { task_id: 'e2e-task-1' },
+    '/api/v1/weverse-uploader/upload-from-path': { status: 'queued', task_id: 'e2e-task-1' },
     '/api/v1/weverse-uploader/tasks/e2e-task-1': {
+      status: 'success',
       task: {
         task_id: 'e2e-task-1',
         title: 'Sample Live',
         status: 'completed',
         progress_percent: 100,
+        current_step: '上傳完成',
+        video_id: 'e2e-video',
         video_url: 'https://youtube.example/watch?v=e2e-video',
         studio_url: 'https://studio.youtube.example/video/e2e-video',
       },
@@ -414,6 +462,207 @@ test('Weverse upload posts the reviewed package and reaches completed state with
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
+});
+
+test('Weverse browser file parsing reaches review and queues the selected video', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/auth/user': {
+      authenticated: true,
+      user: { sub: 'weverse-upload-e2e', email: 'weverse-upload@example.test' },
+      authorizations: {
+        sheets: { connected: false },
+        ytmusic: { connected: false },
+        video_uploader: { connected: true, channel_title: 'Uploader Channel' },
+      },
+      google_scopes: {},
+      youtube: { slots: {} },
+    },
+    '/api/v1/weverse-uploader/parse-files': {
+      status: 'success',
+      packages_count: 1,
+      packages: [
+        {
+          package_id: 'weverse-folder',
+          folder_name: 'weverse-folder',
+          video: {
+            filename: 'browser-live.mp4',
+            relative_path: 'weverse-folder/browser-live.mp4',
+            size_bytes: 11,
+            size_formatted: '11 B',
+            extension: '.mp4',
+          },
+          other_videos: [],
+          subtitles: [],
+          suggested_title: 'Browser Live',
+          suggested_description: '',
+        },
+      ],
+    },
+    '/api/v1/weverse-uploader/upload-files': { status: 'queued', task_id: 'browser-task' },
+    '/api/v1/weverse-uploader/tasks/browser-task': {
+      status: 'success',
+      task: {
+        task_id: 'browser-task',
+        title: 'Browser Live',
+        status: 'completed',
+        progress_percent: 100,
+        current_step: '上傳完成',
+        video_id: 'browser-video',
+        video_url: 'https://youtu.be/browser-video',
+      },
+    },
+  });
+
+  await page.goto('/weverse-uploader');
+  await page.locator('input[type="file"]').setInputFiles('e2e/fixtures/weverse-folder');
+  await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Browser Live');
+  const uploadRequestPromise = page.waitForRequest((request) =>
+    request.url().includes('/api/v1/weverse-uploader/upload-files')
+  );
+  await page.getByRole('button', { name: '確認並開始上傳至 YouTube' }).click();
+  await page.getByRole('button', { name: '立即上傳' }).click();
+
+  const uploadRequest = await uploadRequestPromise;
+  expect(uploadRequest.method()).toBe('POST');
+  expect(uploadRequest.postData()).toContain('browser-live.mp4');
+  await expect(page.getByRole('heading', { name: '上傳成功！' })).toBeVisible();
+});
+
+test('Weverse browser file parsing rejects an inconsistent package count', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/weverse-uploader/parse-files': { status: 'success', packages_count: 1, packages: [] },
+  });
+
+  await page.goto('/weverse-uploader');
+  await page.locator('input[type="file"]').setInputFiles('e2e/fixtures/weverse-folder');
+
+  await expect(page.getByText(/辨識失敗：Weverse 檔案辨識回應格式不正確/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /步驟二：辨識結果複查與編輯/ })).toHaveCount(0);
+});
+
+test('Weverse upload waits for reconciliation when the queued result is malformed', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/auth/user': {
+      authenticated: true,
+      user: { sub: 'weverse-upload-e2e', email: 'weverse-upload@example.test' },
+      authorizations: {
+        sheets: { connected: false },
+        ytmusic: { connected: false },
+        video_uploader: { connected: true, channel_title: 'Uploader Channel' },
+      },
+      google_scopes: {},
+      youtube: { slots: {} },
+    },
+    '/api/v1/weverse-uploader/upload-from-path': { task_id: 'unconfirmed-task' },
+  });
+
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await page.goto('/weverse-uploader');
+  await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
+  await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
+  await page.getByRole('button', { name: '掃描並辨識' }).click();
+  await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Sample Live');
+  await page.getByRole('button', { name: '確認並開始上傳至 YouTube' }).click();
+  await page.getByRole('button', { name: '立即上傳' }).click();
+
+  await expect(page.getByRole('alert').filter({ hasText: '上傳結果待核對' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '確認並開始上傳至 YouTube' })).toBeDisabled();
+  await expect(page.getByText(/請先檢查下方上傳歷史及 YouTube Studio/)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+});
+
+test('Weverse upload does not report success for a task without a video ID', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/auth/user': {
+      authenticated: true,
+      user: { sub: 'weverse-upload-e2e', email: 'weverse-upload@example.test' },
+      authorizations: {
+        sheets: { connected: false },
+        ytmusic: { connected: false },
+        video_uploader: { connected: true, channel_title: 'Uploader Channel' },
+      },
+      google_scopes: {},
+      youtube: { slots: {} },
+    },
+    '/api/v1/weverse-uploader/upload-from-path': { status: 'queued', task_id: 'task-without-video' },
+    '/api/v1/weverse-uploader/tasks/task-without-video': {
+      status: 'success',
+      task: {
+        task_id: 'task-without-video',
+        title: 'Sample Live',
+        status: 'completed',
+        progress_percent: 100,
+        current_step: '上傳完成',
+      },
+    },
+  });
+
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await page.goto('/weverse-uploader');
+  await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
+  await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
+  await page.getByRole('button', { name: '掃描並辨識' }).click();
+  await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Sample Live');
+  await page.getByRole('button', { name: '確認並開始上傳至 YouTube' }).click();
+  await page.getByRole('button', { name: '立即上傳' }).click();
+
+  await expect(page.getByRole('alert').filter({ hasText: '上傳狀態待核對' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '上傳成功！' })).toHaveCount(0);
+  await expect(page.getByRole('progressbar', { name: '上傳進度' })).toHaveCount(0);
+});
+
+test('Weverse history reports malformed records instead of showing an empty list', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/weverse-uploader/history': {
+      status: 'success',
+      tasks: [{ task_id: 'incomplete-task', title: 'Sample Live', status: 'completed' }],
+    },
+  });
+
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await page.goto('/weverse-uploader');
+  await expect(page.getByRole('alert').filter({ hasText: '無法讀取上傳歷史' })).toBeVisible();
+  await expect(page.getByText('尚未有任何上傳紀錄。')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+});
+
+test('Weverse upload stops showing progress when a task is interrupted', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/auth/user': {
+      authenticated: true,
+      user: { sub: 'weverse-upload-e2e', email: 'weverse-upload@example.test' },
+      authorizations: {
+        sheets: { connected: false },
+        ytmusic: { connected: false },
+        video_uploader: { connected: true, channel_title: 'Uploader Channel' },
+      },
+      google_scopes: {},
+      youtube: { slots: {} },
+    },
+    '/api/v1/weverse-uploader/upload-from-path': { status: 'queued', task_id: 'interrupted-task' },
+    '/api/v1/weverse-uploader/tasks/interrupted-task': {
+      status: 'success',
+      task: {
+        task_id: 'interrupted-task',
+        title: 'Sample Live',
+        status: 'interrupted',
+        progress_percent: 80,
+        current_step: '服務停止，請檢查 YouTube Studio',
+      },
+    },
+  });
+
+  await page.goto('/weverse-uploader');
+  await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
+  await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
+  await page.getByRole('button', { name: '掃描並辨識' }).click();
+  await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Sample Live');
+  await page.getByRole('button', { name: '確認並開始上傳至 YouTube' }).click();
+  await page.getByRole('button', { name: '立即上傳' }).click();
+
+  await expect(page.getByRole('alert').filter({ hasText: '上傳狀態待核對' })).toBeVisible();
+  await expect(page.getByRole('progressbar', { name: '上傳進度' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '上傳成功！' })).toHaveCount(0);
 });
 
 test('Google Sheets OAuth uses the backend URL and redirects to the provider', async ({ page }) => {
@@ -517,6 +766,7 @@ test('Playlist Sort previews and confirms creation of a sorted playlist', async 
       moved: 3,
       succeeded: 3,
       failed: 0,
+      failed_items: [],
       quota_used: 0,
     },
   });
@@ -591,6 +841,7 @@ test('YouTube Batch Update checks a full preview before executing the update', a
     '/api/v1/sheets/people': { people: ['人物甲'] },
     '/api/v1/sheets/random-member-preview': { person: '人物甲', values: {} },
     '/api/v1/youtube/playlist-items': {
+      playlist_id: 'playlist-a',
       videos: [
         { video_id: 'video-1', title: '舊標題一', description: '舊描述一\n第二行' },
         { video_id: 'video-2', title: '保留標題', description: '保留描述' },
@@ -630,11 +881,19 @@ test('YouTube Batch Update checks a full preview before executing the update', a
       can_complete_today: true,
     },
     '/api/v1/youtube/batch-update': {
+      operation: 'youtube.metadata_update',
       completed: true,
       total_count: 2,
       succeeded_count: 1,
+      warning_count: 0,
       skipped_count: 1,
       failed_count: 0,
+      not_attempted_count: 0,
+      quota_blocked: false,
+      results: [
+        { video_id: 'video-1', status: 'succeeded' },
+        { video_id: 'video-2', status: 'skipped' },
+      ],
     },
   });
 
@@ -759,6 +1018,7 @@ test('Publish Cleaner confirms the loaded snapshot and completes the publish wor
       skipped_count: 0,
       failed_count: 0,
       not_attempted_count: 0,
+      quota_blocked: false,
       results: [
         { video_id: 'video-older', title: '較早的影片', status: 'succeeded' },
         { video_id: 'video-newer', title: '較新的影片', status: 'succeeded' },
@@ -898,4 +1158,48 @@ test('Sticky Notes autosaves edits, toggles pin state, and deletes through its A
   await page.getByRole('button', { name: '刪除便利貼' }).click();
   await page.getByRole('button', { name: '刪除', exact: true }).click();
   await expect(page.getByRole('heading', { name: '尚未建立任何便利貼' })).toBeVisible();
+});
+
+test('Sticky Notes rejects a malformed list instead of showing an empty notebook', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/notes': { notes: [], total: 1 },
+  });
+
+  await page.goto('/notes');
+  await expect(page.getByText('便利貼清單待核對')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '尚未建立任何便利貼' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '新增便利貼' })).toBeDisabled();
+});
+
+test('Sticky Notes reconciles an ambiguous create without sending a duplicate', async ({ page }) => {
+  const note = {
+    id: 'e2e-created-note',
+    content: '',
+    remark: '',
+    pinned: false,
+    created_at: '2026-09-24T00:00:00Z',
+    updated_at: '2026-09-24T00:00:00Z',
+  };
+  let created = false;
+  let createRequests = 0;
+
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/notes': async (route) => {
+      if (route.request().method() === 'POST') {
+        createRequests += 1;
+        created = true;
+        await route.fulfill({ status: 200, json: {} });
+        return;
+      }
+
+      await route.fulfill({ status: 200, json: { notes: created ? [note] : [], total: created ? 1 : 0 } });
+    },
+  });
+
+  await page.goto('/notes');
+  await expect(page.getByRole('heading', { name: '尚未建立任何便利貼' })).toBeVisible();
+  await page.getByRole('button', { name: '新增便利貼', exact: true }).click();
+  await expect(page.locator('[data-note-id="e2e-created-note"]')).toBeVisible();
+  await expect(page.getByText('共 1 張便籤')).toBeVisible();
+  expect(createRequests).toBe(1);
 });

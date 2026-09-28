@@ -103,7 +103,7 @@ def _copy(value: Any) -> Any:
 class AccountStateStore:
     """Thread-safe JSON store keyed by a Google OIDC subject."""
 
-    def __init__(self, path: Path = _DEFAULT_PATH):
+    def __init__(self, path: Path = _DEFAULT_PATH, *, defer_load: bool = False):
         self._path = Path(path)
         self._lock = RLock()
         self._setting_keys: set[str] = set(DEFAULT_ACCOUNT_SETTING_KEYS)
@@ -112,7 +112,9 @@ class AccountStateStore:
             "version": 1,
             "accounts": {},
         }
-        self._load()
+        self._loaded = False
+        if not defer_load:
+            self._load()
 
     def register_setting_keys(self, keys: Iterable[str]) -> None:
         """Dynamically register allowed setting keys for tools and plugins."""
@@ -144,34 +146,43 @@ class AccountStateStore:
 
     def _load(self) -> None:
         with self._lock:
-            loaded = read_json_file(self._path)
-            if not isinstance(loaded, dict):
-                return
+            loaded = read_json_file(self._path, {"version": 1, "accounts": {}}, strict=True)
+            if not isinstance(loaded, dict) or not isinstance(loaded.get("accounts"), dict):
+                raise ValueError("Invalid account state structure")
 
             accounts = loaded.get("accounts")
             normalized_accounts: dict[str, dict[str, Any]] = {}
-            if isinstance(accounts, dict):
-                for raw_subject, raw_account in accounts.items():
-                    try:
-                        subject = _subject(raw_subject)
-                    except ValueError:
-                        continue
-                    if not isinstance(raw_account, dict):
-                        continue
-                    settings = raw_account.get("settings")
-                    work_state = raw_account.get("work_state")
-                    normalized_accounts[subject] = {
-                        "settings": dict(settings) if isinstance(settings, dict) else {},
-                        "work_state": dict(work_state) if isinstance(work_state, dict) else {},
-                    }
+            for raw_subject, raw_account in accounts.items():
+                try:
+                    subject = _subject(raw_subject)
+                except ValueError:
+                    continue
+                if not isinstance(raw_account, dict):
+                    continue
+                settings = raw_account.get("settings")
+                work_state = raw_account.get("work_state")
+                normalized_accounts[subject] = {
+                    "settings": dict(settings) if isinstance(settings, dict) else {},
+                    "work_state": dict(work_state) if isinstance(work_state, dict) else {},
+                }
             self._data = {
                 "version": 1,
                 "accounts": normalized_accounts,
             }
+            self._loaded = True
             logger.info("Loaded account state from %s", self._path)
 
+    def _ensure_loaded(self) -> None:
+        with self._lock:
+            if not self._loaded:
+                self._load()
+
     def _save(self) -> None:
-        atomic_write_json(self._path, self._data)
+        try:
+            atomic_write_json(self._path, self._data)
+        except Exception:
+            self._loaded = False
+            raise
 
     def _ensure_account_unlocked(self, subject: str) -> tuple[dict[str, Any], bool]:
         account = self._data["accounts"].get(subject)
@@ -191,6 +202,7 @@ class AccountStateStore:
     def ensure_account(self, owner_sub: str) -> None:
         subject = _subject(owner_sub)
         with self._lock:
+            self._ensure_loaded()
             account, changed = self._ensure_account_unlocked(subject)
             if changed:
                 self._save()
@@ -200,6 +212,7 @@ class AccountStateStore:
             raise ValueError(f"Unsupported account setting: {key}")
         subject = _subject(owner_sub)
         with self._lock:
+            self._ensure_loaded()
             account = self._data["accounts"].get(subject)
             settings = account.get("settings") if isinstance(account, dict) else None
             if isinstance(settings, dict) and key in settings:
@@ -211,6 +224,7 @@ class AccountStateStore:
             raise ValueError(f"Unsupported account setting: {key}")
         subject = _subject(owner_sub)
         with self._lock:
+            self._ensure_loaded()
             account, _ = self._ensure_account_unlocked(subject)
             account["settings"][key] = _copy(value)
             self._save()
@@ -218,6 +232,7 @@ class AccountStateStore:
     def get_settings(self, owner_sub: str) -> dict[str, Any]:
         subject = _subject(owner_sub)
         with self._lock:
+            self._ensure_loaded()
             account = self._data["accounts"].get(subject)
             settings = account.get("settings") if isinstance(account, dict) else None
             return _copy(settings) if isinstance(settings, dict) else {}
@@ -225,6 +240,7 @@ class AccountStateStore:
     def get_work_state(self, owner_sub: str) -> dict[str, Any]:
         subject = _subject(owner_sub)
         with self._lock:
+            self._ensure_loaded()
             account = self._data["accounts"].get(subject)
             work_state = account.get("work_state") if isinstance(account, dict) else None
             return _copy(work_state) if isinstance(work_state, dict) else {}
@@ -243,6 +259,7 @@ class AccountStateStore:
 
         subject = _subject(owner_sub)
         with self._lock:
+            self._ensure_loaded()
             account, _ = self._ensure_account_unlocked(subject)
             account["work_state"][key] = _copy(value)
             self._save()
@@ -251,10 +268,11 @@ class AccountStateStore:
     def has_account(self, owner_sub: str) -> bool:
         subject = _subject(owner_sub)
         with self._lock:
+            self._ensure_loaded()
             return subject in self._data["accounts"]
 
 
-account_state_store = AccountStateStore()
+account_state_store = AccountStateStore(defer_load=True)
 _request_store: ContextVar[AccountStateStore | None] = ContextVar("account_state_store", default=None)
 
 

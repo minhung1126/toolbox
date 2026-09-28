@@ -5,7 +5,11 @@ import StickyNoteCard, { formatNoteDate } from './StickyNoteCard';
 import { notesApi } from '../features/notes/api/notesApi';
 import * as clipboardModule from '../utils/clipboard';
 
+const toastMocks = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+
 vi.mock('../features/notes/api/notesApi', () => ({
+  isAmbiguousNoteMutation: (error) =>
+    ['notes_mutation_invalid', 'timeout', 'network_error'].includes(error?.code) || error?.status >= 500,
   notesApi: {
     updateNote: vi.fn(),
     deleteNote: vi.fn(),
@@ -13,7 +17,7 @@ vi.mock('../features/notes/api/notesApi', () => ({
 }));
 
 vi.mock('../components/Toast', () => ({
-  useToast: () => ({ success: vi.fn(), error: vi.fn() }),
+  useToast: () => toastMocks,
 }));
 
 vi.mock('../utils/clipboard', () => ({
@@ -100,5 +104,20 @@ describe('StickyNoteCard', () => {
       expect(notesApi.deleteNote).toHaveBeenCalledWith('note-1');
       expect(onDeleted).toHaveBeenCalledWith('note-1');
     });
+  });
+
+  it('reconciles an ambiguous deletion without claiming success', async () => {
+    notesApi.deleteNote.mockRejectedValueOnce({ code: 'notes_mutation_invalid', message: '回應缺少刪除確認' });
+    const onDeleted = vi.fn();
+    const onReconcile = vi.fn();
+    render(<StickyNoteCard note={mockNote} onDeleted={onDeleted} onReconcile={onReconcile} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '刪除便利貼' }));
+    fireEvent.click(screen.getByRole('button', { name: '刪除', exact: true }));
+
+    await waitFor(() => expect(onReconcile).toHaveBeenCalledOnce());
+    expect(onDeleted).not.toHaveBeenCalled();
+    expect(toastMocks.error).toHaveBeenCalledWith(expect.stringContaining('勿直接重送'));
+    expect(screen.queryByText('確定要刪除這張便利貼嗎？此動作無法復原。')).not.toBeInTheDocument();
   });
 });

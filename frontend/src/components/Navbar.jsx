@@ -12,9 +12,10 @@ import {
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import useAccountWorkState from '../hooks/useAccountWorkState';
-import { youtubeIsConnected } from '../utils/youtubeRouting';
+import { youtubeIsConnected } from '../features/youtube/model/routing';
 import { PATHS } from '../routes/paths';
 import { getToolNavGroups } from '../tools/catalog';
+import { useToolCatalog } from '../tools/ToolCatalogProvider';
 
 function pathIsActive(pathname, item) {
   if (item.activePrefix) return pathname === item.activePrefix || pathname.startsWith(`${item.activePrefix}/`);
@@ -25,10 +26,12 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
   const location = useLocation();
   const pathname = location.pathname;
   const youtubeAuthorized = youtubeIsConnected(authUser?.youtube);
+  const { status: catalogStatus, tools } = useToolCatalog();
   const { value: savedNavigation, save: saveNavigation } = useAccountWorkState('navigation', {});
+  const initialNavigationRef = useRef(savedNavigation);
   const toolNavGroups = useMemo(
-    () => getToolNavGroups().filter((entry) => entry.sidebar !== false && entry.items?.length),
-    []
+    () => getToolNavGroups(tools).filter((entry) => entry.sidebar !== false && entry.items?.length),
+    [tools]
   );
   const [openGroups, setOpenGroups] = useState(() =>
     Object.fromEntries(
@@ -51,8 +54,17 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
   useEffect(() => {
     setOpenGroups((current) => {
       const activeGroups = toolNavGroups.filter((entry) => entry.items.some((value) => pathIsActive(pathname, value)));
-      if (activeGroups.every((entry) => current[entry.id])) return current;
-      return { ...current, ...Object.fromEntries(activeGroups.map((entry) => [entry.id, true])) };
+      const next = { ...current };
+      for (const entry of toolNavGroups) {
+        if (!(entry.id in next)) next[entry.id] = initialNavigationRef.current[`${entry.id}Open`] ?? false;
+      }
+      for (const entry of activeGroups) next[entry.id] = true;
+      if (
+        Object.keys(next).length === Object.keys(current).length &&
+        Object.entries(next).every(([id, open]) => current[id] === open)
+      )
+        return current;
+      return next;
     });
     setDrawerOpen(false);
   }, [pathname, toolNavGroups]);
@@ -61,7 +73,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
     if (!drawerOpen) return undefined;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    closeButtonRef.current?.focus();
+    const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
 
     const onKeyDown = (event) => {
       if (event.key === 'Escape') {
@@ -74,7 +86,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
         ...drawerRef.current.querySelectorAll(
           'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled])'
         ),
-      ];
+      ].filter((element) => element.getClientRects().length > 0);
       if (!focusable.length) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
@@ -92,6 +104,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
     document.addEventListener('keydown', onKeyDown);
     window.addEventListener('resize', onResize);
     return () => {
+      window.cancelAnimationFrame(focusFrame);
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('resize', onResize);
@@ -99,11 +112,16 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
   }, [drawerOpen]);
 
   useEffect(() => {
+    if (catalogStatus !== 'ready' || toolNavGroups.some((entry) => !(entry.id in openGroups))) return;
     saveNavigation(
-      { sidebarCollapsed, ...Object.fromEntries(Object.entries(openGroups).map(([id, open]) => [`${id}Open`, open])) },
+      {
+        ...initialNavigationRef.current,
+        sidebarCollapsed,
+        ...Object.fromEntries(Object.entries(openGroups).map(([id, open]) => [`${id}Open`, open])),
+      },
       { debounceMs: 150 }
     );
-  }, [saveNavigation, sidebarCollapsed, openGroups]);
+  }, [catalogStatus, saveNavigation, sidebarCollapsed, openGroups, toolNavGroups]);
 
   const item = (value, child = false) => {
     const Icon = value.icon;

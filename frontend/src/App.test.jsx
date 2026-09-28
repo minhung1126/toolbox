@@ -3,10 +3,12 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App, { ErrorBoundary, hasVersionMismatch } from './App';
 import { api } from './services/api';
+import { getAllTools } from './tools/catalog';
 
 vi.mock('./services/api', () => ({
   api: {
     getHealth: vi.fn(),
+    getTools: vi.fn(),
     getUserStatus: vi.fn(),
     getSystemInfo: vi.fn(),
     getSharedSettings: vi.fn(),
@@ -18,7 +20,16 @@ vi.mock('./services/api', () => ({
   },
 }));
 
-vi.mock('./components/Navbar', () => ({ default: () => <nav data-testid="navbar">navbar</nav> }));
+vi.mock('./components/Navbar', () => ({
+  default: ({ sidebarCollapsed, setSidebarCollapsed }) => (
+    <nav data-testid="navbar">
+      <button type="button" onClick={() => setSidebarCollapsed((current) => !current)}>
+        切換側邊欄
+      </button>
+      <span data-testid="sidebar-state">{sidebarCollapsed ? 'collapsed' : 'expanded'}</span>
+    </nav>
+  ),
+}));
 vi.mock('./pages/DashboardPage', () => ({ default: () => <div data-testid="dashboard-page">dashboard</div> }));
 vi.mock('./pages/BatchUpdatePage', () => ({ default: () => <div>batch</div> }));
 vi.mock('./pages/PublishCleanerPage', () => ({ default: () => <div>publish</div> }));
@@ -59,6 +70,15 @@ describe('App recovery state', () => {
     vi.clearAllMocks();
     setDocumentHidden(false);
     api.getHealth.mockResolvedValue({ commit_sha: 'development' });
+    api.getTools.mockResolvedValue({
+      tools: getAllTools().map((tool) => ({
+        id: tool.id,
+        status: 'active',
+        version: '1.0.0',
+        entry_url: tool.entryUrl,
+        required_scopes: [],
+      })),
+    });
     api.getUserStatus.mockResolvedValue({ authenticated: false });
     api.getSystemInfo.mockResolvedValue({});
     api.getSharedSettings.mockResolvedValue({});
@@ -121,6 +141,32 @@ describe('App recovery state', () => {
     await firePersistedPageShow();
 
     await waitFor(() => expect(api.getUserStatus).toHaveBeenCalledTimes(callsAfterInit + 1));
+  });
+
+  it('preserves a sidebar change made before a stale settings refresh finishes', async () => {
+    let resolveRefreshedState;
+    api.getUserStatus.mockResolvedValue(userResponse);
+    api.getWorkState
+      .mockResolvedValueOnce({ state: { navigation: { sidebarCollapsed: false } } })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRefreshedState = resolve;
+          })
+      );
+    render(<App />);
+    expect(await screen.findByTestId('dashboard-page')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-state')).toHaveTextContent('expanded');
+
+    await firePersistedPageShow();
+    await waitFor(() => expect(api.getWorkState).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('button', { name: '切換側邊欄' }));
+    expect(screen.getByTestId('sidebar-state')).toHaveTextContent('collapsed');
+
+    await act(async () => {
+      resolveRefreshedState({ state: { navigation: { sidebarCollapsed: false } } });
+    });
+    expect(screen.getByTestId('sidebar-state')).toHaveTextContent('collapsed');
   });
 
   it('shows a non-destructive update prompt when the backend build changes', async () => {

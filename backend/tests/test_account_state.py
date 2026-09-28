@@ -1,3 +1,6 @@
+import pytest
+
+from backend.app.core import account_state_store as account_state_module
 from backend.app.core.account_state_store import MISSING, AccountStateStore
 
 
@@ -25,8 +28,6 @@ def test_account_creation_does_not_copy_external_settings(tmp_path):
 
 
 def test_dynamic_key_registration(tmp_path):
-    import pytest
-
     store = AccountStateStore(tmp_path / "account-state.json")
     store.ensure_account("custom-user")
 
@@ -65,3 +66,34 @@ def test_ytmusic_work_state_keys_supported_by_default(tmp_path):
     assert work_state["ytmusic_pinned_playlists"] == pinned_data
     assert work_state["ytmusic_sort_config"] == sort_data
     assert work_state["ytmusic_preferences"] == pref_data
+
+
+@pytest.mark.parametrize("stored", ["{broken", "null", "{}"])
+def test_lazy_account_state_rejects_corrupt_file_until_repaired(tmp_path, stored):
+    path = tmp_path / "account-state.json"
+    path.write_text(stored, encoding="utf-8")
+    store = AccountStateStore(path, defer_load=True)
+
+    with pytest.raises(ValueError):
+        store.set_setting("test-user", "default_spreadsheet_id", "new-value")
+    assert path.read_text(encoding="utf-8") == stored
+
+    path.write_text('{"version":1,"accounts":{}}', encoding="utf-8")
+    store.set_setting("test-user", "default_spreadsheet_id", "new-value")
+    assert store.get_setting("test-user", "default_spreadsheet_id") == "new-value"
+
+
+def test_account_state_write_failure_does_not_expose_unsaved_value(tmp_path, monkeypatch):
+    path = tmp_path / "account-state.json"
+    store = AccountStateStore(path)
+    store.set_setting("test-user", "default_spreadsheet_id", "saved-value")
+
+    def fail_write(*args, **kwargs):
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr(account_state_module, "atomic_write_json", fail_write)
+    with pytest.raises(OSError, match="disk unavailable"):
+        store.set_setting("test-user", "default_spreadsheet_id", "unsaved-value")
+
+    assert store.get_setting("test-user", "default_spreadsheet_id") == "saved-value"
+    assert AccountStateStore(path).get_setting("test-user", "default_spreadsheet_id") == "saved-value"

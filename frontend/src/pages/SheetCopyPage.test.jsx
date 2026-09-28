@@ -63,7 +63,7 @@ describe('SheetCopyPage work-state persistence', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
-    api.updateWorkState.mockResolvedValue({ state: {} });
+    api.updateWorkState.mockImplementation((key, value) => Promise.resolve({ state: { [key]: value } }));
   });
 
   afterEach(() => vi.useRealTimers());
@@ -105,7 +105,7 @@ describe('SheetCopyPage row dismissal and restoration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    api.updateWorkState.mockResolvedValue({ state: {} });
+    api.updateWorkState.mockImplementation((key, value) => Promise.resolve({ state: { [key]: value } }));
     sheetsCopyApi.getSpreadsheetMetadata.mockResolvedValue({
       spreadsheet_id: 'sheet-123',
       spreadsheet_title: '測試工作簿',

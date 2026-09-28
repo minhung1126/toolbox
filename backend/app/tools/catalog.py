@@ -24,7 +24,8 @@ def get_tool_registry(request: Request) -> ToolRegistry:
 
 def get_registered_tools(registry: ToolRegistry = tool_registry) -> List[Dict[str, Any]]:
     """Return serialized metadata for all currently registered tools."""
-    return [meta.model_dump() for meta in registry.list_metadata()]
+    statuses = registry.runtime_statuses()
+    return [{**meta.model_dump(), "runtime_status": statuses[meta.id]} for meta in registry.list_metadata()]
 
 
 @router.get("", response_model=Dict[str, Any])
@@ -49,5 +50,5 @@ def get_tool_detail(tool_id: str, registry: ToolRegistry = Depends(get_tool_regi
         }
     return {
         "found": True,
-        "tool": meta.model_dump(),
+        "tool": {**meta.model_dump(), "runtime_status": registry.runtime_statuses()[tool_id]},
     }

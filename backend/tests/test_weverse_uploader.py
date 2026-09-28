@@ -4,6 +4,7 @@ import asyncio
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException, Request
@@ -13,7 +14,7 @@ from backend.app.api import auth
 from backend.app.api import weverse_uploader as weverse_api
 from backend.app.core.security import GOOGLE_OAUTH_STATE_SALT, sign_timed_data
 from backend.app.core.weverse_upload_store import WeverseUploadStore, WeverseUploadStoreError
-from backend.app.main import app
+from backend.app.main import app, create_app
 from backend.app.services import weverse_uploader_service as upload_service
 from backend.app.services.weverse_scanner import (
     clean_default_title,
@@ -439,6 +440,102 @@ def test_unauthorized_upload_access():
         headers=headers,
     )
     assert upload_resp.status_code == 401
+
+
+@pytest.mark.parametrize(
+    ("video_name", "subtitle_name", "expected_code"),
+    [
+        ("../../outside.mp4", "captions.vtt", "upload_filename_invalid"),
+        ("video.mp4", "..\\outside.vtt", "upload_filename_invalid"),
+        ("video.mp4", "VIDEO.MP4", "upload_filename_duplicate"),
+    ],
+)
+def test_browser_upload_rejects_unsafe_names_before_writing(
+    tmp_path: Path, video_name: str, subtitle_name: str, expected_code: str
+):
+    store = WeverseUploadStore(tmp_path / "uploads.json")
+    worker = SimpleNamespace(store=store, enqueue=lambda **_kwargs: pytest.fail("Upload must not be queued"))
+    context = SimpleNamespace(owner_sub="test-user", credentials=object())
+    test_app = create_app(
+        upload_worker=worker,
+        dependency_overrides={weverse_api.require_video_uploader_context: lambda: context},
+    )
+    client = TestClient(test_app)
+
+    response = client.post(
+        "/api/v1/weverse-uploader/upload-files",
+        data={"metadata": '{"title":"Test"}'},
+        files=[
+            ("video", (video_name, b"video", "video/mp4")),
+            ("subtitles", (subtitle_name, b"WEBVTT", "text/vtt")),
+        ],
+        headers={"Origin": "http://localhost:3000"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == expected_code
+    assert not (tmp_path / "weverse_temp").exists()
+    assert not (tmp_path / "outside.mp4").exists()
+    assert not (tmp_path / "outside.vtt").exists()
+    assert not store.data_file.exists()
+
+
+def test_browser_upload_persists_safe_names_before_queueing(tmp_path: Path):
+    store = WeverseUploadStore(tmp_path / "uploads.json")
+    queued = []
+    worker = SimpleNamespace(store=store, enqueue=lambda **options: queued.append(options))
+    context = SimpleNamespace(owner_sub="test-user", credentials=object())
+    test_app = create_app(
+        upload_worker=worker,
+        dependency_overrides={weverse_api.require_video_uploader_context: lambda: context},
+    )
+    client = TestClient(test_app)
+
+    response = client.post(
+        "/api/v1/weverse-uploader/upload-files",
+        data={"metadata": '{"title":"Test","subtitles":[{"filename":"繁中.vtt","bcp47":"zh-TW"}]}'},
+        files=[
+            ("video", ("影片.mp4", b"video", "video/mp4")),
+            ("subtitles", ("繁中.vtt", b"WEBVTT", "text/vtt")),
+        ],
+        headers={"Origin": "http://localhost:3000"},
+    )
+
+    assert response.status_code == 200
+    task_id = response.json()["task_id"]
+    assert store.get_task("test-user", task_id)["video_filename"] == "影片.mp4"
+    assert len(queued) == 1
+    assert queued[0]["task_id"] == task_id
+    assert Path(queued[0]["video_path"]).read_bytes() == b"video"
+    assert Path(queued[0]["subtitles"][0]["full_path"]).read_bytes() == b"WEBVTT"
+
+
+def test_browser_upload_cleans_files_when_task_persistence_fails(tmp_path: Path, monkeypatch):
+    store = WeverseUploadStore(tmp_path / "uploads.json")
+
+    def fail_persist(*_args):
+        raise OSError("private path")
+
+    monkeypatch.setattr(store, "create_task", fail_persist)
+    worker = SimpleNamespace(store=store, enqueue=lambda **_kwargs: pytest.fail("Upload must not be queued"))
+    context = SimpleNamespace(owner_sub="test-user", credentials=object())
+    test_app = create_app(
+        upload_worker=worker,
+        dependency_overrides={weverse_api.require_video_uploader_context: lambda: context},
+    )
+    client = TestClient(test_app)
+
+    response = client.post(
+        "/api/v1/weverse-uploader/upload-files",
+        data={"metadata": '{"title":"Test"}'},
+        files={"video": ("video.mp4", b"video", "video/mp4")},
+        headers={"Origin": "http://localhost:3000"},
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "file_save_error"
+    assert "private path" not in str(response.json())
+    assert list((tmp_path / "weverse_temp").glob("**/*")) == []
 
 
 def test_video_uploader_oauth_callback_success(monkeypatch):

@@ -3,14 +3,16 @@
 import hashlib
 import json
 import logging
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
 from typing import Any, Dict, Optional
 
 from cryptography.fernet import InvalidToken
+from starlette.types import ASGIApp, Receive, Scope, Send
 
-from backend.app.core.config import normalize_youtube_slot, settings
+from backend.app.core.config import get_settings, normalize_youtube_slot, settings
 from backend.app.core.data_paths import data_directory
 from backend.app.core.persistence import atomic_write_json, derive_fernet, read_json_file
 
@@ -61,42 +63,58 @@ def _safe_public_user(user: Dict[str, Any]) -> Dict[str, str]:
 class CredentialStore:
     """Persist credentials under an authenticated user's OIDC subject."""
 
-    def __init__(self, path: Path = _DEFAULT_PATH):
+    def __init__(
+        self, path: Path = _DEFAULT_PATH, *, encryption_key: str | None = None, defer_encryption_key: bool = False
+    ):
         self._path = path
         self._lock = RLock()
-        self._fernet = derive_fernet(settings.CREDENTIAL_ENCRYPTION_KEY)
+        if defer_encryption_key and encryption_key is not None:
+            raise ValueError("deferred encryption cannot use an explicit key")
+        if not defer_encryption_key and encryption_key is None:
+            config = get_settings(settings)
+            config.initialize_keys()
+            encryption_key = config.CREDENTIAL_ENCRYPTION_KEY
+        self._fernet = None if defer_encryption_key else derive_fernet(encryption_key)
         self._data: Dict[str, Any] = {
             "version": _STORE_VERSION,
             "users": {},
         }
-        self._load()
+        self._loaded = False
+
+    def _get_fernet(self):
+        with self._lock:
+            if self._fernet is None:
+                settings.initialize_keys()
+                self._fernet = derive_fernet(settings.CREDENTIAL_ENCRYPTION_KEY)
+            return self._fernet
 
     def _load(self) -> None:
         with self._lock:
-            loaded = read_json_file(self._path)
-            if not isinstance(loaded, dict):
-                return
-            users = loaded.get("users")
-            if isinstance(users, dict):
-                users = {
-                    str(subject): records
-                    for subject, records in users.items()
-                    if isinstance(records, dict) and _normalise_subject(subject)
-                }
-                self._data = {
-                    "version": _STORE_VERSION,
-                    "users": users,
-                }
+            loaded = read_json_file(self._path, {"version": _STORE_VERSION, "users": {}}, strict=True)
+            if not isinstance(loaded, dict) or not isinstance(loaded.get("users"), dict):
+                raise ValueError("Invalid users repository structure")
+            self._data = loaded
+            self._loaded = True
+
+    def _ensure_loaded(self) -> None:
+        with self._lock:
+            if not self._loaded:
+                self._load()
 
     def _save(self) -> None:
-        atomic_write_json(self._path, self._data)
+        try:
+            atomic_write_json(self._path, self._data)
+        except Exception:
+            # Do not expose a failed mutation from the in-memory cache.
+            self._loaded = False
+            raise
 
     def _encrypt(self, value: str) -> str:
-        return self._fernet.encrypt(value.encode("utf-8")).decode("ascii")
+        return self._get_fernet().encrypt(value.encode("utf-8")).decode("ascii")
 
     def _decrypt(self, value: str) -> str:
         try:
-            return self._fernet.decrypt(value.encode("ascii")).decode("utf-8")
+            return self._get_fernet().decrypt(value.encode("ascii")).decode("utf-8")
         except (InvalidToken, ValueError) as exc:
             raise RuntimeError("無法解密已儲存的憑證。請確認 CREDENTIAL_ENCRYPTION_KEY 未變更，或重新連線。") from exc
 
@@ -128,6 +146,7 @@ class CredentialStore:
         return None
 
     def _find_record(self, key: str, owner_sub: str) -> Optional[Dict[str, Any]]:
+        self._ensure_loaded()
         subject = _require_subject(owner_sub)
         user_records = self._data.get("users", {}).get(subject)
         record = user_records.get(key) if isinstance(user_records, dict) else None
@@ -160,6 +179,7 @@ class CredentialStore:
         storage_key = f"youtube_{slot_name}" if slot_name else key
         now = utc_now()
         with self._lock:
+            self._ensure_loaded()
             users = self._data.setdefault("users", {})
             user_records = users.setdefault(subject, {})
             previous = user_records.get(storage_key)
@@ -242,6 +262,7 @@ class CredentialStore:
 
     def _get_credentials(self, key: str, owner_sub: str) -> Optional[Dict[str, Any]]:
         with self._lock:
+            self._ensure_loaded()
             record = self._find_record(key, owner_sub)
             encrypted = record.get("credentials_encrypted") if isinstance(record, dict) else None
         return self._decrypt_json(encrypted)
@@ -296,6 +317,7 @@ class CredentialStore:
 
     def _get_public(self, key: str, owner_sub: str) -> Optional[Dict[str, Any]]:
         with self._lock:
+            self._ensure_loaded()
             record = self._find_record(key, owner_sub)
             if not isinstance(record, dict):
                 return None
@@ -336,6 +358,7 @@ class CredentialStore:
         requires_reauthorization: bool = False,
     ) -> None:
         with self._lock:
+            self._ensure_loaded()
             record = self._find_record(key, owner_sub)
             if not isinstance(record, dict):
                 return
@@ -398,6 +421,7 @@ class CredentialStore:
 
     def _clear(self, key: str, owner_sub: str) -> None:
         with self._lock:
+            self._ensure_loaded()
             subject = _require_subject(owner_sub)
             user_records = self._data.get("users", {}).get(subject)
             if isinstance(user_records, dict):
@@ -424,6 +448,7 @@ class CredentialStore:
     ) -> None:
         """Persist encrypted custom YouTube Music browser token / headers."""
         with self._lock:
+            self._ensure_loaded()
             subject = _require_subject(owner_sub)
             user_records = self._data.setdefault("users", {}).setdefault(subject, {})
             encrypted = self._encrypt(str(token_data).strip())
@@ -445,6 +470,7 @@ class CredentialStore:
     ) -> None:
         """Update account_name or channel_handle for an already saved custom token."""
         with self._lock:
+            self._ensure_loaded()
             subject = _require_subject(owner_sub)
             record = self._find_record("ytmusic_custom_token", subject)
             if isinstance(record, dict):
@@ -457,6 +483,7 @@ class CredentialStore:
     def get_ytmusic_custom_token(self, owner_sub: str) -> Optional[str]:
         """Retrieve and decrypt custom YouTube Music token if present."""
         with self._lock:
+            self._ensure_loaded()
             record = self._find_record("ytmusic_custom_token", owner_sub)
             if not isinstance(record, dict) or not record.get("token_encrypted"):
                 return None
@@ -482,4 +509,35 @@ class CredentialStore:
         self._clear(f"youtube_{normalize_youtube_slot(slot)}", owner_sub)
 
 
-credential_store = CredentialStore()
+credential_store = CredentialStore(defer_encryption_key=True)
+
+_request_store: ContextVar[CredentialStore | None] = ContextVar("credential_store", default=None)
+
+
+def get_credential_store(fallback: CredentialStore | None = None) -> CredentialStore:
+    """Resolve the injected request store, preserving standalone helper callers."""
+    store = _request_store.get()
+    if store is not None:
+        return store
+    return credential_store if fallback is None else fallback
+
+
+class CredentialStoreMiddleware:
+    """Scope OAuth and provider helpers to an app, including FastAPI's sync threadpool.
+
+    Manually created background threads must receive the store explicitly.
+    """
+
+    def __init__(self, app: ASGIApp, store: CredentialStore | None = None) -> None:
+        self.app = app
+        self.store = store
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        token = _request_store.set(self.store)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _request_store.reset(token)

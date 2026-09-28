@@ -1,12 +1,19 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-from backend.app.core import dependencies
+from backend.app.api import youtube as youtube_api
+from backend.app.core import dependencies, youtube_routing
+from backend.app.core.account_state_store import AccountStateStore
+from backend.app.core.config import settings
 from backend.app.core.credential_store import CredentialStore
 from backend.app.core.session_store import SessionStore
+from backend.app.core.youtube_context import YouTubeRequestContext
+from backend.app.main import create_app
 from backend.app.services import google_auth
 from backend.app.services.google_auth import (
     DRIVE_READONLY_SCOPE,
@@ -45,6 +52,168 @@ def test_scopes_are_strictly_decoupled():
 
     assert DRIVE_READONLY_SCOPE in DRIVE_SCOPES
     assert SHEETS_READONLY_SCOPE not in DRIVE_SCOPES
+
+
+def test_login_only_session_keeps_connection_pages_available_but_rejects_provider_actions(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(type(settings), "is_google_email_allowed", lambda self, email: True)
+    subject = "login-only-capabilities"
+    credentials = CredentialStore(tmp_path / "credentials.json")
+    sessions = SessionStore(tmp_path / "sessions.json")
+    credentials.save_google_connection(_token_payload(LOGIN_SCOPES, sub=subject), owner_sub=subject)
+    session_id = sessions.create(
+        {"credential_provider": "google_login", "user": {"sub": subject, "email": f"{subject}@example.test"}}
+    )
+    client = TestClient(create_app(session_store=sessions, credential_store=credentials))
+    client.cookies.set(settings.session_cookie_name, session_id)
+
+    user = client.get("/api/v1/auth/user")
+    assert user.status_code == 200
+    assert user.json()["authenticated"] is True
+    assert user.json()["authorizations"]["sheets"]["connected"] is False
+    assert user.json()["authorizations"]["ytmusic"]["connected"] is False
+    assert user.json()["authorizations"]["video_uploader"]["connected"] is False
+
+    sheet_input = {"spreadsheet_url_or_id": "sheet-id", "worksheet_name": "Videos", "team": "Team", "columns": []}
+    requests = [
+        ("google_sheets_scope_required", client.post(f"/api/v1/sheets/{route}", json=sheet_input))
+        for route in ("metadata", "parse-options", "people", "random-member-preview", "copy-table")
+    ]
+    requests.extend(
+        [
+            ("ytmusic_scope_required", client.get("/api/v1/playlist-sort/playlists")),
+            (
+                "ytmusic_scope_required",
+                client.post("/api/v1/playlist-sort/preview", json={"playlist_id": "playlist-1", "sort_keys": []}),
+            ),
+            (
+                "ytmusic_scope_required",
+                client.post(
+                    "/api/v1/playlist-sort/apply",
+                    json={"playlist_id": "playlist-1", "sort_keys": [], "preview_token": "invalid"},
+                ),
+            ),
+            (
+                "video_uploader_scope_required",
+                client.post(
+                    "/api/v1/weverse-uploader/upload-from-path",
+                    json={"video_path": "missing.mp4", "title": "Test"},
+                ),
+            ),
+            (
+                "video_uploader_scope_required",
+                client.post(
+                    "/api/v1/weverse-uploader/upload-files",
+                    data={"metadata": '{"title":"Test"}'},
+                    files={"video": ("sample.mp4", b"test", "video/mp4")},
+                ),
+            ),
+        ]
+    )
+    for code, response in requests:
+        assert response.status_code == 403
+        assert response.json()["detail"]["code"] == code
+
+
+def test_creator_workflow_requires_sheets_but_publish_does_not(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(type(settings), "is_google_email_allowed", lambda self, email: True)
+    subject = "creator-without-sheets"
+    credentials = CredentialStore(tmp_path / "credentials.json")
+    sessions = SessionStore(tmp_path / "sessions.json")
+    credentials.save_google_connection(_token_payload(LOGIN_SCOPES, sub=subject), owner_sub=subject)
+    session_id = sessions.create(
+        {"credential_provider": "google_login", "user": {"sub": subject, "email": f"{subject}@example.test"}}
+    )
+    youtube_context = YouTubeRequestContext(
+        slot="primary",
+        credentials=object(),
+        quota_limiter=SimpleNamespace(),
+        owner_sub=subject,
+    )
+    calls = []
+
+    class FakeWorkflowService:
+        def create_batch_metadata_preview(self, *_args, **_kwargs):
+            raise AssertionError("Batch preview must not run without Sheets authorization")
+
+        def run_batch_metadata_update(self, *_args, **_kwargs):
+            raise AssertionError("Batch update must not run without Sheets authorization")
+
+        def run_publish_and_cleanup(self, payload, *, creds):
+            calls.append((payload, creds))
+            return {"status": "provider-fake"}
+
+    app = create_app(
+        session_store=sessions,
+        credential_store=credentials,
+        dependency_overrides={
+            youtube_api.require_youtube_context: lambda: youtube_context,
+            youtube_api.get_youtube_workflow_service: lambda: FakeWorkflowService(),
+        },
+    )
+    client = TestClient(app)
+    client.cookies.set(settings.session_cookie_name, session_id)
+
+    batch_payload = {
+        "worksheet_name": "Videos",
+        "title_column": "Title",
+        "description_column": "Description",
+        "team": "Team",
+        "assignments": [{"video_id": "video-1", "person": "Alice"}],
+    }
+    for route in ("batch-preview", "batch-update"):
+        batch = client.post(f"/api/v1/youtube/{route}", json=batch_payload)
+        assert batch.status_code == 403
+        assert batch.json()["detail"]["code"] == "google_sheets_scope_required"
+
+    publish = client.post("/api/v1/youtube/publish-and-cleanup", json={"playlist_id": "playlist-1"})
+    assert publish.status_code == 200
+    assert publish.json() == {"status": "provider-fake"}
+    assert len(calls) == 1
+    assert calls[0][1] is youtube_context
+
+
+def test_creator_operations_reject_mismatched_youtube_channels_before_provider_calls(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(type(settings), "is_google_email_allowed", lambda self, email: True)
+    subject = "mismatched-creator-channels"
+    credentials = CredentialStore(tmp_path / "credentials.json")
+    sessions = SessionStore(tmp_path / "sessions.json")
+    credentials.save_google_connection(_token_payload(LOGIN_SCOPES, sub=subject), owner_sub=subject)
+    credentials.save_sheets_connection(_token_payload(SHEETS_SCOPES, sub=subject), owner_sub=subject)
+    session_id = sessions.create(
+        {"credential_provider": "google_login", "user": {"sub": subject, "email": f"{subject}@example.test"}}
+    )
+
+    class MismatchedPublicChannels:
+        def get_youtube_public(self, owner_sub, *, slot):
+            assert owner_sub == subject
+            return {"channel_id": "channel-a" if slot == "primary" else "channel-b"}
+
+    monkeypatch.setattr(youtube_routing, "get_credential_store", lambda _default: MismatchedPublicChannels())
+    app = create_app(
+        session_store=sessions,
+        credential_store=credentials,
+        account_state_store=AccountStateStore(tmp_path / "account-state.json"),
+    )
+    client = TestClient(app)
+    client.cookies.set(settings.session_cookie_name, session_id)
+    requests = [
+        client.post("/api/v1/youtube/playlist-items", json={"playlist_id": "playlist-1"}),
+        client.post("/api/v1/youtube/video-metadata", json={"video_id": "video-1", "title": "Title"}),
+        client.post("/api/v1/youtube/publish-and-cleanup", json={"playlist_id": "playlist-1"}),
+        client.post(
+            "/api/v1/youtube/batch-preview",
+            json={
+                "worksheet_name": "Videos",
+                "title_column": "Title",
+                "description_column": "Description",
+                "team": "Team",
+                "assignments": [{"video_id": "video-1", "person": "Alice"}],
+            },
+        ),
+    ]
+    for response in requests:
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "youtube_channel_mismatch"
 
 
 def test_require_sheets_credentials_rejects_login_only_and_accepts_sheets(tmp_path: Path, monkeypatch):
@@ -320,3 +489,27 @@ def test_validate_ytmusic_custom_token_endpoint(tmp_path: Path, monkeypatch):
     )
     assert resp.status_code == 400
     assert resp.json()["detail"]["code"] == "token_invalid"
+
+    def fail_provider(*_args, **_kwargs):
+        raise RuntimeError("Cookie: SID=private-provider-value")
+
+    monkeypatch.setattr("backend.app.services.ytmusic_service.validate_ytmusic_custom_token", fail_provider)
+    resp = client.post(
+        "/api/v1/auth/ytmusic/custom-token/validate",
+        json={"token": "bad-token"},
+        headers={"Origin": "http://localhost:3000"},
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "token_invalid"
+    assert "private-provider-value" not in resp.text
+
+    from backend.app.services.ytmusic_service import parse_custom_token_input
+
+    monkeypatch.setattr("backend.app.services.ytmusic_service.validate_ytmusic_custom_token", parse_custom_token_input)
+    resp = client.post(
+        "/api/v1/auth/ytmusic/custom-token/validate",
+        json={"token": "not-a-cookie"},
+        headers={"Origin": "http://localhost:3000"},
+    )
+    assert resp.status_code == 400
+    assert "無法在輸入內容中偵測到有效的 Cookie" in resp.json()["detail"]["message"]

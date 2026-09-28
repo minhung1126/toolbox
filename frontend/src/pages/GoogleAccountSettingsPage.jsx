@@ -23,7 +23,7 @@ import { useOAuthConnect } from '../hooks/useOAuthConnect';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
 import { PATHS } from '../routes/paths';
 import { formatTokenDate, tokenStatusLabel } from '../utils/formatters';
-import { youtubeIsConnected, youtubePreferredUiSlot } from '../utils/youtubeRouting';
+import { youtubeIsConnected, youtubePreferredUiSlot } from '../features/youtube/model/routing';
 
 const GITHUB_DOCS = {
   google: 'https://github.com/minhung1126/toolbox/blob/main/docs/GOOGLE_API_SETUP.md',

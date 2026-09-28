@@ -5,11 +5,7 @@ import useTeamPersonFilter from '../../../hooks/useTeamPersonFilter';
 import useSharedTeamPersonFilterPersistence from '../../../hooks/useSharedTeamPersonFilterPersistence';
 import { readSharedTeamPersonFilter } from '../../../utils/teamPersonFilterStorage';
 import { sortVideosByUploadTime } from '../../../utils/videoOrder';
-import {
-  getYoutubeAuthorizationFingerprint,
-  youtubeIsConnected,
-  youtubePreferredUiSlot,
-} from '../../../utils/youtubeRouting';
+import { getYoutubeAuthorizationFingerprint, youtubeIsConnected, youtubePreferredUiSlot } from '../model/routing';
 import { YOUTUBE_COPY, formatResultCounts } from '../../../utils/youtubeCopy';
 import {
   DEFAULT_COLUMNS,
@@ -777,6 +773,23 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
         setPreviewFingerprint('');
         setErrorMsg('預覽已過期或資料已變更，已安全停止批次更新；請重新讀取影片並產生完整預覽。');
         toast.warning('預覽已過期，批次更新已安全停止');
+        return;
+      }
+      if (
+        err.code === 'batch_result_invalid' ||
+        err.code === 'timeout' ||
+        err.code === 'network_error' ||
+        err.status >= 500
+      ) {
+        setResult(null);
+        setBatchPreview(null);
+        setPreviewToken('');
+        setPreviewSnapshot(null);
+        setPreviewFingerprint('');
+        setErrorMsg(
+          '無法確認批次更新是否已完成；請先至 YouTube Studio 核對影片標題與描述，再重新讀取並預覽。勿直接重送。'
+        );
+        toast.warning('批次更新結果待核對，請先檢查 YouTube Studio');
         return;
       }
       setErrorMsg(`批次更新執行失敗：${err.message}`);

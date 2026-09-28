@@ -14,8 +14,8 @@ from backend.app.core.account_state import (
     get_account_active_slot,
     get_account_youtube_routing_mode,
 )
-from backend.app.core.config import normalize_youtube_slot, settings
-from backend.app.core.credential_store import credential_store
+from backend.app.core.config import get_settings, normalize_youtube_slot, settings
+from backend.app.core.credential_store import credential_store, get_credential_store
 from backend.app.core.error_contract import http_error
 from backend.app.services.google_auth import get_youtube_credentials
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
@@ -116,7 +116,8 @@ def estimate_youtube_request_units(
 
 def _channel_mismatch(owner_sub: str) -> bool:
     public = {
-        slot: credential_store.get_youtube_public(owner_sub, slot=slot) or {} for slot in ("primary", "secondary")
+        slot: get_credential_store(credential_store).get_youtube_public(owner_sub, slot=slot) or {}
+        for slot in ("primary", "secondary")
     }
     primary_channel = str(public["primary"].get("channel_id") or "").strip()
     secondary_channel = str(public["secondary"].get("channel_id") or "").strip()
@@ -131,12 +132,12 @@ def _candidate(
     estimated_units: int,
     check_quota: bool,
 ) -> _Candidate:
-    slot_config = settings.youtube_oauth_slot(slot)
+    slot_config = get_settings(settings).youtube_oauth_slot(slot)
     if not slot_config.configured:
         return _Candidate(slot, None, None, False, "not_configured")
 
     credentials = get_youtube_credentials(session_id, slot=slot)
-    public = credential_store.get_youtube_public(owner_sub, slot=slot) or {}
+    public = get_credential_store(credential_store).get_youtube_public(owner_sub, slot=slot) or {}
     channel_id = str(public.get("channel_id") or "").strip() or None
     if not credentials or not credentials.valid or not channel_id:
         return _Candidate(slot, credentials, channel_id, False, "not_connected")

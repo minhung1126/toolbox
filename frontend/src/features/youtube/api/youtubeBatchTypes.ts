@@ -70,9 +70,9 @@ export interface YoutubeBatchPreviewSnapshot extends PlaylistPreviewSnapshot {
 }
 
 export interface YoutubeBatchPreviewResponse {
-  preview_token?: string;
-  preview_snapshot?: YoutubeBatchPreviewSnapshot;
-  plan?: YoutubeBatchPreviewItem[];
+  preview_token: string;
+  preview_snapshot: YoutubeBatchPreviewSnapshot;
+  plan: YoutubeBatchPreviewItem[];
   playlist_id?: string;
   youtube_slot?: string;
   youtube_routing_mode?: string;
@@ -100,17 +100,17 @@ export interface YoutubeBatchUpdateResult {
 }
 
 export interface YoutubeBatchUpdateResponse {
-  operation?: string;
+  operation: 'youtube.metadata_update';
   youtube_slot?: string;
-  completed?: boolean;
-  total_count?: number;
-  succeeded_count?: number;
-  warning_count?: number;
-  skipped_count?: number;
-  failed_count?: number;
-  not_attempted_count?: number;
-  quota_blocked?: boolean;
-  results?: YoutubeBatchUpdateResult[];
+  completed: boolean;
+  total_count: number;
+  succeeded_count: number;
+  warning_count: number;
+  skipped_count: number;
+  failed_count: number;
+  not_attempted_count: number;
+  quota_blocked: boolean;
+  results: YoutubeBatchUpdateResult[];
   [field: string]: unknown;
 }
 

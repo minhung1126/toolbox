@@ -71,6 +71,23 @@ jobs:
           npx playwright install --with-deps chromium
           npm run test:e2e
 
+      - name: Audit frontend production dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Record full frontend dependency audit
+        working-directory: frontend
+        continue-on-error: true
+        run: npm audit --json > audit-report.json
+
+      - name: Upload full dependency audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dependency-audit
+          path: frontend/audit-report.json
+          if-no-files-found: ignore
+
       - name: Upload responsive layout screenshots
         if: always()
         uses: actions/upload-artifact@v4

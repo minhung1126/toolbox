@@ -16,7 +16,14 @@ export interface StickyNotesListResponse {
 
 export interface StickyNoteResponse {
   note: StickyNote;
-  status?: 'created' | 'updated';
+}
+
+export interface StickyNoteCreatedResponse extends StickyNoteResponse {
+  status: 'created';
+}
+
+export interface StickyNoteUpdatedResponse extends StickyNoteResponse {
+  status: 'updated';
 }
 
 export interface StickyNoteDeleteResponse {
@@ -26,8 +33,8 @@ export interface StickyNoteDeleteResponse {
 
 export interface StickyNotesApi {
   getNotes(query?: string): Promise<StickyNotesListResponse>;
-  createNote(note?: StickyNoteDraft): Promise<StickyNoteResponse>;
+  createNote(note?: StickyNoteDraft): Promise<StickyNoteCreatedResponse>;
   getNote(noteId: string): Promise<StickyNoteResponse>;
-  updateNote(noteId: string, patch?: StickyNoteDraft): Promise<StickyNoteResponse>;
+  updateNote(noteId: string, patch?: StickyNoteDraft): Promise<StickyNoteUpdatedResponse>;
   deleteNote(noteId: string): Promise<StickyNoteDeleteResponse>;
 }

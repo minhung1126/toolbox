@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, RefreshCw } from 'lucide-react';
+import { Button, PageHeader } from '../shared/ui';
 import YouTubeQuotaBanner from '../components/YouTubeQuotaBanner';
-import { youtubePreferredUiSlot } from '../utils/youtubeRouting';
+import { youtubePreferredUiSlot } from '../features/youtube/model/routing';
 
 export default function ApiHealthPage({ authUser }) {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -40,17 +41,15 @@ export default function ApiHealthPage({ authUser }) {
 
   return (
     <div className="section-gap api-health-page">
-      <div className="page-header-row">
-        <div>
-          <h1>API 健康度</h1>
-          <p className="section-desc">查看 YouTube API 配額估算與目前的安全上限狀態。</p>
-        </div>
-        <div className="page-actions">
-          <button className="btn btn-secondary" type="button" onClick={() => setRefreshKey((key) => key + 1)}>
-            <RefreshCw size={16} /> 全部更新
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="API 健康度"
+        description="查看 YouTube API 配額估算與目前的安全上限狀態。"
+        actions={
+          <Button variant="secondary" icon={RefreshCw} onClick={() => setRefreshKey((key) => key + 1)}>
+            全部更新
+          </Button>
+        }
+      />
 
       <YouTubeQuotaBanner refreshKey={refreshKey} activeSlot={activeSlot} availableSlots={availableSlots} />
 

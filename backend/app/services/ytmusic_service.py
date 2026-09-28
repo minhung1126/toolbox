@@ -21,13 +21,19 @@ from ytmusicapi.constants import SUPPORTED_LANGUAGES, SUPPORTED_LOCATIONS
 from ytmusicapi.exceptions import YTMusicError
 from ytmusicapi.helpers import get_authorization
 
-from backend.app.core.credential_store import credential_store
+from backend.app.core.credential_store import CredentialStore, credential_store, get_credential_store
 from backend.app.core.youtube_context import YouTubeRequestContext
+from backend.app.services.ytmusic_clients import get_ytmusic_client_factory
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_YTMUSIC_LANGUAGE = "zh_TW"
 DEFAULT_YTMUSIC_LOCATION = "TW"
+
+
+class YtmusicTokenInputError(ValueError):
+    """A local token-input error whose message is safe to show to the user."""
+
 
 LOCALE_PRESETS: dict[str, dict[str, str]] = {
     "TW": {"language": "zh_TW", "location": "TW", "label": "台灣（繁體中文）"},
@@ -167,7 +173,7 @@ def parse_custom_token_input(
     """
     raw = str(token_raw or "").strip()
     if not raw:
-        raise ValueError("Token 內容不可為空。")
+        raise YtmusicTokenInputError("Token 內容不可為空。")
 
     user_headers: dict[str, str] = {}
 
@@ -208,7 +214,7 @@ def parse_custom_token_input(
 
     if "cookie" not in user_headers or not user_headers["cookie"].strip():
         if "fetch(" in raw.lower() or "credentials" in raw.lower():
-            raise ValueError(
+            raise YtmusicTokenInputError(
                 "您貼上的 fetch 代碼中缺少 Cookie！"
                 "這是因為 Chrome/Edge 瀏覽器的「Copy as fetch」是給網頁前端執行的，根據瀏覽器安全規範會刻意移除 Cookie 標頭（改用 credentials: 'include'），導致後端伺服器缺少登入憑證。\n\n"
                 "【請改用以下方式（推薦一鍵完成）】：\n"
@@ -216,7 +222,9 @@ def parse_custom_token_input(
                 "👉 或選擇【Copy as Node.js fetch】（若瀏覽器選單有此選項）\n"
                 "👉 或在 Headers 標籤頁下方直接複製「Cookie:」欄位值"
             )
-        raise ValueError("無法在輸入內容中偵測到有效的 Cookie (例如 SID=... 或 Cookie: ...)。請確認複製內容。")
+        raise YtmusicTokenInputError(
+            "無法在輸入內容中偵測到有效的 Cookie (例如 SID=... 或 Cookie: ...)。請確認複製內容。"
+        )
 
     cookie = user_headers["cookie"].strip()
 
@@ -541,12 +549,13 @@ def get_ytmusic_client(
     custom_token: str | None = None,
     language: str | None = None,
     location: str | None = None,
+    token_store: CredentialStore | None = None,
 ) -> YTMusic:
     """Instantiate a configured YTMusic client with localized language and location.
 
     Priority:
     1. Explicit custom_token parameter
-    2. Stored custom_token in credential_store (owner_sub or context.owner_sub)
+    2. Stored custom_token in the supplied repository, falling back to request context for standalone callers
     3. Unauthenticated YTMusic() fallback (0 quota read access for public/unlisted playlists)
     """
     sub = owner_sub or (context.owner_sub if context else None)
@@ -555,20 +564,21 @@ def get_ytmusic_client(
     # 1. Custom token check
     token_to_use = custom_token
     if not token_to_use and sub:
-        token_to_use = credential_store.get_ytmusic_custom_token(sub)
+        repository = token_store if token_store is not None else get_credential_store(credential_store)
+        token_to_use = repository.get_ytmusic_custom_token(sub)
 
     if token_to_use:
         try:
             parsed_auth = parse_custom_token_input(token_to_use, language=lang, location=loc)
-            return YTMusic(auth=parsed_auth, language=lang, location=loc)
+            return get_ytmusic_client_factory(YTMusic)(auth=parsed_auth, language=lang, location=loc)
         except Exception as e:
-            logger.error("Failed to initialize YTMusic with custom token: %s", e)
+            logger.error("Failed to initialize YTMusic with custom token: %s", type(e).__name__)
             if not context or not context.credentials:
                 raise
 
     # 2. Unauthenticated YTMusic client
     # Defaults to localized language (zh_TW) and location (TW)
-    return YTMusic(language=lang, location=loc)
+    return get_ytmusic_client_factory(YTMusic)(language=lang, location=loc)
 
 
 def validate_ytmusic_custom_token(
@@ -584,29 +594,28 @@ def validate_ytmusic_custom_token(
     """
     clean_token = (token_str or "").strip()
     if not clean_token:
-        raise ValueError("Token 內容不可為空。")
+        raise YtmusicTokenInputError("Token 內容不可為空。")
 
     resolved_lang = language or DEFAULT_YTMUSIC_LANGUAGE
     resolved_loc = location or DEFAULT_YTMUSIC_LOCATION
 
     parsed_auth = parse_custom_token_input(clean_token, language=resolved_lang, location=resolved_loc)
 
-    client = YTMusic(auth=parsed_auth, language=resolved_lang, location=resolved_loc)
+    client = get_ytmusic_client_factory(YTMusic)(auth=parsed_auth, language=resolved_lang, location=resolved_loc)
     auth_type = getattr(client, "auth_type", None)
     if auth_type != AuthType.BROWSER and not isinstance(auth_type, (MagicMock, type(None))):
-        raise ValueError("Token 缺少必要的瀏覽器 Cookie (SID, HSID, SSID, SAPISID) 認證資訊。")
+        raise YtmusicTokenInputError("Token 缺少必要的瀏覽器 Cookie (SID, HSID, SSID, SAPISID) 認證資訊。")
 
     account_info: dict[str, Any] = {}
     try:
         account_info = client.get_account_info() or {}
     except Exception as exc:
-        logger.debug("client.get_account_info() failed: %s; falling back to get_library_playlists", exc)
+        logger.debug("client.get_account_info() failed: %s; falling back to get_library_playlists", type(exc).__name__)
         try:
             client.get_library_playlists(limit=1)
         except Exception as lib_exc:
-            err_msg = str(lib_exc) or str(exc)
-            logger.warning("Token verification failed with YouTube Music API: %s", err_msg)
-            raise ValueError(f"Token 驗證失敗或 Cookie 已過期：{err_msg}") from lib_exc
+            logger.warning("Token verification failed with YouTube Music API: %s", type(lib_exc).__name__)
+            raise ValueError("Token 驗證失敗或 Cookie 已過期。") from lib_exc
 
     account_name = account_info.get("accountName")
     channel_handle = account_info.get("channelHandle")
@@ -633,6 +642,7 @@ def fetch_ytmusic_playlists(
     owner_sub: str | None = None,
     language: str | None = None,
     location: str | None = None,
+    token_store: CredentialStore | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch user's YouTube Music playlists using YTMusic API (0 API credit)."""
     client = get_ytmusic_client(
@@ -640,11 +650,12 @@ def fetch_ytmusic_playlists(
         owner_sub=owner_sub,
         language=language,
         location=location,
+        token_store=token_store,
     )
     try:
         raw_playlists = client.get_library_playlists(limit=None)
     except Exception as exc:
-        logger.warning("client.get_library_playlists failed: %s", exc)
+        logger.warning("client.get_library_playlists failed: %s", type(exc).__name__)
         return []
 
     playlists: list[dict[str, Any]] = []
@@ -683,6 +694,7 @@ def fetch_ytmusic_playlist_tracks(
     fetch_album_details: bool = True,
     language: str | None = None,
     location: str | None = None,
+    token_store: CredentialStore | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch full playlist track items including artists, album, track number, and duration.
 
@@ -694,11 +706,12 @@ def fetch_ytmusic_playlist_tracks(
         owner_sub=owner_sub,
         language=language,
         location=location,
+        token_store=token_store,
     )
     try:
         playlist_data = client.get_playlist(playlist_id, limit=None)
     except Exception as e:
-        logger.error("Failed to fetch playlist %s via ytmusicapi: %s", playlist_id, e)
+        logger.error("Failed to fetch playlist %s via ytmusicapi: %s", playlist_id, type(e).__name__)
         raise
 
     raw_tracks = playlist_data.get("tracks") or []
@@ -717,7 +730,7 @@ def fetch_ytmusic_playlist_tracks(
                     try:
                         album_cache[aid] = client.get_album(aid)
                     except Exception as album_err:
-                        logger.debug("Could not fetch album details for %s: %s", aid, album_err)
+                        logger.debug("Could not fetch album details for %s: %s", aid, type(album_err).__name__)
                         album_cache[aid] = {}
 
     result: list[dict[str, Any]] = []
@@ -843,6 +856,7 @@ def apply_ytmusic_sort_in_place(
     owner_sub: str | None = None,
     language: str | None = None,
     location: str | None = None,
+    token_store: CredentialStore | None = None,
 ) -> dict[str, Any]:
     """Sort a YouTube Music playlist in-place using edit_playlist(moveItem=...).
 
@@ -854,6 +868,7 @@ def apply_ytmusic_sort_in_place(
         owner_sub=owner_sub,
         language=language,
         location=location,
+        token_store=token_store,
     )
 
     auth_type = getattr(client, "auth_type", None)
@@ -895,21 +910,28 @@ def apply_ytmusic_sort_in_place(
                 current_ids.pop(cur_pos)
                 current_ids.insert(i, target_id)
             except YTMusicError as yte:
-                logger.error("Failed to move item %s before %s: %s", target_id, successor_id, yte)
+                logger.error("Failed to move item %s before %s: %s", target_id, successor_id, type(yte).__name__)
                 failed += 1
-                failed_items.append({"playlist_item_id": target_id, "error": str(yte)})
+                failed_items.append(
+                    {"playlist_item_id": target_id, "error": "移動曲目失敗，請核對 YouTube Music 播放清單。"}
+                )
                 err_msg = str(yte).lower()
                 if (
                     failed == 1
                     and succeeded == 0
                     and any(kw in err_msg for kw in ("bad request", "invalid argument", "unauthorized", "forbidden"))
                 ):
-                    logger.warning("Aborting YTMusic in-place sort early due to fatal client/auth error: %s", yte)
+                    logger.warning(
+                        "Aborting YTMusic in-place sort early due to fatal client/auth error: %s",
+                        type(yte).__name__,
+                    )
                     raise
             except Exception as e:
-                logger.exception("Unexpected error moving item %s: %s", target_id, e)
+                logger.error("Unexpected error moving item %s: %s", target_id, type(e).__name__)
                 failed += 1
-                failed_items.append({"playlist_item_id": target_id, "error": str(e)})
+                failed_items.append(
+                    {"playlist_item_id": target_id, "error": "移動曲目失敗，請核對 YouTube Music 播放清單。"}
+                )
 
     if moved_count > 0 and succeeded == 0 and failed > 0:
         raise YTMusicError(f"YouTube Music 播放清單排序全部失敗 ({failed} 首失敗)。")
@@ -935,6 +957,7 @@ def create_sorted_ytmusic_playlist(
     owner_sub: str | None = None,
     language: str | None = None,
     location: str | None = None,
+    token_store: CredentialStore | None = None,
 ) -> dict[str, Any]:
     """Create a brand new YouTube Music playlist with tracks already in sorted order.
 
@@ -946,6 +969,7 @@ def create_sorted_ytmusic_playlist(
         owner_sub=owner_sub,
         language=language,
         location=location,
+        token_store=token_store,
     )
     auth_type = getattr(client, "auth_type", None)
     if auth_type != AuthType.BROWSER and not isinstance(auth_type, (MagicMock, type(None))):
@@ -954,6 +978,11 @@ def create_sorted_ytmusic_playlist(
         )
 
     video_ids = [item["video_id"] for item in sorted_items if item.get("video_id")]
+    missing_video_ids = [
+        {"playlist_item_id": item.get("playlist_item_id", ""), "error": "缺少影片 ID，無法加入新播放清單。"}
+        for item in sorted_items
+        if not item.get("video_id")
+    ]
 
     # Clean title according to ytmusic requirements
     safe_title = re.sub(r"[<>]", "", title).strip() or "已排序播放清單"
@@ -966,7 +995,7 @@ def create_sorted_ytmusic_playlist(
             video_ids=video_ids,
         )
     except Exception as exc:
-        logger.exception("Failed to create new sorted playlist: %s", exc)
+        logger.error("Failed to create new sorted playlist: %s", type(exc).__name__)
         raise
 
     return {
@@ -976,8 +1005,8 @@ def create_sorted_ytmusic_playlist(
         "new_playlist_url": f"https://music.youtube.com/playlist?list={new_playlist_id}",
         "total": len(sorted_items),
         "moved": len(sorted_items),
-        "succeeded": len(sorted_items),
-        "failed": 0,
-        "failed_items": [],
+        "succeeded": len(video_ids),
+        "failed": len(missing_video_ids),
+        "failed_items": missing_video_ids,
         "quota_used": 0,
     }

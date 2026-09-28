@@ -27,6 +27,7 @@ import QuickTokenDrawer from '../components/QuickTokenDrawer';
 import { useOAuthConnect } from '../hooks/useOAuthConnect';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { PATHS } from '../routes/paths';
+import { Badge, PageHeader } from '../shared/ui';
 
 import {
   SORT_FIELDS,
@@ -446,18 +447,15 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
 
   return (
     <div className="section-gap">
-      {/* Page Header */}
-      <header className="glass-panel page-header card-padding">
-        <div className="badge badge-info dashboard-eyebrow">
-          <Sparkles size={14} aria-hidden="true" /> YouTube Music
-        </div>
-        <h1>YouTube Music 播放清單排序</h1>
-        <p className="section-desc">
-          讀取個人 YouTube Music
-          播放清單，以歌手／藝人、專輯名稱、歌曲曲目順序、歌名等多重規則自訂排序。支援拖曳順序與即時快取動態模擬比對，零配額消耗（0
-          API Credit）。
-        </p>
-      </header>
+      <PageHeader
+        title="YouTube Music 播放清單排序"
+        eyebrow={
+          <Badge tone="info">
+            <Sparkles size={14} aria-hidden="true" /> YouTube Music
+          </Badge>
+        }
+        description="讀取個人 YouTube Music 播放清單，以歌手／藝人、專輯名稱、歌曲曲目順序、歌名等多重規則自訂排序。支援拖曳順序與即時快取動態模擬比對，零配額消耗（0 API Credit）。"
+      />
 
       {/* YouTube Music In-Place Authorization Status */}
       <section className="glass-panel card-padding">
@@ -951,7 +949,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
           >
             <div>
               <span>
-                成功移動 <strong>{applyResult.succeeded}</strong> 首，
+                {applyResult.mode === 'new_playlist' ? '成功加入' : '成功移動'} <strong>{applyResult.succeeded}</strong>{' '}
+                首，
                 {applyResult.failed > 0 && (
                   <>
                     失敗 <strong>{applyResult.failed}</strong> 首，
@@ -959,6 +958,18 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
                 )}
                 消耗 <strong>{applyResult.quota_used?.toLocaleString() ?? 0}</strong> API 配額點數。
               </span>
+              {applyResult.failed_items.length > 0 && (
+                <div className="playlist-sort-failed-items">
+                  <strong>需要核對的曲目</strong>
+                  <ul>
+                    {applyResult.failed_items.map((item, index) => (
+                      <li key={`${item.playlist_item_id || item.video_id}-${index}`}>
+                        {item.playlist_item_id || item.video_id}：{item.error}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {applyResult.new_playlist_url && (
                 <div className="playlist-sort-result-link-row">
                   <a

@@ -14,10 +14,10 @@ export interface YtmusicCustomTokenMutationResponse {
 export interface YtmusicCustomTokenValidationResponse {
   status: 'success';
   valid: boolean;
-  message?: string;
-  account_name?: string;
-  channel_handle?: string;
-  account_photo_url?: string;
+  message?: string | null;
+  account_name?: string | null;
+  channel_handle?: string | null;
+  account_photo_url?: string | null;
 }
 
 export interface YtmusicSettingsApi {

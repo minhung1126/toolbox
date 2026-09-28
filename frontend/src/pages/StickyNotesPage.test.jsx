@@ -7,6 +7,8 @@ import { notesApi } from '../features/notes/api/notesApi';
 const toastMocks = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 
 vi.mock('../features/notes/api/notesApi', () => ({
+  isAmbiguousNoteMutation: (error) =>
+    ['notes_mutation_invalid', 'timeout', 'network_error'].includes(error?.code) || error?.status >= 500,
   notesApi: {
     getNotes: vi.fn(),
     createNote: vi.fn(),
@@ -104,5 +106,34 @@ describe('StickyNotesPage', () => {
       expect(screen.getByDisplayValue('第二張購物清單')).toBeInTheDocument();
       expect(screen.getByText(/符合搜尋 1 張/)).toBeInTheDocument();
     });
+  });
+
+  it('shows a read error instead of an empty state when the list contract is invalid', async () => {
+    notesApi.getNotes.mockRejectedValueOnce(new Error('便利貼清單回應格式不正確。'));
+    render(<StickyNotesPage />);
+
+    expect(await screen.findByText('便利貼清單待核對')).toBeInTheDocument();
+    expect(screen.queryByText('尚未建立任何便利貼')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '新增便利貼' })).toBeDisabled();
+  });
+
+  it('reloads after an ambiguous create response before allowing another create', async () => {
+    notesApi.getNotes.mockResolvedValueOnce({ notes: [], total: 0 }).mockResolvedValueOnce({
+      notes: [{ ...mockNotes[0], id: 'created-note' }],
+      total: 1,
+    });
+    notesApi.createNote.mockRejectedValueOnce({
+      code: 'notes_mutation_invalid',
+      message: '回應缺少新增便利貼',
+    });
+    render(<StickyNotesPage />);
+
+    await screen.findByText('尚未建立任何便利貼');
+    fireEvent.click(screen.getByRole('button', { name: '新增便利貼' }));
+
+    expect(await screen.findByText('共 1 張便籤')).toBeInTheDocument();
+    expect(notesApi.getNotes).toHaveBeenCalledTimes(2);
+    expect(notesApi.createNote).toHaveBeenCalledTimes(1);
+    expect(toastMocks.error).toHaveBeenCalledWith(expect.stringContaining('勿直接重送'));
   });
 });

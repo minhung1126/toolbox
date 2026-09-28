@@ -2,15 +2,16 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, CheckCircle2, Sparkles } from 'lucide-react';
 import { SourceLinkButton } from '../components/SourceLinkInput';
-import { youtubePreferredUiSlot } from '../utils/youtubeRouting';
-import { getAllTools } from '../tools/catalog';
+import { youtubePreferredUiSlot } from '../features/youtube/model/routing';
+import { useToolCatalog } from '../tools/ToolCatalogProvider';
+import { getMissingToolCapabilities } from '../tools/capabilities';
 import { Badge, Card, PageHeader } from '../shared/ui';
 import '../features/system/dashboard.css';
 
 export default function DashboardPage({ authUser, sysSettings = {} }) {
   const activeSlot = youtubePreferredUiSlot(authUser?.youtube);
   const activeYoutube = authUser?.youtube?.slots?.[activeSlot] || {};
-  const allTools = getAllTools();
+  const { status: catalogStatus, tools: allTools } = useToolCatalog();
   const sheetsConnected = Boolean(
     authUser?.authorizations?.sheets?.connected || authUser?.google_scopes?.sheets_readonly
   );
@@ -43,7 +44,7 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
             )}
           </div>
           <h3>{authUser ? authUser.email : '尚未登入控制台'}</h3>
-          <p>{allTools.length} 個工具模組已就緒</p>
+          <p>{catalogStatus === 'ready' ? `${allTools.length} 個工具模組已啟用` : '工具目錄尚未就緒'}</p>
         </Card>
 
         <Card as="div" padding="sm" className="dashboard-status-card">
@@ -98,6 +99,7 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
         </Card>
       </div>
 
+      {catalogStatus === 'loading' && <p role="status">工具目錄載入中…</p>}
       {allTools.map((tool) => {
         const cards = tool.featureCards || [];
         if (!cards.length) return null;
@@ -113,6 +115,7 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
             <div className="feature-grid">
               {cards.map((card) => {
                 const Icon = card.icon;
+                const missingCapabilities = getMissingToolCapabilities(tool, authUser, card.to);
                 return (
                   <Card as="div" key={card.id} className="feature-card">
                     <div className={`icon-box icon-box-${card.colorTheme || 'primary'}`}>
@@ -122,6 +125,16 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
                       <h3>{card.title}</h3>
                       <p>{card.description}</p>
                     </div>
+                    {missingCapabilities.length > 0 && (
+                      <div className="dashboard-card-capabilities">
+                        <Badge tone="warning">尚缺授權</Badge>
+                        {missingCapabilities.map((capability) => (
+                          <Link key={capability.key} to={capability.settingsPath}>
+                            連線 {capability.label}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
                     <Link
                       className={`btn btn-${card.colorTheme === 'primary' ? 'primary' : 'secondary'} feature-card-action`}
                       to={card.to}

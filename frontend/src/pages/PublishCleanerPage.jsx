@@ -12,7 +12,11 @@ import YouTubeVideoEditDialog from '../components/YouTubeVideoEditDialog';
 import ResultStatus from '../components/ResultStatus';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import { sortVideosByUploadTime } from '../utils/videoOrder';
-import { getYoutubeAuthContext, youtubeRoutingMode, youtubeRoutingReasonLabel } from '../utils/youtubeRouting';
+import {
+  getYoutubeAuthContext,
+  youtubeRoutingMode,
+  youtubeRoutingReasonLabel,
+} from '../features/youtube/model/routing';
 import {
   YOUTUBE_COPY,
   formatQuotaUnits,
@@ -469,6 +473,18 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
         invalidateSnapshot();
         setErrorMsg('預覽已過期或播放清單已變更，已安全停止發布草稿；請重新讀取清單。');
         toast.warning('預覽已過期，發布草稿已安全停止');
+      } else if (error.code === 'publish_result_invalid') {
+        invalidateSnapshot();
+        setErrorMsg(
+          '伺服器結果格式不正確，發布操作可能已執行；請先至 YouTube Studio 核對影片與播放清單狀態，再重新讀取。勿直接重送。'
+        );
+        toast.warning('發布結果待核對，請先檢查 YouTube Studio');
+      } else if (error.code === 'timeout' || error.code === 'network_error' || error.status >= 500) {
+        invalidateSnapshot();
+        setErrorMsg(
+          '無法確認發布操作是否已完成；請先至 YouTube Studio 核對影片與播放清單狀態，再重新讀取。勿直接重送。'
+        );
+        toast.warning('發布結果待核對，請先檢查 YouTube Studio');
       } else {
         setErrorMsg(`發布草稿執行失敗：${error.message}`);
         toast.error('發布草稿執行失敗');

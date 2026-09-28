@@ -157,6 +157,28 @@ def test_apply_ytmusic_sort_in_place(mock_get_client):
 
 
 @patch("backend.app.services.ytmusic_service.get_ytmusic_client")
+def test_partial_ytmusic_sort_does_not_return_provider_exception(mock_get_client):
+    from ytmusicapi.auth.types import AuthType
+    from ytmusicapi.exceptions import YTMusicError
+
+    client = MagicMock()
+    client.auth_type = AuthType.BROWSER
+    client.edit_playlist.side_effect = [None, YTMusicError("access_token=private-provider-value")]
+    mock_get_client.return_value = client
+    original = [{"playlist_item_id": item} for item in ("a", "b", "c")]
+    sorted_items = [{"playlist_item_id": item} for item in ("b", "c", "a")]
+
+    result = apply_ytmusic_sort_in_place("PL_TEST", sorted_items, original)
+
+    assert result["succeeded"] == 1
+    assert result["failed"] == 1
+    assert result["failed_items"] == [
+        {"playlist_item_id": "c", "error": "移動曲目失敗，請核對 YouTube Music 播放清單。"}
+    ]
+    assert "access_token=private-provider-value" not in str(result)
+
+
+@patch("backend.app.services.ytmusic_service.get_ytmusic_client")
 def test_apply_ytmusic_sort_in_place_rejects_synthetic_id(mock_get_client):
     from ytmusicapi.exceptions import YTMusicError
 
@@ -200,6 +222,25 @@ def test_create_sorted_ytmusic_playlist(mock_get_client):
         privacy_status="PRIVATE",
         video_ids=["v1", "v2"],
     )
+
+
+@patch("backend.app.services.ytmusic_service.get_ytmusic_client")
+def test_create_sorted_ytmusic_playlist_reports_missing_video_id(mock_get_client):
+    mock_client = MagicMock()
+    mock_client.create_playlist.return_value = "PL_NEW_123"
+    mock_get_client.return_value = mock_client
+
+    result = create_sorted_ytmusic_playlist(
+        "Sorted",
+        "Description",
+        [{"playlist_item_id": "missing-video"}, {"playlist_item_id": "valid", "video_id": "v1"}],
+    )
+
+    assert (result["total"], result["moved"], result["succeeded"], result["failed"]) == (2, 2, 1, 1)
+    assert result["failed_items"] == [
+        {"playlist_item_id": "missing-video", "error": "缺少影片 ID，無法加入新播放清單。"}
+    ]
+    assert mock_client.create_playlist.call_args.kwargs["video_ids"] == ["v1"]
 
 
 def test_parse_custom_token_input_curl():
@@ -482,7 +523,7 @@ def test_validate_ytmusic_custom_token_api_failure(monkeypatch):
     mock_client = MagicMock()
     mock_client.auth_type = AuthType.BROWSER
     mock_client.get_account_info.side_effect = Exception("HTTP 401 Unauthorized")
-    mock_client.get_library_playlists.side_effect = Exception("HTTP 401 Unauthorized")
+    mock_client.get_library_playlists.side_effect = Exception("Cookie: SID=private-provider-value")
     monkeypatch.setattr("backend.app.services.ytmusic_service.YTMusic", lambda **kwargs: mock_client)
 
     token = "SID=expired; HSID=expired; SAPISID=expired"

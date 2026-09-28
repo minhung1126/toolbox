@@ -57,13 +57,12 @@ def test_production_settings_fail_closed_and_use_host_only_cookies():
 
 def test_production_oauth_flow_cookie_has_secure_host_only_attributes(monkeypatch):
     monkeypatch.setattr(settings, "ENVIRONMENT", "production")
-    monkeypatch.setattr(auth, "OAUTH_FLOW_COOKIE", "__Host-test_oauth_flow")
     response = Response()
 
     auth._set_flow_cookie(response, flow_type="login", state="state", code_verifier="verifier")
     set_cookie = response.headers["set-cookie"]
 
-    assert set_cookie.startswith("__Host-test_oauth_flow=")
+    assert set_cookie.startswith("__Host-creator_tools_oauth_flow=")
     assert "Secure" in set_cookie
     assert "HttpOnly" in set_cookie
     assert "Path=/" in set_cookie
@@ -71,7 +70,7 @@ def test_production_oauth_flow_cookie_has_secure_host_only_attributes(monkeypatc
 
     deleted = auth.redirect_with_auth_error("test")
     delete_cookie = deleted.headers["set-cookie"]
-    assert "__Host-test_oauth_flow=" in delete_cookie
+    assert "__Host-creator_tools_oauth_flow=" in delete_cookie
     assert "Secure" in delete_cookie
     assert "Path=/" in delete_cookie
 

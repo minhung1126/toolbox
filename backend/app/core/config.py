@@ -2,10 +2,15 @@ import hashlib
 import secrets
 import threading
 import warnings
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import urlparse
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 YOUTUBE_OAUTH_SLOT_NAMES = ("primary", "secondary")
 
@@ -46,6 +51,20 @@ _settings_sync_lock = threading.RLock()
 
 
 class Settings(BaseSettings):
+    runtime_store: Any = Field(default=None, exclude=True, repr=False)
+    secrets_store: Any = Field(default=None, exclude=True, repr=False)
+    defer_key_initialization: bool = Field(default=False, exclude=True, repr=False)
+
+    def get_runtime_store(self):
+        from backend.app.core.runtime_config import runtime_config
+
+        return runtime_config if self.runtime_store is None else self.runtime_store
+
+    def get_secrets_store(self):
+        from backend.app.core.system_secrets import system_secrets
+
+        return system_secrets if self.secrets_store is None else self.secrets_store
+
     # Do not infer the deployment environment from the hostname. A public
     # development instance must not accidentally receive production policy,
     # and a production instance must opt in explicitly and fail closed.
@@ -95,6 +114,8 @@ class Settings(BaseSettings):
 
     def model_post_init(self, __context) -> None:
         del __context
+        if self.runtime_store is not None:
+            self.runtime_store.bind_settings(self)
         self.ENVIRONMENT = self.ENVIRONMENT.strip().casefold()
         if self.ENVIRONMENT not in {"development", "test", "staging", "production"}:
             raise ValueError("ENVIRONMENT must be one of development, test, staging, or production")
@@ -164,10 +185,21 @@ class Settings(BaseSettings):
         ):
             raise ValueError("CREDENTIAL_ENCRYPTION_KEY must be explicitly configured in production")
 
-        if not self.SECRET_KEY or not self.CREDENTIAL_ENCRYPTION_KEY:
-            from backend.app.core.system_secrets import system_secrets
+        if not self.defer_key_initialization:
+            self.initialize_keys()
 
-            sec, enc = system_secrets.get_or_create_master_keys(
+        if self.is_production:
+            self._require_https("PUBLIC_BASE_URL", self.PUBLIC_BASE_URL)
+            self._require_https("FRONTEND_URL", self.FRONTEND_URL)
+
+    def initialize_keys(self) -> None:
+        """Resolve persistent signing and encryption keys during app assembly."""
+        with _settings_sync_lock:
+            self._initialize_keys_unlocked()
+
+    def _initialize_keys_unlocked(self) -> None:
+        if not self.SECRET_KEY or not self.CREDENTIAL_ENCRYPTION_KEY:
+            sec, enc = self.get_secrets_store().get_or_create_master_keys(
                 env_secret_key=self.SECRET_KEY,
                 env_encryption_key=self.CREDENTIAL_ENCRYPTION_KEY,
             )
@@ -205,17 +237,12 @@ class Settings(BaseSettings):
             )
 
         if self.is_production:
-            self._require_https("PUBLIC_BASE_URL", self.PUBLIC_BASE_URL)
-            self._require_https("FRONTEND_URL", self.FRONTEND_URL)
-
             if len(self.SECRET_KEY) < 32:
                 raise ValueError("SECRET_KEY must contain at least 32 characters in production")
             if len(self.CREDENTIAL_ENCRYPTION_KEY) < 32:
                 raise ValueError("CREDENTIAL_ENCRYPTION_KEY must contain at least 32 characters in production")
             if not self.allowed_google_emails:
-                from backend.app.core.runtime_config import runtime_config
-
-                if runtime_config.is_setup_completed():
+                if self.get_runtime_store().is_setup_completed():
                     raise ValueError("ALLOWED_GOOGLE_EMAILS must contain at least one account in production")
 
     @staticmethod
@@ -272,18 +299,14 @@ class Settings(BaseSettings):
 
     @property
     def allowed_google_emails(self) -> frozenset[str]:
-        from backend.app.core.runtime_config import runtime_config
-
-        persisted = runtime_config.get_allowed_emails()
+        persisted = self.get_runtime_store().get_allowed_emails()
         if persisted:
             return frozenset(email.strip().casefold() for email in persisted if email.strip())
         return frozenset(email.strip().casefold() for email in self.ALLOWED_GOOGLE_EMAILS.split(",") if email.strip())
 
     @property
     def allow_new_users(self) -> bool:
-        from backend.app.core.runtime_config import runtime_config
-
-        val = runtime_config.get("allow_new_users", None)
+        val = self.get_runtime_store().get("allow_new_users", None)
         if val is not None:
             return bool(val)
         return bool(self.ALLOW_NEW_USERS)
@@ -343,8 +366,8 @@ class Settings(BaseSettings):
     def sync_dynamic_config(self) -> None:
         """Sync in-memory settings with persistent system secrets and runtime config."""
         with _settings_sync_lock:
-            from backend.app.core.runtime_config import runtime_config
-            from backend.app.core.system_secrets import system_secrets
+            runtime_config = self.get_runtime_store()
+            system_secrets = self.get_secrets_store()
 
             creds = system_secrets.get_credentials()
 
@@ -381,5 +404,33 @@ class Settings(BaseSettings):
                 self.ALLOW_NEW_USERS = bool(allow_users)
 
 
-settings = Settings()
-settings.sync_dynamic_config()
+_request_settings: ContextVar[Settings | None] = ContextVar("settings", default=None)
+
+
+def get_settings(fallback: Settings | None = None) -> Settings:
+    scoped = _request_settings.get()
+    if scoped is not None:
+        return scoped
+    return settings if fallback is None else fallback
+
+
+@contextmanager
+def settings_context(config: Settings | None):
+    token = _request_settings.set(config)
+    try:
+        yield
+    finally:
+        _request_settings.reset(token)
+
+
+class SettingsMiddleware:
+    def __init__(self, app: ASGIApp, config: Settings | None = None):
+        self.app = app
+        self.config = config
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        with settings_context(self.config):
+            await self.app(scope, receive, send)
+
+
+settings = Settings(defer_key_initialization=True)

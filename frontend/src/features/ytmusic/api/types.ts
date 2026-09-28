@@ -15,9 +15,9 @@ export interface PlaylistListResponse {
 }
 
 export interface PlaylistSortQuotaEstimate {
-  total_units?: number;
-  moved_count?: number;
-  units_per_move?: number;
+  total_units: number;
+  moved_count: number;
+  units_per_move: number;
   [field: string]: unknown;
 }
 
@@ -29,9 +29,9 @@ export interface PlaylistSortPreviewRequest {
 }
 
 export interface PlaylistSortPreviewResponse {
-  preview: PlaylistSortPreview | null;
+  preview: PlaylistSortPreview;
   preview_token: string;
-  quota_estimate?: PlaylistSortQuotaEstimate | null;
+  quota_estimate: PlaylistSortQuotaEstimate;
 }
 
 export interface PlaylistSortApplyRequest extends PlaylistSortPreviewRequest {
@@ -43,9 +43,14 @@ export interface PlaylistSortApplyRequest extends PlaylistSortPreviewRequest {
 }
 
 export interface PlaylistSortApplyResponse {
-  mode?: PlaylistSortApplyMode;
-  succeeded?: number;
-  failed?: number;
+  mode: PlaylistSortApplyMode;
+  total: number;
+  moved: number;
+  succeeded: number;
+  failed: number;
+  failed_items: Array<{ playlist_item_id?: string; video_id?: string; error: string }>;
+  quota_used: number;
+  new_playlist_url?: string;
   [field: string]: unknown;
 }
 

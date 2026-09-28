@@ -1,0 +1,140 @@
+.result-item {
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.result-item-success {
+  background: rgb(16 185 129 / 10%);
+  border: 1px solid rgb(16 185 129 / 20%);
+}
+
+.result-item-failed {
+  background: rgb(239 68 68 / 10%);
+  border: 1px solid rgb(239 68 68 / 20%);
+}
+
+.result-item-skipped {
+  background: rgb(255 255 255 / 5%);
+  border: 1px solid rgb(255 255 255 / 10%);
+}
+
+.execution-bar {
+  padding: clamp(1rem, 2vw, 1.25rem);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.result-item strong {
+  overflow-wrap: anywhere;
+}
+
+.metadata-block {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.metadata-label {
+  margin-bottom: 0.1875rem;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+
+.metadata-title {
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.metadata-description {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.result-item > :first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.execution-bar > :first-child {
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .execution-bar,
+  .result-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .execution-bar {
+    justify-content: stretch;
+  }
+
+  .execution-bar .btn {
+    width: 100%;
+  }
+
+  .result-item .badge {
+    align-self: flex-start;
+  }
+}
+
+.execution-bar strong {
+  color: #fff;
+}
+
+.execution-bar p {
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.result-panel {
+  gap: 0.75rem;
+}
+
+.result-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.3rem;
+}
+
+.result-heading-success {
+  color: #34d399;
+}
+
+.result-heading-warning {
+  color: #fbbf24;
+}
+
+.result-meta {
+  margin-top: 0.25rem;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.result-reason {
+  margin-top: 0.25rem;
+  color: #fbbf24;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.result-reason-failed {
+  color: #f87171;
+}

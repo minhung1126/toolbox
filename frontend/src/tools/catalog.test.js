@@ -6,6 +6,7 @@ import {
   getSystemNavItems,
   getToolById,
   getToolNavGroups,
+  reconcileToolCatalog,
   validateFeatureManifests,
 } from './catalog';
 import { PATHS } from '../routes/paths';
@@ -172,5 +173,85 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(cardIds).toContain('sticky_notes_card');
     expect(cardIds).toContain('photo_curator_card');
     expect(cardIds).toContain('weverse_uploader_card');
+  });
+
+  it('uses backend status and metadata without inventing a frontend tool', () => {
+    const [creator, music] = getAllTools();
+    const tools = reconcileToolCatalog({
+      tools: [
+        { id: creator.id, status: 'disabled', version: '1.0.0', entry_url: creator.entryUrl, required_scopes: [] },
+        {
+          id: music.id,
+          status: 'beta',
+          entry_url: music.entryUrl,
+          name: 'Server Music',
+          title: '伺服器名稱',
+          description: '伺服器描述',
+          category: 'Server',
+          version: '1.2.0',
+          required_scopes: [],
+        },
+      ],
+    });
+    expect(tools.map((tool) => tool.id)).toEqual([music.id]);
+    expect(tools[0].title).toBe('伺服器名稱');
+    expect(getToolNavGroups(tools).some((group) => group.id === 'youtube')).toBe(false);
+  });
+
+  it('omits tools whose runtime health is unavailable', () => {
+    const [creator, music] = getAllTools();
+    const metadata = (tool, runtimeStatus) => ({
+      id: tool.id,
+      status: 'active',
+      runtime_status: runtimeStatus,
+      version: '1.0.0',
+      entry_url: tool.entryUrl,
+      required_scopes: [],
+    });
+    expect(
+      reconcileToolCatalog({ tools: [metadata(creator, 'startup_failed'), metadata(music, 'ready')] }).map(
+        (tool) => tool.id
+      )
+    ).toEqual([music.id]);
+    expect(() => reconcileToolCatalog({ tools: [metadata(creator, 'future')] })).toThrow('執行狀態');
+  });
+
+  it('rejects unknown, duplicate, or incompatible backend catalog entries', () => {
+    const tool = getAllTools()[0];
+    const metadata = { id: tool.id, status: 'active', version: '1.0.0', entry_url: tool.entryUrl, required_scopes: [] };
+    expect(() => reconcileToolCatalog({ tools: [{ ...metadata, id: 'unknown-tool' }] })).toThrow('未知');
+    expect(() => reconcileToolCatalog({ tools: [metadata, metadata] })).toThrow('重複');
+    expect(() => reconcileToolCatalog({ tools: [{ ...metadata, entry_url: '/wrong' }] })).toThrow('入口');
+    expect(() => reconcileToolCatalog({ tools: [{ ...metadata, status: 'future' }] })).toThrow('狀態');
+    expect(() => reconcileToolCatalog({ tools: [{ ...metadata, version: '2.0.0' }] })).toThrow('版本');
+    expect(() => reconcileToolCatalog({ tools: [{ ...metadata, version: '0.9.0' }] })).toThrow('版本');
+    expect(() => reconcileToolCatalog({ tools: [{ ...metadata, version: '1.2.0-beta' }] })).toThrow('版本');
+    expect(() => reconcileToolCatalog({ tools: [{ ...metadata, version: '1.99.0' }] })).not.toThrow();
+    expect(() => reconcileToolCatalog({ tools: [{ ...metadata, required_scopes: ['future-scope'] }] })).toThrow(
+      '能力需求'
+    );
+    expect(() => reconcileToolCatalog({ tools: [{ ...metadata, routes: [{ path: PATHS.ytmusicSettings }] }] })).toThrow(
+      '路由不受支援'
+    );
+    expect(() =>
+      reconcileToolCatalog({
+        tools: [{ ...metadata, routes: [{ path: PATHS.youtubeVideoDrafts, required_scopes: ['future-scope'] }] }],
+      })
+    ).toThrow('能力需求');
+  });
+
+  it('keeps the frontend presentation order when the backend registry order changes', () => {
+    const [creator, music] = getAllTools();
+    const metadata = (tool) => ({
+      id: tool.id,
+      status: 'active',
+      version: '1.0.0',
+      entry_url: tool.entryUrl,
+      required_scopes: [],
+    });
+    expect(reconcileToolCatalog({ tools: [metadata(music), metadata(creator)] }).map((tool) => tool.id)).toEqual([
+      creator.id,
+      music.id,
+    ]);
   });
 });

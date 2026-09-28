@@ -8,6 +8,10 @@ import notesManifest from '../features/notes/manifest';
 import youtubeIntegrationsManifest from '../features/youtube-integrations/manifest';
 import systemManifest from '../features/system/manifest';
 import { PATHS } from '../routes/paths';
+import { validateToolScopes } from './capabilities';
+
+// The catalog contract accepts additive v1 metadata; a new major needs an explicit frontend migration.
+const SUPPORTED_TOOL_MAJOR_VERSION = 1;
 
 /** Aggregated feature manifests used by navigation and dashboard views. */
 export const TOOL_MODULES = Object.freeze(
@@ -103,6 +107,64 @@ export function validateFeatureManifests(manifests) {
   return manifests;
 }
 
+/** Join server-owned availability and metadata to locally controlled views. */
+export function reconcileToolCatalog(payload) {
+  if (!Array.isArray(payload?.tools)) throw new Error('工具目錄回應格式不正確。');
+  const known = new Map(TOOL_MODULES.map((tool) => [tool.id, tool]));
+  const seen = new Set();
+  const available = new Map();
+  for (const metadata of payload.tools) {
+    const manifest = known.get(metadata?.id);
+    if (!manifest) throw new Error(`未知的後端工具 ID：${String(metadata?.id)}`);
+    if (seen.has(metadata.id)) throw new Error(`重複的後端工具 ID：${metadata.id}`);
+    seen.add(metadata.id);
+    if (!['active', 'beta', 'disabled'].includes(metadata.status)) {
+      throw new Error(`工具 ${metadata.id} 的狀態不受支援。`);
+    }
+    if (
+      metadata.runtime_status &&
+      !['ready', 'disabled', 'startup_failed', 'unhealthy'].includes(metadata.runtime_status)
+    ) {
+      throw new Error(`工具 ${metadata.id} 的執行狀態不受支援。`);
+    }
+    const version = /^(\d+)\.(\d+)\.(\d+)$/.exec(metadata.version);
+    if (!version || Number(version[1]) !== SUPPORTED_TOOL_MAJOR_VERSION) {
+      throw new Error(`工具 ${metadata.id} 的版本不受支援。`);
+    }
+    if (metadata.entry_url !== manifest.entryUrl) {
+      throw new Error(`工具 ${metadata.id} 的入口與前端路由不一致。`);
+    }
+    validateToolScopes(metadata.id, metadata.required_scopes);
+    const knownRoutes = new Set([
+      ...(manifest.featureCards || []).map((card) => card.to),
+      ...(manifest.navGroups || []).flatMap((group) => (group.items || []).map((item) => item.to)),
+    ]);
+    const routeScopes = {};
+    for (const route of metadata.routes || []) {
+      if (!knownRoutes.has(route.path)) {
+        throw new Error(`工具 ${metadata.id} 的路由不受支援：${route.path}`);
+      }
+      if (Object.hasOwn(routeScopes, route.path)) throw new Error(`工具 ${metadata.id} 的路由重複：${route.path}`);
+      const scopes = route.required_scopes ?? metadata.required_scopes;
+      validateToolScopes(metadata.id, scopes);
+      routeScopes[route.path] = scopes;
+    }
+    if (metadata.status === 'disabled' || (metadata.runtime_status && metadata.runtime_status !== 'ready')) continue;
+    available.set(metadata.id, {
+      ...manifest,
+      name: metadata.name,
+      title: metadata.title,
+      description: metadata.description,
+      category: metadata.category,
+      status: metadata.status,
+      version: metadata.version,
+      requiredScopes: metadata.required_scopes,
+      routeScopes,
+    });
+  }
+  return TOOL_MODULES.flatMap((tool) => (available.has(tool.id) ? [available.get(tool.id)] : []));
+}
+
 /**
  * Return all registered tool modules.
  */
@@ -120,8 +182,8 @@ export function getToolById(toolId) {
 /**
  * Retrieve all navigation groups across tools.
  */
-export function getToolNavGroups() {
-  return TOOL_MODULES.flatMap((tool) => tool.navGroups || []);
+export function getToolNavGroups(tools = TOOL_MODULES) {
+  return tools.flatMap((tool) => tool.navGroups || []);
 }
 
 /** Retrieve direct route definitions contributed by each feature manifest. */

@@ -9,11 +9,11 @@ from urllib.parse import urlparse
 
 from fastapi import Request
 
-from backend.app.core.config import settings
+from backend.app.core.config import get_settings, settings
 from backend.app.core.error_contract import http_error
 
 
-class _SlidingWindowLimiter:
+class SlidingWindowLimiter:
     def __init__(self) -> None:
         self._events: dict[tuple[str, str], deque[float]] = defaultdict(deque)
         self._lock = RLock()
@@ -57,7 +57,12 @@ class _SlidingWindowLimiter:
                         self._events.pop(event_key, None)
 
 
-_limiter = _SlidingWindowLimiter()
+_limiter = SlidingWindowLimiter()
+
+
+def get_request_limiter(request: Request) -> SlidingWindowLimiter:
+    application = request.scope.get("app")
+    return getattr(application.state, "request_limiter", _limiter) if application is not None else _limiter
 
 
 def _client_key(request: Request) -> str:
@@ -67,12 +72,12 @@ def _client_key(request: Request) -> str:
 
 def enforce_api_rate_limit(request: Request) -> None:
     """Apply a modest per-client limit to every versioned API request."""
-    _limiter.check(_client_key(request), "api", limit=240)
+    get_request_limiter(request).check(_client_key(request), "api", limit=240)
 
 
 def enforce_workflow_rate_limit(request: Request) -> None:
     """Apply a stricter limit to synchronous, quota-consuming workflows."""
-    _limiter.check(_client_key(request), "workflow", limit=12)
+    get_request_limiter(request).check(_client_key(request), "workflow", limit=12)
 
 
 def _origin_from_referer(referer: str) -> str:
@@ -90,9 +95,12 @@ def _normalise_origin(value: str) -> str:
 
 
 def _allowed_origins() -> set[str]:
-    allowed = {_normalise_origin(settings.frontend_url), _normalise_origin(settings.base_url)}
+    allowed = {
+        _normalise_origin(get_settings(settings).frontend_url),
+        _normalise_origin(get_settings(settings).base_url),
+    }
     allowed.discard("")
-    if not settings.is_production:
+    if not get_settings(settings).is_production:
         allowed.update(
             {
                 "http://localhost:3000",
@@ -121,6 +129,6 @@ def require_same_origin(request: Request) -> None:
     origin = _normalise_origin(origin_header) if origin_header else _origin_from_referer(referer_header or "")
     if origin and origin in _allowed_origins():
         return
-    if not origin and not settings.is_production:
+    if not origin and not get_settings(settings).is_production:
         return
     raise http_error(403, "csrf_origin_denied", "要求來源未通過驗證。")

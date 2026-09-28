@@ -132,7 +132,11 @@ describe('BatchUpdatePage preview and confirmation', () => {
       worksheets: [{ title: 'Youtube Video', columns: ['Youtube Title', 'Youtube Description'] }],
     });
     mocks.api.getRandomMemberPreview.mockResolvedValue({ person: '人物甲', values: {} });
-    mocks.api.getPlaylistVideos.mockResolvedValue({ videos: [videoOne, videoTwo], source: 'youtube-api' });
+    mocks.api.getPlaylistVideos.mockResolvedValue({
+      playlist_id: 'playlist-a',
+      videos: [videoOne, videoTwo],
+      source: 'youtube-api',
+    });
     mocks.api.getBatchPreview.mockResolvedValue({
       preview_token: 'preview-token',
       preview_snapshot: { youtube_slot: 'primary' },
@@ -166,11 +170,19 @@ describe('BatchUpdatePage preview and confirmation', () => {
       can_complete_today: true,
     });
     mocks.api.batchUpdateMetadata.mockResolvedValue({
+      operation: 'youtube.metadata_update',
       completed: true,
       total_count: 2,
       succeeded_count: 1,
+      warning_count: 0,
       skipped_count: 1,
       failed_count: 0,
+      not_attempted_count: 0,
+      quota_blocked: false,
+      results: [
+        { video_id: 'video-1', status: 'succeeded' },
+        { video_id: 'video-2', status: 'skipped' },
+      ],
     });
   });
 
@@ -226,6 +238,42 @@ describe('BatchUpdatePage preview and confirmation', () => {
         ],
       })
     );
+  });
+
+  it('rejects a missing batch plan before opening the confirmation dialog', async () => {
+    mocks.api.getBatchPreview.mockResolvedValueOnce({
+      preview_token: 'preview-token',
+      preview_snapshot: {},
+      plan: null,
+    });
+    const { container } = renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '讀取 Video 草稿影片' }));
+    await screen.findByText('舊標題一');
+    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: '人物甲' } });
+    fireEvent.click(screen.getByRole('button', { name: '檢查並更新標題與描述' }));
+
+    expect(await screen.findByText('建立完整批次預覽失敗：批次更新預覽回應格式不正確。')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /確認批次更新/ })).not.toBeInTheDocument();
+    expect(mocks.api.batchUpdateMetadata).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['invalid response', () => Promise.resolve({ completed: true })],
+    ['timeout', () => Promise.reject(Object.assign(new Error('連線逾時'), { code: 'timeout' }))],
+  ])('requires provider reconciliation after an ambiguous batch %s', async (_label, response) => {
+    mocks.api.batchUpdateMetadata.mockImplementationOnce(response);
+    const { container } = renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '讀取 Video 草稿影片' }));
+    await screen.findByText('舊標題一');
+    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: '人物甲' } });
+    fireEvent.click(screen.getByRole('button', { name: '檢查並更新標題與描述' }));
+    const dialog = await screen.findByRole('dialog', { name: '確認批次更新 1 支影片' });
+    fireEvent.click(within(dialog).getByRole('button', { name: '開始批次更新' }));
+
+    expect(await screen.findByText(/無法確認批次更新是否已完成/)).toBeInTheDocument();
+    expect(mocks.toast.warning).toHaveBeenCalledWith('批次更新結果待核對，請先檢查 YouTube Studio');
+    expect(mocks.toast.success).not.toHaveBeenCalledWith(expect.stringContaining('批次更新完成'));
+    expect(screen.queryByRole('dialog', { name: /確認批次更新/ })).not.toBeInTheDocument();
   });
 
   it('allows editing the playlist ID and auto-saves draft settings', async () => {

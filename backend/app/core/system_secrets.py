@@ -95,13 +95,9 @@ class SystemSecretsManager:
             encryption_key = env_encryption_key.strip()
 
             # Try loading existing secrets file
-            saved_secrets: Dict[str, Any] = {}
-            if self._secrets_file.is_file():
-                try:
-                    with self._secrets_file.open("r", encoding="utf-8") as handle:
-                        saved_secrets = json.load(handle)
-                except (OSError, json.JSONDecodeError) as exc:
-                    logger.warning("Failed to read master secrets file: %s", type(exc).__name__)
+            saved_secrets = read_json_file(self._secrets_file, {}, strict=True)
+            if not isinstance(saved_secrets, dict):
+                raise ValueError("Invalid master secrets structure")
 
             # Priority 1: explicitly passed from environment
             # Priority 2: saved in persistent .secrets.json
@@ -134,6 +130,7 @@ class SystemSecretsManager:
                     logger.info("Persisted auto-generated master keys to %s", self._secrets_file.name)
                 except OSError as exc:
                     logger.error("Failed to persist master keys: %s", type(exc).__name__)
+                    raise
 
             self._master_secret_key = secret_key
             self._master_encryption_key = encryption_key
@@ -149,8 +146,10 @@ class SystemSecretsManager:
             if self._credentials_cache is not None:
                 return dict(self._credentials_cache)
 
-            data = read_json_file(self._credentials_file)
+            data = read_json_file(self._credentials_file, {}, strict=True)
             if not isinstance(data, dict):
+                raise ValueError("Invalid system credentials structure")
+            if not data:
                 self._credentials_cache = {}
                 return {}
 
@@ -168,7 +167,7 @@ class SystemSecretsManager:
                             decrypted[field] = fernet.decrypt(token).decode("utf-8")
                         except (InvalidToken, ValueError):
                             logger.error("Failed to decrypt secret field: %s", field)
-                            decrypted[field] = ""
+                            raise RuntimeError("Cannot decrypt stored system credentials") from None
                     else:
                         decrypted[field] = str(raw_val)
 
@@ -176,8 +175,7 @@ class SystemSecretsManager:
                 return dict(decrypted)
             except (OSError, json.JSONDecodeError) as exc:
                 logger.error("Failed to load system credentials: %s", type(exc).__name__)
-                self._credentials_cache = {}
-                return {}
+                raise
 
     def update_credentials(self, updates: Dict[str, Any]) -> Dict[str, str]:
         """Encrypt and persist updated system OAuth credentials."""
@@ -207,6 +205,7 @@ class SystemSecretsManager:
                 logger.info("Successfully updated and persisted system OAuth credentials")
             except OSError as exc:
                 logger.error("Failed to save system credentials: %s", type(exc).__name__)
+                raise
 
             return dict(current)
 
@@ -252,16 +251,13 @@ class SystemSecretsManager:
                         self._setup_pin = pin
                         return pin
                 except OSError:
-                    pass
+                    raise
 
             pin = f"{secrets.randbelow(900000) + 100000}"
+            self._data_dir.mkdir(parents=True, exist_ok=True)
+            self._pin_file.write_text(pin, encoding="utf-8")
+            _secure_file_permissions(self._pin_file)
             self._setup_pin = pin
-            try:
-                self._data_dir.mkdir(parents=True, exist_ok=True)
-                self._pin_file.write_text(pin, encoding="utf-8")
-                _secure_file_permissions(self._pin_file)
-            except OSError:
-                pass
 
             logger.warning("=" * 66)
             logger.warning("[Toolbox Setup] Google OAuth is not configured.")
@@ -288,3 +284,12 @@ class SystemSecretsManager:
 
 
 system_secrets = SystemSecretsManager()
+
+
+def get_system_secrets(fallback: SystemSecretsManager | None = None) -> SystemSecretsManager:
+    from backend.app.core.config import get_settings
+
+    config = get_settings()
+    if config.secrets_store is not None:
+        return config.secrets_store
+    return system_secrets if fallback is None else fallback

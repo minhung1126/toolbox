@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from contextvars import ContextVar
+
+from starlette.types import ASGIApp, Receive, Scope, Send
+
 from backend.app.core.youtube_quota_limiter import (
     DEFAULT_SAFETY_BUFFER_UNITS,
     JSON_SCHEMA_VERSION,
@@ -22,11 +27,33 @@ _youtube_quota_trackers: dict[str, YouTubeQuotaLimiter] = {
 }
 
 
+_request_trackers: ContextVar[Mapping[str, YouTubeQuotaLimiter] | None] = ContextVar(
+    "youtube_quota_trackers", default=None
+)
+
+
+class YouTubeQuotaMiddleware:
+    """Resolve quota ledgers per app for existing HTTP/provider helpers."""
+
+    def __init__(self, app: ASGIApp, trackers: Mapping[str, YouTubeQuotaLimiter] | None = None):
+        self.app = app
+        self.trackers = trackers
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        token = _request_trackers.set(self.trackers)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _request_trackers.reset(token)
+
+
 def get_youtube_quota_tracker(slot: str = "primary") -> YouTubeQuotaLimiter:
     slot_name = str(slot or "").strip().casefold()
-    if slot_name not in _youtube_quota_trackers:
+    scoped = _request_trackers.get()
+    trackers = _youtube_quota_trackers if scoped is None else scoped
+    if slot_name not in trackers:
         raise ValueError("YouTube quota slot must be primary or secondary")
-    return _youtube_quota_trackers[slot_name]
+    return trackers[slot_name]
 
 
 __all__ = [
@@ -41,5 +68,6 @@ __all__ = [
     "YOUTUBE_QUOTA_METHODS",
     "YOUTUBE_AUXILIARY_QUOTA_METHODS",
     "YouTubeQuotaLimiter",
+    "YouTubeQuotaMiddleware",
     "get_youtube_quota_tracker",
 ]

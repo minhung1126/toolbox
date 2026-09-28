@@ -9,6 +9,7 @@ vi.mock('../services/api', () => ({
 }));
 
 const usage = (state = 'normal') => ({
+  slot: 'primary',
   state,
   official_default_limit: 10000,
   configured_project_limit: 12000,
@@ -60,10 +61,10 @@ describe('YouTubeQuotaBanner', () => {
   });
 
   it('loads the selected secondary slot ledger', async () => {
-    api.getYoutubeQuotaUsage.mockResolvedValue(usage());
+    api.getYoutubeQuotaUsage.mockResolvedValue({ ...usage(), slot: 'secondary' });
     render(<YouTubeQuotaBanner activeSlot="secondary" availableSlots={['primary', 'secondary']} />);
     await waitFor(() => expect(api.getYoutubeQuotaUsage).toHaveBeenCalledWith('secondary'));
-    expect(screen.getByLabelText('YouTube 授權組合')).toHaveValue('secondary');
+    expect(await screen.findByLabelText('YouTube 授權組合')).toHaveValue('secondary');
   });
 
   it('does not show the previous slot while the next slot is loading', async () => {
@@ -81,7 +82,7 @@ describe('YouTubeQuotaBanner', () => {
     await waitFor(() => expect(screen.getByText('更新中…')).toBeInTheDocument());
     expect(screen.queryByText(/系統可用 7,180 單位/)).not.toBeInTheDocument();
 
-    resolveSecondary(usage('warning'));
+    resolveSecondary({ ...usage('warning'), slot: 'secondary' });
     await waitFor(() => expect(screen.getByText('接近安全上限')).toBeInTheDocument());
   });
 
@@ -94,5 +95,14 @@ describe('YouTubeQuotaBanner', () => {
     await waitFor(() => expect(screen.getByText('主要授權組合配額更新失敗')).toBeInTheDocument());
     expect(screen.queryByText(/系統可用 7,180 單位/)).not.toBeInTheDocument();
     expect(screen.getByText(/資料已過期；最後成功更新/)).toBeInTheDocument();
+  });
+
+  it('shows an error instead of accepting a malformed quota ledger', async () => {
+    api.getYoutubeQuotaUsage.mockResolvedValue({ ...usage(), methods: undefined });
+    render(<YouTubeQuotaBanner />);
+
+    expect(await screen.findByText('主要授權組合配額更新失敗')).toBeInTheDocument();
+    expect(screen.getByText(/配額回應格式不正確/)).toBeInTheDocument();
+    expect(screen.queryByText(/系統可用/)).not.toBeInTheDocument();
   });
 });

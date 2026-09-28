@@ -63,11 +63,49 @@ describe('useDebouncedAutosave', () => {
       result.current.mutate({ foo: 'flushed' });
     });
 
+    let flushResult;
     await act(async () => {
-      await result.current.flush({ notify: true });
+      flushResult = await result.current.flush({ notify: true });
     });
 
     expect(onSave).toHaveBeenCalledWith({ foo: 'flushed' });
+    expect(flushResult).toEqual({ status: 'saved' });
+  });
+
+  it('reports a failed flush without treating the draft as saved', async () => {
+    const error = new Error('write rejected');
+    const onSave = vi.fn().mockRejectedValue(error);
+    const onError = vi.fn();
+    const { result } = renderHook(() => useDebouncedAutosave({ value: 'old', onSave, onError }));
+
+    act(() => result.current.mutate('new'));
+    let flushResult;
+    await act(async () => {
+      flushResult = await result.current.flush({ notify: true });
+    });
+
+    expect(flushResult).toEqual({ status: 'failed', error });
+    expect(result.current.dirty).toBe(true);
+    expect(onError).toHaveBeenCalledWith(error, { notify: true, saveConfirmed: false });
+  });
+
+  it('keeps a confirmed write saved when its follow-up callback fails', async () => {
+    const error = new Error('refresh rejected');
+    const onSave = vi.fn().mockResolvedValue({});
+    const onError = vi.fn();
+    const { result } = renderHook(() =>
+      useDebouncedAutosave({ value: 'old', onSave, onSuccess: () => Promise.reject(error), onError })
+    );
+
+    act(() => result.current.mutate('new'));
+    let flushResult;
+    await act(async () => {
+      flushResult = await result.current.flush({ notify: true });
+    });
+
+    expect(flushResult).toEqual({ status: 'saved', error });
+    expect(result.current.dirty).toBe(false);
+    expect(onError).toHaveBeenCalledWith(error, { notify: true, saveConfirmed: true });
   });
 
   it('flushes on unmount if dirty and not already saved', async () => {

@@ -6,6 +6,7 @@ import re
 import unicodedata
 from typing import Any
 
+from backend.app.core.credential_store import CredentialStore
 from backend.app.core.youtube_context import YouTubeRequestContext
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
 from backend.app.services.youtube_service import (
@@ -62,6 +63,7 @@ def fetch_user_playlists(
     context: YouTubeRequestContext,
     language: str | None = None,
     location: str | None = None,
+    token_store: CredentialStore | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch user playlists. First attempts YouTube Music API (0 quota),
 
@@ -77,12 +79,13 @@ def fetch_user_playlists(
             context=context,
             language=lang,
             location=loc,
+            token_store=token_store,
         )
         if ytm_playlists:
             logger.info("Retrieved %d playlists via YouTube Music client", len(ytm_playlists))
             return ytm_playlists
     except Exception as exc:
-        logger.debug("ytmusic_service.fetch_ytmusic_playlists fallback to Data API: %s", exc)
+        logger.debug("ytmusic_service.fetch_ytmusic_playlists fallback to Data API: %s", type(exc).__name__)
 
     # Fallback to Google YouTube Data API v3
     hl = lang.replace("_", "-")
@@ -134,6 +137,7 @@ def fetch_playlist_items_for_sort(
     use_ytdlp_fallback: bool = True,
     language: str | None = None,
     location: str | None = None,
+    token_store: CredentialStore | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch playlist items for sorting.
 
@@ -154,12 +158,13 @@ def fetch_playlist_items_for_sort(
             fetch_album_details=fetch_album_details,
             language=lang,
             location=loc,
+            token_store=token_store,
         )
         if ytm_items:
             logger.info("Retrieved %d tracks for playlist %s via YouTube Music client", len(ytm_items), playlist_id)
             items = ytm_items
     except Exception as exc:
-        logger.debug("ytmusic_service.fetch_ytmusic_playlist_tracks fallback to Data API: %s", exc)
+        logger.debug("ytmusic_service.fetch_ytmusic_playlist_tracks fallback to Data API: %s", type(exc).__name__)
 
     # Fallback to Google YouTube Data API v3 if ytm_items empty
     if not items:
@@ -220,7 +225,7 @@ def fetch_playlist_items_for_sort(
                 language=lang.replace("_", "-"),
             )
         except Exception as exc:
-            logger.warning("Failed to enrich tracks with yt-dlp fallback: %s", exc)
+            logger.warning("Failed to enrich tracks with yt-dlp fallback: %s", type(exc).__name__)
 
     # Final pass fallback: populate year and release_date from published_at if still missing
     for item in items:
@@ -566,6 +571,7 @@ def apply_sort_to_playlist(
     language: str | None = None,
     location: str | None = None,
     allow_quota_fallback: bool = True,
+    token_store: CredentialStore | None = None,
 ) -> dict[str, Any]:
     """Apply sorting to the playlist.
 
@@ -585,6 +591,7 @@ def apply_sort_to_playlist(
                     context=context,
                     language=language,
                     location=location,
+                    token_store=token_store,
                 )
             else:
                 orig = original_items or sorted(
@@ -597,18 +604,22 @@ def apply_sort_to_playlist(
                     context=context,
                     language=language,
                     location=location,
+                    token_store=token_store,
                 )
                 if res.get("failed", 0) > 0 and res.get("succeeded", 0) == 0 and res.get("moved", 0) > 0:
-                    raise RuntimeError(f"YTMusic in-place sort failed: {res.get('failed_items')}")
+                    raise RuntimeError("YTMusic in-place sort failed for all moved items")
                 return res
         except Exception as exc:
             if not allow_quota_fallback:
                 logger.warning(
                     "apply_sort_to_playlist using ytmusic_service failed: %s; quota fallback blocked by strict defense",
-                    exc,
+                    type(exc).__name__,
                 )
                 raise
-            logger.warning("apply_sort_to_playlist using ytmusic_service failed: %s; falling back to Data API", exc)
+            logger.warning(
+                "apply_sort_to_playlist using ytmusic_service failed: %s; falling back to Data API",
+                type(exc).__name__,
+            )
 
     # Google YouTube Data API v3 update
     service = get_youtube_service(context)
@@ -638,6 +649,13 @@ def apply_sort_to_playlist(
         for item in sorted_items:
             vid = item.get("video_id")
             if not vid:
+                failed += 1
+                failed_items.append(
+                    {
+                        "playlist_item_id": item.get("playlist_item_id", ""),
+                        "error": "缺少影片 ID，無法加入新播放清單。",
+                    }
+                )
                 continue
             try:
                 add_req = service.playlistItems().insert(
@@ -656,9 +674,9 @@ def apply_sort_to_playlist(
                 logger.warning("YouTube quota exceeded while creating new sorted playlist %s", new_playlist_id)
                 raise
             except Exception as e:
-                logger.error("Failed to add video %s to new playlist %s: %s", vid, new_playlist_id, e)
+                logger.error("Failed to add video %s to new playlist %s: %s", vid, new_playlist_id, type(e).__name__)
                 failed += 1
-                failed_items.append({"video_id": vid, "error": str(e)})
+                failed_items.append({"video_id": vid, "error": "加入影片失敗，請至 YouTube Studio 核對。"})
 
         return {
             "operation": "playlist_sort",
@@ -749,10 +767,16 @@ def apply_sort_to_playlist(
                     "Failed to update playlist item %s (resolved id: %s): %s",
                     raw_id,
                     target_id,
-                    e,
+                    type(e).__name__,
                 )
                 failed += 1
-                failed_items.append({"playlist_item_id": raw_id, "resolved_id": target_id, "error": str(e)})
+                failed_items.append(
+                    {
+                        "playlist_item_id": raw_id,
+                        "resolved_id": target_id,
+                        "error": "更新曲目失敗，請至 YouTube Studio 核對。",
+                    }
+                )
 
     return {
         "operation": "playlist_sort",

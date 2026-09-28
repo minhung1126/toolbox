@@ -6,11 +6,11 @@ from fastapi import APIRouter, Depends, Request
 from google.oauth2.credentials import Credentials
 from pydantic import BaseModel, Field, field_validator
 
-from backend.app.core.config import settings
+from backend.app.core.config import get_settings, settings
 from backend.app.core.dependencies import require_account_email, require_login_credentials
 from backend.app.core.error_contract import http_error
-from backend.app.core.runtime_config import runtime_config
-from backend.app.core.system_secrets import system_secrets
+from backend.app.core.runtime_config import get_runtime_config, runtime_config
+from backend.app.core.system_secrets import get_system_secrets, system_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -75,39 +75,41 @@ def _is_local_request(request: Request) -> bool:
 @router.get("/setup-status")
 def get_setup_status(request: Request):
     """Public endpoint to check if initial setup has been completed."""
-    is_configured = bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET)
-    setup_completed = runtime_config.is_setup_completed()
+    is_configured = bool(get_settings(settings).GOOGLE_CLIENT_ID and get_settings(settings).GOOGLE_CLIENT_SECRET)
+    setup_completed = get_runtime_config(runtime_config).is_setup_completed()
     is_local = _is_local_request(request)
-    needs_pin = not setup_completed and not (settings.ENVIRONMENT == "development" and is_local)
+    needs_pin = not setup_completed and not (get_settings(settings).ENVIRONMENT == "development" and is_local)
 
     # Ensure PIN is generated and logged if setup is needed
     active_pin = ""
     if not is_configured and not setup_completed:
-        active_pin = system_secrets.get_or_create_setup_pin()
+        active_pin = get_system_secrets(system_secrets).get_or_create_setup_pin()
 
     return {
         "is_configured": is_configured,
         "setup_completed": setup_completed,
         "needs_pin": needs_pin,
-        "has_admin": bool(settings.allowed_google_emails),
-        "public_base_url": settings.base_url,
-        "redirect_uri": settings.get_redirect_uri(),
-        "environment": settings.ENVIRONMENT,
+        "has_admin": bool(get_settings(settings).allowed_google_emails),
+        "public_base_url": get_settings(settings).base_url,
+        "redirect_uri": get_settings(settings).get_redirect_uri(),
+        "environment": get_settings(settings).ENVIRONMENT,
         # Only expose pin in response if local development
-        "development_pin": active_pin if (settings.ENVIRONMENT == "development" and is_local) else None,
+        "development_pin": active_pin if (get_settings(settings).ENVIRONMENT == "development" and is_local) else None,
     }
 
 
 @router.post("/setup")
 def perform_initial_setup(payload: SetupRequest, request: Request):
     """Perform first-time installation setup: configure Google OAuth & admin email."""
-    if runtime_config.is_setup_completed() and (settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET):
+    if get_runtime_config(runtime_config).is_setup_completed() and (
+        get_settings(settings).GOOGLE_CLIENT_ID and get_settings(settings).GOOGLE_CLIENT_SECRET
+    ):
         raise http_error(400, "setup_already_completed", "系統已完成初始設定，如需修改請登入後前往系統設定頁。")
 
     is_local = _is_local_request(request)
     # Require PIN unless development on localhost
-    if not (settings.ENVIRONMENT == "development" and is_local):
-        if not payload.pin or not system_secrets.verify_setup_pin(payload.pin):
+    if not (get_settings(settings).ENVIRONMENT == "development" and is_local):
+        if not payload.pin or not get_system_secrets(system_secrets).verify_setup_pin(payload.pin):
             raise http_error(
                 400,
                 "invalid_setup_pin",
@@ -115,7 +117,7 @@ def perform_initial_setup(payload: SetupRequest, request: Request):
             )
 
     # Update system OAuth credentials
-    system_secrets.update_credentials(
+    get_system_secrets(system_secrets).update_credentials(
         {
             "google_client_id": payload.google_client_id,
             "google_client_secret": payload.google_client_secret,
@@ -123,21 +125,21 @@ def perform_initial_setup(payload: SetupRequest, request: Request):
     )
 
     # Set administrator email
-    runtime_config.set_allowed_emails([payload.admin_email])
-    runtime_config.set_setup_completed(True)
+    get_runtime_config(runtime_config).set_allowed_emails([payload.admin_email])
+    get_runtime_config(runtime_config).set_setup_completed(True)
 
     # Clear the one-time PIN
-    system_secrets.clear_setup_pin()
+    get_system_secrets(system_secrets).clear_setup_pin()
 
     # Sync settings into memory
-    settings.sync_dynamic_config()
+    get_settings(settings).sync_dynamic_config()
 
     logger.info("Initial system setup successfully completed by %s", payload.admin_email)
     return {
         "status": "success",
         "message": "系統初始設定完成！請使用管理員 Google 帳號登入。",
         "admin_email": payload.admin_email,
-        "redirect_uri": settings.get_redirect_uri(),
+        "redirect_uri": get_settings(settings).get_redirect_uri(),
     }
 
 
@@ -149,9 +151,9 @@ def get_credentials_masked(
     del creds
     return {
         "status": "success",
-        "credentials": system_secrets.get_masked_credentials(),
-        "public_base_url": settings.base_url,
-        "redirect_uri": settings.get_redirect_uri(),
+        "credentials": get_system_secrets(system_secrets).get_masked_credentials(),
+        "public_base_url": get_settings(settings).base_url,
+        "redirect_uri": get_settings(settings).get_redirect_uri(),
     }
 
 
@@ -172,16 +174,16 @@ def update_system_credentials(
             updates[field] = clean
 
     if updates:
-        system_secrets.update_credentials(updates)
-        settings.sync_dynamic_config()
+        get_system_secrets(system_secrets).update_credentials(updates)
+        get_settings(settings).sync_dynamic_config()
         logger.info("System credentials updated via Web UI: %s", list(updates.keys()))
 
     return {
         "status": "success",
         "message": "系統 OAuth 憑證已更新。",
-        "credentials": system_secrets.get_masked_credentials(),
-        "public_base_url": settings.base_url,
-        "redirect_uri": settings.get_redirect_uri(),
+        "credentials": get_system_secrets(system_secrets).get_masked_credentials(),
+        "public_base_url": get_settings(settings).base_url,
+        "redirect_uri": get_settings(settings).get_redirect_uri(),
     }
 
 
@@ -193,10 +195,10 @@ def get_allowlist(
     """Return the allowed Google accounts list and user creation policy."""
     del creds
     return {
-        "allowed_emails": sorted(list(settings.allowed_google_emails)),
+        "allowed_emails": sorted(list(get_settings(settings).allowed_google_emails)),
         "current_user_email": current_user_email,
-        "allowlist_required": settings.allowlist_required,
-        "allow_new_users": settings.allow_new_users,
+        "allowlist_required": get_settings(settings).allowlist_required,
+        "allow_new_users": get_settings(settings).allow_new_users,
     }
 
 
@@ -208,20 +210,20 @@ def add_allowlist_email(
 ):
     """Add an email to the allowed Google accounts list."""
     del creds
-    if not settings.allow_new_users:
+    if not get_settings(settings).allow_new_users:
         raise http_error(
             403,
             "add_user_disabled",
             "目前系統已設定為不允許新增使用者帳號。如需新增，請先至系統設定開啟此功能。",
         )
     email = payload.email.strip().casefold()
-    runtime_config.add_allowed_email(email)
+    get_runtime_config(runtime_config).add_allowed_email(email)
     logger.info("Added %s to allowed Google emails by %s", email, current_user_email)
     return {
         "status": "success",
-        "allowed_emails": sorted(list(settings.allowed_google_emails)),
+        "allowed_emails": sorted(list(get_settings(settings).allowed_google_emails)),
         "current_user_email": current_user_email,
-        "allow_new_users": settings.allow_new_users,
+        "allow_new_users": get_settings(settings).allow_new_users,
     }
 
 
@@ -240,20 +242,20 @@ def remove_allowlist_email(
             "cannot_remove_self",
             "不能從白名單移除您目前登入的帳號，以避免失去管理權限被鎖定於系統之外。",
         )
-    if len(settings.allowed_google_emails) <= 1 and email in settings.allowed_google_emails:
+    if len(get_settings(settings).allowed_google_emails) <= 1 and email in get_settings(settings).allowed_google_emails:
         raise http_error(
             400,
             "cannot_remove_last_admin",
             "不能移除白名單中唯一的管理員帳號，系統必須保留至少一個授權帳號。",
         )
 
-    runtime_config.remove_allowed_email(email)
+    get_runtime_config(runtime_config).remove_allowed_email(email)
     logger.info("Removed %s from allowed Google emails by %s", email, current_user_email)
     return {
         "status": "success",
-        "allowed_emails": sorted(list(settings.allowed_google_emails)),
+        "allowed_emails": sorted(list(get_settings(settings).allowed_google_emails)),
         "current_user_email": current_user_email,
-        "allow_new_users": settings.allow_new_users,
+        "allow_new_users": get_settings(settings).allow_new_users,
     }
 
 
@@ -265,8 +267,8 @@ def update_allow_new_users(
 ):
     """Update whether adding new user accounts is allowed."""
     del creds
-    runtime_config.set_allow_new_users(payload.allow_new_users)
-    settings.sync_dynamic_config()
+    get_runtime_config(runtime_config).set_allow_new_users(payload.allow_new_users)
+    get_settings(settings).sync_dynamic_config()
     logger.info(
         "Allow new users setting updated to %s by %s",
         payload.allow_new_users,
@@ -274,7 +276,7 @@ def update_allow_new_users(
     )
     return {
         "status": "success",
-        "allow_new_users": settings.allow_new_users,
+        "allow_new_users": get_settings(settings).allow_new_users,
         "message": "已更新新增使用者帳號設定。",
     }
 

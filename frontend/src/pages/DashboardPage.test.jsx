@@ -1,11 +1,60 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import DashboardPage from './DashboardPage';
 import { PATHS } from '../routes/paths';
+import { api } from '../services/api';
+import { getAllTools } from '../tools/catalog';
+import { ToolCatalogProvider } from '../tools/ToolCatalogProvider';
 
 describe('DashboardPage', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('shows missing capabilities with reachable connection pages while leaving tool links available', async () => {
+    vi.spyOn(api, 'getTools').mockResolvedValue({
+      tools: getAllTools().map((tool) => ({
+        id: tool.id,
+        name: tool.name,
+        title: tool.title,
+        description: tool.description,
+        category: tool.category,
+        status: 'active',
+        version: '1.0.0',
+        entry_url: tool.entryUrl,
+        required_scopes: tool.id === 'creator-tools' ? ['youtube', 'sheets_readonly'] : [],
+        routes:
+          tool.id === 'creator-tools'
+            ? [
+                { path: PATHS.youtubeVideoDrafts, required_scopes: ['youtube', 'sheets_readonly'] },
+                { path: PATHS.youtubeShortsDrafts, required_scopes: ['youtube', 'sheets_readonly'] },
+                { path: PATHS.youtubePublishCleanup, required_scopes: ['youtube'] },
+              ]
+            : [],
+      })),
+    });
+    render(
+      <MemoryRouter>
+        <ToolCatalogProvider enabled>
+          <DashboardPage authUser={{ email: 'creator@example.com', youtube: { slots: {} } }} />
+        </ToolCatalogProvider>
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByRole('link', { name: '連線 YouTube 頻道' }))[0]).toHaveAttribute(
+      'href',
+      PATHS.youtubeConnections
+    );
+    expect(screen.getAllByRole('link', { name: '連線 Google 試算表' })[0]).toHaveAttribute(
+      'href',
+      PATHS.googleSettings
+    );
+    const publishCard = screen.getByText('發布草稿').closest('.feature-card');
+    expect(publishCard).toHaveTextContent('連線 YouTube 頻道');
+    expect(publishCard).not.toHaveTextContent('連線 Google 試算表');
+    expect(screen.getByRole('link', { name: /進入 Video 草稿/ })).toHaveAttribute('href', PATHS.youtubeVideoDrafts);
+  });
+
   it('renders dashboard with user status and tool feature cards', () => {
     render(
       <MemoryRouter>

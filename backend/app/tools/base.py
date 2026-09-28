@@ -18,6 +18,9 @@ class ToolRoute(BaseModel):
     path: str = Field(description="URL path for the route")
     label: str = Field(description="Display label for navigation and menus")
     description: Optional[str] = Field(default=None, description="Optional brief description of what this route does")
+    required_scopes: Optional[List[str]] = Field(
+        default=None, description="Route capability override; empty list means login alone is sufficient"
+    )
 
 
 class ToolMetadata(BaseModel):

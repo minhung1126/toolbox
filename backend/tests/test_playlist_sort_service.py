@@ -615,6 +615,75 @@ def test_apply_sort_to_playlist_new_playlist_via_data_api(monkeypatch):
     assert added_videos == ["v1", "v2"]
 
 
+def test_new_playlist_reports_item_without_video_id_as_failure(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import backend.app.services.playlist_sort_service as service
+    from backend.app.core.youtube_context import YouTubeRequestContext
+
+    context = YouTubeRequestContext(
+        slot="primary", credentials=object(), quota_limiter=SimpleNamespace(), owner_sub="test-user"
+    )
+    youtube = MagicMock()
+    youtube.playlists().insert().execute.return_value = {"id": "new-playlist"}
+    youtube.playlistItems().insert().execute.return_value = {"id": "added"}
+    monkeypatch.setattr(service, "get_youtube_service", lambda _context: youtube)
+    monkeypatch.setattr(service, "_execute_with_quota", lambda request, _operation, _context: request.execute())
+
+    result = apply_sort_to_playlist(
+        context,
+        "source",
+        [{"playlist_item_id": "missing-video"}, {"playlist_item_id": "valid", "video_id": "v1"}],
+        mode="new_playlist",
+        use_youtube_api=True,
+    )
+
+    assert (result["total"], result["moved"], result["succeeded"], result["failed"]) == (2, 2, 1, 1)
+    assert result["failed_items"] == [
+        {"playlist_item_id": "missing-video", "error": "缺少影片 ID，無法加入新播放清單。"}
+    ]
+
+
+def test_partial_data_api_sort_does_not_return_provider_exception(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import backend.app.services.playlist_sort_service as service
+    from backend.app.core.youtube_context import YouTubeRequestContext
+
+    context = YouTubeRequestContext(
+        slot="primary", credentials=object(), quota_limiter=SimpleNamespace(), owner_sub="test-user"
+    )
+    youtube = MagicMock()
+    youtube.playlists().insert().execute.return_value = {"id": "new-playlist"}
+    youtube.playlistItems().insert().execute.side_effect = [
+        {"id": "added"},
+        RuntimeError("access_token=private-provider-value"),
+    ]
+    youtube.playlistItems().update().execute.side_effect = [
+        {"id": "updated"},
+        RuntimeError("access_token=private-provider-value"),
+    ]
+    monkeypatch.setattr(service, "get_youtube_service", lambda _context: youtube)
+    monkeypatch.setattr(service, "fetch_playlist_items", lambda *_args: [])
+    monkeypatch.setattr(service, "_execute_with_quota", lambda request, _operation, _context: request.execute())
+    items = [
+        {"video_id": "v1", "playlist_item_id": "item-1", "original_position": 1, "new_position": 0},
+        {"video_id": "v2", "playlist_item_id": "item-2", "original_position": 0, "new_position": 1},
+    ]
+
+    created = apply_sort_to_playlist(context, "source", items, mode="new_playlist", use_youtube_api=True)
+    updated = apply_sort_to_playlist(context, "source", items, mode="in_place", use_youtube_api=True)
+
+    assert (created["succeeded"], created["failed"]) == (1, 1)
+    assert (updated["succeeded"], updated["failed"]) == (1, 1)
+    assert created["failed_items"][0]["video_id"] == "v2"
+    assert updated["failed_items"][0]["playlist_item_id"] == "item-2"
+    assert "access_token=private-provider-value" not in str(created)
+    assert "access_token=private-provider-value" not in str(updated)
+
+
 @pytest.mark.anyio
 async def test_preview_sort_quota_estimate_no_custom_token(monkeypatch):
     from types import SimpleNamespace
@@ -645,7 +714,7 @@ async def test_preview_sort_quota_estimate_no_custom_token(monkeypatch):
         use_youtube_api=False,
     )
 
-    res = await preview_sort(inp, context=context)
+    res = await preview_sort(inp, context=context, token_store=credential_store)
     assert res["quota_estimate"]["engine"] == "youtube_data_api_v3"
     assert res["quota_estimate"]["units_per_move"] == 50
     assert res["quota_estimate"]["moved_count"] == 2
@@ -818,7 +887,7 @@ async def test_apply_sort_strict_defense_blocks_fallback_when_token_fails(monkey
     monkeypatch.setattr(
         ps_api,
         "apply_sort_to_playlist",
-        MagicMock(side_effect=YTMusicError("Unauthorized: Session expired")),
+        MagicMock(side_effect=YTMusicError("Unauthorized: access_token=private-provider-value")),
     )
 
     inp = SortApplyInput(
@@ -830,11 +899,12 @@ async def test_apply_sort_strict_defense_blocks_fallback_when_token_fails(monkey
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await apply_sort(inp, context=context)
+        await apply_sort(inp, context=context, token_store=credential_store)
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail["code"] == "TOKEN_FALLBACK_BLOCKED"
     assert "已啟動嚴格防禦保護" in exc_info.value.detail["message"]
+    assert "access_token=private-provider-value" not in exc_info.value.detail["message"]
 
 
 @pytest.mark.anyio
@@ -875,7 +945,7 @@ async def test_apply_sort_allows_fallback_when_explicitly_permitted(monkeypatch)
         allow_quota_fallback=True,
     )
 
-    res = await apply_sort(inp, context=context)
+    res = await apply_sort(inp, context=context, token_store=credential_store)
     assert res["status"] == "success"
     # verify allow_quota_fallback was passed as True
     _, kwargs = mock_apply.call_args

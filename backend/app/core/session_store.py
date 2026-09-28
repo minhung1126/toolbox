@@ -17,7 +17,7 @@ from typing import Any, Optional
 from cryptography.fernet import InvalidToken
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from backend.app.core.config import settings
+from backend.app.core.config import get_settings, settings
 from backend.app.core.data_paths import data_directory
 from backend.app.core.persistence import atomic_write_json, derive_fernet, read_json_file
 
@@ -34,26 +34,52 @@ def _now() -> datetime:
 
 
 class SessionStore:
-    def __init__(self, path: Path = _DEFAULT_PATH):
+    def __init__(
+        self, path: Path = _DEFAULT_PATH, *, encryption_key: str | None = None, defer_encryption_key: bool = False
+    ):
         self._path = path
         self._lock = RLock()
+        if defer_encryption_key and encryption_key is not None:
+            raise ValueError("deferred encryption cannot use an explicit key")
+        if not defer_encryption_key and encryption_key is None:
+            config = get_settings(settings)
+            config.initialize_keys()
+            encryption_key = config.CREDENTIAL_ENCRYPTION_KEY
         # Session payloads and OAuth credentials use the dedicated encryption
         # key. Production configuration guarantees it is explicit and distinct
         # from the signing SECRET_KEY.
-        self._fernet = derive_fernet(settings.CREDENTIAL_ENCRYPTION_KEY)
+        self._fernet = None if defer_encryption_key else derive_fernet(encryption_key)
         self._data: dict[str, Any] = {"version": 1, "sessions": {}}
         self._last_purge_time: float = 0.0
-        self._load()
+        self._loaded = False
+
+    def _get_fernet(self):
+        with self._lock:
+            if self._fernet is None:
+                settings.initialize_keys()
+                self._fernet = derive_fernet(settings.CREDENTIAL_ENCRYPTION_KEY)
+            return self._fernet
 
     def _load(self) -> None:
         with self._lock:
-            loaded = read_json_file(self._path)
-            if isinstance(loaded, dict):
-                sessions = loaded.get("sessions")
-                self._data["sessions"] = sessions if isinstance(sessions, dict) else {}
+            loaded = read_json_file(self._path, {"version": 1, "sessions": {}}, strict=True)
+            if not isinstance(loaded, dict) or not isinstance(loaded.get("sessions"), dict):
+                raise ValueError("Invalid sessions repository structure")
+            self._data = loaded
+            self._loaded = True
+
+    def _ensure_loaded(self) -> None:
+        with self._lock:
+            if not self._loaded:
+                self._load()
 
     def _save(self) -> None:
-        atomic_write_json(self._path, self._data)
+        try:
+            atomic_write_json(self._path, self._data)
+        except Exception:
+            # Do not expose a failed mutation from the in-memory cache.
+            self._loaded = False
+            raise
 
     def _purge_expired(self) -> None:
         now = _now()
@@ -86,9 +112,10 @@ class SessionStore:
         session_id = secrets.token_urlsafe(32)
         record = {
             "expires_at": (_now() + timedelta(seconds=max_age)).isoformat(),
-            "data": self._fernet.encrypt(json.dumps(data, ensure_ascii=False).encode("utf-8")).decode("ascii"),
+            "data": self._get_fernet().encrypt(json.dumps(data, ensure_ascii=False).encode("utf-8")).decode("ascii"),
         }
         with self._lock:
+            self._ensure_loaded()
             self._maybe_purge_expired()
             self._data["sessions"][session_id] = record
             self._save()
@@ -98,6 +125,7 @@ class SessionStore:
         if not session_id or len(session_id) > 200:
             return None
         with self._lock:
+            self._ensure_loaded()
             self._maybe_purge_expired()
             record = self._data["sessions"].get(session_id)
             if not isinstance(record, dict):
@@ -106,7 +134,7 @@ class SessionStore:
             if not isinstance(encrypted, str):
                 return None
             try:
-                payload = self._fernet.decrypt(encrypted.encode("ascii"))
+                payload = self._get_fernet().decrypt(encrypted.encode("ascii"))
                 data = json.loads(payload.decode("utf-8"))
             except (InvalidToken, ValueError, json.JSONDecodeError) as exc:
                 logger.error("Failed to decrypt server session: %s", type(exc).__name__)
@@ -117,11 +145,12 @@ class SessionStore:
         if not session_id:
             return
         with self._lock:
+            self._ensure_loaded()
             self._data["sessions"].pop(session_id, None)
             self._save()
 
 
-session_store = SessionStore()
+session_store = SessionStore(defer_encryption_key=True)
 
 _request_store: ContextVar[SessionStore | None] = ContextVar("session_store", default=None)
 

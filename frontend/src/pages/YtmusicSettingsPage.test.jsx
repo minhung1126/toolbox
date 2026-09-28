@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import YtmusicSettingsPage from './YtmusicSettingsPage';
 import { ytmusicSettingsApi } from '../features/ytmusic/api/ytmusicSettingsApi';
+import { AccountWorkStateProvider } from '../hooks/useAccountWorkState';
+import { api } from '../services/api';
+
+const toastSpies = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }));
 
 vi.mock('../utils/navigation', () => ({ redirectToAuth: vi.fn() }));
 
@@ -15,6 +19,7 @@ vi.mock('../services/api', () => ({
 }));
 
 vi.mock('../features/ytmusic/api/ytmusicSettingsApi', () => ({
+  isAmbiguousYtmusicSettingsMutation: (error) => error?.code === 'ytmusic_settings_response_invalid',
   ytmusicSettingsApi: {
     getAuthUrl: vi.fn(),
     disconnect: vi.fn(),
@@ -25,7 +30,7 @@ vi.mock('../features/ytmusic/api/ytmusicSettingsApi', () => ({
 }));
 
 vi.mock('../components/Toast', () => ({
-  useToast: () => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
+  useToast: () => toastSpies,
 }));
 
 describe('YtmusicSettingsPage', () => {
@@ -127,6 +132,23 @@ describe('YtmusicSettingsPage', () => {
       fireEvent.change(select, { target: { value: 'artist-desc' } });
     });
     expect(select.value).toBe('artist-desc');
+  });
+
+  it('does not report preference save success when work-state persistence fails', async () => {
+    api.updateWorkState.mockRejectedValueOnce(new Error('伺服器忙碌'));
+    render(
+      <MemoryRouter>
+        <AccountWorkStateProvider>
+          <YtmusicSettingsPage authUser={{ authorizations: { ytmusic: { connected: true } } }} />
+        </AccountWorkStateProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '儲存偏好設定' }));
+
+    await waitFor(() => expect(toastSpies.error).toHaveBeenCalledWith('偏好設定尚未確認儲存，請檢查連線後重試。'));
+    expect(toastSpies.success).not.toHaveBeenCalledWith('YouTube Music 偏好設定已成功儲存！');
+    expect(api.updateWorkState).toHaveBeenCalledWith('ytmusic_preferences', expect.any(Object));
   });
 
   it('allows disconnecting YouTube Music via confirm dialog', async () => {
@@ -327,5 +349,29 @@ describe('YtmusicSettingsPage', () => {
     const closeBtn = screen.getByRole('button', { name: '關閉' });
     fireEvent.click(closeBtn);
     expect(screen.queryByText('Token 驗證失敗')).not.toBeInTheDocument();
+  });
+
+  it('keeps token writes disabled when an uncertain save cannot be reconciled', async () => {
+    ytmusicSettingsApi.save.mockRejectedValue(
+      Object.assign(new Error('回應格式不正確'), { code: 'ytmusic_settings_response_invalid' })
+    );
+    const refreshAuthUser = vi.fn().mockRejectedValue(new Error('無法讀取授權狀態'));
+
+    render(
+      <MemoryRouter>
+        <YtmusicSettingsPage
+          authUser={{ authorizations: { ytmusic: { connected: false } } }}
+          refreshAuthUser={refreshAuthUser}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText(/貼上 Token 代碼/), { target: { value: 'cookie: SAPISID=value' } });
+    fireEvent.click(screen.getByRole('button', { name: '儲存自訂 Token' }));
+
+    expect(await screen.findByText('Token 狀態待核對')).toBeInTheDocument();
+    expect(refreshAuthUser).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: '儲存自訂 Token' })).toBeDisabled();
+    expect(ytmusicSettingsApi.save).toHaveBeenCalledTimes(1);
   });
 });

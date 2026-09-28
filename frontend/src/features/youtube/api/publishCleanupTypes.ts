@@ -15,9 +15,9 @@ export interface PlaylistPreviewSnapshot {
 }
 
 export interface PlaylistPreviewResponse {
-  playlist_id?: string;
+  playlist_id: string;
   total?: number;
-  videos?: PublishCleanupVideo[];
+  videos: PublishCleanupVideo[];
   source?: string;
   fallback_reason?: string;
   youtube_slot?: string;
@@ -45,16 +45,23 @@ export interface PublishCleanupOptions {
 }
 
 export interface PublishCleanupResult {
-  operation?: string;
-  completed?: boolean;
-  total_count?: number;
-  succeeded_count?: number;
-  warning_count?: number;
-  skipped_count?: number;
-  failed_count?: number;
-  not_attempted_count?: number;
-  quota_blocked?: boolean;
-  results?: Array<Record<string, unknown>>;
+  operation: 'youtube.publish_cleanup';
+  completed: boolean;
+  total_count: number;
+  succeeded_count: number;
+  warning_count: number;
+  skipped_count: number;
+  failed_count: number;
+  not_attempted_count: number;
+  quota_blocked: boolean;
+  results: Array<{
+    video_id: string;
+    status: 'succeeded' | 'succeeded_with_warnings' | 'skipped' | 'failed' | 'not_attempted';
+    title?: string;
+    description?: string;
+    reason?: string | null;
+    [field: string]: unknown;
+  }>;
   [field: string]: unknown;
 }
 

@@ -6,6 +6,7 @@ Sensitive values are stored separately by credential_store.py.
 """
 
 import logging
+from copy import deepcopy
 from pathlib import Path
 from threading import RLock
 from typing import Any, Dict
@@ -43,43 +44,58 @@ class RuntimeConfig:
     """Thread-safe persistent key-value store for non-secret operational settings."""
 
     def __init__(self, config_path: Path = _CONFIG_FILE):
+        self._settings_source = None
         self._path = config_path
         self._lock = RLock()
         self._data: Dict[str, Any] = {}
-        self._load()
+        self._loaded = False
+        self._persisted_data: Dict[str, Any] = {}
+
+    def bind_settings(self, config):
+        """Bind environment defaults and write notifications to this repository's app."""
+        self._settings_source = config
+
+    def _settings(self):
+        if self._settings_source is not None:
+            return self._settings_source
+        from backend.app.core.config import get_settings
+
+        return get_settings()
 
     def _load(self):
-        saved = read_json_file(self._path)
-        if isinstance(saved, dict):
-            self._data = {key: value for key, value in saved.items() if key in _PERSISTABLE_FIELDS}
-            logger.info("Loaded runtime config from %s", self._path)
-        else:
-            self._data = {}
+        saved = read_json_file(self._path, {}, strict=True)
+        if not isinstance(saved, dict):
+            raise ValueError("Invalid runtime configuration structure")
+        self._data = {key: value for key, value in saved.items() if key in _PERSISTABLE_FIELDS}
+        self._persisted_data = deepcopy(self._data)
+        self._loaded = True
+
+    def _ensure_loaded(self):
+        if not self._loaded:
+            self._load()
 
     def _save(self):
         try:
             atomic_write_json(self._path, self._data)
-            logger.info("Saved runtime config to %s", self._path)
-        except OSError as exc:
-            logger.error("Failed to save runtime config: %s", type(exc).__name__)
+        except Exception:
+            self._data = deepcopy(self._persisted_data)
+            raise
+        self._persisted_data = deepcopy(self._data)
 
     def _notify_settings_sync(self):
         try:
-            from backend.app.core.config import settings
-
-            if hasattr(settings, "sync_dynamic_config"):
-                settings.sync_dynamic_config()
+            self._settings().sync_dynamic_config()
         except Exception as exc:
             logger.error("Failed to sync dynamic settings config: %s", type(exc).__name__)
+            raise
 
     def get(self, key: str, default: Any = "") -> Any:
         with self._lock:
+            self._ensure_loaded()
             if key in self._data and self._data[key] not in (None, ""):
                 return self._data[key]
         try:
-            from backend.app.core.config import settings
-
-            env_value = getattr(settings, key.upper(), "")
+            env_value = getattr(self._settings(), key.upper(), "")
             return env_value if env_value not in (None, "") else default
         except Exception:
             return default
@@ -89,12 +105,14 @@ class RuntimeConfig:
             logger.warning("Attempted to persist non-persistable field: %s", key)
             return
         with self._lock:
+            self._ensure_loaded()
             self._data[key] = value
             self._save()
         self._notify_settings_sync()
 
     def update(self, data: Dict[str, Any]):
         with self._lock:
+            self._ensure_loaded()
             for key, value in data.items():
                 if key in _PERSISTABLE_FIELDS and value is not None:
                     self._data[key] = value
@@ -108,6 +126,7 @@ class RuntimeConfig:
     def get_allowed_emails(self) -> list[str]:
         """Return persisted allowed Google emails as a cleaned list."""
         with self._lock:
+            self._ensure_loaded()
             raw = self._data.get("allowed_google_emails")
             if isinstance(raw, list):
                 return [str(e).strip().casefold() for e in raw if str(e).strip()]
@@ -119,6 +138,7 @@ class RuntimeConfig:
         """Normalize, deduplicate, and persist the allowed emails list."""
         cleaned = list(dict.fromkeys(str(e).strip().casefold() for e in emails if str(e).strip()))
         with self._lock:
+            self._ensure_loaded()
             self._data["allowed_google_emails"] = cleaned
             self._save()
         self._notify_settings_sync()
@@ -128,7 +148,8 @@ class RuntimeConfig:
         """Add a single email to the allowlist atomically."""
         norm = email.strip().casefold()
         with self._lock:
-            current = self.get_allowed_emails()
+            self._ensure_loaded()
+            current = self.get_allowed_emails() or sorted(self._settings().allowed_google_emails)
             if norm and norm not in current:
                 current.append(norm)
                 self._data["allowed_google_emails"] = current
@@ -142,7 +163,8 @@ class RuntimeConfig:
         """Remove a single email from the allowlist atomically."""
         norm = email.strip().casefold()
         with self._lock:
-            current = self.get_allowed_emails()
+            self._ensure_loaded()
+            current = self.get_allowed_emails() or sorted(self._settings().allowed_google_emails)
             updated = [e for e in current if e != norm]
             self._data["allowed_google_emails"] = updated
             self._save()
@@ -152,6 +174,7 @@ class RuntimeConfig:
     def is_allow_new_users(self) -> bool:
         """Return whether adding new user accounts is permitted."""
         with self._lock:
+            self._ensure_loaded()
             val = self._data.get("allow_new_users")
             if val is not None:
                 return bool(val)
@@ -165,6 +188,7 @@ class RuntimeConfig:
     # Setup State Helpers
     def is_setup_completed(self) -> bool:
         with self._lock:
+            self._ensure_loaded()
             return bool(self._data.get("setup_completed", False))
 
     def set_setup_completed(self, completed: bool = True):
@@ -172,10 +196,10 @@ class RuntimeConfig:
 
     def get_youtube_quota_settings(self, slot: str) -> tuple[int, int]:
         """Return the persisted-or-environment quota policy for one slot."""
-        from backend.app.core.config import normalize_youtube_slot, settings
+        from backend.app.core.config import normalize_youtube_slot
 
         slot_name = normalize_youtube_slot(slot)
-        slot_config = settings.youtube_oauth_slot(slot_name)
+        slot_config = self._settings().youtube_oauth_slot(slot_name)
         limit_key = f"youtube_{slot_name}_general_quota_limit"
         buffer_key = f"youtube_{slot_name}_quota_safety_buffer_units"
         limit = self.get(limit_key, slot_config.quota_limit)
@@ -193,3 +217,12 @@ class RuntimeConfig:
 
 
 runtime_config = RuntimeConfig()
+
+
+def get_runtime_config(fallback: RuntimeConfig | None = None) -> RuntimeConfig:
+    from backend.app.core.config import get_settings
+
+    config = get_settings()
+    if config.runtime_store is not None:
+        return config.runtime_store
+    return runtime_config if fallback is None else fallback

@@ -153,6 +153,15 @@ describe('PlaylistSortPage', () => {
     });
   });
 
+  it('reports malformed playlist data without treating it as an empty list', async () => {
+    api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: [{ id: 'pl-1', title: 'Bad', item_count: '3' }] });
+
+    renderWithRouter(<PlaylistSortPage />);
+
+    await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('載入播放清單失敗：播放清單回應格式不正確。'));
+    expect(screen.queryByText('Bad (3 首)')).not.toBeInTheDocument();
+  });
+
   it('uses the YouTube Music feature API to connect a dedicated account', async () => {
     api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: [] });
     ytmusicSettingsApi.getAuthUrl.mockResolvedValueOnce({
@@ -240,10 +249,12 @@ describe('PlaylistSortPage', () => {
     });
     api.applyPlaylistSort.mockResolvedValueOnce({
       operation: 'playlist_sort',
+      mode: 'in_place',
       total: 3,
       moved: 2,
       succeeded: 2,
       failed: 0,
+      failed_items: [],
       quota_used: 100,
     });
 
@@ -279,6 +290,34 @@ describe('PlaylistSortPage', () => {
       expect(screen.getByText('排序成功套用')).toBeInTheDocument();
       expect(screen.getByText(/成功移動/)).toBeInTheDocument();
     });
+  });
+
+  it('shows the failed item ID and safe error after a partial apply', async () => {
+    api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: mockPlaylists });
+    api.previewPlaylistSort.mockResolvedValueOnce({
+      preview: mockPreview,
+      preview_token: 'token-abc',
+      quota_estimate: { moved_count: 2, units_per_move: 50, total_units: 100 },
+    });
+    api.applyPlaylistSort.mockResolvedValueOnce({
+      operation: 'playlist_sort',
+      mode: 'in_place',
+      total: 3,
+      moved: 2,
+      succeeded: 1,
+      failed: 1,
+      failed_items: [{ playlist_item_id: 'item-3', error: '移動曲目失敗，請核對 YouTube Music 播放清單。' }],
+      quota_used: 0,
+    });
+
+    renderWithRouter(<PlaylistSortPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /模擬預覽/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /套用排序/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '確認套用' }));
+
+    expect(await screen.findByText('排序完成（有部分失敗）')).toBeInTheDocument();
+    expect(screen.getByText('需要核對的曲目')).toBeInTheDocument();
+    expect(screen.getByText('item-3：移動曲目失敗，請核對 YouTube Music 播放清單。')).toBeInTheDocument();
   });
 
   it('filters playlists by name and description', async () => {
@@ -387,6 +426,7 @@ describe('PlaylistSortPage', () => {
       moved: 3,
       succeeded: 3,
       failed: 0,
+      failed_items: [],
       quota_used: 0,
     });
 
@@ -815,6 +855,7 @@ describe('PlaylistSortPage', () => {
       moved: 2,
       succeeded: 2,
       failed: 0,
+      failed_items: [],
       quota_used: 100,
     });
 

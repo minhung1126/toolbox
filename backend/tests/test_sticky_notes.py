@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.app.api import notes as notes_api
+from backend.app.core import notes_store as notes_store_module
 from backend.app.core.dependencies import require_account_subject
 from backend.app.core.notes_store import NotesStore
 from backend.app.main import app
@@ -88,6 +89,32 @@ def test_notes_store_search_and_ordering(temp_notes_store):
     veg_search = store.list_notes(sub, query="Vegetables")
     assert len(veg_search) == 1
     assert veg_search[0]["id"] == n2["id"]
+
+
+@pytest.mark.parametrize("stored", ["{broken", "null", "{}"])
+def test_notes_store_rejects_corrupt_file_without_overwriting(tmp_path, stored):
+    path = tmp_path / "notes.json"
+    path.write_text(stored, encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        NotesStore(path)
+    assert path.read_text(encoding="utf-8") == stored
+
+
+def test_notes_write_failure_does_not_expose_unsaved_change(tmp_path, monkeypatch):
+    path = tmp_path / "notes.json"
+    store = NotesStore(path)
+    note = store.create_note("test-user", content="saved")
+
+    def fail_write(*args, **kwargs):
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr(notes_store_module, "atomic_write_json", fail_write)
+    with pytest.raises(OSError, match="disk unavailable"):
+        store.update_note("test-user", note["id"], content="unsaved")
+
+    assert store.get_note("test-user", note["id"])["content"] == "saved"
+    assert NotesStore(path).get_note("test-user", note["id"])["content"] == "saved"
 
 
 def test_sticky_notes_api_endpoints(tmp_path):

@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 import shutil
 import uuid
 from typing import Any, Dict, List, Optional
@@ -64,6 +65,25 @@ class UploadFromPathRequest(BaseModel):
     category_id: str = Field(default="22", max_length=10)
     default_language: str = Field(default="ko", max_length=20)
     subtitles: List[SubtitleConfig] = Field(default_factory=list)
+
+
+_UNSAFE_UPLOAD_FILENAME = re.compile(r'[\x00-\x1f<>:"/\\|?*]')
+_WINDOWS_DEVICE_NAME = re.compile(r"^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)", re.IGNORECASE)
+
+
+def _validated_upload_filename(filename: str | None) -> str:
+    """Keep multipart filenames as plain, portable names within the task directory."""
+    if (
+        not filename
+        or len(filename) > 255
+        or filename != filename.strip()
+        or filename.endswith(".")
+        or filename in {".", ".."}
+        or _UNSAFE_UPLOAD_FILENAME.search(filename)
+        or _WINDOWS_DEVICE_NAME.match(filename)
+    ):
+        raise http_error(400, "upload_filename_invalid", "上傳檔案名稱不正確。")
+    return filename
 
 
 def _enqueue_persisted_upload(
@@ -201,62 +221,67 @@ async def start_upload_files(
         meta_dict = json.loads(metadata)
     except Exception as exc:
         raise http_error(400, "invalid_metadata", "詮釋資料 JSON 格式不正確。") from exc
+    if not isinstance(meta_dict, dict):
+        raise http_error(400, "invalid_metadata", "詮釋資料 JSON 格式不正確。")
 
-    title = str(meta_dict.get("title") or video.filename or "").strip()
+    video_filename = _validated_upload_filename(video.filename)
+    subtitle_filenames = [_validated_upload_filename(item.filename) for item in subtitles]
+    if len({name.casefold() for name in [video_filename, *subtitle_filenames]}) != len(subtitle_filenames) + 1:
+        raise http_error(400, "upload_filename_duplicate", "上傳檔案名稱不可重複。")
+    subtitle_configs = meta_dict.get("subtitles") or []
+    if not isinstance(subtitle_configs, list) or any(
+        not isinstance(config, dict) or not isinstance(config.get("filename"), str) for config in subtitle_configs
+    ):
+        raise http_error(400, "invalid_metadata", "字幕設定格式不正確。")
+
+    title = str(meta_dict.get("title") or video_filename).strip()
     if not title:
         raise http_error(400, "empty_title", "影片標題不可為空。")
 
     task_id = str(uuid.uuid4())
     base_dir = worker.store.data_file.parent / "weverse_temp" / task_id
-    base_dir.mkdir(parents=True, exist_ok=True)
-
-    # Save video file
-    video_save_path = base_dir / (video.filename or "video.mp4")
+    video_save_path = base_dir / video_filename
+    subtitles_lookup = {s.get("filename"): s for s in subtitle_configs}
+    saved_subtitles = []
     try:
+        base_dir.mkdir(parents=True, exist_ok=True)
         with open(video_save_path, "wb") as f:
             while chunk := await video.read(1024 * 1024 * 4):  # 4MB buffer
                 f.write(chunk)
+
+        for sub_file, filename in zip(subtitles, subtitle_filenames, strict=True):
+            sub_save_path = base_dir / filename
+            with open(sub_save_path, "wb") as f:
+                while chunk := await sub_file.read(1024 * 64):
+                    f.write(chunk)
+
+            cfg = subtitles_lookup.get(filename, {})
+            saved_subtitles.append(
+                {
+                    "full_path": str(sub_save_path.resolve()),
+                    "filename": filename,
+                    "bcp47": cfg.get("bcp47") or "zh-TW",
+                    "label": cfg.get("label") or filename,
+                    "enabled": cfg.get("enabled", True),
+                }
+            )
+
+        task_record = {
+            "task_id": task_id,
+            "title": title,
+            "video_filename": video_filename,
+            "video_path": str(video_save_path),
+            "privacy_status": meta_dict.get("privacy_status", "private"),
+            "status": "pending",
+            "progress_percent": 0,
+            "current_step": "任務已加入佇列...",
+            "subtitles_count": len([s for s in saved_subtitles if s.get("enabled")]),
+        }
+        worker.store.create_task(context.owner_sub, task_record)
     except Exception as exc:
-        raise http_error(500, "file_save_error", f"儲存上傳影片失敗：{exc}") from exc
-
-    # Save subtitle files
-    subtitle_configs = meta_dict.get("subtitles") or []
-    subtitles_lookup = {s.get("filename"): s for s in subtitle_configs}
-    saved_subtitles = []
-
-    for sub_file in subtitles:
-        filename = sub_file.filename
-        if not filename:
-            continue
-        sub_save_path = base_dir / filename
-        with open(sub_save_path, "wb") as f:
-            while chunk := await sub_file.read(1024 * 64):
-                f.write(chunk)
-
-        cfg = subtitles_lookup.get(filename, {})
-        saved_subtitles.append(
-            {
-                "full_path": str(sub_save_path.resolve()),
-                "filename": filename,
-                "bcp47": cfg.get("bcp47") or "zh-TW",
-                "label": cfg.get("label") or filename,
-                "enabled": cfg.get("enabled", True),
-            }
-        )
-
-    task_record = {
-        "task_id": task_id,
-        "title": title,
-        "video_filename": video.filename,
-        "video_path": str(video_save_path),
-        "privacy_status": meta_dict.get("privacy_status", "private"),
-        "status": "pending",
-        "progress_percent": 0,
-        "current_step": "任務已加入佇列...",
-        "subtitles_count": len([s for s in saved_subtitles if s.get("enabled")]),
-    }
-
-    worker.store.create_task(context.owner_sub, task_record)
+        shutil.rmtree(base_dir, ignore_errors=True)
+        logger.exception("Could not save browser upload task %s", task_id)
+        raise http_error(500, "file_save_error", "儲存上傳檔案失敗。") from exc
 
     _enqueue_persisted_upload(
         worker=worker,

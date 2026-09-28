@@ -1,13 +1,13 @@
 import '../features/youtube/youtube-shared.css';
-import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, XCircle } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { normalizeYoutubePlaylistInput } from '../features/youtube/api/youtubeBatchApi';
-import { youtubeSettingsApi } from '../features/youtube/api/youtubeSettingsApi';
+import { isAmbiguousYoutubeSettingsMutation, youtubeSettingsApi } from '../features/youtube/api/youtubeSettingsApi';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useDebouncedAutosave } from '../hooks/useDebouncedAutosave';
-import { YOUTUBE_ROUTING_MODES, youtubeRoutingLabel } from '../utils/youtubeRouting';
+import { YOUTUBE_ROUTING_MODES, youtubeRoutingLabel } from '../features/youtube/model/routing';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
 import YouTubeRoutingSection from '../components/youtube/YouTubeRoutingSection';
 import YouTubeSlotCard from '../components/youtube/YouTubeSlotCard';
@@ -15,6 +15,14 @@ import YouTubePlaylistSection from '../components/youtube/YouTubePlaylistSection
 import YouTubeWorkflowLinks from '../components/youtube/YouTubeWorkflowLinks';
 
 const SLOT_ORDER = ['primary', 'secondary'];
+const REFRESH_WARNING = '操作已完成，但畫面更新失敗。請重新整理頁面核對最新狀態。';
+
+function mutationFailureMessage(error, action = '儲存') {
+  if (isAmbiguousYoutubeSettingsMutation(error)) {
+    return 'YouTube 設定操作結果無法確認，請重新整理核對。';
+  }
+  return `${action}失敗：${error?.message || '未知錯誤'}`;
+}
 
 export function initialSettings(defaultPlaylistId, quotaLimit, quotaBuffer) {
   return {
@@ -56,6 +64,21 @@ export default function YouTubeSettingsPage({
   section = 'all',
 }) {
   const toast = useToast();
+
+  const refreshAfterConfirmedWrite = async ({ settings = false, auth = false } = {}) => {
+    const refreshes = [];
+    if (settings && refreshSettings) refreshes.push(refreshSettings);
+    if (auth && refreshAuthUser) refreshes.push(refreshAuthUser);
+    const results = await Promise.allSettled(refreshes.map((refresh) => Promise.resolve().then(refresh)));
+    return results.every((result) => result.status === 'fulfilled');
+  };
+
+  const reportConfirmedWrite = (message, refreshed, inline = false) => {
+    const type = refreshed ? 'success' : 'warning';
+    const text = refreshed ? message : REFRESH_WARNING;
+    if (inline) setMsg({ type, text });
+    toast[type](text);
+  };
   const location = useLocation();
   const showConnections = section === 'all' || section === 'connections';
   const showRouting = section === 'all' || section === 'routing';
@@ -76,6 +99,7 @@ export default function YouTubeSettingsPage({
     [youtube]
   );
   const [playlistId, setPlaylistId] = useState(initial.playlistId);
+  const confirmedPlaylistIdRef = useRef(null);
   const [slotDrafts, setSlotDrafts] = useState(() =>
     Object.fromEntries(
       SLOT_ORDER.map((slot) => [
@@ -113,22 +137,29 @@ export default function YouTubeSettingsPage({
     compareFn: (a, b) => normalizeYoutubePlaylistInput(a) === normalizeYoutubePlaylistInput(b),
     onSave: async (nextValue) => {
       const normalized = normalizeYoutubePlaylistInput(nextValue);
-      if (!normalized) return;
+      if (nextValue.trim() && !normalized) throw new Error('請輸入合法的 YouTube 播放清單網址或 ID。');
       await youtubeSettingsApi.updatePlaylist({ playlistId: normalized });
+      confirmedPlaylistIdRef.current = normalized;
     },
     onSuccess: async (_nextValue, { notify } = {}) => {
-      await refreshSettings?.();
+      const refreshed = await refreshAfterConfirmedWrite({ settings: true });
       setPlaylistAutosaveStatus('saved');
       if (notify) {
-        setMsg({ type: 'success', text: '預設播放清單已儲存。' });
-        toast.success('預設播放清單已儲存');
+        reportConfirmedWrite('預設播放清單已儲存。', refreshed, true);
+      } else if (!refreshed) {
+        toast.warning(REFRESH_WARNING);
       }
     },
-    onError: (error, { notify } = {}) => {
-      setPlaylistAutosaveStatus('error');
+    onError: (error, { notify, saveConfirmed } = {}) => {
+      if (saveConfirmed) {
+        setPlaylistAutosaveStatus('saved');
+        if (notify) reportConfirmedWrite('預設播放清單已儲存。', false, true);
+        return;
+      }
+      setPlaylistAutosaveStatus(error.message?.includes('請輸入合法的 YouTube 播放清單') ? 'invalid' : 'error');
       if (notify) {
         setMsg({ type: 'error', text: error.message || '儲存失敗。' });
-        toast.error(`儲存失敗：${error.message || '未知錯誤'}`);
+        toast.error(mutationFailureMessage(error));
       }
     },
   });
@@ -156,12 +187,11 @@ export default function YouTubeSettingsPage({
         payload.client_secret = slotClientSecret.trim();
       }
       await youtubeSettingsApi.updateSlotConfig(slot, payload);
-      if (refreshSettings) await refreshSettings();
-      if (refreshAuthUser) await refreshAuthUser();
+      const refreshed = await refreshAfterConfirmedWrite({ settings: true, auth: true });
       setEditingSlot(null);
-      toast.success(`${slotRecords[slot].label} 設定已儲存`);
+      reportConfirmedWrite(`${slotRecords[slot].label} 設定已儲存`, refreshed);
     } catch (err) {
-      toast.error(`儲存失敗：${err.message}`);
+      toast.error(mutationFailureMessage(err));
     } finally {
       setSavingSlotCreds(false);
     }
@@ -173,19 +203,26 @@ export default function YouTubeSettingsPage({
       await youtubeSettingsApi.updateSlotConfig('primary', {
         use_system_google_oauth: true,
       });
-      if (refreshSettings) await refreshSettings();
-      if (refreshAuthUser) await refreshAuthUser();
+      const refreshed = await refreshAfterConfirmedWrite({ settings: true, auth: true });
       setEditingSlot(null);
-      toast.success('已成功將系統 Google OAuth 憑證同步至 YouTube Primary 槽位！');
+      reportConfirmedWrite('已成功將系統 Google OAuth 憑證同步至 YouTube Primary 槽位！', refreshed);
     } catch (err) {
-      toast.error(`同步失敗：${err.message}`);
+      toast.error(mutationFailureMessage(err, '同步'));
     } finally {
       setSavingSlotCreds(false);
     }
   };
 
   useEffect(() => {
+    confirmedPlaylistIdRef.current = null;
+  }, [authUser?.sub]);
+
+  useEffect(() => {
     if (!isPlaylistDirty) {
+      if (confirmedPlaylistIdRef.current !== null) {
+        if (initial.playlistId !== confirmedPlaylistIdRef.current) return;
+        confirmedPlaylistIdRef.current = null;
+      }
       setPlaylistId(initial.playlistId);
       resetPlaylistAutosave(initial.playlistId);
     }
@@ -216,13 +253,15 @@ export default function YouTubeSettingsPage({
     try {
       await youtubeSettingsApi.updateRoutingMode(routingModeDraft);
       setRoutingMode(routingModeDraft);
-      if (refreshSettings) await refreshSettings();
-      if (refreshAuthUser) await refreshAuthUser();
-      setMsg({ type: 'success', text: `YouTube slot 使用模式已切換為「${youtubeRoutingLabel(routingModeDraft)}」。` });
-      toast.success(`已切換為${youtubeRoutingLabel(routingModeDraft)}`);
+      const refreshed = await refreshAfterConfirmedWrite({ settings: true, auth: true });
+      reportConfirmedWrite(
+        `YouTube slot 使用模式已切換為「${youtubeRoutingLabel(routingModeDraft)}」。`,
+        refreshed,
+        true
+      );
     } catch (error) {
       setMsg({ type: 'error', text: error.message || '儲存失敗。' });
-      toast.error(`儲存失敗：${error.message || '未知錯誤'}`);
+      toast.error(mutationFailureMessage(error));
     } finally {
       setBusyAction(null);
     }
@@ -246,13 +285,11 @@ export default function YouTubeSettingsPage({
         quotaLimit: limit,
         safetyBufferUnits: buffer,
       });
-      await refreshSettings();
-      if (refreshAuthUser) await refreshAuthUser();
-      setMsg({ type: 'success', text: `${slotRecords[slot].label} 設定已儲存。` });
-      toast.success(`${slotRecords[slot].label} 設定已儲存`);
+      const refreshed = await refreshAfterConfirmedWrite({ settings: true, auth: true });
+      reportConfirmedWrite(`${slotRecords[slot].label} 設定已儲存。`, refreshed, true);
     } catch (error) {
       setMsg({ type: 'error', text: error.message || '儲存失敗。' });
-      toast.error(`儲存失敗：${error.message || '未知錯誤'}`);
+      toast.error(mutationFailureMessage(error));
     } finally {
       setBusyAction(null);
     }
@@ -270,11 +307,11 @@ export default function YouTubeSettingsPage({
     setBusyAction({ kind: 'playlist' });
     setMsg(null);
     try {
-      await flushPlaylistAutosave({ notify: true });
-      setPlaylistId(normalizedPlaylistId);
+      const result = await flushPlaylistAutosave({ notify: true });
+      if (result?.status === 'saved') setPlaylistId(normalizedPlaylistId);
     } catch (error) {
       setMsg({ type: 'error', text: error.message || '儲存失敗。' });
-      toast.error(`儲存失敗：${error.message || '未知錯誤'}`);
+      toast.error(mutationFailureMessage(error));
     } finally {
       setBusyAction(null);
     }
@@ -283,12 +320,12 @@ export default function YouTubeSettingsPage({
   const handlePlaylistChange = (value) => {
     setPlaylistId(value);
     const normalized = normalizeYoutubePlaylistInput(value);
+    mutatePlaylistAutosave(value);
     if (value.trim() && !normalized) {
       setPlaylistAutosaveStatus('invalid');
       return;
     }
     setPlaylistAutosaveStatus('saving');
-    mutatePlaylistAutosave(value);
   };
 
   const isQuotaDirty = (slot) => {
@@ -336,10 +373,10 @@ export default function YouTubeSettingsPage({
     try {
       await youtubeSettingsApi.activateSlot(slot);
       setActiveSlot(slot);
-      if (refreshAuthUser) await refreshAuthUser();
-      toast.success(`已將 ${slotRecords[slot].label} 設為作用中 slot`);
+      const refreshed = await refreshAfterConfirmedWrite({ auth: true });
+      reportConfirmedWrite(`已將 ${slotRecords[slot].label} 設為作用中 slot`, refreshed);
     } catch (error) {
-      toast.error(`切換 slot 失敗：${error.message || '未知錯誤'}`);
+      toast.error(mutationFailureMessage(error, '切換 slot'));
     } finally {
       setBusyAction(null);
     }
@@ -358,10 +395,10 @@ export default function YouTubeSettingsPage({
     setBusyAction({ kind: 'authorization', slot });
     try {
       await youtubeSettingsApi.disconnectSlot(slot, { confirm: true });
-      if (refreshAuthUser) await refreshAuthUser();
-      toast.success(`${slotRecords[slot].label} 已斷開`);
+      const refreshed = await refreshAfterConfirmedWrite({ auth: true });
+      reportConfirmedWrite(`${slotRecords[slot].label} 已斷開`, refreshed);
     } catch (error) {
-      toast.error(`斷開失敗：${error.message || '未知錯誤'}`);
+      toast.error(mutationFailureMessage(error, '斷開'));
     } finally {
       setBusyAction(null);
     }
@@ -388,7 +425,13 @@ export default function YouTubeSettingsPage({
 
       {msg && (
         <div className="info-banner">
-          {msg.type === 'success' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
+          {msg.type === 'success' ? (
+            <CheckCircle2 size={18} />
+          ) : msg.type === 'warning' ? (
+            <AlertTriangle size={18} />
+          ) : (
+            <XCircle size={18} />
+          )}
           {msg.text}
         </div>
       )}
