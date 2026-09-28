@@ -615,6 +615,45 @@ def test_apply_sort_to_playlist_new_playlist_via_data_api(monkeypatch):
     assert added_videos == ["v1", "v2"]
 
 
+def test_partial_data_api_sort_does_not_return_provider_exception(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import backend.app.services.playlist_sort_service as service
+    from backend.app.core.youtube_context import YouTubeRequestContext
+
+    context = YouTubeRequestContext(
+        slot="primary", credentials=object(), quota_limiter=SimpleNamespace(), owner_sub="test-user"
+    )
+    youtube = MagicMock()
+    youtube.playlists().insert().execute.return_value = {"id": "new-playlist"}
+    youtube.playlistItems().insert().execute.side_effect = [
+        {"id": "added"},
+        RuntimeError("access_token=private-provider-value"),
+    ]
+    youtube.playlistItems().update().execute.side_effect = [
+        {"id": "updated"},
+        RuntimeError("access_token=private-provider-value"),
+    ]
+    monkeypatch.setattr(service, "get_youtube_service", lambda _context: youtube)
+    monkeypatch.setattr(service, "fetch_playlist_items", lambda *_args: [])
+    monkeypatch.setattr(service, "_execute_with_quota", lambda request, _operation, _context: request.execute())
+    items = [
+        {"video_id": "v1", "playlist_item_id": "item-1", "original_position": 1, "new_position": 0},
+        {"video_id": "v2", "playlist_item_id": "item-2", "original_position": 0, "new_position": 1},
+    ]
+
+    created = apply_sort_to_playlist(context, "source", items, mode="new_playlist", use_youtube_api=True)
+    updated = apply_sort_to_playlist(context, "source", items, mode="in_place", use_youtube_api=True)
+
+    assert (created["succeeded"], created["failed"]) == (1, 1)
+    assert (updated["succeeded"], updated["failed"]) == (1, 1)
+    assert created["failed_items"][0]["video_id"] == "v2"
+    assert updated["failed_items"][0]["playlist_item_id"] == "item-2"
+    assert "access_token=private-provider-value" not in str(created)
+    assert "access_token=private-provider-value" not in str(updated)
+
+
 @pytest.mark.anyio
 async def test_preview_sort_quota_estimate_no_custom_token(monkeypatch):
     from types import SimpleNamespace

@@ -215,6 +215,8 @@ volumes:
 
 Playlist Sort API 的清單、預覽與套用在入口透過 `get_playlist_credential_store` 明確取得該 app 的 CredentialStore，並將 repository 傳至排序 service 與 YTMusic client 建立處；瀏覽器 Token 是否存在以及是否容許配額 fallback 都由同一 repository 判定。獨立呼叫 YTMusic helper 而未傳入 repository 時仍保留既有 request context fallback，其他服務仍待逐步替換。Playlist Sort 的一般 provider 例外只回傳固定錯誤訊息，不將原始例外文字送回瀏覽器；嚴格 Token fallback 阻擋仍保留原錯誤碼。
 
+排序逐曲目執行失敗時仍回傳成功／失敗計數及失敗的曲目或影片 ID，但 `failed_items.error` 使用固定核對指示，不包含 provider 原始例外。YT Music Token 驗證只向使用者顯示本地輸入格式錯誤；遠端驗證失敗使用固定訊息，避免 Cookie、Token 或請求細節出現在 API 回應。
+
 
 `Settings(runtime_store=RuntimeConfig(...), secrets_store=SystemSecretsManager(...))` 使用指定 repository 讀取動態設定、系統 OAuth 憑證、初次設定狀態與主金鑰。RuntimeConfig 綁定該 Settings，避免直接寫入 repository 時通知其他 app。`create_app(app_settings=config)` 將設定套用於 HTTP context、lifespan、CORS／TrustedHost、來源保護、OAuth URL／簽章／cookie、登入白名單與健康資訊。同步 endpoint 繼承 context，例外後會還原；手動背景執行緒應明確取得設定或使用 `settings_context(config)`。
 

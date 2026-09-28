@@ -489,3 +489,27 @@ def test_validate_ytmusic_custom_token_endpoint(tmp_path: Path, monkeypatch):
     )
     assert resp.status_code == 400
     assert resp.json()["detail"]["code"] == "token_invalid"
+
+    def fail_provider(*_args, **_kwargs):
+        raise RuntimeError("Cookie: SID=private-provider-value")
+
+    monkeypatch.setattr("backend.app.services.ytmusic_service.validate_ytmusic_custom_token", fail_provider)
+    resp = client.post(
+        "/api/v1/auth/ytmusic/custom-token/validate",
+        json={"token": "bad-token"},
+        headers={"Origin": "http://localhost:3000"},
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "token_invalid"
+    assert "private-provider-value" not in resp.text
+
+    from backend.app.services.ytmusic_service import parse_custom_token_input
+
+    monkeypatch.setattr("backend.app.services.ytmusic_service.validate_ytmusic_custom_token", parse_custom_token_input)
+    resp = client.post(
+        "/api/v1/auth/ytmusic/custom-token/validate",
+        json={"token": "not-a-cookie"},
+        headers={"Origin": "http://localhost:3000"},
+    )
+    assert resp.status_code == 400
+    assert "無法在輸入內容中偵測到有效的 Cookie" in resp.json()["detail"]["message"]

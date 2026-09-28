@@ -373,7 +373,7 @@ class YtmusicTokenValidateInput(BaseModel):
 @router.post("/ytmusic/custom-token/validate")
 def validate_ytmusic_token(payload: YtmusicTokenValidateInput, request: Request):
     """Validate a custom YouTube Music token (either provided in payload or currently stored)."""
-    from backend.app.services.ytmusic_service import validate_ytmusic_custom_token
+    from backend.app.services.ytmusic_service import YtmusicTokenInputError, validate_ytmusic_custom_token
 
     auth_session = get_authenticated_session(request)
     token_str = (payload.token or "").strip()
@@ -392,8 +392,11 @@ def validate_ytmusic_token(payload: YtmusicTokenValidateInput, request: Request)
                 channel_handle=result.get("channel_handle"),
             )
         return {"status": "success", **result}
-    except Exception as exc:
+    except YtmusicTokenInputError as exc:
         raise http_error(400, "token_invalid", str(exc)) from exc
+    except Exception as exc:
+        logger.warning("YouTube Music Token validation failed: %s", type(exc).__name__)
+        raise http_error(400, "token_invalid", "Token 驗證失敗或 Cookie 已過期，請重新複製後再試。") from exc
 
 
 @router.get("/youtube/{slot}/url")

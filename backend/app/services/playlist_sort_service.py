@@ -85,7 +85,7 @@ def fetch_user_playlists(
             logger.info("Retrieved %d playlists via YouTube Music client", len(ytm_playlists))
             return ytm_playlists
     except Exception as exc:
-        logger.debug("ytmusic_service.fetch_ytmusic_playlists fallback to Data API: %s", exc)
+        logger.debug("ytmusic_service.fetch_ytmusic_playlists fallback to Data API: %s", type(exc).__name__)
 
     # Fallback to Google YouTube Data API v3
     hl = lang.replace("_", "-")
@@ -164,7 +164,7 @@ def fetch_playlist_items_for_sort(
             logger.info("Retrieved %d tracks for playlist %s via YouTube Music client", len(ytm_items), playlist_id)
             items = ytm_items
     except Exception as exc:
-        logger.debug("ytmusic_service.fetch_ytmusic_playlist_tracks fallback to Data API: %s", exc)
+        logger.debug("ytmusic_service.fetch_ytmusic_playlist_tracks fallback to Data API: %s", type(exc).__name__)
 
     # Fallback to Google YouTube Data API v3 if ytm_items empty
     if not items:
@@ -225,7 +225,7 @@ def fetch_playlist_items_for_sort(
                 language=lang.replace("_", "-"),
             )
         except Exception as exc:
-            logger.warning("Failed to enrich tracks with yt-dlp fallback: %s", exc)
+            logger.warning("Failed to enrich tracks with yt-dlp fallback: %s", type(exc).__name__)
 
     # Final pass fallback: populate year and release_date from published_at if still missing
     for item in items:
@@ -607,16 +607,19 @@ def apply_sort_to_playlist(
                     token_store=token_store,
                 )
                 if res.get("failed", 0) > 0 and res.get("succeeded", 0) == 0 and res.get("moved", 0) > 0:
-                    raise RuntimeError(f"YTMusic in-place sort failed: {res.get('failed_items')}")
+                    raise RuntimeError("YTMusic in-place sort failed for all moved items")
                 return res
         except Exception as exc:
             if not allow_quota_fallback:
                 logger.warning(
                     "apply_sort_to_playlist using ytmusic_service failed: %s; quota fallback blocked by strict defense",
-                    exc,
+                    type(exc).__name__,
                 )
                 raise
-            logger.warning("apply_sort_to_playlist using ytmusic_service failed: %s; falling back to Data API", exc)
+            logger.warning(
+                "apply_sort_to_playlist using ytmusic_service failed: %s; falling back to Data API",
+                type(exc).__name__,
+            )
 
     # Google YouTube Data API v3 update
     service = get_youtube_service(context)
@@ -664,9 +667,9 @@ def apply_sort_to_playlist(
                 logger.warning("YouTube quota exceeded while creating new sorted playlist %s", new_playlist_id)
                 raise
             except Exception as e:
-                logger.error("Failed to add video %s to new playlist %s: %s", vid, new_playlist_id, e)
+                logger.error("Failed to add video %s to new playlist %s: %s", vid, new_playlist_id, type(e).__name__)
                 failed += 1
-                failed_items.append({"video_id": vid, "error": str(e)})
+                failed_items.append({"video_id": vid, "error": "加入影片失敗，請至 YouTube Studio 核對。"})
 
         return {
             "operation": "playlist_sort",
@@ -757,10 +760,16 @@ def apply_sort_to_playlist(
                     "Failed to update playlist item %s (resolved id: %s): %s",
                     raw_id,
                     target_id,
-                    e,
+                    type(e).__name__,
                 )
                 failed += 1
-                failed_items.append({"playlist_item_id": raw_id, "resolved_id": target_id, "error": str(e)})
+                failed_items.append(
+                    {
+                        "playlist_item_id": raw_id,
+                        "resolved_id": target_id,
+                        "error": "更新曲目失敗，請至 YouTube Studio 核對。",
+                    }
+                )
 
     return {
         "operation": "playlist_sort",
