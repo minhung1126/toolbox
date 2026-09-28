@@ -113,7 +113,9 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 
 async def security_headers(request, call_next):
-    _initialize_app_config(request.app)
+    application = request.scope.get("app")
+    if application is not None:
+        _initialize_app_config(application)
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")

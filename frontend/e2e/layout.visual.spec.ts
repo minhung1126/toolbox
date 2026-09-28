@@ -26,6 +26,11 @@ for (const width of [390, 768, 1440]) {
     await page.goto('/dashboard');
     await expect(page.getByRole('heading', { name: 'Toolbox 控制台' })).toBeVisible();
     await waitForVisualFonts(page);
-    await expect(page).toHaveScreenshot(`dashboard-${width}.png`, { animations: 'disabled', fullPage: true });
+    await expect(page).toHaveScreenshot(`dashboard-${width}.png`, {
+      animations: 'disabled',
+      fullPage: true,
+      // Edge rasterizes a few card icons differently across Windows hosts.
+      maxDiffPixels: process.platform === 'win32' ? 20 : 0,
+    });
   });
 }
