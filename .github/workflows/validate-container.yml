@@ -43,7 +43,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install backend dependencies and test tools
-        run: python -m pip install -r backend/requirements-dev.txt
+        run: python -m pip install --index-url https://pypi.org/simple --timeout 60 -r backend/requirements-dev.txt
 
       - name: Test backend
         run: |
