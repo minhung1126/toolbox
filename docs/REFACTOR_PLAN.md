@@ -230,6 +230,8 @@
 - CI run #60 已在 commit `7a02251` 通過後端、前端 424 項 Vitest、42 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認側邊欄狀態修正。
 - 工具目錄現回報與宣告狀態分離的 `runtime_status`：`ready`、`disabled`、`startup_failed`、`unhealthy`。啟動失敗或健康檢查異常的工具不再出現在導覽與 Dashboard，深層網址也被阻止；目錄不會洩漏啟動例外內容。新增後端目錄及前端目錄／路由測試；完整驗證及 CI 待確認。
 - CI run #61 的後端與 426 項 Vitest 通過，42 項 Chromium E2E 有 41 項通過；唯一失敗是停用工具測試仍比對舊的深層網址文案。已更新斷言並增加啟動失敗工具案例，本機 Edge 兩項對應測試通過；後續稽核與 Docker 步驟待新 CI 完整確認。
+- CI run #62 已在 commit `6652d3f` 通過後端、前端 426 項 Vitest、43 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認工具執行狀態契約。
+- Weverse 瀏覽器檔案上傳在建立暫存目錄前拒絕路徑分隔符、跨平台保留名稱及重複檔名；影片、字幕或任務持久化失敗時清除已暫存檔案，API 不回傳底層例外內容。新增 HTTP 測試驗證惡意檔名不落盤、安全檔名正常排隊及持久化失敗不排隊；完整 CI 待確認。
 
 尚待完成：
 
