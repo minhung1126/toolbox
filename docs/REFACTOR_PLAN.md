@@ -246,6 +246,7 @@
 - YouTube 設定 API 現驗證播放清單、路由、配額、slot 設定與授權操作的回應狀態及對應請求值；OAuth 導向僅接受 Google 授權主機的 HTTPS 網址。回應不符、逾時與伺服器錯誤時提示操作結果無法確認，避免將不確定的設定寫入回報為成功；寫入已確認但後續畫面重新讀取失敗時，改提示重新整理而不誤報儲存失敗。完整 CI 待確認。
 - CI run #69 已在 commit `9213f8a` 通過後端、前端 434 項 Vitest、44 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認 YouTube 設定回應契約與刷新失敗提示。
 - 共用 `useDebouncedAutosave` 的明確 flush 結果現區分成功、失敗與已被新編輯取代；寫入成功後的回呼失敗不再被當作寫入失敗。YouTube 播放清單手動儲存僅在確認成功後整理欄位，清空既有清單會實際送出空值，無效輸入會取代舊的待儲存值而不送出。Google Sheet 設定已確認寫入但刷新失敗時顯示核對提示；兩個頁面都會保留已確認的本機值，避免舊的伺服器設定覆蓋。完整 CI 待確認。
+- CI run #70 已在 commit `8c9694c` 通過後端、前端 438 項 Vitest、44 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose。本批次的 autosave 與設定結果判讀修正已驗證；下列項目仍屬整體重構計劃的後續工作。
 
 尚待完成：
 
