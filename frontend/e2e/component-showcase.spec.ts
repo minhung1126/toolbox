@@ -84,6 +84,18 @@ test('system settings use feature styles and remain usable on supported widths',
           client_secret_masked: 'GOCSPX****1234',
           configured: true,
         },
+        youtube_primary: {
+          client_id: '',
+          has_client_secret: false,
+          client_secret_masked: '',
+          configured: false,
+        },
+        youtube_secondary: {
+          client_id: '',
+          has_client_secret: false,
+          client_secret_masked: '',
+          configured: false,
+        },
       },
       public_base_url: 'https://toolbox.example.test',
       redirect_uri: 'https://toolbox.example.test/api/v1/auth/callback',
@@ -92,6 +104,7 @@ test('system settings use feature styles and remain usable on supported widths',
       allowed_emails: ['admin@example.test', 'viewer@example.test'],
       current_user_email: 'admin@example.test',
       allow_new_users: true,
+      allowlist_required: true,
     },
   });
 
@@ -112,6 +125,22 @@ test('system settings use feature styles and remain usable on supported widths',
       animations: 'disabled',
     });
   }
+});
+
+test('system settings keeps the edit controls closed when a read response is malformed', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/system/credentials': { status: 'success', credentials: {} },
+    '/api/v1/system/allowlist': {
+      allowed_emails: [],
+      current_user_email: 'admin@example.test',
+      allow_new_users: true,
+      allowlist_required: true,
+    },
+  });
+  await page.goto('/system/settings');
+  await expect(page.getByText('系統設定待核對')).toBeVisible();
+  await expect(page.getByRole('button', { name: '重新讀取' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '新增成員' })).toHaveCount(0);
 });
 
 test('Quick Token Drawer uses its feature styles on supported widths', async ({ page }, testInfo) => {
