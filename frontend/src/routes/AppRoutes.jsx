@@ -38,7 +38,7 @@ function ToolRouteGate({ toolId, children }) {
   if (!tools.some((tool) => tool.id === toolId)) {
     return (
       <div className="loading-center error-state" role="status">
-        此工具目前未啟用。
+        此工具目前無法使用。
       </div>
     );
   }

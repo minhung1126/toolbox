@@ -198,6 +198,24 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(getToolNavGroups(tools).some((group) => group.id === 'youtube')).toBe(false);
   });
 
+  it('omits tools whose runtime health is unavailable', () => {
+    const [creator, music] = getAllTools();
+    const metadata = (tool, runtimeStatus) => ({
+      id: tool.id,
+      status: 'active',
+      runtime_status: runtimeStatus,
+      version: '1.0.0',
+      entry_url: tool.entryUrl,
+      required_scopes: [],
+    });
+    expect(
+      reconcileToolCatalog({ tools: [metadata(creator, 'startup_failed'), metadata(music, 'ready')] }).map(
+        (tool) => tool.id
+      )
+    ).toEqual([music.id]);
+    expect(() => reconcileToolCatalog({ tools: [metadata(creator, 'future')] })).toThrow('執行狀態');
+  });
+
   it('rejects unknown, duplicate, or incompatible backend catalog entries', () => {
     const tool = getAllTools()[0];
     const metadata = { id: tool.id, status: 'active', version: '1.0.0', entry_url: tool.entryUrl, required_scopes: [] };

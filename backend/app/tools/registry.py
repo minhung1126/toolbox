@@ -114,6 +114,22 @@ class ToolRegistry:
                 results[tool_id] = {"status": "error", "error": type(exc).__name__}
         return results
 
+    def runtime_statuses(self) -> Dict[str, str]:
+        """Summarize tool availability without exposing health error details."""
+        health = self.health_check()
+        return {
+            tool_id: (
+                "disabled"
+                if plugin.metadata.status == "disabled"
+                else "startup_failed"
+                if tool_id in self._startup_errors
+                else "ready"
+                if health[tool_id].get("status") == "ok"
+                else "unhealthy"
+            )
+            for tool_id, plugin in self._plugins.items()
+        }
+
 
 # Global singleton instance
 tool_registry = ToolRegistry()

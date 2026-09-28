@@ -121,6 +121,12 @@ export function reconcileToolCatalog(payload) {
     if (!['active', 'beta', 'disabled'].includes(metadata.status)) {
       throw new Error(`工具 ${metadata.id} 的狀態不受支援。`);
     }
+    if (
+      metadata.runtime_status &&
+      !['ready', 'disabled', 'startup_failed', 'unhealthy'].includes(metadata.runtime_status)
+    ) {
+      throw new Error(`工具 ${metadata.id} 的執行狀態不受支援。`);
+    }
     const version = /^(\d+)\.(\d+)\.(\d+)$/.exec(metadata.version);
     if (!version || Number(version[1]) !== SUPPORTED_TOOL_MAJOR_VERSION) {
       throw new Error(`工具 ${metadata.id} 的版本不受支援。`);
@@ -143,7 +149,7 @@ export function reconcileToolCatalog(payload) {
       validateToolScopes(metadata.id, scopes);
       routeScopes[route.path] = scopes;
     }
-    if (metadata.status === 'disabled') continue;
+    if (metadata.status === 'disabled' || (metadata.runtime_status && metadata.runtime_status !== 'ready')) continue;
     available.set(metadata.id, {
       ...manifest,
       name: metadata.name,

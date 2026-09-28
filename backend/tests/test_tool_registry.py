@@ -95,6 +95,7 @@ def test_custom_tool_registration_and_lifecycle():
     # Test health check
     health = registry.health_check()
     assert health["demo-plugin"]["status"] == "ok"
+    assert registry.runtime_statuses()["demo-plugin"] == "ready"
 
     # Test unregister
     unregistered = registry.unregister("demo-plugin")
@@ -124,6 +125,39 @@ def test_plugin_startup_failure_is_visible_in_health_without_leaking_exception()
     asyncio.run(registry.run_startup(main.FastAPI()))
 
     assert registry.health_check()["failing-plugin"] == {"status": "error", "error": "RuntimeError"}
+    assert registry.runtime_statuses()["failing-plugin"] == "startup_failed"
+
+    app = main.create_app(registry=registry)
+    with TestClient(app) as client:
+        catalog = client.get("/api/v1/tools").json()
+        assert catalog["tools"][0]["runtime_status"] == "startup_failed"
+        detail = client.get("/api/v1/tools/failing-plugin").json()
+        assert detail["tool"]["runtime_status"] == "startup_failed"
+        assert "refresh_token=secret" not in str(catalog)
+
+
+def test_unhealthy_plugin_is_unavailable_in_catalog():
+    registry = ToolRegistry()
+
+    class UnhealthyPlugin(ToolPlugin):
+        @property
+        def metadata(self) -> ToolMetadata:
+            return ToolMetadata(
+                id="unhealthy-plugin",
+                name="Unhealthy Plugin",
+                title="異常外掛",
+                description="Health failure test",
+                entry_url="/unhealthy",
+            )
+
+        def health_check(self):
+            return {"status": "degraded", "error": "private detail"}
+
+    registry.register(UnhealthyPlugin())
+    app = main.create_app(registry=registry)
+    with TestClient(app) as client:
+        assert client.get("/api/v1/tools").json()["tools"][0]["runtime_status"] == "unhealthy"
+        assert client.get("/api/v1/health").json()["ready"] is False
 
 
 def test_disabled_plugin_is_listed_but_never_started_or_mounted():
@@ -163,6 +197,7 @@ def test_disabled_plugin_is_listed_but_never_started_or_mounted():
     with TestClient(app) as client:
         catalog = client.get("/api/v1/tools").json()
         assert catalog["tools"][0]["status"] == "disabled"
+        assert catalog["tools"][0]["runtime_status"] == "disabled"
         assert client.get("/api/v1/disabled/hello").status_code == 404
         health = client.get("/api/v1/health").json()
         assert health["status"] == "healthy"
@@ -170,6 +205,7 @@ def test_disabled_plugin_is_listed_but_never_started_or_mounted():
 
     assert plugin.started is False
     assert registry.health_check()["disabled-plugin"] == {"status": "disabled"}
+    assert registry.runtime_statuses()["disabled-plugin"] == "disabled"
 
 
 def test_tools_catalog_api():

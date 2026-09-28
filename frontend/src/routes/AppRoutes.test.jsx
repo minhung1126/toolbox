@@ -106,7 +106,23 @@ describe('AppRoutes', () => {
       })),
     });
     renderRoutes(PATHS.youtubeVideoDrafts);
-    expect(await screen.findByText('此工具目前未啟用。')).toBeInTheDocument();
+    expect(await screen.findByText('此工具目前無法使用。')).toBeInTheDocument();
+    expect(screen.queryByText('Video batch route')).not.toBeInTheDocument();
+  });
+
+  it('blocks a deep link when tool startup fails', async () => {
+    api.getTools.mockResolvedValue({
+      tools: getAllTools().map((tool) => ({
+        id: tool.id,
+        status: 'active',
+        runtime_status: tool.id === 'creator-tools' ? 'startup_failed' : 'ready',
+        version: '1.0.0',
+        entry_url: tool.entryUrl,
+        required_scopes: [],
+      })),
+    });
+    renderRoutes(PATHS.youtubeVideoDrafts);
+    expect(await screen.findByText('此工具目前無法使用。')).toBeInTheDocument();
     expect(screen.queryByText('Video batch route')).not.toBeInTheDocument();
   });
 
