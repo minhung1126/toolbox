@@ -645,7 +645,7 @@ async def test_preview_sort_quota_estimate_no_custom_token(monkeypatch):
         use_youtube_api=False,
     )
 
-    res = await preview_sort(inp, context=context)
+    res = await preview_sort(inp, context=context, token_store=credential_store)
     assert res["quota_estimate"]["engine"] == "youtube_data_api_v3"
     assert res["quota_estimate"]["units_per_move"] == 50
     assert res["quota_estimate"]["moved_count"] == 2
@@ -818,7 +818,7 @@ async def test_apply_sort_strict_defense_blocks_fallback_when_token_fails(monkey
     monkeypatch.setattr(
         ps_api,
         "apply_sort_to_playlist",
-        MagicMock(side_effect=YTMusicError("Unauthorized: Session expired")),
+        MagicMock(side_effect=YTMusicError("Unauthorized: access_token=private-provider-value")),
     )
 
     inp = SortApplyInput(
@@ -830,11 +830,12 @@ async def test_apply_sort_strict_defense_blocks_fallback_when_token_fails(monkey
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await apply_sort(inp, context=context)
+        await apply_sort(inp, context=context, token_store=credential_store)
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail["code"] == "TOKEN_FALLBACK_BLOCKED"
     assert "已啟動嚴格防禦保護" in exc_info.value.detail["message"]
+    assert "access_token=private-provider-value" not in exc_info.value.detail["message"]
 
 
 @pytest.mark.anyio
@@ -875,7 +876,7 @@ async def test_apply_sort_allows_fallback_when_explicitly_permitted(monkeypatch)
         allow_quota_fallback=True,
     )
 
-    res = await apply_sort(inp, context=context)
+    res = await apply_sort(inp, context=context, token_store=credential_store)
     assert res["status"] == "success"
     # verify allow_quota_fallback was passed as True
     _, kwargs = mock_apply.call_args

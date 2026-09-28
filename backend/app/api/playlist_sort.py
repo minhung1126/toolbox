@@ -3,11 +3,11 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from backend.app.core.credential_store import credential_store, get_credential_store
+from backend.app.core.credential_store import CredentialStore, credential_store
 from backend.app.core.dependencies import require_ytmusic_context
 from backend.app.core.error_contract import http_error
 from backend.app.core.preview import (
@@ -29,6 +29,12 @@ from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/playlist-sort", tags=["Playlist Sort"])
+
+
+def get_playlist_credential_store(request: Request) -> CredentialStore:
+    """Resolve the credential repository owned by this app instance."""
+    configured = getattr(request.app.state, "credential_store", None)
+    return configured if configured is not None else credential_store
 
 
 def _quota_http_exception(exc: YouTubeQuotaUnavailable) -> HTTPException:
@@ -84,14 +90,15 @@ async def get_playlists(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("Error fetching playlists: %s", e)
-        raise http_error(500, "playlist_fetch_failed", str(e)) from e
+        logger.error("Error fetching playlists: %s", type(e).__name__)
+        raise http_error(500, "playlist_fetch_failed", "讀取播放清單失敗，請稍後再試。") from e
 
 
 @router.post("/preview")
 async def preview_sort(
     input_data: SortPreviewInput,
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
+    token_store: CredentialStore = Depends(get_playlist_credential_store),
 ):
     try:
         # Also run yt-dlp fallback when sorting by album so that singles and videos (items
@@ -124,7 +131,7 @@ async def preview_sort(
             playlist=snapshot,
         )
 
-        has_custom_token = bool(get_credential_store(credential_store).get_ytmusic_custom_token(context.owner_sub))
+        has_custom_token = bool(token_store.get_ytmusic_custom_token(context.owner_sub))
         has_valid_set_video_ids = all(item.get("has_set_video_id", True) for item in original_items)
         can_use_ytm = not input_data.use_youtube_api and has_custom_token and has_valid_set_video_ids
 
@@ -160,8 +167,8 @@ async def preview_sort(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("Error generating sort preview: %s", e)
-        raise http_error(500, "PREVIEW_FAILED", str(e)) from e
+        logger.error("Error generating sort preview: %s", type(e).__name__)
+        raise http_error(500, "PREVIEW_FAILED", "產生排序預覽失敗，請稍後再試。") from e
 
 
 @router.post("/apply")
@@ -169,6 +176,7 @@ async def apply_sort(
     input_data: SortApplyInput,
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
     rate_limit=Depends(enforce_workflow_rate_limit),
+    token_store: CredentialStore = Depends(get_playlist_credential_store),
 ):
     try:
         has_full_sorted_ids = bool(input_data.sorted_item_ids)
@@ -213,7 +221,7 @@ async def apply_sort(
             sort_keys_dict = [{"field": k.field, "direction": k.direction} for k in input_data.sort_keys]
             sorted_items = sort_items(original_items, sort_keys_dict)
 
-        has_custom_token = bool(get_credential_store(credential_store).get_ytmusic_custom_token(context.owner_sub))
+        has_custom_token = bool(token_store.get_ytmusic_custom_token(context.owner_sub))
         effective_fallback = input_data.allow_quota_fallback or (not has_custom_token)
         preview = build_sort_preview(original_items, sorted_items)
 
@@ -236,12 +244,12 @@ async def apply_sort(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("Error applying sort: %s", e)
-        has_custom = bool(get_credential_store(credential_store).get_ytmusic_custom_token(context.owner_sub))
+        logger.error("Error applying sort: %s", type(e).__name__)
+        has_custom = bool(token_store.get_ytmusic_custom_token(context.owner_sub))
         if has_custom and not input_data.use_youtube_api and not input_data.allow_quota_fallback:
             raise http_error(
                 401,
                 "TOKEN_FALLBACK_BLOCKED",
-                f"YouTube Music Token 執行失敗（{e}）。已啟動嚴格防禦保護，阻止自動降級至 Google API 配額模式（避免無預警消耗配額）。請更新 Token 或確認以 Google API 配額繼續。",
+                "YouTube Music Token 執行失敗。已啟動嚴格防禦保護，阻止自動降級至 Google API 配額模式（避免無預警消耗配額）。請更新 Token 或確認以 Google API 配額繼續。",
             ) from e
-        raise http_error(500, "APPLY_FAILED", str(e)) from e
+        raise http_error(500, "APPLY_FAILED", "套用排序失敗，請稍後再試。") from e

@@ -58,6 +58,86 @@ def test_service_disconnect_and_custom_token_are_app_scoped(tmp_path, monkeypatc
     assert stores[0].get_ytmusic_custom_token("same-user") is None
 
 
+def test_playlist_preview_uses_each_apps_credential_repository(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from backend.app.api import playlist_sort
+    from backend.app.core.dependencies import require_ytmusic_context
+
+    stores = [CredentialStore(tmp_path / f"playlist-{index}.json") for index in range(2)]
+    stores[0].save_ytmusic_custom_token("browser-token", owner_sub="same-user")
+    context = SimpleNamespace(owner_sub="same-user", slot="primary")
+    items = [
+        {"playlist_item_id": "v1_0", "video_id": "v1", "title": "B", "position": 0, "has_set_video_id": True},
+        {"playlist_item_id": "v2_1", "video_id": "v2", "title": "A", "position": 1, "has_set_video_id": True},
+    ]
+    monkeypatch.setattr(playlist_sort, "fetch_playlist_items_for_sort", lambda *_args, **_kwargs: items)
+    clients = [
+        TestClient(
+            create_app(
+                credential_store=store,
+                dependency_overrides={require_ytmusic_context: lambda: context},
+            )
+        )
+        for store in stores
+    ]
+    responses = [
+        client.post(
+            "/api/v1/playlist-sort/preview",
+            json={"playlist_id": "playlist-1", "sort_keys": [{"field": "title", "direction": "asc"}]},
+        )
+        for client in clients
+    ]
+    assert [response.status_code for response in responses] == [200, 200]
+    assert [response.json()["quota_estimate"]["engine"] for response in responses] == [
+        "ytmusic_innertube",
+        "youtube_data_api_v3",
+    ]
+    monkeypatch.setattr(playlist_sort, "verify_preview_token", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        playlist_sort,
+        "apply_sort_to_playlist",
+        lambda *_args, **kwargs: {"allow_quota_fallback": kwargs["allow_quota_fallback"]},
+    )
+    apply_responses = [
+        client.post(
+            "/api/v1/playlist-sort/apply",
+            json={"playlist_id": "playlist-1", "sort_keys": [], "preview_token": "signed-preview"},
+        )
+        for client in clients
+    ]
+    assert [response.status_code for response in apply_responses] == [200, 200]
+    assert [response.json()["allow_quota_fallback"] for response in apply_responses] == [False, True]
+
+
+def test_playlist_api_does_not_expose_provider_exception_text(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from backend.app.api import playlist_sort
+    from backend.app.core.dependencies import require_ytmusic_context
+
+    def fail_provider(*_args, **_kwargs):
+        raise RuntimeError("access_token=private-provider-value")
+
+    monkeypatch.setattr(playlist_sort, "fetch_user_playlists", fail_provider)
+    monkeypatch.setattr(playlist_sort, "fetch_playlist_items_for_sort", fail_provider)
+    app = create_app(
+        credential_store=CredentialStore(tmp_path / "playlist-errors.json"),
+        dependency_overrides={require_ytmusic_context: lambda: SimpleNamespace(owner_sub="same-user", slot="primary")},
+    )
+    client = TestClient(app)
+    responses = [
+        client.get("/api/v1/playlist-sort/playlists"),
+        client.post("/api/v1/playlist-sort/preview", json={"playlist_id": "playlist-1", "sort_keys": []}),
+    ]
+    assert [response.status_code for response in responses] == [500, 500]
+    assert [response.json()["detail"]["code"] for response in responses] == [
+        "playlist_fetch_failed",
+        "PREVIEW_FAILED",
+    ]
+    assert all("access_token=private-provider-value" not in response.text for response in responses)
+
+
 def test_refresh_uses_and_persists_only_injected_credentials(tmp_path, monkeypatch):
     stores = [CredentialStore(tmp_path / f"{i}.json") for i in range(2)]
     for i, store in enumerate(stores):
