@@ -1,6 +1,8 @@
 export interface YoutubeSlotState {
   configured?: boolean;
   authenticated?: boolean;
+  can_be_active?: boolean;
+  channel_mismatch?: boolean;
   channel_id?: string;
   channel_title?: string;
   client_fingerprint?: string;
@@ -35,17 +37,22 @@ export function youtubePreferredUiSlot(youtube?: YoutubeRoutingState | null) {
   const slots = youtube?.slots || {};
   const activeSlot = youtube?.active_slot || 'primary';
   if (youtubeRoutingMode(youtube) === YOUTUBE_ROUTING_MODES.MANUAL) return activeSlot;
-  if (slots.primary?.authenticated) return 'primary';
-  if (slots.secondary?.authenticated) return 'secondary';
+  if (slotIsUsable(slots.primary)) return 'primary';
+  if (slotIsUsable(slots.secondary)) return 'secondary';
   return activeSlot;
+}
+
+function slotIsUsable(slot?: YoutubeSlotState) {
+  return Boolean(slot?.authenticated && slot.can_be_active !== false && !slot.channel_mismatch);
 }
 
 export function youtubeIsConnected(youtube?: YoutubeRoutingState | null) {
   const slots = youtube?.slots || {};
+  if (Object.values(slots).some((slot) => slot?.channel_mismatch)) return false;
   if (youtubeRoutingMode(youtube) === YOUTUBE_ROUTING_MODES.MANUAL) {
-    return Boolean(slots[youtube?.active_slot || 'primary']?.authenticated);
+    return slotIsUsable(slots[youtube?.active_slot || 'primary']);
   }
-  return Object.values(slots).some((slot) => slot?.authenticated);
+  return Object.values(slots).some(slotIsUsable);
 }
 
 export function youtubeRoutingLabel(mode?: string | null) {
@@ -83,6 +90,8 @@ export function getYoutubeAuthorizationFingerprint(
       slot,
       record.configured,
       record.authenticated,
+      record.can_be_active,
+      record.channel_mismatch,
       record.channel_id,
       record.client_fingerprint,
       record.token_status,
@@ -108,7 +117,7 @@ export function getYoutubeAuthContext(authUser?: YoutubeAuthUser | null, slotOve
     channelTitle: record.channel_title || '',
     account: user.sub || user.email || '',
     clientFingerprint: record.client_fingerprint || '',
-    authenticated: Boolean(record.authenticated) || youtubeIsConnected(youtube),
+    authenticated: slotIsUsable(record) && youtubeIsConnected(youtube),
     tokenStatus: record.token_status || '',
     tokenExpiresAt: record.token_expires_at || '',
     lastRefreshedAt: record.last_refreshed_at || '',

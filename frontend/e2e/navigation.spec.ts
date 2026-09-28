@@ -42,6 +42,32 @@ test('YT Music does not claim missing authorization when the channel fallback is
   await expect(page.getByRole('link', { name: '連線 影片上傳頻道' })).toBeVisible();
 });
 
+test('mismatched YouTube channels are not presented as a usable connection', async ({ page }) => {
+  await mockAuthenticatedBackend(page, {
+    '/api/v1/auth/user': {
+      authenticated: true,
+      user: { sub: 'mismatch-user', email: 'mismatch@example.test' },
+      authorizations: {
+        sheets: { connected: true },
+        ytmusic: { connected: false },
+        video_uploader: { connected: false },
+      },
+      youtube: {
+        routing_mode: 'auto_primary',
+        active_slot: 'primary',
+        slots: {
+          primary: { authenticated: true, can_be_active: false, channel_mismatch: true },
+          secondary: { authenticated: true, can_be_active: false, channel_mismatch: true },
+        },
+      },
+    },
+  });
+  await page.goto('/dashboard');
+  await expect(page.getByText('YouTube 未連結')).toBeVisible();
+  await expect(page.getByRole('link', { name: '連線 YouTube 頻道' }).first()).toBeVisible();
+  await expect(page.getByRole('link', { name: '連線 YouTube Music' })).toBeVisible();
+});
+
 for (const [label, override] of [
   ['disabled', { status: 'disabled' }],
   ['startup failed', { runtime_status: 'startup_failed' }],

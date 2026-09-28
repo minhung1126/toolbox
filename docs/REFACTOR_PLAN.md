@@ -232,6 +232,8 @@
 - CI run #61 的後端與 426 項 Vitest 通過，42 項 Chromium E2E 有 41 項通過；唯一失敗是停用工具測試仍比對舊的深層網址文案。已更新斷言並增加啟動失敗工具案例，本機 Edge 兩項對應測試通過；後續稽核與 Docker 步驟待新 CI 完整確認。
 - CI run #62 已在 commit `6652d3f` 通過後端、前端 426 項 Vitest、43 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認工具執行狀態契約。
 - Weverse 瀏覽器檔案上傳在建立暫存目錄前拒絕路徑分隔符、跨平台保留名稱及重複檔名；影片、字幕或任務持久化失敗時清除已暫存檔案，API 不回傳底層例外內容。新增 HTTP 測試驗證惡意檔名不落盤、安全檔名正常排隊及持久化失敗不排隊；完整 CI 待確認。
+- CI run #63 已在 commit `4785810` 通過後端、前端 426 項 Vitest、43 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認 Weverse 上傳檔名與暫存清理修正。
+- YouTube Primary／Secondary 頻道不一致時，前端共用連線判斷現在依後端的 `channel_mismatch`／`can_be_active` 顯示未連線，並把狀態納入預覽授權指紋；YT Music fallback 不再把衝突中的創作者頻道當作可用授權。後端 HTTP 測試確認 Creator 播放清單、單片編輯、發布及批次預覽在進入 provider 前均回傳 409；前端單元與 Edge 導覽測試確認提示，完整 CI 待確認。
 
 尚待完成：
 

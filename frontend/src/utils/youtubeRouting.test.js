@@ -45,6 +45,28 @@ describe('YouTube routing helpers', () => {
     expect(youtubeIsConnected({ ...manual, routing_mode: 'auto_primary' })).toBe(true);
   });
 
+  it('treats a channel mismatch or a blocked slot as unusable', () => {
+    const youtube = {
+      routing_mode: 'auto_primary',
+      active_slot: 'primary',
+      slots: {
+        primary: { authenticated: true, can_be_active: false, channel_mismatch: true },
+        secondary: { authenticated: true, can_be_active: false, channel_mismatch: true },
+      },
+    };
+    expect(youtubeIsConnected(youtube)).toBe(false);
+    expect(getYoutubeAuthContext({ youtube }).authenticated).toBe(false);
+    expect(youtubeIsConnected({ ...youtube, slots: { primary: { authenticated: true, can_be_active: false } } })).toBe(
+      false
+    );
+    expect(
+      youtubePreferredUiSlot({
+        ...youtube,
+        slots: { primary: { authenticated: true, can_be_active: false }, secondary: { authenticated: true } },
+      })
+    ).toBe('secondary');
+  });
+
   it('provides safe routing explanations for known and unknown reasons', () => {
     expect(youtubeRoutingReasonLabel('preview_pinned_slot')).toBe('沿用 preview 已選定的 slot');
     expect(youtubeRoutingReasonLabel('new_reason')).toBe('new_reason');
@@ -75,8 +97,8 @@ describe('YouTube routing helpers', () => {
       activeSlot: 'primary',
       routingMode: 'auto_primary',
       slots: [
-        ['primary', true, true, 'UC123', 'fp123', 'active', '2026-09-12T12:00:00Z', '2026-09-12T11:00:00Z'],
-        ['secondary', null, null, null, null, null, null, null],
+        ['primary', true, true, null, null, 'UC123', 'fp123', 'active', '2026-09-12T12:00:00Z', '2026-09-12T11:00:00Z'],
+        ['secondary', null, null, null, null, null, null, null, null, null],
       ],
     });
 
@@ -87,5 +109,11 @@ describe('YouTube routing helpers', () => {
     expect(context.account).toBe('sub-1');
     expect(context.authenticated).toBe(true);
     expect(context.authorizationFingerprint).toBe(fingerprint);
+    expect(
+      getYoutubeAuthorizationFingerprint({
+        ...youtube,
+        slots: { primary: { ...youtube.slots.primary, channel_mismatch: true, can_be_active: false } },
+      })
+    ).not.toBe(fingerprint);
   });
 });

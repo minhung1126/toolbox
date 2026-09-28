@@ -7,7 +7,8 @@ from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 from backend.app.api import youtube as youtube_api
-from backend.app.core import dependencies
+from backend.app.core import dependencies, youtube_routing
+from backend.app.core.account_state_store import AccountStateStore
 from backend.app.core.config import settings
 from backend.app.core.credential_store import CredentialStore
 from backend.app.core.session_store import SessionStore
@@ -169,6 +170,50 @@ def test_creator_workflow_requires_sheets_but_publish_does_not(tmp_path: Path, m
     assert publish.json() == {"status": "provider-fake"}
     assert len(calls) == 1
     assert calls[0][1] is youtube_context
+
+
+def test_creator_operations_reject_mismatched_youtube_channels_before_provider_calls(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(type(settings), "is_google_email_allowed", lambda self, email: True)
+    subject = "mismatched-creator-channels"
+    credentials = CredentialStore(tmp_path / "credentials.json")
+    sessions = SessionStore(tmp_path / "sessions.json")
+    credentials.save_google_connection(_token_payload(LOGIN_SCOPES, sub=subject), owner_sub=subject)
+    credentials.save_sheets_connection(_token_payload(SHEETS_SCOPES, sub=subject), owner_sub=subject)
+    session_id = sessions.create(
+        {"credential_provider": "google_login", "user": {"sub": subject, "email": f"{subject}@example.test"}}
+    )
+
+    class MismatchedPublicChannels:
+        def get_youtube_public(self, owner_sub, *, slot):
+            assert owner_sub == subject
+            return {"channel_id": "channel-a" if slot == "primary" else "channel-b"}
+
+    monkeypatch.setattr(youtube_routing, "get_credential_store", lambda _default: MismatchedPublicChannels())
+    app = create_app(
+        session_store=sessions,
+        credential_store=credentials,
+        account_state_store=AccountStateStore(tmp_path / "account-state.json"),
+    )
+    client = TestClient(app)
+    client.cookies.set(settings.session_cookie_name, session_id)
+    requests = [
+        client.post("/api/v1/youtube/playlist-items", json={"playlist_id": "playlist-1"}),
+        client.post("/api/v1/youtube/video-metadata", json={"video_id": "video-1", "title": "Title"}),
+        client.post("/api/v1/youtube/publish-and-cleanup", json={"playlist_id": "playlist-1"}),
+        client.post(
+            "/api/v1/youtube/batch-preview",
+            json={
+                "worksheet_name": "Videos",
+                "title_column": "Title",
+                "description_column": "Description",
+                "team": "Team",
+                "assignments": [{"video_id": "video-1", "person": "Alice"}],
+            },
+        ),
+    ]
+    for response in requests:
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "youtube_channel_mismatch"
 
 
 def test_require_sheets_credentials_rejects_login_only_and_accepts_sheets(tmp_path: Path, monkeypatch):

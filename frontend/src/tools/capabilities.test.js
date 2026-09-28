@@ -25,6 +25,24 @@ describe('tool capability presentation', () => {
     ).toEqual([]);
   });
 
+  it('does not present a mismatched YouTube channel as a usable capability', () => {
+    const user = {
+      youtube: {
+        routing_mode: 'auto_primary',
+        slots: {
+          primary: { authenticated: true, can_be_active: false, channel_mismatch: true },
+          secondary: { authenticated: true, can_be_active: false, channel_mismatch: true },
+        },
+      },
+    };
+    expect(getMissingToolCapabilities(tool('creator-tools', ['youtube']), user)[0].settingsPath).toBe(
+      PATHS.youtubeConnections
+    );
+    expect(getMissingToolCapabilities(tool('youtube-music', ['youtube']), user)[0].settingsPath).toBe(
+      PATHS.ytmusicSettings
+    );
+  });
+
   it('honors YT Music channel fallback but keeps uploader authorization independent', () => {
     const user = { youtube: { slots: { primary: { authenticated: true } } } };
     expect(getMissingToolCapabilities(tool('youtube-music', ['youtube']), user)).toEqual([]);
