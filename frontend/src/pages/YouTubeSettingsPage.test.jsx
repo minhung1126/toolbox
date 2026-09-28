@@ -11,6 +11,7 @@ vi.mock('../services/api', () => ({
     updateYoutubeQuota: vi.fn(),
     updateYoutubePlaylist: vi.fn(),
     updateYoutubeRoutingMode: vi.fn(),
+    updateYoutubeSlotConfig: vi.fn(),
     getYoutubeAuthUrl: vi.fn(),
     activateYoutubeSlot: vi.fn(),
     disconnectYoutube: vi.fn(),
@@ -77,12 +78,31 @@ function renderPage(overrides = {}) {
 describe('YouTubeSettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    api.updateYoutubeQuota.mockResolvedValue({});
-    api.updateYoutubePlaylist.mockResolvedValue({});
-    api.updateYoutubeRoutingMode.mockResolvedValue({});
+    api.updateYoutubeQuota.mockImplementation(({ slot, quotaLimit, safetyBufferUnits }) =>
+      Promise.resolve({ status: 'success', slot, quota_limit: quotaLimit, safety_buffer_units: safetyBufferUnits })
+    );
+    api.updateYoutubePlaylist.mockImplementation(({ playlistId }) =>
+      Promise.resolve({ status: 'success', default_playlist_id: playlistId })
+    );
+    api.updateYoutubeRoutingMode.mockImplementation((mode) =>
+      Promise.resolve({ status: 'success', routing_mode: mode })
+    );
+    api.updateYoutubeSlotConfig.mockImplementation((slot, patch) =>
+      Promise.resolve({
+        status: 'success',
+        slot,
+        label: patch.label || (slot === 'primary' ? 'Primary' : 'Secondary'),
+        configured: true,
+        enabled: true,
+        quota_limit: 10000,
+        safety_buffer_units: 1000,
+      })
+    );
     api.getYoutubeAuthUrl.mockResolvedValue({ auth_url: 'https://accounts.google.com/oauth' });
-    api.activateYoutubeSlot.mockResolvedValue({});
-    api.disconnectYoutube.mockResolvedValue({});
+    api.activateYoutubeSlot.mockImplementation((slot) =>
+      Promise.resolve({ status: 'youtube_slot_activated', active_slot: slot })
+    );
+    api.disconnectYoutube.mockImplementation((slot) => Promise.resolve({ status: 'youtube_disconnected', slot }));
   });
 
   it('preserves backend channel_mismatch and an explicit can_be_active false', () => {
@@ -138,6 +158,37 @@ describe('YouTubeSettingsPage', () => {
         playlistId: 'PL_unsaved',
       })
     );
+  });
+
+  it('does not report a quota write as saved when the confirmation disagrees', async () => {
+    const refreshSettings = vi.fn().mockResolvedValue({});
+    api.updateYoutubeQuota.mockResolvedValueOnce({
+      status: 'success',
+      slot: 'primary',
+      quota_limit: 9000,
+      safety_buffer_units: 1000,
+    });
+    renderPage({ refreshSettings });
+
+    fireEvent.change(document.getElementById('primary-quota-limit'), { target: { value: '8000' } });
+    fireEvent.click(screen.getAllByRole('button', { name: '儲存 slot 設定' })[0]);
+
+    expect((await screen.findAllByText(/YouTube 設定操作結果無法確認/)).length).toBeGreaterThan(0);
+    expect(refreshSettings).not.toHaveBeenCalled();
+    expect(screen.queryByText('Primary 設定已儲存。')).not.toBeInTheDocument();
+  });
+
+  it('reports a confirmed quota write separately from a failed settings refresh', async () => {
+    const refreshSettings = vi.fn().mockRejectedValue(new Error('refresh unavailable'));
+    const refreshAuthUser = vi.fn().mockResolvedValue({});
+    renderPage({ refreshSettings, refreshAuthUser });
+
+    fireEvent.change(document.getElementById('primary-quota-limit'), { target: { value: '8000' } });
+    fireEvent.click(screen.getAllByRole('button', { name: '儲存 slot 設定' })[0]);
+
+    expect((await screen.findAllByText(/操作已完成，但畫面更新失敗/)).length).toBeGreaterThan(0);
+    expect(refreshAuthUser).toHaveBeenCalled();
+    expect(screen.queryByText(/儲存失敗：refresh unavailable/)).not.toBeInTheDocument();
   });
 
   it('confirms every disconnect and explains the active-slot impact', async () => {

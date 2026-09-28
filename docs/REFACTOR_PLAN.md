@@ -242,6 +242,8 @@
 - Playlist Sort 的部分成功回應現在保留計數與失敗項目 ID，但以固定核對訊息取代 provider 原始例外；YT Music Token 遠端驗證失敗也不再將例外文字送回 API。新增 YTMusic 及 YouTube Data API 混合成功／失敗測試與 Token 驗證 HTTP 測試，確認敏感字串不出現在回應；完整 CI 待確認。
 - CI run #67 已在 commit `36cf01a` 通過後端、前端 428 項 Vitest、44 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認部分成功及 Token 驗證的錯誤訊息保護。
 - Playlist Sort 套用回應現檢查總數、移動數、成功／失敗數與失敗項目是否一致；YTMusic 與 Data API 新增歌單時缺少影片 ID 的曲目會計入失敗，畫面列出需要核對的曲目 ID 和安全錯誤訊息。前端拒絕缺漏或互相矛盾的回應，避免誤報成功；本機對應測試通過，完整 CI 待確認。
+- CI run #68 已在 commit `0d5e9d3` 通過後端、前端 429 項 Vitest、44 項 Chromium E2E、正式依賴稽核門檻、完整 audit artifact 與 Docker／Compose，確認 Playlist Sort 套用結果契約。
+- YouTube 設定 API 現驗證播放清單、路由、配額、slot 設定與授權操作的回應狀態及對應請求值；OAuth 導向僅接受 Google 授權主機的 HTTPS 網址。回應不符、逾時與伺服器錯誤時提示操作結果無法確認，避免將不確定的設定寫入回報為成功；寫入已確認但後續畫面重新讀取失敗時，改提示重新整理而不誤報儲存失敗。完整 CI 待確認。
 
 尚待完成：
 
