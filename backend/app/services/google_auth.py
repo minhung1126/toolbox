@@ -6,6 +6,7 @@ from typing import Callable, Optional
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
+from oauthlib.oauth2.rfc6749.tokens import OAuth2Token
 
 from backend.app.core.config import get_settings, normalize_youtube_slot, settings
 from backend.app.core.credential_store import credential_store, get_credential_store
@@ -185,7 +186,20 @@ def exchange_code_for_tokens(
     """Exchange an authorization code with the matching flow and PKCE verifier."""
     slot_name = normalize_youtube_slot(slot) if purpose == "youtube" else "primary"
     flow = create_oauth_flow(code_verifier=code_verifier, purpose=purpose, slot=slot_name)
-    flow.fetch_token(code=code)
+    try:
+        flow.fetch_token(code=code)
+    except Warning as exc:
+        # Incremental Google consent can return previously granted scopes too.
+        # OAuthLib raises after validating the token but before saving it to the
+        # session. Recover only a scope expansion; never redeem the code twice
+        # or disable scope validation globally for concurrent OAuth flows.
+        token = getattr(exc, "token", None)
+        if not isinstance(token, OAuth2Token) or not token.scope_changed:
+            raise
+        if not set(_scopes_for(purpose)).issubset(token.scopes):
+            raise
+        flow.oauth2session.token = token
+        logger.info("Google OAuth accepted additional granted scopes (%s/%s)", purpose, slot_name)
     creds = flow.credentials
 
     token_dict = {
