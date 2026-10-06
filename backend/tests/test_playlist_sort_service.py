@@ -468,10 +468,9 @@ def test_apply_sort_to_playlist_resolves_synthetic_ids_via_data_api(monkeypatch)
     from types import SimpleNamespace
     from unittest.mock import MagicMock
 
-    from ytmusicapi.exceptions import YTMusicError
-
     import backend.app.services.playlist_sort_service as pss
     from backend.app.core.youtube_context import YouTubeRequestContext
+    from backend.app.services.playlist_write_outcome import PlaylistWriteNotStarted as YTMusicError
 
     context = YouTubeRequestContext(
         slot="primary",
@@ -714,7 +713,7 @@ async def test_preview_sort_quota_estimate_no_custom_token(monkeypatch):
         use_youtube_api=False,
     )
 
-    res = await preview_sort(inp, context=context, token_store=credential_store)
+    res = await preview_sort(inp, context=context, token_store=credential_store, client_factory=None)
     assert res["quota_estimate"]["engine"] == "youtube_data_api_v3"
     assert res["quota_estimate"]["units_per_move"] == 50
     assert res["quota_estimate"]["moved_count"] == 2
@@ -899,7 +898,7 @@ async def test_apply_sort_strict_defense_blocks_fallback_when_token_fails(monkey
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await apply_sort(inp, context=context, token_store=credential_store)
+        await apply_sort(inp, context=context, token_store=credential_store, client_factory=None)
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail["code"] == "TOKEN_FALLBACK_BLOCKED"
@@ -945,7 +944,7 @@ async def test_apply_sort_allows_fallback_when_explicitly_permitted(monkeypatch)
         allow_quota_fallback=True,
     )
 
-    res = await apply_sort(inp, context=context, token_store=credential_store)
+    res = await apply_sort(inp, context=context, token_store=credential_store, client_factory=None)
     assert res["status"] == "success"
     # verify allow_quota_fallback was passed as True
     _, kwargs = mock_apply.call_args

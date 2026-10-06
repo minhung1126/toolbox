@@ -142,6 +142,15 @@ describe('PlaylistSortPage', () => {
     vi.clearAllMocks();
   });
 
+  it('restores the saved selected playlist when the library loads', async () => {
+    api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: mockPlaylists });
+    renderWithRouter(<PlaylistSortPage />, {
+      initialState: { ytmusic_sort_config: { selectedPlaylistId: 'pl-2', presetMode: 'title-asc' } },
+    });
+    await screen.findByText('健身歌單 (5 首)');
+    expect(screen.getByRole('combobox', { name: '選擇播放清單' })).toHaveValue('pl-2');
+  });
+
   it('loads and displays user playlists', async () => {
     api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: mockPlaylists });
 
@@ -467,6 +476,34 @@ describe('PlaylistSortPage', () => {
       });
       expect(screen.getByText(/前往 YouTube Music 查看新歌單/)).toBeInTheDocument();
     });
+  });
+
+  it.each([
+    ['timeout', Object.assign(new Error('逾時'), { code: 'timeout' })],
+    ['unknown write', Object.assign(new Error('待核對'), { code: 'playlist_write_unknown', status: 409 })],
+  ])('requires reconciliation before another preview after %s', async (_name, error) => {
+    api.getPlaylistSortPlaylists.mockResolvedValueOnce({ playlists: mockPlaylists });
+    api.previewPlaylistSort.mockResolvedValue({
+      preview: mockPreview,
+      preview_token: 'token-abc',
+      quota_estimate: { moved_count: 2, units_per_move: 0, total_units: 0 },
+    });
+    api.applyPlaylistSort.mockRejectedValueOnce(error);
+    renderWithRouter(<PlaylistSortPage />);
+    await screen.findByText('我的最愛音樂 (3 首)');
+    fireEvent.click(screen.getByRole('button', { name: /模擬預覽/ }));
+    await screen.findByText('另存為新排序歌單（保留原歌單備份）');
+    fireEvent.click(screen.getByLabelText('另存為新排序歌單（保留原歌單備份）'));
+    fireEvent.click(screen.getByRole('button', { name: '建立新排序歌單' }));
+    fireEvent.click(await screen.findByRole('button', { name: '確認套用' }));
+    await screen.findByText('寫入結果待核對');
+    expect(screen.queryByRole('button', { name: '建立新排序歌單' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /模擬預覽/ }));
+    expect(api.previewPlaylistSort).toHaveBeenCalledTimes(1);
+    expect(api.applyPlaylistSort).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: '已核對播放清單' }));
+    fireEvent.click(screen.getByRole('button', { name: /模擬預覽/ }));
+    await waitFor(() => expect(api.previewPlaylistSort).toHaveBeenCalledTimes(2));
   });
 
   it('allows pinning and unpinning playlists to quickly find them', async () => {

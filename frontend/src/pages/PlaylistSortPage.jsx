@@ -1,3 +1,7 @@
+import PlaylistSelector from '../features/ytmusic/components/PlaylistSelector';
+import PlaylistSortPreview from '../features/ytmusic/components/PlaylistSortPreview';
+import PlaylistSortResult from '../features/ytmusic/components/PlaylistSortResult';
+import { usePlaylistSortState } from '../features/ytmusic/hooks/usePlaylistSortState';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import '../features/ytmusic/playlist-sort.css';
 import {
@@ -6,18 +10,13 @@ import {
   Check,
   CheckCircle2,
   Disc3,
-  ExternalLink,
   Globe,
   Key,
-  ListMusic,
   Loader2,
-  Pin,
   Plus,
   RefreshCw,
-  Search,
   Settings,
   Sparkles,
-  X,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useToast } from '../components/Toast';
@@ -75,6 +74,51 @@ export {
 
 export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
   const toast = useToast();
+  const { state, setters, dispatch: dispatchWorkflow } = usePlaylistSortState();
+  const {
+    showTokenDrawer,
+    strictFallbackPrompt,
+    quotaExceededRecovery,
+    playlists,
+    selectedPlaylistId,
+    loadingPlaylists,
+    playlistFilterQuery,
+    previewData,
+    previewToken,
+    previewing,
+    quotaEstimate,
+    cachedOriginalTracks,
+    isManuallyAdjusted,
+    draggedRuleIdx,
+    dragOverRuleIdx,
+    newPlaylistTitle,
+    showConfirm,
+    applying,
+    applyResult,
+    reconciliationMessage,
+  } = state;
+  const {
+    setShowTokenDrawer,
+    setStrictFallbackPrompt,
+    setQuotaExceededRecovery,
+    setPlaylists,
+    setSelectedPlaylistId,
+    setLoadingPlaylists,
+    setPlaylistFilterQuery,
+    setPreviewData,
+    setPreviewToken,
+    setPreviewing,
+    setQuotaEstimate,
+    setCachedOriginalTracks,
+    setIsManuallyAdjusted,
+    setDraggedRuleIdx,
+    setDragOverRuleIdx,
+    setNewPlaylistTitle,
+    setShowConfirm,
+    setApplying,
+    setApplyResult,
+    setReconciliationMessage,
+  } = setters;
 
   const ytmusicAuth = authUser?.authorizations?.ytmusic;
   const isYtmusicConnected = Boolean(ytmusicAuth?.connected);
@@ -85,15 +129,8 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
   const activeYoutubeConnected = Boolean(authUser?.youtube?.slots?.primary?.authenticated);
 
   // In-place token drawer & defense prompt states
-  const [showTokenDrawer, setShowTokenDrawer] = useState(false);
-  const [strictFallbackPrompt, setStrictFallbackPrompt] = useState(null);
-  const [quotaExceededRecovery, setQuotaExceededRecovery] = useState(null);
 
   // Playlist selection
-  const [playlists, setPlaylists] = useState([]);
-  const [selectedPlaylistId, setSelectedPlaylistId] = useState('');
-  const [loadingPlaylists, setLoadingPlaylists] = useState(true);
-  const [playlistFilterQuery, setPlaylistFilterQuery] = useState('');
 
   const filteredPlaylists = useMemo(() => {
     const q = playlistFilterQuery.trim().toLowerCase();
@@ -109,7 +146,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         setSelectedPlaylistId(filteredPlaylists[0].id);
       }
     }
-  }, [playlistFilterQuery, filteredPlaylists, selectedPlaylistId]);
+  }, [playlistFilterQuery, filteredPlaylists, selectedPlaylistId, setSelectedPlaylistId]);
 
   // Preferences (including locale/region defaults to Taiwan)
   const { value: preferences } = useAccountWorkState('ytmusic_preferences', {
@@ -153,7 +190,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     } finally {
       if (requestId === playlistRequestId.current) setLoadingPlaylists(false);
     }
-  }, [toast, activeLanguage, activeLocation]);
+  }, [setLoadingPlaylists, activeLanguage, activeLocation, setPlaylists, setSelectedPlaylistId, toast]);
 
   const ytmusicOAuth = useOAuthConnect({
     serviceName: 'ytmusic',
@@ -284,23 +321,11 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         restoredConfigRef.current = true;
       }
     }
-  }, [sortConfigReady, sortConfig, preferences?.defaultPreset, selectedPlaylistId]);
+  }, [sortConfigReady, sortConfig, preferences?.defaultPreset, selectedPlaylistId, setSelectedPlaylistId]);
 
   // Preview & Cached Simulation
-  const [previewData, setPreviewData] = useState(null);
-  const [previewToken, setPreviewToken] = useState('');
-  const [previewing, setPreviewing] = useState(false);
-  const [quotaEstimate, setQuotaEstimate] = useState(null);
-  const [cachedOriginalTracks, setCachedOriginalTracks] = useState(null);
-  const [isManuallyAdjusted, setIsManuallyAdjusted] = useState(false);
 
   // Drag state for sort rules
-  const [draggedRuleIdx, setDraggedRuleIdx] = useState(null);
-  const [dragOverRuleIdx, setDragOverRuleIdx] = useState(null);
-  const [newPlaylistTitle, setNewPlaylistTitle] = useState('');
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [applying, setApplying] = useState(false);
-  const [applyResult, setApplyResult] = useState(null);
 
   const activeSortKeys = useMemo(() => {
     if (presetMode === 'custom') return customKeys;
@@ -308,12 +333,36 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     return preset?.keys || [{ field: 'title', direction: 'asc' }];
   }, [presetMode, customKeys]);
 
+  const accountKey = authUser?.sub || authUser?.email || '';
+  const previousAccountKey = useRef(accountKey);
   useEffect(() => {
+    playlistRequestId.current += 1;
+    if (previousAccountKey.current !== accountKey) {
+      previousAccountKey.current = accountKey;
+      restoredConfigRef.current = false;
+      dispatchWorkflow({
+        type: 'patch',
+        patch: {
+          playlists: [],
+          selectedPlaylistId: '',
+          previewData: null,
+          previewToken: '',
+          cachedOriginalTracks: null,
+          quotaEstimate: null,
+          applyResult: null,
+          reconciliationMessage: '',
+          showConfirm: false,
+          strictFallbackPrompt: null,
+          applying: false,
+          previewing: false,
+        },
+      });
+    }
     fetchPlaylists();
     return () => {
       playlistRequestId.current += 1;
     };
-  }, [fetchPlaylists]);
+  }, [accountKey, dispatchWorkflow, fetchPlaylists]);
 
   // Reset preview when selected playlist changes
   useEffect(() => {
@@ -323,7 +372,15 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     setCachedOriginalTracks(null);
     setIsManuallyAdjusted(false);
     setApplyResult(null);
-  }, [selectedPlaylistId]);
+  }, [
+    selectedPlaylistId,
+    setApplyResult,
+    setCachedOriginalTracks,
+    setIsManuallyAdjusted,
+    setPreviewData,
+    setPreviewToken,
+    setQuotaEstimate,
+  ]);
 
   const selectedPlaylist = playlists.find((p) => p.id === selectedPlaylistId);
 
@@ -332,7 +389,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     if (selectedPlaylist?.title) {
       setNewPlaylistTitle(`[已排序] ${selectedPlaylist.title}`);
     }
-  }, [selectedPlaylist]);
+  }, [selectedPlaylist, setNewPlaylistTitle]);
 
   // Instant local simulation when cached tracks are present and sort rules change
   useEffect(() => {
@@ -342,7 +399,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     const simulatedPreview = buildPreviewFromSorted(cachedOriginalTracks, locallySorted);
     setPreviewData(simulatedPreview);
     setIsManuallyAdjusted(false);
-  }, [cachedOriginalTracks, activeSortKeys, activeCollationLocale]);
+  }, [cachedOriginalTracks, activeSortKeys, activeCollationLocale, setPreviewData, setIsManuallyAdjusted]);
 
   const {
     handleApplyClick,
@@ -353,6 +410,10 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
     handleTokenCleared,
     handleTokenSaved,
   } = usePlaylistSortWorkflow({
+    dispatchWorkflow,
+    accountKey: authUser?.sub || authUser?.email || '',
+    reconciliationMessage,
+    setReconciliationMessage,
     activeLanguage,
     activeLocation,
     activeSortKeys,
@@ -577,154 +638,23 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
       </section>
 
       {/* Step 1: Select Playlist */}
-      <section className="glass-panel card-padding">
-        <div className="playlist-sort-section-header">
-          <h3 className="playlist-sort-section-title">
-            <ListMusic size={18} /> 選擇播放清單
-          </h3>
-          {playlists.length > 0 && (
-            <span className="playlist-sort-muted-summary">
-              {playlistFilterQuery
-                ? `篩選符合 ${filteredPlaylists.length} / 共 ${playlists.length} 個`
-                : `共 ${playlists.length} 個播放清單`}
-            </span>
-          )}
-        </div>
-
-        {/* Playlist Name Filter Input */}
-        <div className="playlist-sort-filter">
-          <Search size={16} className="playlist-sort-filter-icon" aria-hidden="true" />
-          <input
-            type="text"
-            className={`form-input playlist-sort-filter-input${playlistFilterQuery ? ' playlist-sort-filter-input-clearable' : ''}`}
-            aria-label="依播放清單名稱或說明篩選"
-            placeholder="依播放清單名稱或說明快速篩選…"
-            value={playlistFilterQuery}
-            onChange={(e) => setPlaylistFilterQuery(e.target.value)}
-            disabled={loadingPlaylists || playlists.length === 0}
-          />
-          {playlistFilterQuery && (
-            <button
-              type="button"
-              className="playlist-sort-filter-clear"
-              onClick={() => setPlaylistFilterQuery('')}
-              title="清除篩選"
-              aria-label="清除篩選"
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-
-        {/* Pinned Playlists Quick Access Chips */}
-        {pinnedPlaylists.length > 0 && (
-          <div className="playlist-sort-pinned-list">
-            <span className="playlist-sort-pinned-label">
-              <Pin size={13} className="playlist-sort-pinned-icon" aria-hidden="true" /> 常用釘選：
-            </span>
-            {pinnedPlaylists.map((pl) => {
-              const isCurrent = pl.id === selectedPlaylistId;
-              return (
-                <div
-                  key={pl.id}
-                  className={`badge playlist-sort-pinned-chip${isCurrent ? ' playlist-sort-pinned-chip-active' : ''}`}
-                >
-                  <button
-                    type="button"
-                    className="playlist-sort-pinned-select"
-                    aria-label={`快速切換至「${pl.title}」`}
-                    onClick={() => {
-                      setSelectedPlaylistId(pl.id);
-                      persistConfig({ selectedPlaylistId: pl.id });
-                    }}
-                  >
-                    <span className="playlist-sort-pinned-title">{pl.title}</span>
-                    <span className="playlist-sort-pinned-count">({pl.item_count})</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="playlist-sort-pinned-remove"
-                    aria-label={`取消釘選「${pl.title}」`}
-                    onClick={() => togglePinPlaylist(pl.id)}
-                  >
-                    <X size={12} aria-hidden="true" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="playlist-sort-select-row">
-          <select
-            className="form-select playlist-sort-select"
-            aria-label="選擇播放清單"
-            value={selectedPlaylistId}
-            onChange={(e) => {
-              setSelectedPlaylistId(e.target.value);
-              persistConfig({ selectedPlaylistId: e.target.value });
-            }}
-            disabled={loadingPlaylists || filteredPlaylists.length === 0}
-          >
-            {loadingPlaylists ? (
-              <option value="">載入中…</option>
-            ) : filteredPlaylists.length === 0 ? (
-              <option value="">{playlists.length === 0 ? '找不到播放清單' : '無符合關鍵字的播放清單'}</option>
-            ) : (
-              <>
-                {pinnedFiltered.length > 0 && (
-                  <optgroup label="📌 常用釘選清單">
-                    {pinnedFiltered.map((pl) => (
-                      <option key={pl.id} value={pl.id}>
-                        📌 {pl.title} ({pl.item_count} 首)
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                <optgroup label={pinnedFiltered.length > 0 ? '全部播放清單' : '播放清單'}>
-                  {unpinnedFiltered.map((pl) => (
-                    <option key={pl.id} value={pl.id}>
-                      {pl.title} ({pl.item_count} 首)
-                    </option>
-                  ))}
-                </optgroup>
-              </>
-            )}
-          </select>
-          <button
-            type="button"
-            className={`btn playlist-sort-pin-button ${isSelectedPinned ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => togglePinPlaylist(selectedPlaylistId)}
-            disabled={!selectedPlaylistId || loadingPlaylists}
-            title={isSelectedPinned ? '取消釘選此播放清單' : '釘選目前播放清單至頂端常用'}
-            aria-label={isSelectedPinned ? '取消釘選此播放清單' : '釘選目前播放清單至頂端常用'}
-          >
-            <Pin size={14} className={isSelectedPinned ? 'playlist-sort-pin-icon-active' : undefined} />
-            {isSelectedPinned ? '已釘選' : '釘選'}
-          </button>
-          <Button
-            variant="secondary"
-            type="button"
-            className="btn btn-secondary"
-            aria-label="重新整理清單"
-            onClick={fetchPlaylists}
-            disabled={loadingPlaylists}
-            title="重新整理清單"
-          >
-            <RefreshCw size={14} className={loadingPlaylists ? 'spin' : ''} />
-          </Button>
-        </div>
-        {selectedPlaylist && (
-          <p className="playlist-sort-selected-description">
-            {selectedPlaylist.description || '無說明'} ·{' '}
-            {selectedPlaylist.privacy_status === 'private'
-              ? '私人'
-              : selectedPlaylist.privacy_status === 'unlisted'
-                ? '不公開'
-                : '公開'}
-          </p>
-        )}
-      </section>
+      <PlaylistSelector
+        playlists={playlists}
+        playlistFilterQuery={playlistFilterQuery}
+        filteredPlaylists={filteredPlaylists}
+        setPlaylistFilterQuery={setPlaylistFilterQuery}
+        loadingPlaylists={loadingPlaylists}
+        pinnedPlaylists={pinnedPlaylists}
+        selectedPlaylistId={selectedPlaylistId}
+        setSelectedPlaylistId={setSelectedPlaylistId}
+        persistConfig={persistConfig}
+        togglePinPlaylist={togglePinPlaylist}
+        pinnedFiltered={pinnedFiltered}
+        unpinnedFiltered={unpinnedFiltered}
+        isSelectedPinned={isSelectedPinned}
+        fetchPlaylists={fetchPlaylists}
+        selectedPlaylist={selectedPlaylist}
+      />
 
       {/* Step 2: Sort Rules */}
       <section className="glass-panel card-padding">
@@ -830,33 +760,15 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
 
       {/* Step 3: Side-by-Side Live Preview Results */}
       {previewData && (
-        <section className="glass-panel card-padding">
-          <div className="playlist-sort-section-header playlist-sort-preview-header">
-            <h3 className="playlist-sort-section-title">左右比對預覽結果</h3>
-            <div className="playlist-sort-preview-stats">
-              <span className="playlist-sort-preview-stat">
-                <StatusDot status="unchanged" /> 不變 {previewData.unchanged_count} 首
-              </span>
-              <span className="playlist-sort-preview-stat">
-                <StatusDot status="moved" /> 移動 {previewData.moved_count} 首
-              </span>
-              <span className="playlist-sort-muted-summary">共 {previewData.total} 首</span>
-            </div>
-          </div>
-
-          <div className="playlist-sort-preview-columns">
-            <PreviewTable title="目前原始順序" items={originalItems} sortKeys={activeSortKeys} />
-            <InteractivePreviewTable
-              title="即時排序結果"
-              items={sortedItems}
-              icon={ArrowUpDown}
-              sortKeys={activeSortKeys}
-              onReorder={handleReorderTracks}
-              isManuallyAdjusted={isManuallyAdjusted}
-              onResetOrder={handleResetToRuleOrder}
-            />
-          </div>
-        </section>
+        <PlaylistSortPreview
+          previewData={previewData}
+          originalItems={originalItems}
+          activeSortKeys={activeSortKeys}
+          sortedItems={sortedItems}
+          handleReorderTracks={handleReorderTracks}
+          isManuallyAdjusted={isManuallyAdjusted}
+          handleResetToRuleOrder={handleResetToRuleOrder}
+        />
       )}
 
       {/* Step 4: Apply Configuration */}
@@ -961,52 +873,18 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         </section>
       )}
 
-      {/* Apply Result */}
-      {applyResult && (
-        <section className="glass-panel card-padding">
-          <StatusMessage
-            tone={applyResult.failed > 0 ? 'warning' : 'success'}
-            title={applyResult.failed > 0 ? '排序完成（有部分失敗）' : '排序成功套用'}
-          >
-            <div>
-              <span>
-                {applyResult.mode === 'new_playlist' ? '成功加入' : '成功移動'} <strong>{applyResult.succeeded}</strong>{' '}
-                首，
-                {applyResult.failed > 0 && (
-                  <>
-                    失敗 <strong>{applyResult.failed}</strong> 首，
-                  </>
-                )}
-                消耗 <strong>{applyResult.quota_used?.toLocaleString() ?? 0}</strong> API 配額點數。
-              </span>
-              {applyResult.failed_items.length > 0 && (
-                <div className="playlist-sort-failed-items">
-                  <strong>需要核對的曲目</strong>
-                  <ul>
-                    {applyResult.failed_items.map((item, index) => (
-                      <li key={`${item.playlist_item_id || item.video_id}-${index}`}>
-                        {item.playlist_item_id || item.video_id}：{item.error}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {applyResult.new_playlist_url && (
-                <div className="playlist-sort-result-link-row">
-                  <a
-                    href={applyResult.new_playlist_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-secondary btn-sm playlist-sort-auth-action"
-                  >
-                    <ExternalLink size={14} /> 前往 YouTube Music 查看新歌單
-                  </a>
-                </div>
-              )}
-            </div>
-          </StatusMessage>
-        </section>
+      {reconciliationMessage && (
+        <StatusMessage
+          tone="warning"
+          title="寫入結果待核對"
+          action={<Button onClick={() => setReconciliationMessage('')}>已核對播放清單</Button>}
+        >
+          {reconciliationMessage}
+        </StatusMessage>
       )}
+
+      {/* Apply Result */}
+      {applyResult && <PlaylistSortResult applyResult={applyResult} />}
 
       {/* Confirm Dialog */}
       <ConfirmDialog

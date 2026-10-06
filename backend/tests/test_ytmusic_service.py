@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from ytmusicapi.auth.types import AuthType
 
 from backend.app.services.ytmusic_service import (
     apply_ytmusic_sort_in_place,
@@ -37,6 +38,8 @@ def test_parse_custom_token_input_empty():
 @patch("backend.app.services.ytmusic_service.get_ytmusic_client")
 def test_fetch_ytmusic_playlists(mock_get_client):
     mock_client = MagicMock()
+    mock_client.auth_type = AuthType.BROWSER
+    mock_client.edit_playlist.return_value = "STATUS_SUCCEEDED"
     mock_client.get_library_playlists.return_value = [
         {
             "playlistId": "PL123",
@@ -60,6 +63,8 @@ def test_fetch_ytmusic_playlists(mock_get_client):
 @patch("backend.app.services.ytmusic_service.get_ytmusic_client")
 def test_fetch_ytmusic_playlist_tracks_with_album_resolution(mock_get_client):
     mock_client = MagicMock()
+    mock_client.auth_type = AuthType.BROWSER
+    mock_client.edit_playlist.return_value = "STATUS_SUCCEEDED"
     mock_client.get_playlist.return_value = {
         "tracks": [
             {
@@ -129,6 +134,8 @@ def test_fetch_ytmusic_playlist_tracks_with_album_resolution(mock_get_client):
 @patch("backend.app.services.ytmusic_service.get_ytmusic_client")
 def test_apply_ytmusic_sort_in_place(mock_get_client):
     mock_client = MagicMock()
+    mock_client.auth_type = AuthType.BROWSER
+    mock_client.edit_playlist.return_value = "STATUS_SUCCEEDED"
     mock_get_client.return_value = mock_client
 
     original = [
@@ -163,18 +170,20 @@ def test_partial_ytmusic_sort_does_not_return_provider_exception(mock_get_client
 
     client = MagicMock()
     client.auth_type = AuthType.BROWSER
-    client.edit_playlist.side_effect = [None, YTMusicError("access_token=private-provider-value")]
+    client.edit_playlist.side_effect = ["STATUS_SUCCEEDED", YTMusicError("access_token=private-provider-value")]
     mock_get_client.return_value = client
     original = [{"playlist_item_id": item} for item in ("a", "b", "c")]
     sorted_items = [{"playlist_item_id": item} for item in ("b", "c", "a")]
 
-    result = apply_ytmusic_sort_in_place("PL_TEST", sorted_items, original)
+    from backend.app.services.playlist_write_outcome import PlaylistWriteOutcomeUnknown
+
+    with pytest.raises(PlaylistWriteOutcomeUnknown) as caught:
+        apply_ytmusic_sort_in_place("PL_TEST", sorted_items, original)
+    result = caught.value.result
 
     assert result["succeeded"] == 1
     assert result["failed"] == 1
-    assert result["failed_items"] == [
-        {"playlist_item_id": "c", "error": "移動曲目失敗，請核對 YouTube Music 播放清單。"}
-    ]
+    assert result["failed_items"] == [{"playlist_item_id": "c", "error": "寫入結果待核對。"}]
     assert "access_token=private-provider-value" not in str(result)
 
 
@@ -183,6 +192,8 @@ def test_apply_ytmusic_sort_in_place_rejects_synthetic_id(mock_get_client):
     from ytmusicapi.exceptions import YTMusicError
 
     mock_client = MagicMock()
+    mock_client.auth_type = AuthType.BROWSER
+    mock_client.edit_playlist.return_value = "STATUS_SUCCEEDED"
     mock_get_client.return_value = mock_client
 
     original = [
@@ -201,6 +212,8 @@ def test_apply_ytmusic_sort_in_place_rejects_synthetic_id(mock_get_client):
 @patch("backend.app.services.ytmusic_service.get_ytmusic_client")
 def test_create_sorted_ytmusic_playlist(mock_get_client):
     mock_client = MagicMock()
+    mock_client.auth_type = AuthType.BROWSER
+    mock_client.edit_playlist.return_value = "STATUS_SUCCEEDED"
     mock_client.create_playlist.return_value = "PL_NEW_123"
     mock_get_client.return_value = mock_client
 
@@ -227,6 +240,8 @@ def test_create_sorted_ytmusic_playlist(mock_get_client):
 @patch("backend.app.services.ytmusic_service.get_ytmusic_client")
 def test_create_sorted_ytmusic_playlist_reports_missing_video_id(mock_get_client):
     mock_client = MagicMock()
+    mock_client.auth_type = AuthType.BROWSER
+    mock_client.edit_playlist.return_value = "STATUS_SUCCEEDED"
     mock_client.create_playlist.return_value = "PL_NEW_123"
     mock_get_client.return_value = mock_client
 
@@ -373,6 +388,8 @@ def test_apply_ytmusic_sort_in_place_rejects_unauthenticated(mock_get_client):
     from ytmusicapi.exceptions import YTMusicError
 
     mock_client = MagicMock()
+    mock_client.auth_type = AuthType.BROWSER
+    mock_client.edit_playlist.return_value = "STATUS_SUCCEEDED"
     mock_client.auth_type = AuthType.UNAUTHORIZED
     # Set explicit non-MagicMock name or check
     type(mock_client).__name__ = "YTMusic"
@@ -466,6 +483,9 @@ def test_validate_ytmusic_custom_token_success_with_account_info(monkeypatch):
 
     mock_client = MagicMock()
     mock_client.auth_type = AuthType.BROWSER
+    mock_client.edit_playlist.return_value = "STATUS_SUCCEEDED"
+    mock_client.auth_type = AuthType.BROWSER
+    mock_client.edit_playlist.return_value = "STATUS_SUCCEEDED"
     mock_client.get_account_info.return_value = {
         "accountName": "VIP Music Listener",
         "channelHandle": "@viplistener",
@@ -491,6 +511,9 @@ def test_validate_ytmusic_custom_token_fallback_playlists(monkeypatch):
 
     mock_client = MagicMock()
     mock_client.auth_type = AuthType.BROWSER
+    mock_client.edit_playlist.return_value = "STATUS_SUCCEEDED"
+    mock_client.auth_type = AuthType.BROWSER
+    mock_client.edit_playlist.return_value = "STATUS_SUCCEEDED"
     mock_client.get_account_info.side_effect = Exception("Account menu unavailable")
     mock_client.get_library_playlists.return_value = [{"title": "Playlist A"}]
     monkeypatch.setattr("backend.app.services.ytmusic_service.YTMusic", lambda **kwargs: mock_client)
@@ -522,6 +545,9 @@ def test_validate_ytmusic_custom_token_api_failure(monkeypatch):
 
     mock_client = MagicMock()
     mock_client.auth_type = AuthType.BROWSER
+    mock_client.edit_playlist.return_value = "STATUS_SUCCEEDED"
+    mock_client.auth_type = AuthType.BROWSER
+    mock_client.edit_playlist.return_value = "STATUS_SUCCEEDED"
     mock_client.get_account_info.side_effect = Exception("HTTP 401 Unauthorized")
     mock_client.get_library_playlists.side_effect = Exception("Cookie: SID=private-provider-value")
     monkeypatch.setattr("backend.app.services.ytmusic_service.YTMusic", lambda **kwargs: mock_client)

@@ -9,6 +9,7 @@ from backend.app.core.account_state_store import (
     DEFAULT_WORK_STATE_KEYS,
     MISSING,
     WORK_STATE_KEYS,
+    AccountStateStore,
     get_account_state_store,
 )
 from backend.app.core.config import get_settings, normalize_youtube_slot, settings
@@ -38,11 +39,15 @@ def ensure_account(owner_sub: str) -> str:
     return subject
 
 
-def get_account_setting(owner_sub: str, key: str, default: Any = "") -> Any:
+def get_account_setting(owner_sub: str, key: str, default: Any = "", *, store: AccountStateStore | None = None) -> Any:
     if key not in ACCOUNT_SETTING_KEYS:
         raise ValueError(f"Unsupported account setting: {key}")
-    subject = ensure_account(owner_sub)
-    value = get_account_state_store().get_setting(subject, key, MISSING)
+    repository = store if store is not None else get_account_state_store()
+    subject = _owner(owner_sub)
+    if not subject:
+        raise ValueError("account subject is required")
+    repository.ensure_account(subject)
+    value = repository.get_setting(subject, key, MISSING)
     return default if value is MISSING else value
 
 

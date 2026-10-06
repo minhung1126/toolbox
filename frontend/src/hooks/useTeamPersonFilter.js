@@ -15,7 +15,7 @@ export default function useTeamPersonFilter({
   worksheetName = '',
   enabled = true,
   initialTeam = '',
-  initialSelectedPeople = [],
+  initialSelectedPeople = /** @type {string[]} */ ([]),
   defaultTeam = 'none',
   refreshKey = 0,
   apiClient = sheetsFilterApi,
@@ -30,9 +30,9 @@ export default function useTeamPersonFilter({
   const pendingPeopleRef = useRef(null);
   const defaultAllPeopleRef = useRef(false);
 
-  const [teams, setTeams] = useState([]);
+  const [teams, setTeams] = useState(/** @type {string[]} */ ([]));
   const [selectedTeam, setSelectedTeamState] = useState(initialTeam || '');
-  const [people, setPeople] = useState([]);
+  const [people, setPeople] = useState(/** @type {string[]} */ ([]));
   const [selectedPeople, setSelectedPeopleState] = useState(asList(initialSelectedPeople));
   const [loadingTeams, setLoadingTeams] = useState(false);
   const [loadingPeople, setLoadingPeople] = useState(false);
@@ -72,7 +72,7 @@ export default function useTeamPersonFilter({
   }, []);
 
   const resetSelection = useCallback(
-    ({ team = '', selectedPeople: nextPeople = [] } = {}) => {
+    ({ team = '', selectedPeople: nextPeople = /** @type {string[]} */ ([]) } = {}) => {
       const normalizedPeople = asList(nextPeople);
       initialSelectionRef.current = { team: team || '', people: normalizedPeople };
       selectTeam(team, { preferredPeople: normalizedPeople });

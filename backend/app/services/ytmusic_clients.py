@@ -2,11 +2,22 @@
 
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-YtmusicClientFactory = Callable[..., Any]
+from backend.app.services.ytmusic_writer import YtmusicWriteProvider
+
+
+class YtmusicProvider(YtmusicWriteProvider, Protocol):
+    def get_library_playlists(self, *, limit: int | None = None) -> list[dict[str, Any]]: ...
+    def get_playlist(self, playlistId: str, *, limit: int | None = None) -> dict[str, Any]: ...
+    def get_album(self, browseId: str) -> dict[str, Any]: ...
+    def get_song(self, videoId: str) -> dict[str, Any]: ...
+    def get_account_info(self) -> dict[str, Any]: ...
+
+
+YtmusicClientFactory = Callable[..., YtmusicProvider]
 _factory: ContextVar[YtmusicClientFactory | None] = ContextVar("ytmusic_client_factory", default=None)
 
 

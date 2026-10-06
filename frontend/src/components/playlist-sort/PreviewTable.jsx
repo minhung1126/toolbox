@@ -14,7 +14,13 @@ export function StatusDot({ status }) {
   );
 }
 
-export default function PreviewTable({ title, items, icon: Icon, extraHeader, sortKeys = [] }) {
+export default function PreviewTable({
+  title,
+  items,
+  icon: Icon,
+  extraHeader,
+  sortKeys = /** @type {import('../../features/ytmusic/model/types').PlaylistSortKey[]} */ ([]),
+}) {
   return (
     <div className="playlist-preview-column">
       <div className="playlist-preview-header">

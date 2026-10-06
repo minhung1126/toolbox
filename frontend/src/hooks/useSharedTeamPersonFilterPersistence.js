@@ -13,7 +13,7 @@ function emptyStatus() {
 
 export default function useSharedTeamPersonFilterPersistence({
   team = '',
-  selectedPeople = [],
+  selectedPeople = /** @type {string[]} */ ([]),
   ready = false,
   onError,
 }) {

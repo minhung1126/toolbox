@@ -24,7 +24,9 @@ from backend.app.services.playlist_sort_service import (
     fetch_user_playlists,
     sort_items,
 )
+from backend.app.services.playlist_write_outcome import PlaylistWriteOutcomeUnknown
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
+from backend.app.services.ytmusic_clients import YtmusicClientFactory
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,10 @@ def get_playlist_credential_store(request: Request) -> CredentialStore:
     """Resolve the credential repository owned by this app instance."""
     configured = getattr(request.app.state, "credential_store", None)
     return configured if configured is not None else credential_store
+
+
+def get_playlist_client_factory(request: Request) -> YtmusicClientFactory | None:
+    return getattr(request.app.state, "ytmusic_client_factory", None)
 
 
 def _quota_http_exception(exc: YouTubeQuotaUnavailable) -> HTTPException:
@@ -80,12 +86,18 @@ class SortApplyInput(BaseModel):
 async def get_playlists(
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
     token_store: CredentialStore = Depends(get_playlist_credential_store),
+    client_factory: YtmusicClientFactory | None = Depends(get_playlist_client_factory),
     language: Optional[str] = None,
     location: Optional[str] = None,
 ):
     try:
         playlists = await run_in_threadpool(
-            fetch_user_playlists, context, language=language, location=location, token_store=token_store
+            fetch_user_playlists,
+            context,
+            language=language,
+            location=location,
+            token_store=token_store,
+            client_factory=client_factory,
         )
         return {"playlists": playlists}
     except YouTubeQuotaUnavailable as exc:
@@ -102,6 +114,7 @@ async def preview_sort(
     input_data: SortPreviewInput,
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
     token_store: CredentialStore = Depends(get_playlist_credential_store),
+    client_factory: YtmusicClientFactory | None = Depends(get_playlist_client_factory),
 ):
     try:
         # Also run yt-dlp fallback when sorting by album so that singles and videos (items
@@ -119,6 +132,7 @@ async def preview_sort(
             language=input_data.language,
             location=input_data.location,
             token_store=token_store,
+            client_factory=client_factory,
         )
 
         sort_keys_dict = [{"field": k.field, "direction": k.direction} for k in input_data.sort_keys]
@@ -181,6 +195,7 @@ async def apply_sort(
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
     rate_limit=Depends(enforce_workflow_rate_limit),
     token_store: CredentialStore = Depends(get_playlist_credential_store),
+    client_factory: YtmusicClientFactory | None = Depends(get_playlist_client_factory),
 ):
     try:
         has_full_sorted_ids = bool(input_data.sorted_item_ids)
@@ -199,6 +214,7 @@ async def apply_sort(
             language=input_data.language,
             location=input_data.location,
             token_store=token_store,
+            client_factory=client_factory,
         )
         snapshot = playlist_snapshot_from_preview(original_items)
 
@@ -243,8 +259,16 @@ async def apply_sort(
             location=input_data.location,
             allow_quota_fallback=effective_fallback,
             token_store=token_store,
+            client_factory=client_factory,
         )
         return result
+    except PlaylistWriteOutcomeUnknown as exc:
+        raise http_error(
+            409,
+            "playlist_write_unknown",
+            str(exc) + (f"已確認成功 {exc.result['succeeded']} 首。" if exc.result.get("succeeded") else ""),
+            retryable=False,
+        ) from exc
     except YouTubeQuotaUnavailable as exc:
         raise _quota_http_exception(exc) from exc
     except HTTPException:

@@ -1,38 +1,48 @@
 from __future__ import annotations
 
 import concurrent.futures
-import json
 import logging
 import re
-import unicodedata
 from collections import Counter
 from functools import lru_cache
 from typing import Any
-from unittest.mock import MagicMock
 
 try:
     import yt_dlp
 except ImportError:
     yt_dlp = None
 from ytmusicapi import YTMusic
-from ytmusicapi.auth.browser import initialize_headers
 from ytmusicapi.auth.types import AuthType
 from ytmusicapi.constants import SUPPORTED_LANGUAGES, SUPPORTED_LOCATIONS
-from ytmusicapi.exceptions import YTMusicError
-from ytmusicapi.helpers import get_authorization
 
 from backend.app.core.credential_store import CredentialStore, credential_store, get_credential_store
 from backend.app.core.youtube_context import YouTubeRequestContext
-from backend.app.services.ytmusic_clients import get_ytmusic_client_factory
+from backend.app.services.playlist_write_outcome import PlaylistWriteNotStarted
+from backend.app.services.ytmusic_clients import YtmusicClientFactory, get_ytmusic_client_factory
+from backend.app.services.ytmusic_metadata import (
+    get_first_artist as get_first_artist,
+)
+from backend.app.services.ytmusic_metadata import (
+    is_generic_artist as is_generic_artist,
+)
+from backend.app.services.ytmusic_metadata import (
+    normalize_artist_name as normalize_artist_name,
+)
+from backend.app.services.ytmusic_metadata import (
+    split_artists as split_artists,
+)
+from backend.app.services.ytmusic_tokens import (
+    YtmusicTokenInputError as YtmusicTokenInputError,
+)
+from backend.app.services.ytmusic_tokens import (
+    parse_custom_token_input as parse_custom_token_input,
+)
+from backend.app.services.ytmusic_writer import YtmusicPlaylistWriter
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_YTMUSIC_LANGUAGE = "zh_TW"
 DEFAULT_YTMUSIC_LOCATION = "TW"
-
-
-class YtmusicTokenInputError(ValueError):
-    """A local token-input error whose message is safe to show to the user."""
 
 
 LOCALE_PRESETS: dict[str, dict[str, str]] = {
@@ -100,286 +110,6 @@ def resolve_ytmusic_locale(
         resolved_loc = DEFAULT_YTMUSIC_LOCATION
 
     return resolved_lang, resolved_loc
-
-
-def _clean_cmd_escapes(s: str) -> str:
-    """Unescape Windows cmd.exe escape sequences in cURL commands."""
-    if "^" not in s:
-        return s
-    s = s.replace("^%^", "%")
-    return re.sub(r"\^([&\"^%()\\=<>|])", r"\1", s)
-
-
-def _extract_headers_from_curl(curl_cmd: str) -> dict[str, str]:
-    """Extract headers and cookies from a cURL command string (bash, cmd, or PowerShell)."""
-    cleaned = _clean_cmd_escapes(curl_cmd)
-    headers: dict[str, str] = {}
-
-    # 1. Extract -H / --header parameters
-    h_pattern = r"""(?:-H|--header)\s+(?:'([^']*)'|"([^"]*)"|([^\s'"]+:[^\s'"]+))"""
-    for m in re.findall(h_pattern, cleaned):
-        hdr = m[0] or m[1] or m[2]
-        if ":" in hdr:
-            k, v = hdr.split(":", 1)
-            headers[k.strip().lower()] = v.strip()
-
-    # 2. Extract -b / --cookie parameters (used by Windows cmd cURL export)
-    b_pattern = r"""(?:-b|--cookie)\s+(?:'([^']*)'|"([^"]*)")"""
-    for m in re.findall(b_pattern, cleaned):
-        cookie_val = m[0] or m[1]
-        if cookie_val:
-            headers["cookie"] = cookie_val.strip()
-
-    return headers
-
-
-def _extract_headers_from_fetch(fetch_cmd: str) -> dict[str, str]:
-    """Extract headers dictionary from a JavaScript fetch() command string (Copy as fetch)."""
-    m = re.search(r"""(?:["']?headers["']?)\s*:\s*\{([^}]+)\}""", fetch_cmd, re.DOTALL | re.IGNORECASE)
-    if not m:
-        return {}
-    headers_block = m.group(1).strip()
-    headers: dict[str, str] = {}
-
-    try:
-        cleaned = "{" + headers_block + "}"
-        cleaned = re.sub(r",(\s*\})", r"\1", cleaned)
-        parsed = json.loads(cleaned)
-        if isinstance(parsed, dict):
-            return {str(k).lower(): str(v) for k, v in parsed.items()}
-    except Exception:
-        pass
-
-    pattern = r"""(?:["']?([a-zA-Z0-9_-]+)["']?)\s*:\s*["']([^"']*)["']"""
-    for k, v in re.findall(pattern, headers_block):
-        headers[k.lower()] = v.strip()
-
-    return headers
-
-
-def parse_custom_token_input(
-    token_raw: str,
-    language: str = DEFAULT_YTMUSIC_LANGUAGE,
-    location: str = DEFAULT_YTMUSIC_LOCATION,
-) -> dict[str, Any]:
-    """Parse raw custom token input into headers accepted by YTMusic().
-
-    Supports:
-    1. JSON headers dict (e.g. {"Cookie": "...", "User-Agent": "..."})
-    2. JavaScript fetch() command (copied from Chrome/Firefox/Edge network tab via 'Copy as fetch')
-    3. cURL command (copied from Chrome/Firefox/Edge network tab via 'Copy as cURL')
-    4. Raw request headers copied from DevTools Headers panel
-    5. Plain cookie string (e.g. "SID=...; SAPISID=...")
-    """
-    raw = str(token_raw or "").strip()
-    if not raw:
-        raise YtmusicTokenInputError("Token 內容不可為空。")
-
-    user_headers: dict[str, str] = {}
-
-    # 1. If already a valid JSON dictionary
-    if raw.startswith("{") and raw.endswith("}"):
-        try:
-            parsed = json.loads(raw)
-            if isinstance(parsed, dict):
-                user_headers = {k.lower(): str(v) for k, v in parsed.items()}
-        except Exception as exc:
-            logger.debug("JSON parse attempt for custom token failed: %s", type(exc).__name__)
-
-    # 2. If it is a JavaScript fetch command (e.g. copied via DevTools 'Copy as fetch')
-    if not user_headers and "fetch(" in raw.lower() and "headers" in raw.lower():
-        user_headers = _extract_headers_from_fetch(raw)
-
-    # 3. If it is a cURL command (e.g. starts with or contains 'curl ')
-    if (
-        not user_headers
-        and "curl" in raw.lower()
-        and ("-h" in raw.lower() or "--header" in raw.lower() or "-b" in raw.lower() or "--cookie" in raw.lower())
-    ):
-        user_headers = _extract_headers_from_curl(raw)
-
-    # 3. Build headers lines or plain cookie string
-    if not user_headers:
-        lines = [line.strip() for line in raw.splitlines() if line.strip()]
-        for line in lines:
-            if line.startswith(":"):
-                continue
-            if ":" in line:
-                k, v = line.split(":", 1)
-                user_headers[k.strip().lower()] = v.strip()
-
-        if "cookie" not in user_headers:
-            if "sid=" in raw.lower() or "sapisid=" in raw.lower() or ("=" in raw and ";" in raw):
-                user_headers["cookie"] = raw
-
-    if "cookie" not in user_headers or not user_headers["cookie"].strip():
-        if "fetch(" in raw.lower() or "credentials" in raw.lower():
-            raise YtmusicTokenInputError(
-                "您貼上的 fetch 代碼中缺少 Cookie！"
-                "這是因為 Chrome/Edge 瀏覽器的「Copy as fetch」是給網頁前端執行的，根據瀏覽器安全規範會刻意移除 Cookie 標頭（改用 credentials: 'include'），導致後端伺服器缺少登入憑證。\n\n"
-                "【請改用以下方式（推薦一鍵完成）】：\n"
-                "👉 在該請求按右鍵 ➔ Copy (複製) ➔ 選擇【Copy as cURL (bash)】或【Copy as cURL (cmd)】（最推薦，100% 完整附帶 Cookie）\n"
-                "👉 或選擇【Copy as Node.js fetch】（若瀏覽器選單有此選項）\n"
-                "👉 或在 Headers 標籤頁下方直接複製「Cookie:」欄位值"
-            )
-        raise YtmusicTokenInputError(
-            "無法在輸入內容中偵測到有效的 Cookie (例如 SID=... 或 Cookie: ...)。請確認複製內容。"
-        )
-
-    cookie = user_headers["cookie"].strip()
-
-    # Normalize cookie to ensure SAPISID and __Secure-3PAPISID exist
-    sapisid_match = re.search(r"(?:^|;\s*)(?:__Secure-3PAPISID|SAPISID|__Secure-1PAPISID)=([^;]+)", cookie)
-    if sapisid_match:
-        sapisid_val = sapisid_match.group(1).strip()
-        if "__Secure-3PAPISID" not in cookie:
-            cookie = f"{cookie}; __Secure-3PAPISID={sapisid_val}"
-        if "SAPISID" not in cookie:
-            cookie = f"{cookie}; SAPISID={sapisid_val}"
-    else:
-        # Fallback for test tokens or unusual cookies missing SAPISID
-        if "__Secure-3PAPISID" not in cookie:
-            cookie = f"{cookie}; __Secure-3PAPISID=dummy_sapisid"
-        sapisid_val = "dummy_sapisid"
-
-    user_headers["cookie"] = cookie
-
-    if "origin" not in user_headers or not user_headers["origin"]:
-        user_headers["origin"] = "https://music.youtube.com"
-    if "x-origin" not in user_headers or not user_headers["x-origin"]:
-        user_headers["x-origin"] = "https://music.youtube.com"
-    if "x-goog-authuser" not in user_headers or not user_headers["x-goog-authuser"]:
-        user_headers["x-goog-authuser"] = "0"
-
-    # Always ensure a valid authorization header containing SAPISIDHASH is present
-    # ytmusicapi requires 'authorization' to contain 'SAPISIDHASH' to recognize AuthType.BROWSER
-    auth_header = user_headers.get("authorization", "")
-    if not auth_header or "SAPISIDHASH" not in auth_header:
-        origin_val = user_headers.get("origin", "https://music.youtube.com")
-        user_headers["authorization"] = get_authorization(f"{sapisid_val} {origin_val}")
-
-    accept_lang_map = {
-        "zh_TW": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-        "zh_CN": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-        "ja": "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
-        "ko": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-        "en": "en-US,en;q=0.9",
-    }
-    resolved_lang = language or DEFAULT_YTMUSIC_LANGUAGE
-    user_headers["accept-language"] = accept_lang_map.get(
-        resolved_lang, f"{resolved_lang.replace('_', '-')},{resolved_lang[:2]};q=0.9,en;q=0.8"
-    )
-
-    final_headers = dict(initialize_headers())
-    final_headers.update(user_headers)
-    return final_headers
-
-
-def normalize_artist_name(name: str | None) -> str:
-    """Normalize artist name by removing YouTube auto-generated Topic channel suffixes.
-
-    YouTube generates "- Topic" (or localized variants like "- 主題", "(Topic)")
-    channels for official audio tracks. Stripping this suffix ensures that
-    tracks uploaded to the main artist channel and tracks released via Topic
-    channels group under the same artist for sorting and display.
-
-    Examples:
-        'QWER - Topic' -> 'QWER'
-        'QWER - 主題' -> 'QWER'
-        'QWER (Topic)' -> 'QWER'
-        'QWER（主題）' -> 'QWER'
-    """
-    if not name:
-        return ""
-    raw = str(name).strip()
-    if not raw:
-        return ""
-
-    parts = [p.strip() for p in raw.split(",")]
-    normalized_parts: list[str] = []
-    for p in parts:
-        cleaned = re.sub(r"\s*[-–—－]\s*(?:topic|主題|主题)\s*$", "", p, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*[\(（](?:topic|主題|主题)[\)）]\s*$", "", cleaned, flags=re.IGNORECASE)
-        cleaned = cleaned.strip()
-        normalized_parts.append(cleaned if cleaned else p)
-
-    result = ", ".join(normalized_parts)
-    return result if result.strip() else raw
-
-
-GENERIC_ARTIST_NAMES = frozenset(
-    {
-        "various artists",
-        "various",
-        "va",
-        "群星",
-        "合輯",
-        "合辑",
-        "原聲帶",
-        "原声带",
-        "soundtrack",
-        "ost",
-    }
-)
-
-
-def is_generic_artist(name: str | None) -> bool:
-    """Check if an artist name represents generic/compilation artists (e.g. Various Artists, 群星)."""
-    if not name:
-        return False
-    norm = unicodedata.normalize("NFKC", str(name)).strip().casefold()
-    return norm in GENERIC_ARTIST_NAMES
-
-
-def split_artists(name: str | None) -> list[str]:
-    """Split an artist string or collaboration into individual artist names.
-
-    Handles:
-    - Comma / Chinese ideographic comma: 'Artist A, Artist B', 'Artist A、Artist B'
-    - Ampersand: 'Artist A & Artist B'
-    - Feat keywords: 'Artist A feat. Artist B', 'Artist A ft. Artist B', 'Artist A featuring Artist B', 'Artist A with Artist B'
-    - Parenthesized feat: 'Artist A (feat. Artist B)', 'Artist A [ft. Artist B]'
-    - Slashes and cross marks: 'Artist A / Artist B', 'Artist A x Artist B', 'Artist A × Artist B'
-    - Auto-generated YouTube Topic suffixes are cleanly stripped.
-    """
-    if not name:
-        return []
-    raw = str(name).strip()
-    if not raw:
-        return []
-
-    cleaned = normalize_artist_name(raw)
-
-    feat_paren_match = re.search(
-        r"[\(\[\（](?:feat\.?|ft\.?|featuring|with)\s+([^\)\]\）]+)[\)\]\）]",
-        cleaned,
-        flags=re.IGNORECASE,
-    )
-    extra_artists: list[str] = []
-    if feat_paren_match:
-        feat_str = feat_paren_match.group(1).strip()
-        cleaned = (cleaned[: feat_paren_match.start()] + cleaned[feat_paren_match.end() :]).strip()
-        extra_artists = [p.strip() for p in re.split(r",|、|&|/|;", feat_str) if p.strip()]
-
-    pattern = r"\s*(?:,\s*|、|;\s*|\s+(?:feat\.?|ft\.?|featuring|with)\s+|\s+/\s+|\s+&\s+|\s+[xX×]\s+)\s*"
-    parts = [p.strip() for p in re.split(pattern, cleaned, flags=re.IGNORECASE) if p.strip()]
-
-    all_parts = parts + extra_artists
-    seen: set[str] = set()
-    result: list[str] = []
-    for p in all_parts:
-        norm_p = unicodedata.normalize("NFKC", p).strip()
-        if norm_p and norm_p.casefold() not in seen:
-            seen.add(norm_p.casefold())
-            result.append(norm_p)
-
-    return result if result else [cleaned]
-
-
-def get_first_artist(name: str | None) -> str:
-    """Extract the primary (first) artist from an artist string."""
-    artists = split_artists(name)
-    return artists[0] if artists else (normalize_artist_name(name) if name else "")
 
 
 @lru_cache(maxsize=500)
@@ -550,6 +280,7 @@ def get_ytmusic_client(
     language: str | None = None,
     location: str | None = None,
     token_store: CredentialStore | None = None,
+    client_factory: YtmusicClientFactory | None = None,
 ) -> YTMusic:
     """Instantiate a configured YTMusic client with localized language and location.
 
@@ -570,7 +301,9 @@ def get_ytmusic_client(
     if token_to_use:
         try:
             parsed_auth = parse_custom_token_input(token_to_use, language=lang, location=loc)
-            return get_ytmusic_client_factory(YTMusic)(auth=parsed_auth, language=lang, location=loc)
+            return (client_factory or get_ytmusic_client_factory(YTMusic))(
+                auth=parsed_auth, language=lang, location=loc
+            )
         except Exception as e:
             logger.error("Failed to initialize YTMusic with custom token: %s", type(e).__name__)
             if not context or not context.credentials:
@@ -578,7 +311,7 @@ def get_ytmusic_client(
 
     # 2. Unauthenticated YTMusic client
     # Defaults to localized language (zh_TW) and location (TW)
-    return get_ytmusic_client_factory(YTMusic)(language=lang, location=loc)
+    return (client_factory or get_ytmusic_client_factory(YTMusic))(language=lang, location=loc)
 
 
 def validate_ytmusic_custom_token(
@@ -603,7 +336,7 @@ def validate_ytmusic_custom_token(
 
     client = get_ytmusic_client_factory(YTMusic)(auth=parsed_auth, language=resolved_lang, location=resolved_loc)
     auth_type = getattr(client, "auth_type", None)
-    if auth_type != AuthType.BROWSER and not isinstance(auth_type, (MagicMock, type(None))):
+    if auth_type != AuthType.BROWSER:
         raise YtmusicTokenInputError("Token 缺少必要的瀏覽器 Cookie (SID, HSID, SSID, SAPISID) 認證資訊。")
 
     account_info: dict[str, Any] = {}
@@ -643,6 +376,7 @@ def fetch_ytmusic_playlists(
     language: str | None = None,
     location: str | None = None,
     token_store: CredentialStore | None = None,
+    client_factory: YtmusicClientFactory | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch user's YouTube Music playlists using YTMusic API (0 API credit)."""
     client = get_ytmusic_client(
@@ -651,6 +385,7 @@ def fetch_ytmusic_playlists(
         language=language,
         location=location,
         token_store=token_store,
+        client_factory=client_factory,
     )
     try:
         raw_playlists = client.get_library_playlists(limit=None)
@@ -695,6 +430,7 @@ def fetch_ytmusic_playlist_tracks(
     language: str | None = None,
     location: str | None = None,
     token_store: CredentialStore | None = None,
+    client_factory: YtmusicClientFactory | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch full playlist track items including artists, album, track number, and duration.
 
@@ -707,6 +443,7 @@ def fetch_ytmusic_playlist_tracks(
         language=language,
         location=location,
         token_store=token_store,
+        client_factory=client_factory,
     )
     try:
         playlist_data = client.get_playlist(playlist_id, limit=None)
@@ -848,6 +585,13 @@ def fetch_ytmusic_playlist_tracks(
     return result
 
 
+def _get_write_client(**kwargs):
+    try:
+        return get_ytmusic_client(**kwargs)
+    except Exception as exc:
+        raise PlaylistWriteNotStarted("無法建立 YouTube Music 寫入連線。") from exc
+
+
 def apply_ytmusic_sort_in_place(
     playlist_id: str,
     sorted_items: list[dict[str, Any]],
@@ -857,95 +601,17 @@ def apply_ytmusic_sort_in_place(
     language: str | None = None,
     location: str | None = None,
     token_store: CredentialStore | None = None,
+    client_factory: YtmusicClientFactory | None = None,
 ) -> dict[str, Any]:
-    """Sort a YouTube Music playlist in-place using edit_playlist(moveItem=...).
-
-    Simulates moves using greedy position alignment. Only calls moveItem for items
-    that are out of order, consuming 0 YouTube Data API quota.
-    """
-    client = get_ytmusic_client(
+    client = _get_write_client(
         context=context,
         owner_sub=owner_sub,
         language=language,
         location=location,
         token_store=token_store,
+        client_factory=client_factory,
     )
-
-    auth_type = getattr(client, "auth_type", None)
-    if auth_type != AuthType.BROWSER and not isinstance(auth_type, (MagicMock, type(None))):
-        raise YTMusicError(
-            "YouTube Music 尚未設定或未啟用有效的瀏覽器 Token (AuthType.BROWSER)，無法執行內部協定排序。"
-        )
-
-    # Check if items have valid setVideoId for inner API movement
-    for item in sorted_items:
-        pid = item.get("playlist_item_id", "")
-        vid = item.get("video_id", "")
-        if item.get("has_set_video_id") is False or (vid and pid.startswith(f"{vid}_")):
-            raise YTMusicError(
-                f"曲目「{item.get('title', pid)}」缺少有效的 YouTube Music setVideoId，無法執行內部協定移動。"
-            )
-
-    current_ids = [item["playlist_item_id"] for item in original_items]
-    target_ids = [item["playlist_item_id"] for item in sorted_items]
-
-    moved_count = 0
-    succeeded = 0
-    failed = 0
-    failed_items = []
-
-    for i in range(len(target_ids) - 1):
-        target_id = target_ids[i]
-        if current_ids[i] != target_id:
-            successor_id = current_ids[i]
-            moved_count += 1
-            try:
-                client.edit_playlist(
-                    playlistId=playlist_id,
-                    moveItem=(target_id, successor_id),
-                )
-                succeeded += 1
-                # Update simulation state
-                cur_pos = current_ids.index(target_id)
-                current_ids.pop(cur_pos)
-                current_ids.insert(i, target_id)
-            except YTMusicError as yte:
-                logger.error("Failed to move item %s before %s: %s", target_id, successor_id, type(yte).__name__)
-                failed += 1
-                failed_items.append(
-                    {"playlist_item_id": target_id, "error": "移動曲目失敗，請核對 YouTube Music 播放清單。"}
-                )
-                err_msg = str(yte).lower()
-                if (
-                    failed == 1
-                    and succeeded == 0
-                    and any(kw in err_msg for kw in ("bad request", "invalid argument", "unauthorized", "forbidden"))
-                ):
-                    logger.warning(
-                        "Aborting YTMusic in-place sort early due to fatal client/auth error: %s",
-                        type(yte).__name__,
-                    )
-                    raise
-            except Exception as e:
-                logger.error("Unexpected error moving item %s: %s", target_id, type(e).__name__)
-                failed += 1
-                failed_items.append(
-                    {"playlist_item_id": target_id, "error": "移動曲目失敗，請核對 YouTube Music 播放清單。"}
-                )
-
-    if moved_count > 0 and succeeded == 0 and failed > 0:
-        raise YTMusicError(f"YouTube Music 播放清單排序全部失敗 ({failed} 首失敗)。")
-
-    return {
-        "operation": "playlist_sort",
-        "mode": "in_place",
-        "total": len(sorted_items),
-        "moved": moved_count,
-        "succeeded": succeeded,
-        "failed": failed,
-        "failed_items": failed_items,
-        "quota_used": 0,
-    }
+    return YtmusicPlaylistWriter(client).sort_in_place(playlist_id, sorted_items, original_items)
 
 
 def create_sorted_ytmusic_playlist(
@@ -958,55 +624,14 @@ def create_sorted_ytmusic_playlist(
     language: str | None = None,
     location: str | None = None,
     token_store: CredentialStore | None = None,
+    client_factory: YtmusicClientFactory | None = None,
 ) -> dict[str, Any]:
-    """Create a brand new YouTube Music playlist with tracks already in sorted order.
-
-    Instantly completes in 1 request and preserves the original playlist intact.
-    Consumes 0 YouTube Data API quota.
-    """
-    client = get_ytmusic_client(
+    client = _get_write_client(
         context=context,
         owner_sub=owner_sub,
         language=language,
         location=location,
         token_store=token_store,
+        client_factory=client_factory,
     )
-    auth_type = getattr(client, "auth_type", None)
-    if auth_type != AuthType.BROWSER and not isinstance(auth_type, (MagicMock, type(None))):
-        raise YTMusicError(
-            "YouTube Music 尚未設定或未啟用有效的瀏覽器 Token (AuthType.BROWSER)，無法執行內部協定建立播放清單。"
-        )
-
-    video_ids = [item["video_id"] for item in sorted_items if item.get("video_id")]
-    missing_video_ids = [
-        {"playlist_item_id": item.get("playlist_item_id", ""), "error": "缺少影片 ID，無法加入新播放清單。"}
-        for item in sorted_items
-        if not item.get("video_id")
-    ]
-
-    # Clean title according to ytmusic requirements
-    safe_title = re.sub(r"[<>]", "", title).strip() or "已排序播放清單"
-
-    try:
-        new_playlist_id = client.create_playlist(
-            title=safe_title,
-            description=description or "透過 Toolbox YouTube Music 智慧排序建立",
-            privacy_status=privacy_status.upper(),
-            video_ids=video_ids,
-        )
-    except Exception as exc:
-        logger.error("Failed to create new sorted playlist: %s", type(exc).__name__)
-        raise
-
-    return {
-        "operation": "playlist_sort",
-        "mode": "new_playlist",
-        "new_playlist_id": str(new_playlist_id),
-        "new_playlist_url": f"https://music.youtube.com/playlist?list={new_playlist_id}",
-        "total": len(sorted_items),
-        "moved": len(sorted_items),
-        "succeeded": len(video_ids),
-        "failed": len(missing_video_ids),
-        "failed_items": missing_video_ids,
-        "quota_used": 0,
-    }
+    return YtmusicPlaylistWriter(client).create_sorted(title, description, sorted_items, privacy_status)

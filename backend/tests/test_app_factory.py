@@ -94,5 +94,5 @@ def test_factory_keeps_workflow_adapters_per_app():
     second = create_app(youtube_workflow_adapters={"fetch_playlist_items": second_provider})
     first_service = get_youtube_workflow_service(Request({"type": "http", "app": first}))
     second_service = get_youtube_workflow_service(Request({"type": "http", "app": second}))
-    assert first_service.dependencies["fetch_playlist_items"] is first_provider
-    assert second_service.dependencies["fetch_playlist_items"] is second_provider
+    assert first_service.ports.fetch_playlist_items is first_provider
+    assert second_service.ports.fetch_playlist_items is second_provider

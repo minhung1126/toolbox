@@ -1,21 +1,33 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { normalizeYoutubePlaylistInput, youtubeBatchApi } from '../api/youtubeBatchApi.ts';
+import type { BatchWorkflowOptions, BatchConfig } from '../model/batchWorkflowTypes';
+import { useBatchConfigPersistence } from './useBatchConfigPersistence';
+import { useBatchExecution } from './useBatchExecution';
+import type { ChangeEvent, KeyboardEvent, MouseEvent } from 'react';
+
+interface WorkflowError extends Error {
+  code?: string;
+  status?: number;
+}
+function workflowError(value: unknown): WorkflowError {
+  return value instanceof Error ? value : new Error(String(value));
+}
+import { useBatchWorkflowState } from './useBatchWorkflowState';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { youtubeBatchApi } from '../api/youtubeBatchApi.ts';
 import useAccountWorkState from '../../../hooks/useAccountWorkState';
 import useTeamPersonFilter from '../../../hooks/useTeamPersonFilter';
 import useSharedTeamPersonFilterPersistence from '../../../hooks/useSharedTeamPersonFilterPersistence';
 import { readSharedTeamPersonFilter } from '../../../utils/teamPersonFilterStorage';
 import { sortVideosByUploadTime } from '../../../utils/videoOrder';
 import { getYoutubeAuthorizationFingerprint, youtubeIsConnected, youtubePreferredUiSlot } from '../model/routing';
-import { YOUTUBE_COPY, formatResultCounts } from '../../../utils/youtubeCopy';
+import { YOUTUBE_COPY } from '../../../utils/youtubeCopy';
 import {
   DEFAULT_COLUMNS,
   getBatchPreviewStatus,
-  isBatchPreviewUpdate,
   normalizeConfig,
   resolveDraftConfig,
 } from '../../../utils/batchPreview';
 
-export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast }) {
+export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast }: BatchWorkflowOptions) {
   const activeSlot = youtubePreferredUiSlot(authUser?.youtube);
   const youtubeConnected = youtubeIsConnected(authUser?.youtube);
   const authorizationKey = useMemo(() => {
@@ -40,49 +52,89 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     [sysSettings.default_playlist_id, sysSettings.default_spreadsheet_id]
   );
   const initial = normalizeConfig({}, defaults, persistedDefaults, sharedFilter);
-  const [spreadsheetId, setSpreadsheetId] = useState(initial.spreadsheetId);
-  const [appliedSpreadsheetId, setAppliedSpreadsheetId] = useState(initial.spreadsheetId);
-  const [sourceReady, setSourceReady] = useState(false);
-  const [sourceRevision, setSourceRevision] = useState(0);
-  const [playlistId, setPlaylistId] = useState(initial.playlistId);
+  const { state, setters, dispatch: dispatchWorkflow } = useBatchWorkflowState(initial, remembered);
+  const {
+    spreadsheetId,
+    appliedSpreadsheetId,
+    sourceReady,
+    sourceRevision,
+    playlistId,
+    worksheets,
+    worksheetName,
+    columns,
+    titleColumn,
+    descriptionColumn,
+    configSaving,
+    randomPreview,
+    randomPreviewLoading,
+    loadingPreview,
+    previewError,
+    batchPreview,
+    previewToken,
+    previewSnapshot,
+    previewFingerprint,
+    videos,
+    assignments,
+    selectedVideoIds,
+    bulkPerson,
+    playlistSource,
+    playlistFallbackReason,
+    youtubeRoutingInfo,
+    loadingSheet,
+    loadingVideos,
+    executing,
+    result,
+    errorMsg,
+    configSaveError,
+    sourceError,
+    confirmOpen,
+    previewImage,
+    quotaEstimate,
+    estimateLoading,
+    hydrated,
+    draftAutosaveStatus,
+    playlistAutosaveStatus,
+    awaitingReconciliation,
+  } = state;
+  const {
+    setSpreadsheetId,
+    setAppliedSpreadsheetId,
+    setSourceReady,
+    setSourceRevision,
+    setPlaylistId,
+    setWorksheets,
+    setWorksheetName,
+    setColumns,
+    setTitleColumn,
+    setDescriptionColumn,
+    setRandomPreview,
+    setRandomPreviewLoading,
+    setPreviewError,
+    setBatchPreview,
+    setPreviewToken,
+    setPreviewSnapshot,
+    setPreviewFingerprint,
+    setVideos,
+    setAssignments,
+    setSelectedVideoIds,
+    setBulkPerson,
+    setPlaylistSource,
+    setPlaylistFallbackReason,
+    setYoutubeRoutingInfo,
+    setLoadingSheet,
+    setLoadingVideos,
+    setResult,
+    setErrorMsg,
+    setConfigSaveError,
+    setSourceError,
+    setConfirmOpen,
+    setPreviewImage,
+    setQuotaEstimate,
+    setEstimateLoading,
+    setHydrated,
+    setAwaitingReconciliation,
+  } = setters;
   const sharedPlaylistIdRef = useRef(persistedDefaults.default_playlist_id || '');
-  const [worksheets, setWorksheets] = useState([]);
-  const [worksheetName, setWorksheetName] = useState(initial.worksheetName);
-  const [columns, setColumns] = useState([]);
-  const [titleColumn, setTitleColumn] = useState(initial.titleColumn);
-  const [descriptionColumn, setDescriptionColumn] = useState(initial.descriptionColumn);
-  const [configSaving, setConfigSaving] = useState(false);
-  const [randomPreview, setRandomPreview] = useState(null);
-  const [randomPreviewLoading, setRandomPreviewLoading] = useState(false);
-  const [loadingPreview, setLoadingPreview] = useState(false);
-  const [previewError, setPreviewError] = useState('');
-  const [batchPreview, setBatchPreview] = useState(null);
-  const [previewToken, setPreviewToken] = useState('');
-  const [previewSnapshot, setPreviewSnapshot] = useState(null);
-  const [previewFingerprint, setPreviewFingerprint] = useState('');
-  const [videos, setVideos] = useState([]);
-  const [assignments, setAssignments] = useState(() =>
-    remembered.assignments && typeof remembered.assignments === 'object' ? remembered.assignments : {}
-  );
-  const [selectedVideoIds, setSelectedVideoIds] = useState(() =>
-    Array.isArray(remembered.selectedVideoIds) ? remembered.selectedVideoIds : []
-  );
-  const [bulkPerson, setBulkPerson] = useState(remembered.bulkPerson || '');
-  const [playlistSource, setPlaylistSource] = useState('');
-  const [playlistFallbackReason, setPlaylistFallbackReason] = useState('');
-  const [youtubeRoutingInfo, setYoutubeRoutingInfo] = useState(null);
-  const [loadingSheet, setLoadingSheet] = useState(false);
-  const [loadingVideos, setLoadingVideos] = useState(false);
-  const [executing, setExecuting] = useState(false);
-  const [result, setResult] = useState(null);
-  const [errorMsg, setErrorMsg] = useState(null);
-  const [configSaveError, setConfigSaveError] = useState('');
-  const [sourceError, setSourceError] = useState('');
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [previewImage, setPreviewImage] = useState(null);
-  const [quotaEstimate, setQuotaEstimate] = useState(null);
-  const [estimateLoading, setEstimateLoading] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
   const initialLoadRequestedRef = useRef(false);
   const restoreVideoOptionsRef = useRef(true);
   const hydrationStartedRef = useRef('');
@@ -90,10 +142,6 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
   const sheetRequestRef = useRef(0);
   const randomPreviewRequestRef = useRef(0);
   const previousAuthorizationKeyRef = useRef(authorizationKey);
-  const draftSaveTimerRef = useRef(null);
-  const playlistSaveTimerRef = useRef(null);
-  const [draftAutosaveStatus, setDraftAutosaveStatus] = useState(null);
-  const [playlistAutosaveStatus, setPlaylistAutosaveStatus] = useState(null);
 
   const sourceStale = spreadsheetId.trim() !== appliedSpreadsheetId.trim();
   const teamPersonFilter = useTeamPersonFilter({
@@ -167,12 +215,17 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     setPlaylistSource('');
     setPlaylistFallbackReason('');
     setYoutubeRoutingInfo(null);
-    setBatchPreview(null);
-    setLoadingPreview(false);
-    setPreviewToken('');
-    setPreviewSnapshot(null);
-    setPreviewFingerprint('');
-    setConfirmOpen(false);
+    dispatchWorkflow({
+      type: 'patch',
+      patch: {
+        batchPreview: null,
+        loadingPreview: false,
+        previewToken: '',
+        previewSnapshot: null,
+        previewFingerprint: '',
+        confirmOpen: false,
+      },
+    });
     setEstimateLoading(false);
     setResult(null);
     setErrorMsg(null);
@@ -183,98 +236,24 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     restoreVideoOptionsRef.current = false;
   }, []);
 
-  const clearConfigSaveError = useCallback(() => {
-    setConfigSaveError('');
-  }, []);
-
-  const scheduleDraftSave = useCallback(
-    (overrides = {}) => {
-      if (!authUser) return;
-      setDraftAutosaveStatus('saving');
-      window.clearTimeout(draftSaveTimerRef.current);
-      draftSaveTimerRef.current = window.setTimeout(async () => {
-        try {
-          const nextSpreadsheetId = overrides.spreadsheetId !== undefined ? overrides.spreadsheetId : spreadsheetId;
-          const nextWorksheetName = overrides.worksheetName !== undefined ? overrides.worksheetName : worksheetName;
-          const nextTitleColumn = overrides.titleColumn !== undefined ? overrides.titleColumn : titleColumn;
-          const nextDescriptionColumn =
-            overrides.descriptionColumn !== undefined ? overrides.descriptionColumn : descriptionColumn;
-          const nextPlaylistId = overrides.playlistId !== undefined ? overrides.playlistId : playlistId;
-
-          await youtubeBatchApi.updateDraftSettings(videoType, {
-            spreadsheet_id: nextSpreadsheetId.trim(),
-            worksheet_name: nextWorksheetName,
-            title_column: nextTitleColumn,
-            description_column: nextDescriptionColumn,
-            playlist_id: nextPlaylistId.trim(),
-          });
-          setDraftAutosaveStatus('saved');
-        } catch (error) {
-          setDraftAutosaveStatus('error');
-          setConfigSaveError(`草稿設定未能自動儲存：${error.message}`);
-        }
-      }, 800);
-    },
-    [authUser, descriptionColumn, playlistId, spreadsheetId, titleColumn, videoType, worksheetName]
-  );
-
-  const schedulePlaylistSave = useCallback(
-    (value) => {
-      if (!authUser) return;
-      setPlaylistAutosaveStatus('saving');
-      window.clearTimeout(playlistSaveTimerRef.current);
-      playlistSaveTimerRef.current = window.setTimeout(async () => {
-        try {
-          const normalized = normalizeYoutubePlaylistInput(value);
-          if (value.trim() && !normalized) {
-            setPlaylistAutosaveStatus('invalid');
-            return;
-          }
-          await youtubeBatchApi.updatePlaylist({ playlistId: normalized || '' });
-          setPlaylistAutosaveStatus('saved');
-          scheduleDraftSave({ playlistId: value });
-        } catch {
-          setPlaylistAutosaveStatus('error');
-        }
-      }, 800);
-    },
-    [authUser, scheduleDraftSave]
-  );
-
-  const saveDraftConfig = useCallback(async () => {
-    if (!authUser) return;
-    window.clearTimeout(draftSaveTimerRef.current);
-    setConfigSaving(true);
-    setDraftAutosaveStatus('saving');
-    setConfigSaveError('');
-    try {
-      await youtubeBatchApi.updateDraftSettings(videoType, {
-        spreadsheet_id: spreadsheetId.trim(),
-        worksheet_name: worksheetName,
-        title_column: titleColumn,
-        description_column: descriptionColumn,
-        playlist_id: playlistId.trim(),
-      });
-      setDraftAutosaveStatus('saved');
-      toast.success('YouTube 草稿設定已儲存');
-    } catch (error) {
-      setDraftAutosaveStatus('error');
-      setConfigSaveError(`設定未能同步至伺服器：${error.message}`);
-    } finally {
-      setConfigSaving(false);
-    }
-  }, [authUser, descriptionColumn, playlistId, spreadsheetId, titleColumn, toast, videoType, worksheetName]);
-
+  const { clearConfigSaveError, scheduleDraftSave, schedulePlaylistSave, saveDraftConfig } = useBatchConfigPersistence({
+    state,
+    setters,
+    authUser,
+    videoType,
+    toast,
+  });
   useEffect(
     () => () => {
-      window.clearTimeout(draftSaveTimerRef.current);
-      window.clearTimeout(playlistSaveTimerRef.current);
+      playlistRequestRef.current += 1;
+      sheetRequestRef.current += 1;
+      randomPreviewRequestRef.current += 1;
     },
     []
   );
 
   const applyConfig = useCallback(
-    (config) => {
+    (config: BatchConfig) => {
       setSpreadsheetId(config.spreadsheetId);
       setAppliedSpreadsheetId(config.spreadsheetId);
       setSourceReady(false);
@@ -295,7 +274,24 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     let cancelled = false;
     let settled = false;
     const fallbackConfig = normalizeConfig({}, defaults, persistedDefaults, sharedFilter);
-    setHydrated(false);
+    playlistRequestRef.current += 1;
+    sheetRequestRef.current += 1;
+    randomPreviewRequestRef.current += 1;
+    dispatchWorkflow({
+      type: 'transition',
+      phase: 'loading',
+      patch: {
+        hydrated: false,
+        configSaving: false,
+        draftAutosaveStatus: null,
+        playlistAutosaveStatus: null,
+        executing: false,
+        awaitingReconciliation: false,
+        result: null,
+        errorMsg: null,
+        confirmOpen: false,
+      },
+    });
     setWorksheets([]);
     setColumns([]);
     setSourceReady(false);
@@ -326,7 +322,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
       .getDraftSettings()
       .then((data) => {
         if (cancelled) return;
-        const serverConfig = data?.[videoType.toLowerCase()];
+        const serverConfig = data?.[videoType === 'Shorts' ? 'shorts' : 'video'];
         applyConfig(
           normalizeConfig(resolveDraftConfig(serverConfig, fallbackConfig), defaults, persistedDefaults, sharedFilter)
         );
@@ -373,7 +369,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
       selectedVideoIds,
       bulkPerson,
     };
-    saveWorkState(cache);
+    saveWorkState(cache, {});
     return undefined;
   }, [assignments, bulkPerson, hydrated, saveWorkState, selectedVideoIds]);
 
@@ -444,7 +440,8 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
       ]);
       if (requestId !== randomPreviewRequestRef.current) return;
       setRandomPreview(preview);
-    } catch (err) {
+    } catch (caughtError: unknown) {
+      const err = workflowError(caughtError);
       if (requestId !== randomPreviewRequestRef.current) return;
       setRandomPreview(null);
       setPreviewError(err.message);
@@ -520,7 +517,8 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
         setSourceReady(true);
         setSourceRevision((current) => current + 1);
         if (showToast) toast.success('工作表與欄位已刷新');
-      } catch (err) {
+      } catch (caughtError: unknown) {
+        const err = workflowError(caughtError);
         if (requestId !== sheetRequestRef.current) return;
         invalidateLoadedVideos();
         setSourceError(`刷新試算表失敗：${err.message}`);
@@ -546,7 +544,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     }
   }, [hydrated, authUser, appliedSpreadsheetId, loadSheetResources]);
 
-  const handleSpreadsheetChange = (event) => {
+  const handleSpreadsheetChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextValue = event.target.value;
     sheetRequestRef.current += 1;
     setSpreadsheetId(nextValue);
@@ -557,7 +555,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     scheduleDraftSave({ spreadsheetId: nextValue });
   };
 
-  const handleWorksheetChange = (nextWorksheet) => {
+  const handleWorksheetChange = (nextWorksheet: string) => {
     sheetRequestRef.current += 1;
     setWorksheetName(nextWorksheet);
     clearConfigSaveError();
@@ -569,7 +567,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     scheduleDraftSave({ worksheetName: nextWorksheet });
   };
 
-  const handlePlaylistChange = (nextPlaylist) => {
+  const handlePlaylistChange = (nextPlaylist: string) => {
     setPlaylistId(nextPlaylist);
     clearConfigSaveError();
     invalidateLoadedVideos();
@@ -615,6 +613,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
         ])
       );
       const videoIds = new Set(videoList.map((video) => video.video_id));
+      setAwaitingReconciliation(false);
       setVideos(videoList);
       setAssignments(nextAssignments);
       setSelectedVideoIds(shouldRestore ? rememberedSelectedVideoIds.filter((videoId) => videoIds.has(videoId)) : []);
@@ -626,29 +625,31 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
         slot: res.youtube_slot || '',
         reason: res.youtube_slot_reason || '',
       });
-    } catch (err) {
+    } catch (caughtError: unknown) {
+      const err = workflowError(caughtError);
       if (playlistRequestRef.current !== requestId) return;
       invalidateLoadedVideos();
       setErrorMsg(`載入草稿影片失敗：${err.message}`);
     } finally {
-      setLoadingVideos(false);
+      if (playlistRequestRef.current === requestId) setLoadingVideos(false);
     }
   };
 
-  const toggleVideoSelection = (videoId) =>
+  const toggleVideoSelection = (videoId: string) =>
     setSelectedVideoIds((current) =>
       current.includes(videoId) ? current.filter((item) => item !== videoId) : [...current, videoId]
     );
-  const handleVideoCardClick = (event, videoId) => {
-    if (event.target?.closest?.('button, input, select, textarea, a, label')) return;
+  const handleVideoCardClick = (event: MouseEvent<HTMLElement>, videoId: string) => {
+    if ((event.target as HTMLElement)?.closest?.('button, input, select, textarea, a, label')) return;
     toggleVideoSelection(videoId);
   };
-  const handleVideoCardKeyDown = (event, videoId) => {
+  const handleVideoCardKeyDown = (event: KeyboardEvent<HTMLElement>, videoId: string) => {
     if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return;
     event.preventDefault();
     toggleVideoSelection(videoId);
   };
-  const setAllVideosSelected = (checked) => setSelectedVideoIds(checked ? videos.map((video) => video.video_id) : []);
+  const setAllVideosSelected = (checked: boolean) =>
+    setSelectedVideoIds(checked ? videos.map((video) => video.video_id) : []);
 
   const applyBulkAssignment = () => {
     if (!selectedVideoIds.length) return toast.warning('請先勾選要批次編輯的影片');
@@ -666,173 +667,23 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     toast.success(`已套用到 ${selectedCount} 支影片，尚未送出`);
   };
 
-  const loadBatchPreview = useCallback(async () => {
-    const requestVersion = playlistRequestRef.current;
-    setLoadingPreview(true);
-    setErrorMsg(null);
-    try {
-      const response = await youtubeBatchApi.getBatchPreview({
-        spreadsheetUrlOrId: appliedSpreadsheetId,
-        playlistId,
-        videoType,
-        worksheetName,
-        titleColumn,
-        descriptionColumn,
-        team: selectedTeam,
-        assignments: videos.map((video) => ({
-          video_id: video.video_id,
-          person: assignments[video.video_id] || '不編輯',
-        })),
-      });
-      if (playlistRequestRef.current !== requestVersion)
-        throw new Error('目前播放清單已變更，請重新讀取影片後再預覽。');
-      const plan = Array.isArray(response?.plan) ? response.plan : [];
-      const token = response?.preview_token || '';
-      const snapshot = response?.preview_snapshot || null;
-      if (!token || !snapshot) throw new Error('伺服器未提供可驗證的預覽，請重新整理後再試。');
-      setBatchPreview(plan);
-      setPreviewToken(token);
-      setPreviewSnapshot(snapshot);
-      setYoutubeRoutingInfo({
-        slot: snapshot?.youtube_slot || response.youtube_slot || '',
-        reason: snapshot?.youtube_slot_reason || response.youtube_slot_reason || '',
-      });
-      setPreviewFingerprint(currentPreviewFingerprint);
-      return { plan, snapshot };
-    } catch (error) {
-      setBatchPreview(null);
-      setPreviewToken('');
-      setPreviewSnapshot(null);
-      setPreviewFingerprint('');
-      setErrorMsg(`建立完整批次預覽失敗：${error.message}`);
-      return null;
-    } finally {
-      setLoadingPreview(false);
-    }
-  }, [
-    appliedSpreadsheetId,
-    assignments,
+  const { doExecute, requestExecute } = useBatchExecution({
+    state,
+    setters,
+    dispatchWorkflow,
+    playlistRequestRef,
     currentPreviewFingerprint,
-    descriptionColumn,
-    playlistId,
-    selectedTeam,
-    titleColumn,
     videoType,
-    videos,
-    worksheetName,
-  ]);
-
-  const doExecute = async () => {
-    if (!youtubeConnected) {
-      setConfirmOpen(false);
-      toast.warning('請先連結 YouTube 頻道 Google 帳號！');
-      return;
-    }
-    if (!previewToken || !previewSnapshot || previewFingerprint !== currentPreviewFingerprint) {
-      setConfirmOpen(false);
-      setErrorMsg('完整批次預覽已過期，已安全停止；請重新產生預覽後再執行。');
-      return;
-    }
-    setConfirmOpen(false);
-    setExecuting(true);
-    setErrorMsg(null);
-    setResult(null);
-    try {
-      const res = await youtubeBatchApi.updateMetadata({
-        spreadsheetUrlOrId: appliedSpreadsheetId,
-        playlistId,
-        videoType,
-        worksheetName,
-        titleColumn,
-        descriptionColumn,
-        team: selectedTeam,
-        assignments: videos.map((video) => ({
-          video_id: video.video_id,
-          person: assignments[video.video_id] || '不編輯',
-        })),
-        youtubeSlot: previewSnapshot?.youtube_slot,
-        previewToken,
-        previewSnapshot,
-      });
-      setResult(res);
-      setBatchPreview(null);
-      setPreviewToken('');
-      setPreviewSnapshot(null);
-      setPreviewFingerprint('');
-      const summary = formatResultCounts(res);
-      if (res.quota_blocked || res.not_attempted_count)
-        toast.warning(`YouTube ${YOUTUBE_COPY.batchUpdate}部分完成：${summary}`);
-      else if (res.failed_count) toast.warning(`YouTube ${YOUTUBE_COPY.batchUpdate}完成但有失敗項目：${summary}`);
-      else toast.success(`YouTube ${YOUTUBE_COPY.batchUpdate}完成：${summary}`);
-    } catch (err) {
-      if (err.code === 'stale_preview' || err.status === 409) {
-        setResult(null);
-        setBatchPreview(null);
-        setPreviewToken('');
-        setPreviewSnapshot(null);
-        setPreviewFingerprint('');
-        setErrorMsg('預覽已過期或資料已變更，已安全停止批次更新；請重新讀取影片並產生完整預覽。');
-        toast.warning('預覽已過期，批次更新已安全停止');
-        return;
-      }
-      if (
-        err.code === 'batch_result_invalid' ||
-        err.code === 'timeout' ||
-        err.code === 'network_error' ||
-        err.status >= 500
-      ) {
-        setResult(null);
-        setBatchPreview(null);
-        setPreviewToken('');
-        setPreviewSnapshot(null);
-        setPreviewFingerprint('');
-        setErrorMsg(
-          '無法確認批次更新是否已完成；請先至 YouTube Studio 核對影片標題與描述，再重新讀取並預覽。勿直接重送。'
-        );
-        toast.warning('批次更新結果待核對，請先檢查 YouTube Studio');
-        return;
-      }
-      setErrorMsg(`批次更新執行失敗：${err.message}`);
-      toast.error('批次更新執行失敗');
-    } finally {
-      setExecuting(false);
-    }
-  };
-
-  const requestExecute = async () => {
-    if (executing || loadingPreview) return;
-    if (!sourceReady || sourceStale) return toast.warning('請先刷新資料來源，讓目前來源設定套用完成');
-    if (!worksheetName) return toast.warning('請先選擇工作表');
-    if (!titleColumn || !descriptionColumn) return toast.warning('請先選擇標題與描述欄位');
-    if (titleColumn === descriptionColumn) return toast.warning('標題與描述不能使用同一欄位');
-    if (!selectedTeam) return toast.warning('請先選擇所屬團體');
-    if (!videos.length) return toast.warning('請先讀取草稿影片');
-    const previewResult = await loadBatchPreview();
-    if (!previewResult) return;
-    const { plan, snapshot } = previewResult;
-    const activeCount = plan.filter(isBatchPreviewUpdate).length;
-    if (!activeCount) return toast.warning('完整預覽中沒有可更新的影片');
-    setEstimateLoading(true);
-    try {
-      setQuotaEstimate(
-        await youtubeBatchApi.estimateQuota({
-          operation: 'youtube.metadata_update',
-          itemCount: activeCount,
-          slot: snapshot?.youtube_slot || activeSlot,
-        })
-      );
-    } catch (error) {
-      setQuotaEstimate(null);
-      toast.warning(`無法取得配額預估，仍可直接執行：${error.message}`);
-    } finally {
-      setEstimateLoading(false);
-    }
-    setConfirmOpen(true);
-  };
+    toast,
+    selectedTeam,
+    youtubeConnected,
+    sourceStale,
+    activeSlot,
+  });
 
   const sourceLabel = playlistSource === 'youtube-api' ? 'YouTube API' : '';
   const previewCounts = useMemo(() => {
-    const counts = { willUpdate: 0, unchanged: 0, skipped: 0, failed: 0 };
+    const counts: Record<string, number> = { willUpdate: 0, unchanged: 0, skipped: 0, failed: 0 };
     (batchPreview || []).forEach((item) => {
       counts[getBatchPreviewStatus(item).key] += 1;
     });

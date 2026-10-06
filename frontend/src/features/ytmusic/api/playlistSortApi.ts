@@ -120,7 +120,7 @@ function parseSortApply(value: unknown): PlaylistSortApplyResponse {
         !value.new_playlist_url.startsWith('https://'))) ||
     (value.new_playlist_url != null && typeof value.new_playlist_url !== 'string')
   ) {
-    throw new Error('排序套用回應格式不正確。');
+    throw Object.assign(new Error('排序套用回應格式不正確。'), { code: 'playlist_sort_result_invalid' });
   }
   return value as unknown as PlaylistSortApplyResponse;
 }

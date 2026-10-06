@@ -1,3 +1,5 @@
+import type { ModelAction } from '../../../shared/model/useWorkflowModel';
+import type { PlaylistSortState } from './usePlaylistSortState';
 import { useCallback, useEffect, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { playlistSortApi } from '../api/playlistSortApi';
@@ -26,6 +28,10 @@ interface WorkflowToast {
 }
 
 interface PlaylistSortWorkflowOptions {
+  dispatchWorkflow: Dispatch<ModelAction<PlaylistSortState>>;
+  accountKey: string;
+  reconciliationMessage: string;
+  setReconciliationMessage: Dispatch<SetStateAction<string>>;
   activeLanguage: string;
   activeLocation: string;
   activeSortKeys: PlaylistSortKey[];
@@ -63,6 +69,10 @@ function isQuotaError(error: WorkflowError): boolean {
 }
 
 export function usePlaylistSortWorkflow({
+  dispatchWorkflow,
+  accountKey,
+  reconciliationMessage,
+  setReconciliationMessage,
   activeLanguage,
   activeLocation,
   activeSortKeys,
@@ -89,6 +99,13 @@ export function usePlaylistSortWorkflow({
   setShowTokenDrawer,
   setStrictFallbackPrompt,
 }: PlaylistSortWorkflowOptions) {
+  const scope = `${accountKey}:${selectedPlaylistId}`;
+  const currentScope = useRef(scope);
+  const scopeVersion = useRef(0);
+  if (currentScope.current !== scope) {
+    currentScope.current = scope;
+    scopeVersion.current += 1;
+  }
   const previewRequestId = useRef(0);
   const previewInFlight = useRef(false);
   const applyInFlight = useRef(false);
@@ -107,9 +124,13 @@ export function usePlaylistSortWorkflow({
     previewRequestId.current += 1;
     previewInFlight.current = false;
     setPreviewing(false);
-  }, [activeLanguage, activeLocation, activeSortKeys, selectedPlaylistId, setPreviewing]);
+  }, [accountKey, activeLanguage, activeLocation, activeSortKeys, selectedPlaylistId, setPreviewing]);
 
   const handlePreview = useCallback(async () => {
+    if (reconciliationMessage) {
+      toast.warning('請先核對 YouTube Music 寫入結果，再重新預覽。');
+      return;
+    }
     if (previewInFlight.current) return;
     if (!selectedPlaylistId) {
       toast.warning('請先選擇播放清單');
@@ -122,7 +143,7 @@ export function usePlaylistSortWorkflow({
 
     previewInFlight.current = true;
     const requestId = ++previewRequestId.current;
-    setPreviewing(true);
+    dispatchWorkflow({ type: 'transition', phase: 'previewing', patch: { previewing: true } });
     setPreviewData(null);
     setApplyResult(null);
     try {
@@ -134,6 +155,7 @@ export function usePlaylistSortWorkflow({
       });
       if (!mounted.current || requestId !== previewRequestId.current) return;
 
+      dispatchWorkflow({ type: 'transition', phase: 'ready', patch: { reconciliationMessage: '' } });
       setPreviewData(response.preview || null);
       setPreviewToken(response.preview_token || '');
       setQuotaEstimate(response.quota_estimate || null);
@@ -161,6 +183,7 @@ export function usePlaylistSortWorkflow({
           message: error.message || 'Google YouTube Data API 配額已達每日上限。',
         });
       }
+      dispatchWorkflow({ type: 'transition', phase: 'idle', patch: {} });
       toast.error(`預覽失敗：${error.message || '未知錯誤'}`);
     } finally {
       if (requestId === previewRequestId.current) {
@@ -169,11 +192,14 @@ export function usePlaylistSortWorkflow({
       }
     }
   }, [
+    dispatchWorkflow,
+    reconciliationMessage,
     activeLanguage,
     activeLocation,
     activeSortKeys,
     selectedPlaylistId,
     setApplyResult,
+    setReconciliationMessage,
     setCachedOriginalTracks,
     setIsManuallyAdjusted,
     setPreviewData,
@@ -225,11 +251,12 @@ export function usePlaylistSortWorkflow({
 
   const handleApplyConfirm = useCallback(
     async (options: { forceAllowQuotaFallback?: boolean } = {}) => {
-      if (applyInFlight.current) return;
+      if (applyInFlight.current || reconciliationMessage) return;
+      const applyVersion = scopeVersion.current;
       applyInFlight.current = true;
       const { forceAllowQuotaFallback = false } = options;
       setShowConfirm(false);
-      setApplying(true);
+      dispatchWorkflow({ type: 'transition', phase: 'executing', patch: { applying: true } });
       try {
         const payload: PlaylistSortApplyRequest = {
           playlistId: selectedPlaylistId,
@@ -248,8 +275,8 @@ export function usePlaylistSortWorkflow({
         }
 
         const response = await playlistSortApi.apply(payload);
-        if (!mounted.current) return;
-        setApplyResult(response);
+        if (!mounted.current || scopeVersion.current !== applyVersion) return;
+        dispatchWorkflow({ type: 'transition', phase: 'completed', patch: { applyResult: response } });
         const succeeded = response.succeeded ?? 0;
         const failed = response.failed ?? 0;
         if (failed > 0) {
@@ -265,10 +292,34 @@ export function usePlaylistSortWorkflow({
         setCachedOriginalTracks(null);
         setIsManuallyAdjusted(false);
       } catch (caughtError: unknown) {
-        if (!mounted.current) return;
+        if (!mounted.current || scopeVersion.current !== applyVersion) return;
         const error = normalizeWorkflowError(caughtError);
         const errorCode = error.code || error.detail?.code;
+        if (
+          errorCode === 'playlist_write_unknown' ||
+          errorCode === 'playlist_sort_result_invalid' ||
+          error.code === 'timeout' ||
+          error.code === 'network_error' ||
+          (error.status ?? 0) >= 500
+        ) {
+          dispatchWorkflow({
+            type: 'transition',
+            phase: 'reconciliation',
+            patch: {
+              reconciliationMessage:
+                '無法確認排序寫入是否已完成；請先至 YouTube Music 核對播放清單與新歌單，再重新產生預覽。勿直接重送。',
+            },
+          });
+          setPreviewData(null);
+          setPreviewToken('');
+          setCachedOriginalTracks(null);
+          setQuotaEstimate(null);
+          setStrictFallbackPrompt(null);
+          toast.warning('排序寫入結果待核對');
+          return;
+        }
         if (errorCode === 'TOKEN_FALLBACK_BLOCKED' || error.status === 401) {
+          dispatchWorkflow({ type: 'transition', phase: 'ready', patch: {} });
           setStrictFallbackPrompt({
             message: error.message || error.detail?.message || 'YouTube Music Token 認證失效或已過期。',
             quotaUnits: quotaEstimate?.total_units || (previewData?.moved_count || 0) * 50,
@@ -280,13 +331,18 @@ export function usePlaylistSortWorkflow({
             message: error.message || 'Google YouTube Data API 配額已達每日上限。',
           });
         }
+        dispatchWorkflow({ type: 'transition', phase: 'ready', patch: {} });
         toast.error(`套用排序失敗：${error.message || '未知錯誤'}`);
       } finally {
         applyInFlight.current = false;
-        if (mounted.current) setApplying(false);
+        if (mounted.current && scopeVersion.current === applyVersion) setApplying(false);
       }
     },
     [
+      dispatchWorkflow,
+      accountKey,
+      reconciliationMessage,
+      setReconciliationMessage,
       activeLanguage,
       activeLocation,
       activeSortKeys,

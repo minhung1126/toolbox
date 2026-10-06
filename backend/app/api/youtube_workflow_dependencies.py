@@ -48,6 +48,7 @@ from backend.app.services.youtube_service import (
     set_video_public,
     update_single_video_metadata,
 )
+from backend.app.services.youtube_workflow_ports import YoutubeWorkflowPorts
 from backend.app.services.youtube_workflows import YoutubeWorkflowService
 
 logger = logging.getLogger("backend.app.api.youtube")
@@ -169,7 +170,7 @@ def _verify_playlist_preview_token(
         playlist_id=playlist_id,
         playlist=expected_playlist,
     ):
-        raise _stale_preview_exception()
+        raise stale_preview_exception()
 
 
 def _validate_batch_inputs(
@@ -321,9 +322,13 @@ def create_youtube_workflow_service(overrides: Mapping[str, Any] | None = None) 
         read_rows=dependencies["get_all_rows_for_sheet"],
         make_http_error=dependencies["http_error"],
     )
-    return YoutubeWorkflowService(dependencies)
+    return YoutubeWorkflowService(YoutubeWorkflowPorts.from_legacy(dependencies))
 
 
 def get_youtube_workflow_service(request: Request) -> YoutubeWorkflowService:
     """FastAPI dependency used by YouTube workflow endpoints."""
-    return create_youtube_workflow_service(getattr(request.app.state, "youtube_workflow_adapters", None))
+    overrides = dict(getattr(request.app.state, "youtube_workflow_adapters", None) or {})
+    repository = getattr(request.app.state, "account_state_store", None)
+    if repository is not None:
+        overrides.setdefault("get_account_setting", partial(get_account_setting, store=repository))
+    return create_youtube_workflow_service(overrides)

@@ -8,6 +8,7 @@ from typing import Any
 
 from backend.app.core.credential_store import CredentialStore
 from backend.app.core.youtube_context import YouTubeRequestContext
+from backend.app.services.playlist_write_outcome import PlaylistWriteNotStarted, PlaylistWriteOutcomeUnknown
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
 from backend.app.services.youtube_service import (
     _execute_with_quota,
@@ -15,6 +16,7 @@ from backend.app.services.youtube_service import (
     fetch_video_details,
     get_youtube_service,
 )
+from backend.app.services.ytmusic_clients import YtmusicClientFactory
 from backend.app.services.ytmusic_service import (
     apply_ytmusic_sort_in_place,
     create_sorted_ytmusic_playlist,
@@ -64,6 +66,7 @@ def fetch_user_playlists(
     language: str | None = None,
     location: str | None = None,
     token_store: CredentialStore | None = None,
+    client_factory: YtmusicClientFactory | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch user playlists. First attempts YouTube Music API (0 quota),
 
@@ -80,6 +83,7 @@ def fetch_user_playlists(
             language=lang,
             location=loc,
             token_store=token_store,
+            client_factory=client_factory,
         )
         if ytm_playlists:
             logger.info("Retrieved %d playlists via YouTube Music client", len(ytm_playlists))
@@ -138,6 +142,7 @@ def fetch_playlist_items_for_sort(
     language: str | None = None,
     location: str | None = None,
     token_store: CredentialStore | None = None,
+    client_factory: YtmusicClientFactory | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch playlist items for sorting.
 
@@ -159,6 +164,7 @@ def fetch_playlist_items_for_sort(
             language=lang,
             location=loc,
             token_store=token_store,
+            client_factory=client_factory,
         )
         if ytm_items:
             logger.info("Retrieved %d tracks for playlist %s via YouTube Music client", len(ytm_items), playlist_id)
@@ -572,6 +578,7 @@ def apply_sort_to_playlist(
     location: str | None = None,
     allow_quota_fallback: bool = True,
     token_store: CredentialStore | None = None,
+    client_factory: YtmusicClientFactory | None = None,
 ) -> dict[str, Any]:
     """Apply sorting to the playlist.
 
@@ -592,6 +599,7 @@ def apply_sort_to_playlist(
                     language=language,
                     location=location,
                     token_store=token_store,
+                    client_factory=client_factory,
                 )
             else:
                 orig = original_items or sorted(
@@ -605,11 +613,12 @@ def apply_sort_to_playlist(
                     language=language,
                     location=location,
                     token_store=token_store,
+                    client_factory=client_factory,
                 )
                 if res.get("failed", 0) > 0 and res.get("succeeded", 0) == 0 and res.get("moved", 0) > 0:
-                    raise RuntimeError("YTMusic in-place sort failed for all moved items")
+                    raise PlaylistWriteOutcomeUnknown(res)
                 return res
-        except Exception as exc:
+        except PlaylistWriteNotStarted as exc:
             if not allow_quota_fallback:
                 logger.warning(
                     "apply_sort_to_playlist using ytmusic_service failed: %s; quota fallback blocked by strict defense",
@@ -638,15 +647,22 @@ def apply_sort_to_playlist(
                 },
             },
         )
-        new_pl = _execute_with_quota(req, "playlists.insert", context)
-        new_playlist_id = new_pl.get("id", "")
+        try:
+            new_pl = _execute_with_quota(req, "playlists.insert", context)
+        except YouTubeQuotaUnavailable:
+            raise
+        except Exception as exc:
+            raise PlaylistWriteOutcomeUnknown() from exc
+        new_playlist_id = new_pl.get("id") if isinstance(new_pl, dict) else None
+        if not isinstance(new_playlist_id, str) or not new_playlist_id.strip():
+            raise PlaylistWriteOutcomeUnknown()
 
         succeeded = 0
         failed = 0
         failed_items = []
         quota_used = 50
 
-        for item in sorted_items:
+        for index, item in enumerate(sorted_items):
             vid = item.get("video_id")
             if not vid:
                 failed += 1
@@ -671,8 +687,17 @@ def apply_sort_to_playlist(
                 succeeded += 1
                 quota_used += 50
             except YouTubeQuotaUnavailable:
-                logger.warning("YouTube quota exceeded while creating new sorted playlist %s", new_playlist_id)
-                raise
+                logger.warning("YouTube quota exceeded after creating sorted playlist %s", new_playlist_id)
+                remaining = sorted_items[index:]
+                failed += len(remaining)
+                failed_items.extend(
+                    {
+                        "playlist_item_id": pending.get("playlist_item_id", ""),
+                        "error": "清單已建立，配額不足而未完成加入；請核對新播放清單，勿再次建立。",
+                    }
+                    for pending in remaining
+                )
+                break
             except Exception as e:
                 logger.error("Failed to add video %s to new playlist %s: %s", vid, new_playlist_id, type(e).__name__)
                 failed += 1

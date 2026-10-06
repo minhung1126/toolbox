@@ -11,7 +11,7 @@ export default function InteractivePreviewTable({
   onReorder,
   isManuallyAdjusted,
   onResetOrder,
-  sortKeys = [],
+  sortKeys = /** @type {import('../../features/ytmusic/model/types').PlaylistSortKey[]} */ ([]),
 }) {
   const [draggedIdx, setDraggedIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
