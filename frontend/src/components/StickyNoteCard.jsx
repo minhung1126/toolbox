@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Copy, Pin, Tag, Trash2 } from 'lucide-react';
+import { Check, Copy, CopyPlus, Pin, Tag, Trash2 } from 'lucide-react';
 import { isAmbiguousNoteMutation, notesApi } from '../features/notes/api/notesApi';
+import { renderTemplate, templateVariables } from '../features/notes/model/template';
 import { copyToClipboard } from '../utils/clipboard';
 import { useToast } from './Toast';
 import ConfirmDialog from './ConfirmDialog';
@@ -19,20 +20,34 @@ export function formatNoteDate(isoString) {
   return `${y}/${m}/${d} ${hh}:${mm}:${ss}`;
 }
 
-export default function StickyNoteCard({ note, onUpdated, onDeleted, onReconcile }) {
+export default function StickyNoteCard({ note, onUpdated, onDeleted, onReconcile, onDuplicate, duplicateDisabled }) {
   const toast = useToast();
   const [localNote, setLocalNote] = useState(note);
   const [copied, setCopied] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const isTemplate = localNote.note_type === 'template';
+  const variableNames = isTemplate ? templateVariables(localNote.content || '') : [];
+  const result = isTemplate ? renderTemplate(localNote.content || '', localNote.variables) : localNote.content || '';
+  const missingVariables = variableNames.filter(
+    (name) => !Object.hasOwn(localNote.variables || {}, name) || !localNote.variables[name]
+  );
+
+  const draftOf = (value) => ({
+    content: value.content,
+    remark: value.remark,
+    ...(value.note_type === 'template' ? { variables: value.variables || {} } : {}),
+  });
   const { saving, dirty, mutate } = useDebouncedAutosave({
-    value: { content: localNote.content, remark: localNote.remark },
+    value: draftOf(localNote),
     delay: 500,
-    compareFn: (a, b) => a.content === b.content && a.remark === b.remark,
+    compareFn: (a, b) =>
+      a.content === b.content && a.remark === b.remark && JSON.stringify(a.variables) === JSON.stringify(b.variables),
     onSave: async (nextData) => {
       const res = await notesApi.updateNote(note.id, nextData);
-      setLocalNote((prev) => ({ ...prev, ...res.note }));
+      // A completed request must not overwrite edits made while it was in flight.
+      setLocalNote((prev) => ({ ...prev, updated_at: res.note.updated_at }));
       onUpdated?.(res.note);
     },
     onError: (err) => {
@@ -54,13 +69,19 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted, onReconcile
   const handleContentChange = (e) => {
     const newContent = e.target.value;
     setLocalNote((prev) => ({ ...prev, content: newContent }));
-    mutate({ content: newContent, remark: localNote.remark });
+    mutate(draftOf({ ...localNote, content: newContent }));
   };
 
   const handleRemarkChange = (e) => {
     const newRemark = e.target.value;
     setLocalNote((prev) => ({ ...prev, remark: newRemark }));
-    mutate({ content: localNote.content, remark: newRemark });
+    mutate(draftOf({ ...localNote, remark: newRemark }));
+  };
+
+  const handleVariableChange = (name, value) => {
+    const next = { ...localNote, variables: { ...localNote.variables, [name]: value } };
+    setLocalNote(next);
+    mutate(draftOf(next));
   };
 
   const handleTogglePin = async () => {
@@ -83,7 +104,7 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted, onReconcile
 
   const handleCopy = async () => {
     try {
-      await copyToClipboard(localNote.content || '');
+      await copyToClipboard(result);
       setCopied(true);
       toast.success('已複製便利貼內容至剪貼簿');
       setTimeout(() => setCopied(false), 2000);
@@ -154,16 +175,43 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted, onReconcile
         </div>
 
         <div className="sticky-note-body">
+          {isTemplate && <span className="sticky-note-template-label">模板 · 使用 {'{變數名稱}'}</span>}
           <textarea
             className="sticky-note-textarea"
-            placeholder="點擊此處輸入文字內容…"
+            placeholder={isTemplate ? '例如：hi this is {name}. ......' : '點擊此處輸入文字內容…'}
             value={localNote.content || ''}
             onChange={handleContentChange}
-            aria-label="便利貼文字內容"
+            aria-label={isTemplate ? '模板內容' : '便利貼文字內容'}
+            maxLength={20000}
           />
         </div>
 
         <div className="sticky-note-footer">
+          {isTemplate && (
+            <div className="sticky-note-template-controls">
+              {variableNames.map((name) => (
+                <label key={name} className="sticky-note-variable">
+                  <span>{name}:</span>
+                  <input
+                    type="text"
+                    value={Object.hasOwn(localNote.variables || {}, name) ? localNote.variables[name] : ''}
+                    onChange={(event) => handleVariableChange(name, event.target.value)}
+                    aria-label={`變數 ${name}`}
+                    maxLength={20000}
+                    placeholder="輸入替換文字"
+                  />
+                </label>
+              ))}
+              {!variableNames.length && <span>在上方輸入 {'{name}'}，即可設定替換文字。</span>}
+              <span className="sticky-note-template-label">結果預覽</span>
+              <div className="sticky-note-preview" aria-label="替換結果" aria-live="polite">
+                {result}
+              </div>
+              {missingVariables.length > 0 && (
+                <span role="status">尚未填寫：{missingVariables.join('、')}（複製時保留變數標記）</span>
+              )}
+            </div>
+          )}
           <div className="sticky-note-meta">
             <span className="sticky-note-time" title={localNote.updated_at || localNote.created_at}>
               最後編輯：{formatNoteDate(localNote.updated_at || localNote.created_at)}
@@ -178,25 +226,47 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted, onReconcile
             )}
           </div>
 
-          <button
-            type="button"
-            className={`btn btn-secondary sticky-note-copy-btn${copied ? ' is-copied' : ''}`}
-            onClick={handleCopy}
-            title="一鍵複製文字內容"
-            aria-label="一鍵複製文字內容"
-          >
-            {copied ? (
-              <>
-                <Check size={14} aria-hidden="true" />
-                <span>已複製</span>
-              </>
-            ) : (
-              <>
-                <Copy size={14} aria-hidden="true" />
-                <span>一鍵複製</span>
-              </>
-            )}
-          </button>
+          <div className="sticky-note-footer-actions">
+            <button
+              type="button"
+              className="btn btn-secondary sticky-note-copy-btn"
+              disabled={duplicateDisabled || !onDuplicate}
+              onClick={() =>
+                onDuplicate(
+                  {
+                    content: localNote.content,
+                    remark: localNote.remark,
+                    pinned: localNote.pinned,
+                    note_type: localNote.note_type || 'plain',
+                    variables: { ...localNote.variables },
+                  },
+                  note.id
+                )
+              }
+            >
+              <CopyPlus size={14} aria-hidden="true" />
+              建立副本
+            </button>
+            <button
+              type="button"
+              className={`btn btn-secondary sticky-note-copy-btn${copied ? ' is-copied' : ''}`}
+              onClick={handleCopy}
+              title={isTemplate ? '複製結果' : '一鍵複製文字內容'}
+              aria-label={isTemplate ? '複製結果' : '一鍵複製文字內容'}
+            >
+              {copied ? (
+                <>
+                  <Check size={14} aria-hidden="true" />
+                  <span>已複製</span>
+                </>
+              ) : (
+                <>
+                  <Copy size={14} aria-hidden="true" />
+                  <span>{isTemplate ? '複製結果' : '複製文字'}</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 

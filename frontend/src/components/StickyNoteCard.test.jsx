@@ -120,4 +120,39 @@ describe('StickyNoteCard', () => {
     expect(toastMocks.error).toHaveBeenCalledWith(expect.stringContaining('勿直接重送'));
     expect(screen.queryByText('確定要刪除這張便利貼嗎？此動作無法復原。')).not.toBeInTheDocument();
   });
+  it('duplicates the current draft including unsaved template values', () => {
+    const onDuplicate = vi.fn();
+    render(
+      <StickyNoteCard
+        note={{ ...mockNote, note_type: 'template', content: 'hi {name}', variables: { name: 'min' } }}
+        onDuplicate={onDuplicate}
+      />
+    );
+    fireEvent.change(screen.getByLabelText('模板內容'), { target: { value: 'hello {name}' } });
+    fireEvent.change(screen.getByLabelText('變數 name'), { target: { value: 'max' } });
+    fireEvent.click(screen.getByRole('button', { name: '建立副本' }));
+    expect(onDuplicate).toHaveBeenCalledWith(
+      { content: 'hello {name}', remark: '待辦事項', pinned: false, note_type: 'template', variables: { name: 'max' } },
+      'note-1'
+    );
+  });
+
+  it('previews repeated variables, copies results, and autosaves values', async () => {
+    const note = { ...mockNote, note_type: 'template', content: 'hi {name}. {name} {role}', variables: {} };
+    notesApi.updateNote.mockImplementation(async (_id, patch) => ({ note: { ...note, ...patch } }));
+    render(<StickyNoteCard note={note} />);
+    expect(screen.getAllByLabelText('變數 name')).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText('變數 name'), { target: { value: 'min' } });
+    expect(screen.getByLabelText('替換結果')).toHaveTextContent('hi min. min {role}');
+    expect(screen.getByRole('status')).toHaveTextContent('尚未填寫：role');
+    fireEvent.click(screen.getByRole('button', { name: '複製結果' }));
+    expect(clipboardModule.copyToClipboard).toHaveBeenCalledWith('hi min. min {role}');
+    await waitFor(() =>
+      expect(notesApi.updateNote).toHaveBeenCalledWith('note-1', {
+        content: note.content,
+        remark: note.remark,
+        variables: { name: 'min' },
+      })
+    );
+  });
 });

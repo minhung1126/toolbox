@@ -187,3 +187,69 @@ def test_sticky_notes_repository_is_isolated_per_app(tmp_path):
     assert created.status_code == 200
     assert first.get("/notes").json()["total"] == 1
     assert second.get("/notes").json() == {"notes": [], "total": 0}
+
+
+def test_template_persistence_and_independent_copy(tmp_path):
+    path = tmp_path / "templates.json"
+    store = NotesStore(path)
+    note = store.create_note(
+        "owner",
+        content="hi this is {name}. {name}",
+        remark="Greeting",
+        pinned=True,
+        note_type="template",
+        variables={"name": "min"},
+    )
+    draft = {key: note[key] for key in ("content", "remark", "pinned", "note_type", "variables")}
+    duplicate = store.create_note("owner", **draft)
+    assert duplicate["id"] != note["id"]
+    store.update_note("owner", duplicate["id"], content="Hello {name}", variables={"name": "other"})
+    reopened = NotesStore(path)
+    assert reopened.get_note("owner", note["id"])["variables"] == {"name": "min"}
+    assert reopened.get_note("owner", duplicate["id"])["variables"] == {"name": "other"}
+    assert reopened.get_note("other-user", duplicate["id"]) is None
+    assert reopened.get_note("owner", note["id"])["content"] == "hi this is {name}. {name}"
+
+
+def test_template_api_round_trip_and_validation(tmp_path):
+    test_app = FastAPI()
+    test_app.state.notes_store = NotesStore(tmp_path / "notes.json")
+    test_app.include_router(notes_api.router)
+    test_app.dependency_overrides[require_account_subject] = lambda: "owner"
+    client = TestClient(test_app)
+    response = client.post(
+        "/notes",
+        json={
+            "content": "hi this is {name}.",
+            "note_type": "template",
+            "variables": {"name": "min"},
+        },
+    )
+    assert response.status_code == 200
+    note = response.json()["note"]
+    assert note["note_type"] == "template"
+    assert note["variables"] == {"name": "min"}
+    updated = client.put(f"/notes/{note['id']}", json={"variables": {"name": "max"}})
+    assert updated.json()["note"]["variables"] == {"name": "max"}
+    assert client.get(f"/notes/{note['id']}").json()["note"]["variables"] == {"name": "max"}
+    assert client.post("/notes", json={"note_type": "invalid"}).status_code == 422
+    assert client.put(f"/notes/{note['id']}", json={"variables": {"name": "x" * 20001}}).status_code == 422
+    assert client.get("/notes").json()["total"] == 1
+
+
+def test_legacy_notes_remain_readable(tmp_path):
+    import json
+
+    path = tmp_path / "legacy.json"
+    legacy = {
+        "id": "old",
+        "content": "unchanged",
+        "remark": "",
+        "pinned": False,
+        "created_at": "2026-10-01",
+        "updated_at": "2026-10-01",
+    }
+    path.write_text(json.dumps({"version": 1, "users": {"owner": [legacy]}}))
+    store = NotesStore(path)
+    assert store.get_note("owner", "old") == legacy
+    assert store.update_note("owner", "old", content="edited")["content"] == "edited"

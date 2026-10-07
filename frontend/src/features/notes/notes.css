@@ -215,6 +215,7 @@
 }
 
 .sticky-note-footer {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -298,4 +299,50 @@
   .sticky-notes-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.sticky-note-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.sticky-note-template-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.sticky-note-variable {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.sticky-note-variable input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  color: var(--text-main);
+}
+
+.sticky-note-template-label {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  margin-bottom: 0.3rem;
+}
+
+.sticky-note-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-main);
+  padding: 0.65rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
 }

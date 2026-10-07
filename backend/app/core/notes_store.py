@@ -111,6 +111,8 @@ class NotesStore:
         content: str = "",
         remark: str = "",
         pinned: bool = False,
+        note_type: str = "plain",
+        variables: Optional[dict[str, str]] = None,
     ) -> dict[str, Any]:
         """Create a new sticky note for a user."""
         clean_sub = str(subject or "").strip()
@@ -123,6 +125,8 @@ class NotesStore:
             "content": (content or "")[:MAX_NOTE_CONTENT_LENGTH],
             "remark": (remark or "")[:MAX_NOTE_REMARK_LENGTH],
             "pinned": bool(pinned),
+            "note_type": note_type,
+            "variables": copy.deepcopy(variables or {}),
             "created_at": now,
             "updated_at": now,
         }
@@ -144,6 +148,8 @@ class NotesStore:
         content: Optional[str] = None,
         remark: Optional[str] = None,
         pinned: Optional[bool] = None,
+        note_type: Optional[str] = None,
+        variables: Optional[dict[str, str]] = None,
     ) -> Optional[dict[str, Any]]:
         """Update fields of an existing sticky note and bump updated_at."""
         clean_sub = str(subject or "").strip()
@@ -176,6 +182,13 @@ class NotesStore:
                     changed = True
             if pinned is not None and target.get("pinned") != pinned:
                 target["pinned"] = bool(pinned)
+                changed = True
+
+            if note_type is not None and target.get("note_type", "plain") != note_type:
+                target["note_type"] = note_type
+                changed = True
+            if variables is not None and target.get("variables", {}) != variables:
+                target["variables"] = copy.deepcopy(variables)
                 changed = True
 
             if changed:

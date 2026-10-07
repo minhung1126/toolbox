@@ -41,6 +41,9 @@ function isNote(value: unknown): value is StickyNote {
     typeof value.content === 'string' &&
     typeof value.remark === 'string' &&
     typeof value.pinned === 'boolean' &&
+    (value.note_type === undefined || value.note_type === 'plain' || value.note_type === 'template') &&
+    (value.variables === undefined ||
+      (isRecord(value.variables) && Object.values(value.variables).every((entry) => typeof entry === 'string'))) &&
     typeof value.created_at === 'string' &&
     value.created_at.length > 0 &&
     typeof value.updated_at === 'string' &&

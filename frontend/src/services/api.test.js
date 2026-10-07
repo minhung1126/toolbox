@@ -303,3 +303,21 @@ describe('API request recovery', () => {
     });
   });
 });
+
+describe('Sticky Notes payloads', () => {
+  it('sends template type and values on create and update', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
+    vi.stubGlobal('fetch', fetchMock);
+    const draft = {
+      content: 'hi {name}',
+      remark: '',
+      pinned: false,
+      note_type: 'template',
+      variables: { name: 'min' },
+    };
+    await api.createNote(draft);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(draft);
+    await api.updateNote('note-1', { variables: { name: 'max' } });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ variables: { name: 'max' } });
+  });
+});

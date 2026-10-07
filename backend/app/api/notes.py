@@ -1,7 +1,7 @@
 """API endpoints for user sticky notes management."""
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Annotated, Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
@@ -21,16 +21,24 @@ def get_notes_store(request: Request) -> NotesStore:
     return configured if configured is not None else default_notes_store()
 
 
+VariableName = Annotated[str, Field(min_length=1, max_length=100)]
+VariableValue = Annotated[str, Field(max_length=20000)]
+
+
 class CreateNoteRequest(BaseModel):
     content: str = Field(default="", max_length=20000)
     remark: str = Field(default="", max_length=200)
     pinned: bool = Field(default=False)
+    note_type: Literal["plain", "template"] = "plain"
+    variables: dict[VariableName, VariableValue] = Field(default_factory=dict, max_length=100)
 
 
 class UpdateNoteRequest(BaseModel):
     content: Optional[str] = Field(default=None, max_length=20000)
     remark: Optional[str] = Field(default=None, max_length=200)
     pinned: Optional[bool] = Field(default=None)
+    note_type: Optional[Literal["plain", "template"]] = None
+    variables: Optional[dict[VariableName, VariableValue]] = Field(default=None, max_length=100)
 
 
 class NoteResponse(BaseModel):
@@ -38,6 +46,8 @@ class NoteResponse(BaseModel):
     content: str
     remark: str
     pinned: bool
+    note_type: Literal["plain", "template"] = "plain"
+    variables: dict[str, str] = Field(default_factory=dict)
     created_at: str
     updated_at: str
 
@@ -68,6 +78,8 @@ def create_note(
         content=payload.content,
         remark=payload.remark,
         pinned=payload.pinned,
+        note_type=payload.note_type,
+        variables=payload.variables,
     )
     return {
         "note": note,
@@ -102,6 +114,8 @@ def update_note(
         content=payload.content,
         remark=payload.remark,
         pinned=payload.pinned,
+        note_type=payload.note_type,
+        variables=payload.variables,
     )
     if not note:
         raise http_error(404, "note_not_found", "找不到欲更新的便利貼。")

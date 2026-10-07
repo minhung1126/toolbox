@@ -136,4 +136,39 @@ describe('StickyNotesPage', () => {
     expect(notesApi.createNote).toHaveBeenCalledTimes(1);
     expect(toastMocks.error).toHaveBeenCalledWith(expect.stringContaining('勿直接重送'));
   });
+  it('creates a template note with its own type and variable storage', async () => {
+    notesApi.getNotes.mockResolvedValueOnce({ notes: [], total: 0 });
+    notesApi.createNote.mockImplementationOnce(async (draft) => ({
+      note: { ...mockNotes[0], ...draft, id: 'template' },
+    }));
+    render(<StickyNotesPage />);
+    await screen.findByText('尚未建立任何便利貼');
+    fireEvent.click(screen.getByRole('button', { name: '新增模板便利貼' }));
+    expect(await screen.findByLabelText('模板內容')).toBeInTheDocument();
+    expect(notesApi.createNote).toHaveBeenCalledWith({
+      content: '',
+      remark: '',
+      pinned: false,
+      note_type: 'template',
+      variables: {},
+    });
+  });
+
+  it('inserts an independent duplicate beside the source', async () => {
+    notesApi.getNotes.mockResolvedValueOnce({ notes: mockNotes, total: 2 });
+    notesApi.createNote.mockImplementationOnce(async (draft) => ({ note: { ...mockNotes[0], ...draft, id: 'copy' } }));
+    notesApi.updateNote.mockImplementation(async (id, draft) => ({ note: { ...mockNotes[0], ...draft, id } }));
+    const { container } = render(<StickyNotesPage />);
+    await screen.findByDisplayValue('第一張便利貼內容');
+    fireEvent.click(screen.getAllByRole('button', { name: '建立副本' })[0]);
+    await screen.findByText('共 3 張便籤');
+    expect([...container.querySelectorAll('[data-note-id]')].map((card) => card.dataset.noteId)).toEqual([
+      'n1',
+      'copy',
+      'n2',
+    ]);
+    const contents = screen.getAllByDisplayValue('第一張便利貼內容');
+    fireEvent.change(contents[1], { target: { value: '副本獨立修改' } });
+    expect(contents[0]).toHaveValue('第一張便利貼內容');
+  });
 });

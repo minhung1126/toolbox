@@ -38,13 +38,19 @@ export default function StickyNotesPage() {
     fetchNotes();
   }, [fetchNotes]);
 
-  const handleCreateNote = async () => {
+  const handleCreateNote = async (draft = { content: '', remark: '', pinned: false }, sourceId) => {
     if (creating || createUncertain) return;
     setCreating(true);
     try {
-      const res = await notesApi.createNote({ content: '', remark: '', pinned: false });
-      setNotes((prev) => [res.note, ...prev]);
-      toast.success('已新增便利貼');
+      const res = await notesApi.createNote(draft);
+      setNotes((prev) => {
+        if (!sourceId) return [res.note, ...prev];
+        const index = prev.findIndex((item) => item.id === sourceId);
+        const next = [...prev];
+        next.splice(index < 0 ? 0 : index + 1, 0, res.note);
+        return next;
+      });
+      toast.success(sourceId ? '已建立便利貼副本' : '已新增便利貼');
     } catch (err) {
       if (isAmbiguousNoteMutation(err)) {
         setCreateUncertain(true);
@@ -79,18 +85,29 @@ export default function StickyNotesPage() {
       <PageHeader
         eyebrow="生產力工具"
         title="便利貼備忘錄"
-        description="極簡純文字便利貼，支援多便籤編輯、備註標記、一鍵複製與最後修改時間追蹤。"
+        description="記錄文字或建立變數模板，支援建立副本、複製文字與自動儲存。"
       />
 
       <div className="sticky-notes-toolbar">
         <div className="sticky-notes-toolbar-left">
           <Button
-            onClick={handleCreateNote}
+            onClick={() => handleCreateNote()}
             disabled={loading || creating || createUncertain || Boolean(loadError)}
             loading={creating}
             icon={Plus}
           >
             新增便利貼
+          </Button>
+
+          <Button
+            variant="secondary"
+            onClick={() =>
+              handleCreateNote({ content: '', remark: '', pinned: false, note_type: 'template', variables: {} })
+            }
+            disabled={loading || creating || createUncertain || Boolean(loadError)}
+            icon={Plus}
+          >
+            新增模板便利貼
           </Button>
 
           <div className="sticky-notes-search-box">
@@ -154,7 +171,7 @@ export default function StickyNotesPage() {
             icon={StickyNote}
             action={
               <Button
-                onClick={handleCreateNote}
+                onClick={() => handleCreateNote()}
                 disabled={loading || creating || createUncertain || Boolean(loadError)}
                 loading={creating}
                 icon={Plus}
@@ -182,6 +199,8 @@ export default function StickyNotesPage() {
               key={note.id}
               note={note}
               onUpdated={handleNoteUpdated}
+              onDuplicate={handleCreateNote}
+              duplicateDisabled={loading || creating || createUncertain || Boolean(loadError)}
               onDeleted={handleNoteDeleted}
               onReconcile={fetchNotes}
             />
