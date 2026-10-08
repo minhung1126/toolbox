@@ -1124,7 +1124,7 @@ test('Photo Curator exports the assigned image and checklist in a ZIP download',
   await expect(page.getByText('#01 封面')).toBeVisible();
 
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: '一鍵結構化打包 (ZIP)' }).click();
+  await page.getByRole('button', { name: '下載分組照片 (ZIP)' }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/^Instagram_三部曲貼文_\d{4}-\d{2}-\d{2}\.zip$/);
 

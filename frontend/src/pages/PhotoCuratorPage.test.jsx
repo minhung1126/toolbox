@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PhotoCuratorPage from './PhotoCuratorPage';
 import { api } from '../services/api';
@@ -59,6 +59,11 @@ describe('PhotoCuratorPage', () => {
     expect(screen.getByText('貼文三部曲排版工作台')).toBeInTheDocument();
     expect(screen.getByText('Instagram 主頁三聯排效果預覽')).toBeInTheDocument();
     expect(screen.getByText('待分配防漏池')).toBeInTheDocument();
+    expect(screen.getAllByText(/Post [123] 封面/).map((node) => node.textContent)).toEqual([
+      'Post 3 封面',
+      'Post 2 封面',
+      'Post 1 封面',
+    ]);
 
     await waitFor(() => {
       expect(screen.getByDisplayValue('Post 1')).toBeInTheDocument();
@@ -218,5 +223,85 @@ describe('PhotoCuratorPage', () => {
       expect(copyToClipboard).toHaveBeenCalled();
       expect(mockToast.success).toHaveBeenCalledWith('已複製發布對照清單至剪貼簿！');
     });
+  });
+  function importAndAssign(container, names) {
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: { files: names.map((name) => new File(['image'], name, { type: 'image/jpeg' })) },
+    });
+    names.forEach(() => fireEvent.click(screen.getAllByRole('button', { name: '+ P1' })[0]));
+  }
+
+  function photoNames(container, postId) {
+    return Array.from(container.querySelectorAll(`[data-post-id="${postId}"] .photo-card-name`)).map(
+      (node) => node.textContent
+    );
+  }
+
+  function dragPhoto(container, name, targetName, edge = 'before', postId = 'post-1') {
+    const source = screen.getByText(name).closest('.post-item-card');
+    const target = targetName
+      ? screen.getByText(targetName).closest('.post-item-card')
+      : container.querySelector(`[data-post-id="${postId}"]`);
+    const dataTransfer = { setData: vi.fn(), getData: () => source.dataset.photoId };
+    vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({ top: 100, height: 100 });
+    fireEvent.dragStart(source, { dataTransfer });
+    const over = createEvent.dragOver(target, { dataTransfer });
+    Object.defineProperty(over, 'clientY', { value: edge === 'before' ? 110 : 190 });
+    fireEvent(target, over);
+    if (targetName && name !== targetName) expect(target).toHaveClass(`drop-${edge}`);
+    const drop = createEvent.drop(target, { dataTransfer });
+    Object.defineProperty(drop, 'clientY', { value: edge === 'before' ? 110 : 190 });
+    fireEvent(target, drop);
+  }
+
+  it('inserts in both directions, synchronizes cover/checklist, and restores the previous order', async () => {
+    const { container } = render(<PhotoCuratorPage />);
+    importAndAssign(container, ['a.jpg', 'b.jpg', 'c.jpg']);
+    dragPhoto(container, 'c.jpg', 'a.jpg');
+    expect(photoNames(container, 'post-1')).toEqual(['c.jpg', 'a.jpg', 'b.jpg']);
+    expect(screen.getByText('c.jpg').closest('.post-item-card')).toHaveClass('is-cover-item');
+    fireEvent.click(screen.getByRole('button', { name: /複製對照表/ }));
+    const { copyToClipboard } = await import('../utils/clipboard');
+    expect(copyToClipboard).toHaveBeenLastCalledWith(expect.stringContaining('01. c.jpg [★ 首圖 Cover]'));
+    dragPhoto(container, 'c.jpg', 'b.jpg', 'after');
+    expect(photoNames(container, 'post-1')).toEqual(['a.jpg', 'b.jpg', 'c.jpg']);
+    fireEvent.click(screen.getByRole('button', { name: /復原上一步/ }));
+    expect(photoNames(container, 'post-1')).toEqual(['c.jpg', 'a.jpg', 'b.jpg']);
+    expect(container.querySelector('.drop-before, .drop-after, .is-dragging')).toBeNull();
+  });
+
+  it('moves between posts at a specific position without duplicates and ignores self/foreign drops', () => {
+    const { container } = render(<PhotoCuratorPage />);
+    importAndAssign(container, ['a.jpg', 'b.jpg', 'c.jpg']);
+    dragPhoto(container, 'c.jpg', null, 'after', 'post-2');
+    dragPhoto(container, 'b.jpg', 'c.jpg');
+    expect(photoNames(container, 'post-1')).toEqual(['a.jpg']);
+    expect(photoNames(container, 'post-2')).toEqual(['b.jpg', 'c.jpg']);
+    dragPhoto(container, 'b.jpg', 'b.jpg');
+    expect(photoNames(container, 'post-2')).toEqual(['b.jpg', 'c.jpg']);
+    fireEvent.drop(container.querySelector('[data-post-id="post-1"]'), {
+      dataTransfer: { getData: () => 'unknown-photo' },
+    });
+    expect(photoNames(container, 'post-1')).toEqual(['a.jpg']);
+    fireEvent.change(screen.getByLabelText('移動 b.jpg 至貼文'), { target: { value: 'post-3' } });
+    expect(photoNames(container, 'post-3')).toEqual(['b.jpg']);
+    expect(container.querySelectorAll('.post-item-card')).toHaveLength(3);
+  });
+
+  it('protects existing groups before redistribution and permits undo without reverting renamed titles', () => {
+    const { container } = render(<PhotoCuratorPage />);
+    importAndAssign(container, ['a.jpg', 'b.jpg', 'c.jpg']);
+    fireEvent.click(screen.getByRole('button', { name: /按時間均分/ }));
+    expect(screen.getByText('重新按時間均分？')).toBeInTheDocument();
+    expect(photoNames(container, 'post-1')).toHaveLength(3);
+    fireEvent.click(screen.getByRole('button', { name: '保留目前排版' }));
+    expect(photoNames(container, 'post-1')).toHaveLength(3);
+    fireEvent.click(screen.getByRole('button', { name: /按時間均分/ }));
+    fireEvent.click(screen.getByRole('button', { name: '重新均分' }));
+    expect(photoNames(container, 'post-1')).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText('Post 1 主題名稱'), { target: { value: '新主題' } });
+    fireEvent.click(screen.getByRole('button', { name: /復原上一步/ }));
+    expect(photoNames(container, 'post-1')).toHaveLength(3);
+    expect(screen.getByDisplayValue('新主題')).toBeInTheDocument();
   });
 });

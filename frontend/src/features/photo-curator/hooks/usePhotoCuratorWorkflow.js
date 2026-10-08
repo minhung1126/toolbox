@@ -17,6 +17,9 @@ export function usePhotoCuratorWorkflow({ toast }) {
 
   const [draggedPhotoId, setDraggedPhotoId] = useState(null);
   const [dragOverZone, setDragOverZone] = useState(null); // 'unassigned' | 'post-1' | 'post-2' | 'post-3'
+  const [dropPosition, setDropPosition] = useState(null);
+  const [previousArrangement, setPreviousArrangement] = useState(null);
+  const [autoConfirmOpen, setAutoConfirmOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [previewPhoto, setPreviewPhoto] = useState(null);
@@ -79,6 +82,7 @@ export function usePhotoCuratorWorkflow({ toast }) {
       };
     });
 
+    setPreviousArrangement(null);
     setPhotos((prev) => [...prev, ...newPhotos]);
     setUnassignedIds((prev) => [...prev, ...newPhotos.map((p) => p.id)]);
     toast.success(`成功匯入 ${newPhotos.length} 張照片至待分配池！`);
@@ -93,34 +97,63 @@ export function usePhotoCuratorWorkflow({ toast }) {
     }
   };
 
-  // Assign photo to a post
-  const assignPhotoToPost = useCallback((photoId, targetPostId) => {
-    setUnassignedIds((prev) => prev.filter((id) => id !== photoId));
-    setPosts((prevPosts) =>
-      prevPosts.map((post) => {
-        const filtered = post.photoIds.filter((id) => id !== photoId);
-        if (post.id === targetPostId) {
-          return { ...post, photoIds: [...filtered, photoId] };
-        }
-        return { ...post, photoIds: filtered };
-      })
-    );
-  }, []);
+  const rememberArrangement = useCallback(() => {
+    setPreviousArrangement({ posts, unassignedIds });
+  }, [posts, unassignedIds]);
 
-  // Return photo to unassigned pool
-  const returnPhotoToUnassigned = useCallback((photoId) => {
-    setPosts((prevPosts) =>
-      prevPosts.map((post) => ({
+  const undoArrangement = () => {
+    if (!previousArrangement) return;
+    setPosts((current) =>
+      current.map((post) => ({
         ...post,
-        photoIds: post.photoIds.filter((id) => id !== photoId),
+        photoIds: previousArrangement.posts.find((item) => item.id === post.id).photoIds,
       }))
     );
-    setUnassignedIds((prev) => (prev.includes(photoId) ? prev : [photoId, ...prev]));
-  }, []);
+    setUnassignedIds(previousArrangement.unassignedIds);
+    setPreviousArrangement(null);
+    toast.info('已復原上一次分組或排序。');
+  };
+
+  // Insert relative to a photo, after removing it from its original position.
+  const assignPhotoToPost = useCallback(
+    (photoId, targetPostId, targetPhotoId = null, edge = 'before') => {
+      if (!photoMap.has(photoId) || !posts.some((post) => post.id === targetPostId)) return;
+      if (photoId === targetPhotoId) return;
+      rememberArrangement();
+      setUnassignedIds((prev) => prev.filter((id) => id !== photoId));
+      setPosts((prevPosts) =>
+        prevPosts.map((post) => {
+          const filtered = post.photoIds.filter((id) => id !== photoId);
+          if (post.id !== targetPostId) return { ...post, photoIds: filtered };
+          const targetIndex = filtered.indexOf(targetPhotoId);
+          const insertIndex = targetIndex < 0 ? filtered.length : targetIndex + (edge === 'after' ? 1 : 0);
+          filtered.splice(insertIndex, 0, photoId);
+          return { ...post, photoIds: filtered };
+        })
+      );
+    },
+    [photoMap, posts, rememberArrangement]
+  );
+
+  const returnPhotoToUnassigned = useCallback(
+    (photoId) => {
+      if (!photoMap.has(photoId) || unassignedIds.includes(photoId)) return;
+      rememberArrangement();
+      setPosts((prevPosts) =>
+        prevPosts.map((post) => ({
+          ...post,
+          photoIds: post.photoIds.filter((id) => id !== photoId),
+        }))
+      );
+      setUnassignedIds((prev) => [photoId, ...prev]);
+    },
+    [photoMap, unassignedIds, rememberArrangement]
+  );
 
   // Delete photo completely from workbench
   const deletePhoto = useCallback(
     (photoId) => {
+      setPreviousArrangement(null);
       setPhotos((prev) => {
         const target = prev.find((p) => p.id === photoId);
         if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
@@ -141,6 +174,8 @@ export function usePhotoCuratorWorkflow({ toast }) {
   // Move photo inside post (set as cover or move up/down)
   const setAsCover = useCallback(
     (postId, photoId) => {
+      if (!posts.some((post) => post.id === postId && post.photoIds.includes(photoId))) return;
+      rememberArrangement();
       setPosts((prevPosts) =>
         prevPosts.map((post) => {
           if (post.id !== postId) return post;
@@ -150,23 +185,27 @@ export function usePhotoCuratorWorkflow({ toast }) {
       );
       toast.info('已將照片設為該篇首圖 (Cover)！');
     },
-    [toast]
+    [toast, posts, rememberArrangement]
   );
 
-  const movePhotoInPost = useCallback((postId, index, direction) => {
-    setPosts((prevPosts) =>
-      prevPosts.map((post) => {
-        if (post.id !== postId) return post;
-        const newIds = [...post.photoIds];
-        const targetIndex = index + direction;
-        if (targetIndex < 0 || targetIndex >= newIds.length) return post;
-        const temp = newIds[index];
-        newIds[index] = newIds[targetIndex];
-        newIds[targetIndex] = temp;
-        return { ...post, photoIds: newIds };
-      })
-    );
-  }, []);
+  const movePhotoInPost = useCallback(
+    (postId, index, direction) => {
+      rememberArrangement();
+      setPosts((prevPosts) =>
+        prevPosts.map((post) => {
+          if (post.id !== postId) return post;
+          const newIds = [...post.photoIds];
+          const targetIndex = index + direction;
+          if (targetIndex < 0 || targetIndex >= newIds.length) return post;
+          const temp = newIds[index];
+          newIds[index] = newIds[targetIndex];
+          newIds[targetIndex] = temp;
+          return { ...post, photoIds: newIds };
+        })
+      );
+    },
+    [rememberArrangement]
+  );
 
   // Chronological Auto-Distribute
   const handleAutoDistribute = () => {
@@ -175,6 +214,8 @@ export function usePhotoCuratorWorkflow({ toast }) {
       return;
     }
 
+    rememberArrangement();
+    setAutoConfirmOpen(false);
     // Sort all photos by lastModified
     const sorted = [...photos].sort((a, b) => a.lastModified - b.lastModified);
     const total = sorted.length;
@@ -202,6 +243,8 @@ export function usePhotoCuratorWorkflow({ toast }) {
     photos.forEach((p) => {
       if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
     });
+    setPreviousArrangement(null);
+    handleDragEnd();
     setPhotos([]);
     setUnassignedIds([]);
     setPosts(INITIAL_POSTS);
@@ -248,35 +291,56 @@ export function usePhotoCuratorWorkflow({ toast }) {
   // HTML5 Drag and drop handlers for photos
   const handleDragStart = (e, photoId) => {
     setDraggedPhotoId(photoId);
-    e.dataTransfer.setData('text/plain', photoId);
+    e.dataTransfer.setData('application/x-toolbox-photo', photoId);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDragEnd = () => {
     setDraggedPhotoId(null);
     setDragOverZone(null);
+    setDropPosition(null);
   };
 
   const handleDragOver = (e, zone) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    setDropPosition(null);
     if (dragOverZone !== zone) setDragOverZone(zone);
   };
 
   const handleDragLeave = (e, zone) => {
-    if (dragOverZone === zone) setDragOverZone(null);
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    if (dragOverZone === zone) {
+      setDragOverZone(null);
+      setDropPosition(null);
+    }
   };
 
-  const handleDropOnZone = (e, zone) => {
-    e.preventDefault();
-    setDragOverZone(null);
-    const photoId = e.dataTransfer.getData('text/plain') || draggedPhotoId;
-    if (!photoId) return;
+  const getDropEdge = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+  };
 
+  const handleDragOverPhoto = (e, postId, photoId) => {
+    if (!draggedPhotoId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverZone(postId);
+    setDropPosition(photoId === draggedPhotoId ? null : { photoId, edge: getDropEdge(e) });
+  };
+
+  const handleDropOnZone = (e, zone, targetPhotoId = null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const photoId = e.dataTransfer.getData('application/x-toolbox-photo') || draggedPhotoId;
+    const edge = targetPhotoId ? getDropEdge(e) : 'after';
+    handleDragEnd();
+    if (!photoMap.has(photoId)) return;
     if (zone === 'unassigned') {
       returnPhotoToUnassigned(photoId);
-    } else if (zone.startsWith('post-')) {
-      assignPhotoToPost(photoId, zone);
+    } else {
+      assignPhotoToPost(photoId, zone, targetPhotoId, edge);
     }
   };
 
@@ -296,6 +360,11 @@ export function usePhotoCuratorWorkflow({ toast }) {
     setPosts,
     draggedPhotoId,
     dragOverZone,
+    dropPosition,
+    previousArrangement,
+    undoArrangement,
+    autoConfirmOpen,
+    setAutoConfirmOpen,
     exporting,
     resetConfirmOpen,
     setResetConfirmOpen,
@@ -318,6 +387,7 @@ export function usePhotoCuratorWorkflow({ toast }) {
     handleDragStart,
     handleDragEnd,
     handleDragOver,
+    handleDragOverPhoto,
     handleDragLeave,
     handleDropOnZone,
     coverPhotos,

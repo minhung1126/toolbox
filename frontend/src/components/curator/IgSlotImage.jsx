@@ -13,7 +13,7 @@ export default function IgSlotImage({ cover, onZoom, idx }) {
       <div className="ig-slot-empty">
         <ImageIcon size={28} className="text-dim" aria-hidden="true" />
         <span>尚未設定首圖</span>
-        <small>從下方貼文點選「設為封面」</small>
+        <small>將照片排到貼文第一張，或點選「設為封面」</small>
       </div>
     );
   }
@@ -31,7 +31,7 @@ export default function IgSlotImage({ cover, onZoom, idx }) {
     <>
       <img
         src={cover.previewUrl}
-        alt={`Post ${idx + 1} 封面`}
+        alt={`Post ${idx + 1} 封面：${cover.name}`}
         className="ig-slot-img"
         draggable={false}
         referrerPolicy="no-referrer"
