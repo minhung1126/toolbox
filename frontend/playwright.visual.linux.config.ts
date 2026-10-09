@@ -2,7 +2,9 @@ import { defineConfig } from '@playwright/test';
 import base from './playwright.config';
 
 // Linux Chromium uses its own reviewed snapshots and a fixed CJK font in CI.
-const { webServer: _baseWebServer, ...sharedConfig } = base;
+const { webServer: _baseWebServer, use: baseUse, ...sharedConfig } = base;
+// Visual baselines must use the lockfile's bundled browser, regardless of E2E overrides.
+const { channel: _baseChannel, launchOptions: _baseLaunchOptions, ...sharedUse } = baseUse ?? {};
 
 export default defineConfig(sharedConfig, {
   testIgnore: [],
@@ -11,6 +13,7 @@ export default defineConfig(sharedConfig, {
   updateSnapshots: 'none',
   snapshotPathTemplate: '{testDir}/visual-baselines-linux/{arg}{ext}',
   use: {
+    ...sharedUse,
     browserName: 'chromium',
     baseURL: 'http://127.0.0.1:4174',
     locale: 'zh-TW',

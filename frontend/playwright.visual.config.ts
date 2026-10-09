@@ -6,7 +6,9 @@ import base from './playwright.config';
 if (process.platform !== 'win32') throw new Error('Visual baselines require Windows and Microsoft Edge.');
 
 // defineConfig concatenates webServer entries; visual tests need only their own server.
-const { webServer: _baseWebServer, ...sharedConfig } = base;
+const { webServer: _baseWebServer, use: baseUse, ...sharedConfig } = base;
+// The Edge baseline must not inherit a custom E2E executable or browser channel.
+const { channel: _baseChannel, launchOptions: _baseLaunchOptions, ...sharedUse } = baseUse ?? {};
 
 export default defineConfig(sharedConfig, {
   testIgnore: [],
@@ -15,6 +17,7 @@ export default defineConfig(sharedConfig, {
   updateSnapshots: 'none',
   snapshotPathTemplate: '{testDir}/visual-baselines/{arg}{ext}',
   use: {
+    ...sharedUse,
     channel: 'msedge',
     baseURL: 'http://127.0.0.1:4174',
     locale: 'zh-TW',

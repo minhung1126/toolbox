@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { mockAuthenticatedBackend } from './fixtures';
+import { mockAuthenticatedBackend, toolCatalog } from './fixtures';
+
+const dashboardCardCount = toolCatalog.reduce((count, tool) => count + tool.routes.length, 0);
 
 async function waitForVisualFonts(page: import('@playwright/test').Page) {
   if (process.platform === 'linux') {
@@ -25,6 +27,12 @@ for (const width of [390, 768, 1440]) {
     await mockAuthenticatedBackend(page);
     await page.goto('/dashboard');
     await expect(page.getByRole('heading', { name: 'Toolbox 控制台' })).toBeVisible();
+    // The heading renders before the catalog and saved navigation have hydrated.
+    await expect(
+      page.getByText(`顯示 ${dashboardCardCount} / ${dashboardCardCount} 個工具入口`, { exact: true })
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: '將 FFmpeg 命令行生成器 加入常用工具', exact: true })).toBeEnabled();
+    await expect(page.getByText('按工具卡右上角的圖釘，即可加入常用入口。', { exact: true })).toBeVisible();
     await waitForVisualFonts(page);
     await expect(page).toHaveScreenshot(`dashboard-${width}.png`, {
       animations: 'disabled',
