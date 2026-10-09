@@ -13,6 +13,7 @@ vi.mock('../../../services/api', () => ({
     disconnectVideoUploader: vi.fn(),
     uploadWeverseFromPath: vi.fn(),
     uploadWeverseFiles: vi.fn(),
+    retryWeverseCaptions: vi.fn(),
     getWeverseUploadTask: vi.fn(),
     getWeverseUploadHistory: vi.fn(),
     getWeverseRecentPaths: vi.fn(),
@@ -191,4 +192,33 @@ describe('weverseUploadApi queued upload response', () => {
       );
     }
   );
+});
+
+describe('caption retry contracts', () => {
+  it.each([
+    { caption_results: [{ filename: 'en.vtt', language: 'en', name: 'English', status: 'uploaded' }] },
+    { caption_results: [{ filename: 'en.vtt', language: 'en', name: 'English', status: 'invalid' }] },
+    {
+      caption_results: [
+        { filename: 'en.vtt', language: 'en', name: 'English', status: 'unknown', error: { private: true } },
+      ],
+    },
+  ])('rejects malformed caption evidence', async ({ caption_results }) => {
+    vi.mocked(api.getWeverseUploadTask).mockResolvedValue({
+      status: 'success',
+      task: { ...completedTask(), caption_results },
+    } as Awaited<ReturnType<typeof api.getWeverseUploadTask>>);
+    await expect(weverseUploadApi.getTask('task-123')).rejects.toBeInstanceOf(WeverseTaskContractError);
+  });
+  it('validates the queued response of a caption-only request', async () => {
+    const body = new FormData();
+    vi.mocked(api.retryWeverseCaptions).mockResolvedValue({ status: 'queued', task_id: 'child' });
+    await expect(weverseUploadApi.retryCaptions('parent', body)).resolves.toEqual({
+      status: 'queued',
+      task_id: 'child',
+    });
+    expect(api.retryWeverseCaptions).toHaveBeenCalledWith('parent', body);
+    vi.mocked(api.retryWeverseCaptions).mockResolvedValue({ status: 'queued', task_id: '' });
+    await expect(weverseUploadApi.retryCaptions('parent', body)).rejects.toBeInstanceOf(WeverseUploadResultError);
+  });
 });

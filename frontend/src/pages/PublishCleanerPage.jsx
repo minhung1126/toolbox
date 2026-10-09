@@ -1,3 +1,4 @@
+import { ResultExport } from '../shared/ui/ResultExport';
 import { Button } from '../shared/ui';
 import '../features/youtube/youtube-shared.css';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -719,6 +720,16 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
 
       {result && (
         <div className="glass-panel card-padding publish-result-panel card-stack">
+          <ResultExport
+            filename="PublishCleanerPage"
+            rows={result.results.map((item) => ({
+              id: item.video_id,
+              title: item.title || '',
+              status: item.status,
+              reason: item.reason || '',
+              url: `https://youtu.be/${item.video_id}`,
+            }))}
+          />
           <h3
             className={
               result.completed

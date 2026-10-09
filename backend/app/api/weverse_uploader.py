@@ -6,9 +6,11 @@ import os
 import re
 import shutil
 import uuid
+from copy import deepcopy
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from backend.app.core.dependencies import (
@@ -19,6 +21,7 @@ from backend.app.core.dependencies import (
 from backend.app.core.error_contract import http_error
 from backend.app.core.weverse_upload_store import WeverseUploadStore, weverse_upload_store
 from backend.app.core.youtube_context import YouTubeRequestContext
+from backend.app.services.weverse_captions import caption_plan, public_task
 from backend.app.services.weverse_scanner import (
     parse_browser_file_list,
     scan_local_path,
@@ -143,7 +146,7 @@ def scan_folder(
         raise http_error(400, "scan_failed", str(exc)) from exc
     except Exception as exc:
         logger.exception("Unexpected error scanning folder %s: %s", folder_path, exc)
-        raise http_error(500, "scan_server_error", f"掃描資料夾時發生未預期錯誤：{exc}") from exc
+        raise http_error(500, "scan_server_error", "掃描資料夾失敗，請檢查路徑與權限。") from exc
 
 
 @router.post("/parse-files")
@@ -160,7 +163,7 @@ def parse_files(
         return {"status": "success", **result}
     except Exception as exc:
         logger.exception("Failed to parse file list: %s", exc)
-        raise http_error(400, "parse_failed", f"解析檔案清單失敗：{exc}") from exc
+        raise http_error(400, "parse_failed", "解析檔案清單失敗，請檢查檔案格式。") from exc
 
 
 @router.post("/upload-from-path")
@@ -185,6 +188,8 @@ def start_upload_from_path(
         "progress_percent": 0,
         "current_step": "任務已加入佇列...",
         "subtitles_count": len([s for s in payload.subtitles if s.enabled]),
+        "caption_results": caption_plan([s.model_dump() for s in payload.subtitles]),
+        "channel_id": getattr(context, "channel_id", None),
     }
 
     worker.store.create_task(context.owner_sub, task_record)
@@ -276,6 +281,8 @@ async def start_upload_files(
             "progress_percent": 0,
             "current_step": "任務已加入佇列...",
             "subtitles_count": len([s for s in saved_subtitles if s.get("enabled")]),
+            "caption_results": caption_plan(saved_subtitles),
+            "channel_id": getattr(context, "channel_id", None),
         }
         worker.store.create_task(context.owner_sub, task_record)
     except Exception as exc:
@@ -313,18 +320,18 @@ def get_task_status(
     task = store.get_task(auth_session.subject, task_id)
     if not task:
         raise http_error(404, "task_not_found", f"找不到任務 ID：{task_id}")
-    return {"status": "success", "task": task}
+    return {"status": "success", "task": public_task(task)}
 
 
 @router.get("/history")
 def list_history(
-    limit: int = 20,
+    limit: int = Query(default=20, ge=1, le=50),
     auth_session: AuthenticatedSession = Depends(get_authenticated_session),
     store: WeverseUploadStore = Depends(get_upload_store),
 ) -> Dict[str, Any]:
     """List recent upload tasks."""
     tasks = store.list_tasks(auth_session.subject, limit=min(limit, 50))
-    return {"status": "success", "tasks": tasks}
+    return {"status": "success", "tasks": [public_task(task) for task in tasks]}
 
 
 @router.get("/recent-paths")
@@ -335,3 +342,102 @@ def get_recent_paths(
     """Get recently scanned folder paths."""
     paths = store.get_recent_paths(auth_session.subject)
     return {"status": "success", "paths": paths}
+
+
+@router.post("/tasks/{task_id}/retry-captions")
+async def retry_captions(
+    task_id: str,
+    expected_updated_at: str = Form(...),
+    confirmed_missing: str = Form(default="[]"),
+    subtitles: List[UploadFile] = File(default=[]),
+    context: YouTubeRequestContext = Depends(require_video_uploader_context),
+    worker: UploadWorker = Depends(get_upload_worker),
+) -> Dict[str, Any]:
+    """Create a caption-only child task after atomically claiming the source revision."""
+    parent = worker.store.get_task(context.owner_sub, task_id)
+    if not parent:
+        raise http_error(404, "task_not_found", "找不到任務。")
+    if worker.is_task_running(context.owner_sub, task_id):
+        raise http_error(409, "caption_retry_conflict", "任務仍在執行，請稍後重新讀取。")
+    if not parent.get("video_id") or not parent.get("caption_results"):
+        raise http_error(
+            409, "caption_retry_unavailable", "此紀錄沒有可補傳的影片與字幕資料，請至 YouTube Studio 處理。"
+        )
+    if parent.get("channel_id") and parent["channel_id"] != context.channel_id:
+        raise http_error(409, "channel_mismatch", "請連結原影片所屬的上傳頻道。")
+    results = deepcopy(parent["caption_results"])
+    candidates = {item["filename"]: item for item in results if item["status"] != "uploaded"}
+    names = [_validated_upload_filename(item.filename) for item in subtitles]
+    try:
+        confirmed = json.loads(confirmed_missing)
+    except ValueError as exc:
+        raise http_error(400, "invalid_metadata", "核對清單格式不正確。") from exc
+    if (
+        not isinstance(confirmed, list)
+        or any(not isinstance(name, str) or name not in candidates for name in confirmed)
+        or len(set(name.casefold() for name in names)) != len(names)
+        or any(name not in candidates or Path(name).suffix.lower() not in {".vtt", ".srt"} for name in names)
+    ):
+        raise http_error(400, "invalid_caption_selection", "請只選取清單中待處理的字幕檔案。")
+    if not candidates:
+        raise http_error(409, "caption_retry_unavailable", "字幕已全部完成。")
+    for name in confirmed:
+        if candidates[name]["status"] == "unknown":
+            candidates[name].update(status="missing_file", manually_confirmed_missing=True)
+    retry_id = str(uuid.uuid4())
+    directory = worker.store.data_file.parent / "weverse_temp" / retry_id
+    saved = []
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        for upload, name in zip(subtitles, names, strict=True):
+            target = directory / name
+            with target.open("wb") as handle:
+                while chunk := await upload.read(65536):
+                    handle.write(chunk)
+            item = candidates[name]
+            saved.append({"filename": name, "full_path": str(target), "bcp47": item["language"], "label": item["name"]})
+        child = {
+            key: parent[key]
+            for key in (
+                "title",
+                "video_filename",
+                "privacy_status",
+                "video_id",
+                "video_url",
+                "studio_url",
+                "channel_id",
+            )
+            if key in parent
+        }
+        child.update(
+            task_id=retry_id,
+            status="pending",
+            progress_percent=0,
+            current_step="字幕核對與補傳已排入佇列。",
+            caption_results=results,
+            subtitles_count=len(results),
+            operation="caption_retry",
+        )
+        worker.store.create_caption_retry(context.owner_sub, task_id, expected_updated_at, child)
+    except ValueError as exc:
+        shutil.rmtree(directory, ignore_errors=True)
+        raise http_error(409, "caption_retry_conflict", "任務已變更或已建立補傳工作，請重新讀取歷史。") from exc
+    except Exception as exc:
+        shutil.rmtree(directory, ignore_errors=True)
+        logger.exception("Could not prepare caption retry")
+        raise http_error(500, "caption_retry_save_failed", "無法保存字幕補傳工作。") from exc
+    _enqueue_persisted_upload(
+        worker=worker,
+        owner_sub=context.owner_sub,
+        task_id=retry_id,
+        credentials=context.credentials,
+        video_path="",
+        title=parent["title"],
+        description="",
+        privacy_status=parent.get("privacy_status", "private"),
+        subtitles=saved,
+        existing_video_id=parent["video_id"],
+        caption_results=results,
+        temp_dir_to_clean=str(directory),
+    )
+    return {"status": "queued", "task_id": retry_id}

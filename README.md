@@ -84,7 +84,7 @@ npm run dev
 - `/dashboard`：儀表板
 - `/system/health`、`/system/info`、`/system/design-system`：API 健康度、部署資訊與共用元件展示
 - `/settings/system`：系統安全、Google OAuth 憑證與登入白名單管理
-- `/weverse-uploader`：Weverse 影片上傳工作台
+- `/weverse-uploader`：Weverse 影片上傳工作台；歷史可開啟任務詳情，`?task=<id>` 支援重新整理後追蹤，並提供字幕核對、補傳及結果匯出
 - `/ffmpeg-generator`、`/photo-curator`、`/notes`：媒體工具與便利貼
 - `/youtube/drafts/videos`、`/youtube/drafts/shorts`：Video／Shorts 草稿
 - `/youtube/publish-cleanup`：發布並清理清單
@@ -140,6 +140,7 @@ Compose 預設把容器的 8000 port 綁到主機 `127.0.0.1:${HOST_PORT}`，並
 - [YouTube 配額說明](docs/YOUTUBE_QUOTA.md)
 - [Docker 與 production 部署](docs/DEPLOYMENT.md)
 - [系統架構設計與模組化開發指南](docs/ARCHITECTURE.md)
+- [上傳工作流、字幕補傳與頁面重構紀錄](docs/UPLOAD_REFACTOR_2026-10-09.md)
 
 正式環境僅需在 `.env` 設定 `PUBLIC_BASE_URL`（例如 `https://toolbox.example.com`），`SECRET_KEY` 與 `CREDENTIAL_ENCRYPTION_KEY` 於首次啟動時自動生成並安全保存於 `data/.secrets.json`。Google OAuth 憑證、管理員白名單及 YouTube 槽位皆可在網頁端設定並即時熱更新生效。Google callback 由 `PUBLIC_BASE_URL` 組成：`/api/v1/auth/callback`。
 

@@ -62,6 +62,16 @@ export interface WeverseRecentPathsResponse {
   paths: string[];
 }
 
+export interface CaptionResult {
+  filename: string;
+  language: string;
+  name: string;
+  status: 'pending' | 'uploaded' | 'unknown' | 'missing_file';
+  caption_id?: string;
+  error?: string;
+  reconciled?: boolean;
+}
+
 export interface WeverseUploadTask {
   task_id: string;
   title: string;
@@ -76,7 +86,13 @@ export interface WeverseUploadTask {
   video_url?: string;
   studio_url?: string;
   subtitles_count?: number;
-  [field: string]: unknown;
+  caption_results?: CaptionResult[];
+  failed_captions?: Array<{ language: string; name?: string; error?: string }>;
+  uploaded_captions?: Array<{ language: string; caption_id?: string }>;
+  updated_at?: string;
+  created_at?: string;
+  parent_task_id?: string;
+  retry_task_id?: string;
 }
 
 export interface WeverseUploadTaskResponse {
@@ -122,5 +138,6 @@ export interface WeverseUploadApi {
   scanFolder(folderPath: string): Promise<WeverseScanResponse>;
   parseFiles(files: WeverseFileMetadata[]): Promise<WeversePackageListResponse>;
   uploadFromPath(payload: WeverseUploadFromPathRequest): Promise<WeverseUploadQueuedResponse>;
+  retryCaptions(taskId: string, formData: FormData): Promise<WeverseUploadQueuedResponse>;
   uploadFiles(formData: FormData): Promise<WeverseUploadQueuedResponse>;
 }

@@ -117,6 +117,30 @@ function parseRecentPaths(value: unknown): WeverseRecentPathsResponse {
 function isTask(value: unknown): value is WeverseUploadTask {
   if (!isRecord(value)) return false;
   if (
+    (value.caption_results != null &&
+      (!Array.isArray(value.caption_results) ||
+        !value.caption_results.every(
+          (item) =>
+            isRecord(item) &&
+            typeof item.filename === 'string' &&
+            typeof item.language === 'string' &&
+            typeof item.name === 'string' &&
+            ['pending', 'uploaded', 'unknown', 'missing_file'].includes(String(item.status)) &&
+            (item.status !== 'uploaded' || (typeof item.caption_id === 'string' && item.caption_id.length > 0)) &&
+            (item.error == null || typeof item.error === 'string')
+        ))) ||
+    (value.failed_captions != null &&
+      (!Array.isArray(value.failed_captions) ||
+        !value.failed_captions.every(
+          (item) =>
+            isRecord(item) &&
+            typeof item.language === 'string' &&
+            (item.error == null || typeof item.error === 'string')
+        ))) ||
+    (value.retry_task_id != null && typeof value.retry_task_id !== 'string') ||
+    (value.parent_task_id != null && typeof value.parent_task_id !== 'string') ||
+    (value.video_id != null && typeof value.video_id !== 'string') ||
+    (value.updated_at != null && typeof value.updated_at !== 'string') ||
     typeof value.task_id !== 'string' ||
     value.task_id.trim().length === 0 ||
     typeof value.title !== 'string' ||
@@ -178,6 +202,7 @@ export const weverseUploadApi: WeverseUploadApi = {
   disconnectUploader: () => api.disconnectVideoUploader(),
   getRecentPaths: async () => parseRecentPaths(await api.getWeverseRecentPaths()),
   getHistory: async (limit) => parseHistoryResponse(await api.getWeverseUploadHistory(limit)),
+  retryCaptions: async (taskId, formData) => parseQueuedUpload(await api.retryWeverseCaptions(taskId, formData)),
   getTask: async (taskId) => parseTaskResponse(await api.getWeverseUploadTask(taskId), taskId),
   scanFolder: async (folderPath) => parseScan(await api.scanWeverseFolder(folderPath)),
   parseFiles: async (files) => parsePackages(await api.parseWeverseFiles(files), 'browser'),

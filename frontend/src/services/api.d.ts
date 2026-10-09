@@ -140,6 +140,7 @@ export const api: {
   parseWeverseFiles(files: WeverseFileMetadata[]): Promise<WeversePackageListResponse>;
   uploadWeverseFromPath(payload: WeverseUploadFromPathRequest): Promise<WeverseUploadQueuedResponse>;
   uploadWeverseFiles(formData: FormData): Promise<WeverseUploadQueuedResponse>;
+  retryWeverseCaptions(taskId: string, formData: FormData): Promise<WeverseUploadQueuedResponse>;
   getWeverseUploadTask(taskId: string): Promise<WeverseUploadTaskResponse>;
   getWeverseUploadHistory(limit?: number): Promise<WeverseUploadHistoryResponse>;
   getWeverseRecentPaths(): Promise<WeverseRecentPathsResponse>;

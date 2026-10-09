@@ -41,3 +41,9 @@
 - 發布使用與檢查結果相同的 commit SHA；分支保護與 required checks 的實際設定納入 #8 核對。
 
 目前維持單體部署及既有 JSON 格式。多主機實例、網路檔案系統鎖定語意、資料庫或外部佇列須在確有部署需求時另行設計與驗證。
+
+## 2026-10-09：上傳結果、任務恢復與頁面拆分
+
+本批已實作字幕部分完成提示、安全字幕補傳、任務詳情與 URL 恢復追蹤、CSV／JSON 結果匯出，以及 Weverse、FFmpeg、Playlist Sort、YTMusic Settings 的職責拆分。390px Photo Curator 水平溢出與 YouTube 設定卡片遮擋已修正。
+
+設計、相容性及驗證紀錄見 [本批交付紀錄](UPLOAD_REFACTOR_2026-10-09.md)。既有 #7／#8 所需的真實 provider 帳號與隔離部署環境仍未提供；它們屬外部驗收，不以假 provider 測試代替。

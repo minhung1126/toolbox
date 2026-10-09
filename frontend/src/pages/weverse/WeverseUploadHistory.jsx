@@ -1,10 +1,12 @@
+import { pendingCaptionCount } from '../../features/weverse/model/taskState';
 import { Clock, ExternalLink, RefreshCw } from 'lucide-react';
 import { StatusMessage } from '../../components/StatusMessage';
 import { Badge, Button } from '../../shared/ui';
 import './WeverseUploadHistory.css';
 
 function uploadStatus(item) {
-  if (item.status === 'completed') return <Badge tone="success">已完成</Badge>;
+  if (item.status === 'completed')
+    return pendingCaptionCount(item) ? <Badge tone="warning">部分完成</Badge> : <Badge tone="success">已完成</Badge>;
   if (item.status === 'failed') return <Badge tone="danger">失敗</Badge>;
   if (item.status === 'interrupted') {
     return <Badge tone="warning">已中斷，請確認 YouTube 狀態</Badge>;
@@ -19,7 +21,7 @@ function formatCreatedAt(value) {
   return value ? new Date(value).toLocaleString() : '-';
 }
 
-export default function WeverseUploadHistory({ items = [], loading = false, error = '', onRefresh }) {
+export default function WeverseUploadHistory({ items = [], loading = false, error = '', onRefresh, onOpen }) {
   return (
     <section className="glass-panel weverse-upload-history" aria-labelledby="weverse-history-title">
       <div className="weverse-upload-history-header">
@@ -67,6 +69,11 @@ export default function WeverseUploadHistory({ items = [], loading = false, erro
                   <td>{uploadStatus(item)}</td>
                   <td className="weverse-history-created-at">{formatCreatedAt(item.created_at)}</td>
                   <td>
+                    {onOpen && (
+                      <Button variant="secondary" size="sm" onClick={() => onOpen(item.task_id)}>
+                        任務詳情
+                      </Button>
+                    )}
                     {item.video_url && (
                       <a
                         href={item.video_url}

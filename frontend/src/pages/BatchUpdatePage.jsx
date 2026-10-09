@@ -1,3 +1,4 @@
+import { ResultExport } from '../shared/ui/ResultExport';
 import { Button } from '../shared/ui';
 import '../features/youtube/youtube-shared.css';
 import React from 'react';
@@ -496,6 +497,16 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
 
       {result && (
         <div className="glass-panel card-padding result-panel card-stack">
+          <ResultExport
+            filename="BatchUpdatePage"
+            rows={result.results.map((item) => ({
+              id: item.video_id,
+              title: item.title || '',
+              status: item.status,
+              reason: item.reason || '',
+              url: `https://youtu.be/${item.video_id}`,
+            }))}
+          />
           <h3
             className={
               result.completed ? 'result-heading result-heading-success' : 'result-heading result-heading-warning'

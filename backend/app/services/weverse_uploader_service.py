@@ -5,13 +5,13 @@ import os
 import shutil
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor, wait
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import googleapiclient.discovery
 from googleapiclient.http import MediaFileUpload
 
 from backend.app.core.weverse_upload_store import WeverseUploadStore, weverse_upload_store
+from backend.app.services.weverse_captions import caption_plan, upload_captions
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,8 @@ def execute_upload_task(
     store: WeverseUploadStore | None = None,
     service_factory=None,
     stop_event: threading.Event | None = None,
+    existing_video_id: str | None = None,
+    caption_results: list[dict] | None = None,
 ) -> None:
     """Synchronous worker function that executes YouTube video and captions upload."""
     store = store if store is not None else weverse_upload_store
@@ -59,150 +61,106 @@ def execute_upload_task(
         service = service_factory(credentials)
         check_stopping()
 
-        # 1. Prepare video upload request
-        store.update_task(
-            owner_sub,
-            task_id,
-            {
-                "status": "uploading_video",
-                "progress_percent": 5,
-                "current_step": "正在準備上傳影片至 YouTube...",
-            },
-        )
-
-        body = {
-            "snippet": {
-                "title": title[:100],
-                "description": description[:5000],
-                "tags": tags or [],
-                "categoryId": category_id or "22",
-                "defaultLanguage": default_language or "ko",
-            },
-            "status": {
-                "privacyStatus": privacy_status if privacy_status in ("private", "unlisted", "public") else "private",
-                "selfDeclaredMadeForKids": False,
-            },
-        }
-
-        # 8MB chunk size for resumable video upload
-        chunk_size = 1024 * 1024 * 8
-        media = MediaFileUpload(video_path, chunksize=chunk_size, resumable=True)
-        request = service.videos().insert(part="snippet,status", body=body, media_body=media)
-
-        video_id = None
-        response = None
-
-        logger.info("Executing chunked video upload for task %s", task_id)
-        while response is None:
-            check_stopping()
-            status, response = request.next_chunk()
-            if status:
-                # Video progress covers 5% to 80%
-                percent = int(5 + status.progress() * 75)
-                store.update_task(
-                    owner_sub,
-                    task_id,
-                    {
-                        "progress_percent": percent,
-                        "current_step": f"正在上傳影片... ({int(status.progress() * 100)}%)",
-                    },
-                )
-
-        if not response or "id" not in response:
-            raise RuntimeError("YouTube 未返回有效的影片 ID。")
-
-        video_id = response["id"]
-        video_url = f"https://youtu.be/{video_id}"
-        studio_url = f"https://studio.youtube.com/video/{video_id}/edit"
-        logger.info("Video uploaded successfully for task %s, video_id=%s", task_id, video_id)
-
-        store.update_task(
-            owner_sub,
-            task_id,
-            {
-                "video_id": video_id,
-                "video_url": video_url,
-                "studio_url": studio_url,
-                "progress_percent": 80,
-                "current_step": f"影片上傳完成 (ID: {video_id})，開始上傳字幕軌...",
-            },
-        )
-
-        check_stopping()
-
-        # 2. Upload subtitles
-        uploaded_captions = []
-        failed_captions = []
-        enabled_subs = [s for s in subtitles if s.get("enabled", True)]
-        total_subs = len(enabled_subs)
-
-        if total_subs > 0:
+        results = caption_results if caption_results is not None else caption_plan(subtitles)
+        store.update_task(owner_sub, task_id, {"caption_results": results})
+        video_id = existing_video_id
+        if not video_id:
+            # 1. Prepare video upload request
             store.update_task(
                 owner_sub,
                 task_id,
                 {
-                    "status": "uploading_captions",
+                    "status": "uploading_video",
+                    "progress_percent": 5,
+                    "current_step": "正在準備上傳影片至 YouTube...",
                 },
             )
 
-            for index, sub in enumerate(enabled_subs, start=1):
+            body = {
+                "snippet": {
+                    "title": title[:100],
+                    "description": description[:5000],
+                    "tags": tags or [],
+                    "categoryId": category_id or "22",
+                    "defaultLanguage": default_language or "ko",
+                },
+                "status": {
+                    "privacyStatus": privacy_status
+                    if privacy_status in ("private", "unlisted", "public")
+                    else "private",
+                    "selfDeclaredMadeForKids": False,
+                },
+            }
+
+            # 8MB chunk size for resumable video upload
+            chunk_size = 1024 * 1024 * 8
+            media = MediaFileUpload(video_path, chunksize=chunk_size, resumable=True)
+            request = service.videos().insert(part="snippet,status", body=body, media_body=media)
+
+            video_id = None
+            response = None
+
+            logger.info("Executing chunked video upload for task %s", task_id)
+            while response is None:
                 check_stopping()
-                sub_path = sub.get("full_path")
-                bcp47 = sub.get("bcp47") or "zh-TW"
-                label = sub.get("label") or bcp47
-
-                sub_percent = int(80 + (index / total_subs) * 18)
-                store.update_task(
-                    owner_sub,
-                    task_id,
-                    {
-                        "progress_percent": sub_percent,
-                        "current_step": f"正在上傳字幕 ({index}/{total_subs})：{label} [{bcp47}]...",
-                    },
-                )
-
-                if not sub_path or not Path(sub_path).exists():
-                    logger.warning("Subtitle file not found: %s", sub_path)
-                    failed_captions.append({"language": bcp47, "name": label, "error": "字幕檔案不存在"})
-                    continue
-
-                try:
-                    caption_body = {
-                        "snippet": {
-                            "videoId": video_id,
-                            "language": bcp47,
-                            "name": label[:100],
-                            "isDraft": False,
-                        }
-                    }
-                    caption_media = MediaFileUpload(sub_path, mimetype="text/vtt", resumable=False)
-                    caption_res = (
-                        service.captions().insert(part="snippet", body=caption_body, media_body=caption_media).execute()
-                    )
-                    uploaded_captions.append(
+                status, response = request.next_chunk()
+                if status:
+                    # Video progress covers 5% to 80%
+                    percent = int(5 + status.progress() * 75)
+                    store.update_task(
+                        owner_sub,
+                        task_id,
                         {
-                            "caption_id": caption_res.get("id"),
-                            "language": bcp47,
-                            "name": label,
-                        }
+                            "progress_percent": percent,
+                            "current_step": f"正在上傳影片... ({int(status.progress() * 100)}%)",
+                        },
                     )
-                    logger.info("Uploaded caption [%s] for video %s", bcp47, video_id)
-                except Exception as cap_err:
-                    logger.error("Failed to upload caption [%s]: %s", bcp47, cap_err)
-                    failed_captions.append({"language": bcp47, "name": label, "error": str(cap_err)})
+
+            if not isinstance(response, dict) or not isinstance(response.get("id"), str) or not response["id"].strip():
+                raise RuntimeError("YouTube 未返回有效的影片 ID。")
+
+            video_id = response["id"]
+            video_url = f"https://youtu.be/{video_id}"
+            studio_url = f"https://studio.youtube.com/video/{video_id}/edit"
+            logger.info("Video uploaded successfully for task %s, video_id=%s", task_id, video_id)
+
+            store.update_task(
+                owner_sub,
+                task_id,
+                {
+                    "video_id": video_id,
+                    "video_url": video_url,
+                    "studio_url": studio_url,
+                    "progress_percent": 80,
+                    "current_step": f"影片上傳完成 (ID: {video_id})，開始上傳字幕軌...",
+                },
+            )
 
         check_stopping()
 
-        # 3. Mark completed
+        # Checkpoint every caption independently; retries only operate on this video.
+        results = upload_captions(
+            service,
+            video_id,
+            subtitles,
+            results,
+            checkpoint=lambda patch: store.update_task(owner_sub, task_id, patch),
+            check_stopping=check_stopping,
+            reconcile=bool(existing_video_id),
+        )
+        check_stopping()
+        uploaded = [item for item in results if item["status"] == "uploaded"]
+        failed = [item for item in results if item["status"] != "uploaded"]
         store.update_task(
             owner_sub,
             task_id,
             {
                 "status": "completed",
                 "progress_percent": 100,
-                "current_step": f"上傳全部完成！共發布 1 部影片與 {len(uploaded_captions)} 語系字幕。",
-                "uploaded_captions": uploaded_captions,
-                "failed_captions": failed_captions,
+                "current_step": f"影片已上傳；字幕成功 {len(uploaded)}，待處理 {len(failed)}。",
+                "caption_results": results,
+                "uploaded_captions": uploaded,
+                "failed_captions": failed,
             },
         )
         logger.info("Upload task %s finished successfully", task_id)
@@ -216,8 +174,9 @@ def execute_upload_task(
             task_id,
             {
                 "status": "failed",
-                "error_message": str(exc),
-                "current_step": f"上傳失敗：{exc}",
+                "error_code": "upload_result_unconfirmed",
+                "error_message": "無法確認完整上傳結果，請先核對 YouTube Studio。",
+                "current_step": "上傳已停止，請核對影片與字幕結果。",
             },
         )
     finally:
@@ -283,6 +242,13 @@ class UploadWorker:
             directory = options.get("temp_dir_to_clean")
             if directory:
                 shutil.rmtree(directory, ignore_errors=True)
+
+    def is_task_running(self, owner_sub: str, task_id: str) -> bool:
+        with self._lock:
+            return any(
+                options["owner_sub"] == owner_sub and options["task_id"] == task_id and not future.done()
+                for future, (options, _) in self._tasks.items()
+            )
 
     def shutdown(self) -> int:
         """Stop admission, drain up to the deadline, and preserve uncertain work."""

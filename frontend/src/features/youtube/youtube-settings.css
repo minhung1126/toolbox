@@ -215,3 +215,15 @@
     text-align: center;
   }
 }
+
+.youtube-slot-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  align-items: start;
+}
+
+.youtube-slot-grid .card-header,
+.youtube-slot-grid .card-header-title {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}

@@ -150,11 +150,40 @@ class WeverseUploadStore:
                 updates = {
                     key: value
                     for key, value in updates.items()
-                    if key in {"video_id", "video_url", "studio_url", "uploaded_captions", "failed_captions"}
+                    if key
+                    in {
+                        "video_id",
+                        "video_url",
+                        "studio_url",
+                        "uploaded_captions",
+                        "failed_captions",
+                        "caption_results",
+                    }
                 }
             task.update(updates)
             task["updated_at"] = _utc_now_iso()
             tasks[task_id] = task
+            self._save_all(data)
+            return task
+
+    def create_caption_retry(self, owner_sub: str, parent_id: str, expected_updated_at: str, task: dict) -> dict:
+        """Claim a single retry and persist its child in the same locked transaction."""
+        with self._lock, self._process_file_lock():
+            data = self._load_all()
+            tasks = data.get(owner_sub, {}).get("tasks", {})
+            parent = tasks.get(parent_id)
+            if not parent:
+                raise ValueError("task_not_found")
+            if (
+                parent.get("updated_at") != expected_updated_at
+                or parent.get("retry_task_id")
+                or parent.get("status") not in {"completed", "failed", "interrupted"}
+            ):
+                raise ValueError("caption_retry_conflict")
+            now = _utc_now_iso()
+            task.update(created_at=now, updated_at=now, parent_task_id=parent_id)
+            parent.update(retry_task_id=task["task_id"], updated_at=now)
+            tasks[task["task_id"]] = task
             self._save_all(data)
             return task
 

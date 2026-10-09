@@ -489,3 +489,19 @@
     width: 100%;
   }
 }
+
+.weverse-task-details {
+  overflow-wrap: anywhere;
+}
+
+.weverse-task-details fieldset,
+.weverse-task-details input[type='file'] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.weverse-task-details fieldset {
+  padding: var(--space-3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}

@@ -1,33 +1,24 @@
+import UploadPackageReview from '../features/weverse/components/UploadPackageReview';
+import UploadPackagePicker from '../features/weverse/components/UploadPackagePicker';
+import UploadTaskDetails from '../features/weverse/components/UploadTaskDetails';
+import { isActiveTask } from '../features/weverse/model/taskState';
 import React from 'react';
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  ExternalLink,
-  FileText,
-  Folder,
-  FolderOpen,
-  FolderUp,
-  Loader2,
-  UploadCloud,
-  Video,
-} from 'lucide-react';
+import { FolderUp, Loader2, UploadCloud } from 'lucide-react';
 import './WeverseUploaderPage.css';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ServiceAuthCard from '../components/ServiceAuthCard';
 import { StatusMessage } from '../components/StatusMessage';
-import { PageHeader, Button } from '../shared/ui';
+import { PageHeader } from '../shared/ui';
 import { useOAuthConnect } from '../hooks/useOAuthConnect';
 import WeverseUploadHistory from './weverse/WeverseUploadHistory';
-import {
-  COMMON_BCP47_LANGS,
-  useWeverseUploadWorkflow,
-  YOUTUBE_CATEGORIES,
-} from '../features/weverse/hooks/useWeverseUploadWorkflow';
+import { useWeverseUploadWorkflow } from '../features/weverse/hooks/useWeverseUploadWorkflow';
 import { weverseUploadApi } from '../features/weverse/api/weverseUploadApi';
 
-export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
+export default function WeverseUploaderPage(props) {
+  return <WeverseUploaderContent key={props.authUser?.user?.sub || 'anonymous'} {...props} />;
+}
+function WeverseUploaderContent({ authUser, refreshAuthUser }) {
   const toast = useToast();
 
   // YouTube Dedicated Authorization hook
@@ -58,6 +49,7 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
     metadata,
     setMetadata,
     taskStatus,
+    taskLoading,
     taskPollingError,
     uploadConfirmOpen,
     setUploadConfirmOpen,
@@ -67,6 +59,8 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
     historyLoading,
     historyError,
     loadHistory,
+    openTask,
+    trackQueued,
     folderInputRef,
     handleScanPath,
     handleFolderInputChange,
@@ -122,399 +116,41 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
 
       {/* 2. Step: Pick / Drop Folder */}
       {viewStep === 'pick' && (
-        <div className="glass-panel weverse-folder-picker-panel">
-          <div className="weverse-folder-picker-header">
-            <h3 className="weverse-folder-picker-title">
-              <FolderOpen size={20} color="var(--accent)" /> 步驟一：選擇或拖曳本機資料夾
-            </h3>
-            <div className="weverse-folder-picker-actions">
-              <button
-                type="button"
-                className={`btn btn-sm ${pathInputMode === 'folder_picker' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setPathInputMode('folder_picker')}
-              >
-                資料夾選取 / 拖曳
-              </button>
-              <button
-                type="button"
-                className={`btn btn-sm ${pathInputMode === 'manual_path' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setPathInputMode('manual_path')}
-              >
-                直接輸入本機路徑
-              </button>
-            </div>
-          </div>
-
-          {pathInputMode === 'folder_picker' ? (
-            <div>
-              {/* Hidden webkitdirectory input */}
-              <input
-                ref={folderInputRef}
-                type="file"
-                webkitdirectory=""
-                multiple
-                className="weverse-file-input"
-                onChange={handleFolderInputChange}
-              />
-
-              {/* Drag and drop zone */}
-              <div
-                className={`dropzone-panel weverse-dropzone ${isDragging ? 'is-dragging' : ''}`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => folderInputRef.current?.click()}
-              >
-                <FolderUp
-                  size={54}
-                  color={isDragging ? 'var(--primary)' : 'var(--text-muted)'}
-                  className="weverse-dropzone-icon"
-                />
-                <h4 className="weverse-dropzone-title">按一下選擇資料夾，或將資料夾直接拖曳至此處</h4>
-                <p className="weverse-dropzone-description">
-                  支援包含 <code className="weverse-dropzone-extension">.mp4</code> 影片與多國語系{' '}
-                  <code className="weverse-dropzone-extension">.vtt</code> 字幕檔的 Weverse 資料夾
-                </p>
-                <Button
-                  variant="primary"
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    folderInputRef.current?.click();
-                  }}
-                  disabled={scanning}
-                >
-                  {scanning ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" /> 正在辨識檔案結構...
-                    </>
-                  ) : (
-                    '選擇資料夾'
-                  )}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <div className="weverse-manual-path-row">
-                <input
-                  type="text"
-                  placeholder="例如：D:\Weverse\20260923_Artist_Live_3-241665049"
-                  value={localPath}
-                  onChange={(e) => setLocalPath(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleScanPath();
-                  }}
-                  className="input-field weverse-manual-path-input"
-                />
-                <Button
-                  variant="primary"
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => handleScanPath()}
-                  disabled={scanning || !localPath.trim()}
-                >
-                  {scanning ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" /> 掃描中...
-                    </>
-                  ) : (
-                    '掃描並辨識'
-                  )}
-                </Button>
-              </div>
-
-              {recentPaths.length > 0 && (
-                <div className="weverse-recent-paths">
-                  <span className="weverse-recent-paths-label">最近掃描路徑：</span>
-                  <div className="weverse-recent-path-list">
-                    {recentPaths.map((p) => (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        key={p}
-                        type="button"
-                        className="btn btn-sm btn-secondary weverse-recent-path"
-                        onClick={() => {
-                          setLocalPath(p);
-                          handleScanPath(p);
-                        }}
-                      >
-                        <Folder size={12} className="weverse-recent-path-icon" /> {p}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <UploadPackagePicker
+          pathInputMode={pathInputMode}
+          folderInputRef={folderInputRef}
+          handleFolderInputChange={handleFolderInputChange}
+          isDragging={isDragging}
+          handleDragOver={handleDragOver}
+          handleDragLeave={handleDragLeave}
+          handleDrop={handleDrop}
+          scanning={scanning}
+          localPath={localPath}
+          recentPaths={recentPaths}
+          setPathInputMode={setPathInputMode}
+          setLocalPath={setLocalPath}
+          handleScanPath={handleScanPath}
+        />
       )}
 
       {/* 3. Step: Review & Inspect ("辨識後讓我複查") */}
       {viewStep === 'review' && (
-        <div className="glass-panel weverse-review-panel">
-          <div className="weverse-review-header">
-            <h3 className="weverse-review-title">
-              <FileText size={20} color="var(--primary)" /> 步驟二：辨識結果複查與編輯
-            </h3>
-            <Button
-              variant="secondary"
-              size="sm"
-              type="button"
-              className="btn btn-sm btn-secondary"
-              onClick={handleReset}
-            >
-              重新選擇資料夾
-            </Button>
-          </div>
-
-          {/* Video summary card */}
-          {videoInfo && (
-            <div className="weverse-video-summary">
-              <div className="weverse-video-summary-content">
-                <Video size={24} color="var(--primary)" className="weverse-video-summary-icon" />
-                <div>
-                  <div className="weverse-video-filename">{videoInfo.filename}</div>
-                  <div className="weverse-video-details">
-                    檔案大小：{videoInfo.size_formatted}
-                    {videoInfo.full_path ? ` · 路徑：${videoInfo.full_path}` : ''}
-                  </div>
-                </div>
-              </div>
-              <span className="badge badge-connected weverse-video-ready">主要影片已就緒</span>
-            </div>
-          )}
-
-          {/* Video Metadata Settings */}
-          <div className="weverse-metadata-grid">
-            <div className="weverse-metadata-field">
-              <label className="weverse-field-label" htmlFor="weverse-video-title">
-                影片標題 (Title) <span className="weverse-required">*</span>
-                <span className="weverse-field-counter">{metadata.title.length}/100</span>
-              </label>
-              <input
-                type="text"
-                id="weverse-video-title"
-                className="input-field"
-                value={metadata.title}
-                maxLength={100}
-                onChange={(e) => setMetadata({ ...metadata, title: e.target.value })}
-                placeholder="輸入 YouTube 影片標題"
-              />
-            </div>
-
-            <div className="weverse-metadata-field">
-              <label className="weverse-field-label" htmlFor="weverse-video-privacy">
-                公開隱私狀態 (Privacy Status)
-              </label>
-              <select
-                id="weverse-video-privacy"
-                className="input-field"
-                value={metadata.privacy_status}
-                onChange={(e) => setMetadata({ ...metadata, privacy_status: e.target.value })}
-              >
-                <option value="private">私人 (Private - 推薦)</option>
-                <option value="unlisted">不公開 (Unlisted)</option>
-                <option value="public">公開 (Public)</option>
-              </select>
-            </div>
-
-            <div className="weverse-metadata-field">
-              <label className="weverse-field-label" htmlFor="weverse-video-category">
-                影片類別 (Category)
-              </label>
-              <select
-                id="weverse-video-category"
-                className="input-field"
-                value={metadata.category_id}
-                onChange={(e) => setMetadata({ ...metadata, category_id: e.target.value })}
-              >
-                {YOUTUBE_CATEGORIES.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="weverse-metadata-field">
-              <label className="weverse-field-label" htmlFor="weverse-video-tags">
-                標籤 (Tags, 逗號分隔)
-              </label>
-              <input
-                type="text"
-                id="weverse-video-tags"
-                className="input-field"
-                value={metadata.tags}
-                onChange={(e) => setMetadata({ ...metadata, tags: e.target.value })}
-                placeholder="例如：weverse, live, idol"
-              />
-            </div>
-          </div>
-
-          <div className="weverse-description-field">
-            <label className="weverse-field-label" htmlFor="weverse-video-description">
-              影片說明 (Description)
-              <span className="weverse-field-counter">{metadata.description.length}/5000</span>
-            </label>
-            <textarea
-              id="weverse-video-description"
-              rows={3}
-              maxLength={5000}
-              value={metadata.description}
-              onChange={(e) => setMetadata({ ...metadata, description: e.target.value })}
-              placeholder="輸入影片詳細說明內容..."
-              className="input-field weverse-video-description-input"
-            />
-          </div>
-
-          {/* Subtitles review section */}
-          <div className="weverse-subtitle-section">
-            <div className="weverse-subtitle-header">
-              <div>
-                <h4 className="weverse-subtitle-title">
-                  字幕軌清單與語言對照
-                  <span className="weverse-subtitle-count">
-                    (已勾選 {enabledSubsCount} / {subtitles.length} 軌)
-                  </span>
-                </h4>
-              </div>
-              <div className="weverse-subtitle-actions">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  type="button"
-                  className="btn btn-sm btn-secondary"
-                  onClick={() => handleToggleAllSubs(true)}
-                >
-                  全選
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  type="button"
-                  className="btn btn-sm btn-secondary"
-                  onClick={() => handleToggleAllSubs(false)}
-                >
-                  全消
-                </Button>
-              </div>
-            </div>
-
-            {subtitles.length === 0 ? (
-              <div className="weverse-subtitle-empty">此資料夾中未偵測到任何 .vtt 或 .srt 字幕檔案。</div>
-            ) : (
-              <div className="weverse-subtitle-table-wrap">
-                <table className="weverse-subtitle-table">
-                  <thead>
-                    <tr className="weverse-subtitle-table-head">
-                      <th className="weverse-subtitle-table-heading weverse-subtitle-table-heading-upload">上傳</th>
-                      <th className="weverse-subtitle-table-heading">原字幕檔名 / 偵測代碼</th>
-                      <th className="weverse-subtitle-table-heading">YouTube 語言代碼 (BCP-47)</th>
-                      <th className="weverse-subtitle-table-heading">字幕軌顯示名稱 (Label)</th>
-                      <th className="weverse-subtitle-table-heading weverse-subtitle-table-heading-size">大小</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {subtitles.map((sub) => (
-                      <tr key={sub.id} className={`weverse-subtitle-row ${sub.enabled ? 'is-enabled' : 'is-disabled'}`}>
-                        <td className="weverse-subtitle-cell weverse-subtitle-cell-upload">
-                          <input
-                            type="checkbox"
-                            checked={sub.enabled}
-                            onChange={() => handleToggleSub(sub.id)}
-                            className="weverse-subtitle-checkbox"
-                          />
-                        </td>
-                        <td className="weverse-subtitle-cell">
-                          <div className="weverse-subtitle-filename">{sub.filename}</div>
-                          <span className="weverse-subtitle-language-code">代碼：{sub.raw_lang || '未知'}</span>
-                        </td>
-                        <td className="weverse-subtitle-cell">
-                          <input
-                            type="text"
-                            value={sub.bcp47}
-                            disabled={!sub.enabled}
-                            onChange={(e) => handleSubChange(sub.id, 'bcp47', e.target.value)}
-                            list="bcp47-suggestions"
-                            className="input-field input-sm weverse-subtitle-language-input"
-                          />
-                        </td>
-                        <td className="weverse-subtitle-cell">
-                          <input
-                            type="text"
-                            value={sub.label}
-                            disabled={!sub.enabled}
-                            onChange={(e) => handleSubChange(sub.id, 'label', e.target.value)}
-                            className="input-field input-sm weverse-subtitle-label-input"
-                          />
-                        </td>
-                        <td className="weverse-subtitle-cell weverse-subtitle-cell-size">{sub.size_formatted}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            <datalist id="bcp47-suggestions">
-              {COMMON_BCP47_LANGS.map((l) => (
-                <option key={l.code} value={l.code}>
-                  {l.label}
-                </option>
-              ))}
-            </datalist>
-          </div>
-
-          {/* Quota preview card */}
-          <div className="weverse-quota-card">
-            <div>
-              <div className="weverse-quota-title">
-                <Clock size={16} color="var(--accent)" /> YouTube API 配額預估消耗：{estimatedQuota.toLocaleString()}{' '}
-                單位
-              </div>
-              <div className="weverse-quota-description">
-                影片上傳：1,600 單位 · 字幕上傳：{enabledSubsCount} 軌 × 400 單位 ={' '}
-                {(enabledSubsCount * 400).toLocaleString()} 單位
-              </div>
-            </div>
-
-            {estimatedQuota >= 8000 && (
-              <span className="badge badge-warning weverse-quota-warning">
-                <AlertTriangle size={14} /> 接近 YouTube 每日預設上限 (10,000)
-              </span>
-            )}
-          </div>
-
-          {/* Actions */}
-          {uploadOutcomeUncertain && (
-            <StatusMessage tone="error" title="上傳結果待核對">
-              無法確認任務是否已啟動。請先檢查下方上傳歷史及 YouTube Studio；核對後再重新選擇資料夾，勿直接重送。
-            </StatusMessage>
-          )}
-          <div className="weverse-review-actions">
-            <Button variant="secondary" type="button" className="btn btn-secondary" onClick={handleReset}>
-              取消
-            </Button>
-            <Button
-              variant="primary"
-              type="button"
-              className="btn btn-primary"
-              disabled={uploadStarting || uploadOutcomeUncertain || !isVideoAuthConnected || !metadata.title.trim()}
-              onClick={() => setUploadConfirmOpen(true)}
-            >
-              {uploadStarting ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" /> 啟動中...
-                </>
-              ) : (
-                '確認並開始上傳至 YouTube'
-              )}
-            </Button>
-          </div>
-        </div>
+        <UploadPackageReview
+          handleReset={handleReset}
+          videoInfo={videoInfo}
+          metadata={metadata}
+          enabledSubsCount={enabledSubsCount}
+          subtitles={subtitles}
+          estimatedQuota={estimatedQuota}
+          uploadOutcomeUncertain={uploadOutcomeUncertain}
+          uploadStarting={uploadStarting}
+          isVideoAuthConnected={isVideoAuthConnected}
+          setMetadata={setMetadata}
+          handleToggleAllSubs={handleToggleAllSubs}
+          handleToggleSub={handleToggleSub}
+          handleSubChange={handleSubChange}
+          setUploadConfirmOpen={setUploadConfirmOpen}
+        />
       )}
 
       {/* Confirm upload dialog */}
@@ -528,7 +164,7 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
       />
 
       {/* 4. Step: Uploading / Progress */}
-      {viewStep === 'uploading' && taskStatus && (
+      {viewStep === 'uploading' && taskStatus && (isActiveTask(taskStatus) || taskPollingError) && (
         <div className="glass-panel weverse-upload-progress-panel">
           {taskPollingError ? (
             <StatusMessage tone="error" title="上傳狀態待核對">
@@ -560,45 +196,30 @@ export default function WeverseUploaderPage({ authUser, refreshAuthUser }) {
         </div>
       )}
 
-      {/* 5. Step: Completed View */}
-      {viewStep === 'completed' && taskStatus && (
-        <div className="glass-panel weverse-upload-complete-panel">
-          <CheckCircle2 size={54} color="var(--success)" className="weverse-upload-success-icon" />
-          <h2 className="weverse-upload-success-title">上傳成功！</h2>
-          <p className="weverse-upload-success-description">
-            影片「{taskStatus.title}」已順利發布，並已掛載多語系字幕。
-          </p>
-
-          <div className="weverse-upload-links">
-            {taskStatus.video_url && (
-              <a
-                href={taskStatus.video_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-primary weverse-result-link"
-              >
-                在 YouTube 開啟影片 <ExternalLink size={16} />
-              </a>
-            )}
-            {taskStatus.studio_url && (
-              <a
-                href={taskStatus.studio_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-secondary weverse-result-link"
-              >
-                在 YouTube Studio 編輯 <ExternalLink size={16} />
-              </a>
-            )}
-          </div>
-
-          <Button variant="secondary" type="button" className="btn btn-secondary" onClick={handleReset}>
-            上傳另一部影片
-          </Button>
-        </div>
+      {taskLoading && <p role="status">正在讀取任務詳情…</p>}
+      {taskPollingError && !taskStatus && (
+        <StatusMessage tone="error" title="上傳狀態待核對">
+          {taskPollingError}
+        </StatusMessage>
+      )}
+      {taskStatus && (
+        <UploadTaskDetails
+          key={taskStatus.task_id}
+          task={taskStatus}
+          connected={isVideoAuthConnected}
+          onQueued={trackQueued}
+          onOpen={openTask}
+          onReset={handleReset}
+        />
       )}
 
-      <WeverseUploadHistory items={historyList} loading={historyLoading} error={historyError} onRefresh={loadHistory} />
+      <WeverseUploadHistory
+        items={historyList}
+        loading={historyLoading}
+        error={historyError}
+        onRefresh={loadHistory}
+        onOpen={openTask}
+      />
     </div>
   );
 }

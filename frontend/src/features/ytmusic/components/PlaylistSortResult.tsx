@@ -1,9 +1,29 @@
+import { ResultExport } from '../../../shared/ui/ResultExport';
 import { ExternalLink } from 'lucide-react';
 import { StatusMessage } from '../../../components/StatusMessage';
 import type { PlaylistSortApplyResponse } from '../api/types';
 export default function PlaylistSortResult({ applyResult }: { applyResult: PlaylistSortApplyResponse }) {
   return (
     <section className="glass-panel card-padding">
+      <ResultExport
+        filename="playlist-sort"
+        rows={[
+          {
+            id: 'summary',
+            title: `成功 ${applyResult.succeeded}／失敗 ${applyResult.failed}／總數 ${applyResult.total}`,
+            status: applyResult.failed ? 'partial' : 'completed',
+            reason: '成功項目僅提供總數；以下為需核對的曲目。',
+            url: applyResult.new_playlist_url || '',
+          },
+          ...applyResult.failed_items.map((item) => ({
+            id: item.playlist_item_id || item.video_id || '',
+            title: '',
+            status: 'failed',
+            reason: item.error,
+            url: item.video_id ? `https://youtu.be/${item.video_id}` : '',
+          })),
+        ]}
+      />
       <StatusMessage
         action={undefined}
         status={undefined}

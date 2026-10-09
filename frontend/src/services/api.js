@@ -537,6 +537,12 @@ export const api = {
       timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
       body: formData,
     }),
+  retryWeverseCaptions: (taskId, formData) =>
+    request(`/weverse-uploader/tasks/${encodeURIComponent(taskId)}/retry-captions`, {
+      method: 'POST',
+      body: formData,
+      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+    }),
   getWeverseUploadTask: (taskId) => request(`/weverse-uploader/tasks/${taskId}`),
   getWeverseUploadHistory: (limit = 20) => request(`/weverse-uploader/history?limit=${limit}`),
   getWeverseRecentPaths: () => request('/weverse-uploader/recent-paths'),
