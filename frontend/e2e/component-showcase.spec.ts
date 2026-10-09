@@ -1126,7 +1126,7 @@ test('Photo Curator exports the assigned image and checklist in a ZIP download',
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: '下載分組照片 (ZIP)' }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/^Instagram_三部曲貼文_\d{4}-\d{2}-\d{2}\.zip$/);
+  expect(download.suggestedFilename()).toMatch(/^Instagram_三部曲貼文_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.zip$/);
 
   const archive = await JSZip.loadAsync(await readFile(await download.path()));
   expect(archive.file('Post_1_Post 1/01_COVER_concert-photo.jpg')).not.toBeNull();

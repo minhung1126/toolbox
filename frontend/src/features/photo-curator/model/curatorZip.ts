@@ -97,7 +97,10 @@ export async function exportCuratedZip({ posts, photoMap, checklistContent }: Cu
   const downloadUrl = URL.createObjectURL(content);
   const anchor = document.createElement('a');
   anchor.href = downloadUrl;
-  const timestamp = new Date().toISOString().slice(0, 10);
+  const timestamp = new Date()
+    .toLocaleString('sv-SE', { timeZone: 'Asia/Taipei', hourCycle: 'h23' })
+    .replace(' ', '_')
+    .replace(/:/g, '-');
   anchor.download = `Instagram_三部曲貼文_${timestamp}.zip`;
   document.body.appendChild(anchor);
   anchor.click();

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { exportCuratedZip, generateChecklistText } from './curatorZip';
 
 describe('curatorZip utils', () => {
@@ -36,7 +36,13 @@ describe('curatorZip utils', () => {
   });
 
   describe('exportCuratedZip', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
     it('creates zip blob and triggers anchor download', async () => {
+      vi.setSystemTime(new Date('2026-10-09T16:30:52Z'));
       global.URL.createObjectURL = vi.fn(() => 'blob:mock-download-url');
       global.URL.revokeObjectURL = vi.fn();
       let downloadedAnchor;
@@ -52,7 +58,11 @@ describe('curatorZip utils', () => {
 
       expect(global.URL.createObjectURL).toHaveBeenCalled();
       expect(downloadedAnchor).toHaveAttribute('href', 'blob:mock-download-url');
-      expect(downloadedAnchor).toHaveAttribute('download', expect.stringMatching(/\.zip$/));
+      expect(downloadedAnchor).toHaveAttribute('download', 'Instagram_三部曲貼文_2026-10-10_00-30-52.zip');
+
+      vi.setSystemTime(new Date('2026-10-09T16:30:53Z'));
+      await exportCuratedZip({ posts, photoMap, checklistContent: 'test checklist' });
+      expect(downloadedAnchor).toHaveAttribute('download', 'Instagram_三部曲貼文_2026-10-10_00-30-53.zip');
     });
   });
 });
