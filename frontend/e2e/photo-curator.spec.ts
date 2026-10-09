@@ -4,7 +4,8 @@ import { mockAuthenticatedBackend } from './fixtures';
 for (const width of [390, 1440]) {
   test(`photo grouping and precise sorting at ${width}px`, async ({ page }) => {
     await mockAuthenticatedBackend(page);
-    await page.setViewportSize({ width, height: 1000 });
+    // Keep the larger photo cards visible together during pointer-based sorting.
+    await page.setViewportSize({ width, height: width === 1440 ? 1600 : 1000 });
     await page.goto('/photo-curator');
     await page.locator('input[type=file]').setInputFiles(
       ['a', 'b', 'c'].map((name) => ({
@@ -19,18 +20,19 @@ for (const width of [390, 1440]) {
     await expect(page.locator('.ig-slot-badge')).toHaveText(['Post 3 封面', 'Post 2 封面', 'Post 1 封面']);
     const post1 = page.locator('[data-post-id=post-1]');
     const cards = post1.locator('.post-item-card');
+    const thumbnailBox = await cards.first().locator('.photo-card-thumb-wrap').boundingBox();
+    expect(thumbnailBox!.width).toBeGreaterThan(200);
+    expect(thumbnailBox!.height).toBeGreaterThan(150);
     if (width === 1440) {
       await cards.nth(2).dragTo(cards.nth(0), { sourcePosition: { x: 20, y: 10 }, targetPosition: { x: 20, y: 10 } });
       await expect(post1.locator('.photo-card-name')).toHaveText(['c.svg', 'a.svg', 'b.svg']);
       await expect(cards.first()).toHaveClass(/is-cover-item/);
       await expect(page.locator('.ig-grid-slot').last().locator('img')).toHaveAttribute('alt', /c.svg/);
       const targetBox = await cards.nth(2).boundingBox();
-      await cards
-        .first()
-        .dragTo(cards.nth(2), {
-          sourcePosition: { x: 20, y: 10 },
-          targetPosition: { x: 20, y: targetBox!.height - 10 },
-        });
+      await cards.first().dragTo(cards.nth(2), {
+        sourcePosition: { x: 20, y: 10 },
+        targetPosition: { x: 20, y: targetBox!.height - 10 },
+      });
       await expect(post1.locator('.photo-card-name')).toHaveText(['a.svg', 'b.svg', 'c.svg']);
     } else {
       await page.getByRole('button', { name: '往前移 c.svg', exact: true }).click();

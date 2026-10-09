@@ -229,7 +229,7 @@
 /* Main Curator Workbench Grid */
 .curator-workbench-grid {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.5rem;
   align-items: start;
 }
@@ -241,7 +241,7 @@
   flex-direction: column;
   gap: 0.75rem;
   background: rgb(15 23 42 / 60%);
-  min-height: 480px;
+  min-height: 0;
 }
 
 .unassigned-pool-panel.is-drag-over {
@@ -275,15 +275,16 @@
 }
 
 .pool-photo-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
   gap: 0.65rem;
-  max-height: 650px;
+  max-height: 380px;
   overflow-y: auto;
   padding-right: 4px;
 }
 
 .pool-empty-state {
+  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -298,7 +299,7 @@
 /* Post Columns Grid */
 .posts-columns-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1.25rem;
 }
 
@@ -379,8 +380,6 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  max-height: 650px;
-  overflow-y: auto;
   padding-right: 4px;
 }
 
@@ -407,6 +406,7 @@
 .curator-photo-card {
   position: relative;
   display: flex;
+  flex-direction: column;
   gap: 0.75rem;
   background: rgb(10 15 29 / 85%);
   border: 1px solid var(--border-color);
@@ -465,8 +465,9 @@
 }
 
 .photo-card-thumb-wrap {
-  width: 64px;
-  height: 64px;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
   border-radius: var(--radius-sm);
   overflow: hidden;
   position: relative;
@@ -518,7 +519,7 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 0.35rem;
+  gap: 0.65rem;
 }
 
 .photo-card-name {
@@ -658,6 +659,15 @@
     grid-template-columns: 1fr;
   }
 
+  .post-photo-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  }
+
+  .post-empty-drop-target {
+    grid-column: 1 / -1;
+  }
+
   .ig-preview-grid {
     grid-template-columns: repeat(3, 1fr);
   }
@@ -711,9 +721,15 @@
 }
 
 .photo-drag-grip {
-  flex-shrink: 0;
-  align-self: center;
-  color: var(--text-muted);
+  position: absolute;
+  top: 0.9rem;
+  left: 0.9rem;
+  z-index: 1;
+  padding: 2px;
+  box-sizing: content-box;
+  border-radius: var(--radius-xs);
+  background: rgb(0 0 0 / 60%);
+  color: var(--text-main);
 }
 
 .post-item-card.drop-before {
@@ -750,28 +766,10 @@
   padding: 5px 4px;
 }
 
-@media (min-width: 1025px) and (max-width: 1500px) {
-  .curator-workbench-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 .unassigned-pool-panel.is-empty {
   min-height: 0;
 }
 
 .unassigned-pool-panel.is-empty .pool-empty-state {
   padding: 1rem;
-}
-
-@media (min-width: 641px) and (max-width: 1500px) {
-  .unassigned-pool-panel {
-    min-height: 0;
-  }
-
-  .pool-photo-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    max-height: 240px;
-  }
 }
