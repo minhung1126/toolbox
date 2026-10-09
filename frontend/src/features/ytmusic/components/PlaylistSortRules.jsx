@@ -54,6 +54,7 @@ export default function PlaylistSortRules({
           className="form-select playlist-sort-preset-select"
           aria-label="排序預設模式"
           value={presetMode}
+          disabled={applying}
           onChange={(e) => {
             const next = e.target.value;
             setPresetMode(next);
@@ -69,7 +70,7 @@ export default function PlaylistSortRules({
       </div>
 
       {presetMode === 'custom' && (
-        <div className="playlist-sort-custom-rules">
+        <fieldset className="playlist-sort-custom-rules" disabled={applying}>
           <p className="playlist-sort-help">可按住左側圖示拖曳以調整順位優先層級（靠上層者優先排序）：</p>
           {customKeys.map((k, i) => (
             <SortKeyRow
@@ -96,7 +97,7 @@ export default function PlaylistSortRules({
               <Plus size={14} /> 新增排序順位
             </Button>
           )}
-        </div>
+        </fieldset>
       )}
 
       <div className="playlist-sort-actions">
@@ -116,7 +117,7 @@ export default function PlaylistSortRules({
             type="button"
             className="btn btn-secondary playlist-sort-action playlist-sort-refresh-cache"
             onClick={handlePreview}
-            disabled={previewing}
+            disabled={previewing || applying}
             title="重新向伺服器拉取最新歌曲資料並更新快取"
           >
             <RefreshCw size={14} className={previewing ? 'spin' : ''} /> 重新讀取歌曲快取

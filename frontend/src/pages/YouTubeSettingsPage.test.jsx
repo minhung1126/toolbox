@@ -54,7 +54,7 @@ const secondarySlot = {
 };
 
 function renderPage(overrides = {}) {
-  const props = {
+  let props = {
     authUser: {
       youtube: { active_slot: 'primary', slots: { primary: primarySlot, secondary: secondarySlot } },
     },
@@ -63,7 +63,7 @@ function renderPage(overrides = {}) {
     refreshAuthUser: vi.fn().mockResolvedValue({}),
     ...overrides,
   };
-  return render(
+  const content = () => (
     <MemoryRouter
       future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       initialEntries={['/youtube/settings/connections']}
@@ -73,6 +73,14 @@ function renderPage(overrides = {}) {
       </ToastProvider>
     </MemoryRouter>
   );
+  const view = render(content());
+  return {
+    ...view,
+    rerenderPage: (nextProps) => {
+      props = { ...props, ...nextProps };
+      view.rerender(content());
+    },
+  };
 }
 
 describe('YouTubeSettingsPage', () => {
@@ -131,6 +139,83 @@ describe('YouTubeSettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '顯示 OAuth Client Secret' }));
     expect(secret).toHaveAttribute('type', 'text');
     expect(screen.getByRole('button', { name: '隱藏 OAuth Client Secret' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('preserves edited settings on auth refresh while updating untouched fields', () => {
+    const authUser = {
+      sub: 'creator',
+      youtube: {
+        routing_mode: 'auto_primary',
+        active_slot: 'primary',
+        slots: { primary: primarySlot, secondary: secondarySlot },
+      },
+    };
+    const { rerenderPage } = renderPage({ authUser, section: 'routing' });
+    fireEvent.change(screen.getByLabelText('路由模式 (Routing Mode)'), { target: { value: 'manual' } });
+    fireEvent.change(document.getElementById('primary-quota-limit'), { target: { value: '12345' } });
+    fireEvent.change(document.getElementById('secondary-quota-buffer'), { target: { value: '' } });
+
+    const refreshedUser = {
+      ...authUser,
+      youtube: {
+        ...authUser.youtube,
+        slots: {
+          primary: { ...primarySlot, quota_limit: 15000, safety_buffer_units: 1200 },
+          secondary: { ...secondarySlot, safety_buffer_units: 950 },
+        },
+      },
+    };
+    rerenderPage({ authUser: refreshedUser });
+    rerenderPage({ authUser: JSON.parse(JSON.stringify(refreshedUser)) });
+
+    expect(screen.getByLabelText('路由模式 (Routing Mode)')).toHaveValue('manual');
+    expect(document.getElementById('primary-quota-limit')).toHaveValue(12345);
+    expect(document.getElementById('primary-quota-buffer')).toHaveValue(1200);
+    expect(document.getElementById('secondary-quota-buffer')).toHaveValue(null);
+
+    rerenderPage({ authUser: { ...refreshedUser, sub: 'another-creator' } });
+    expect(screen.getByLabelText('路由模式 (Routing Mode)')).toHaveValue('auto_primary');
+    expect(document.getElementById('primary-quota-limit')).toHaveValue(15000);
+    expect(document.getElementById('secondary-quota-buffer')).toHaveValue(950);
+  });
+
+  it('keeps another slot and routing draft when refreshing after a quota save', async () => {
+    const authUser = {
+      sub: 'creator',
+      youtube: {
+        routing_mode: 'auto_primary',
+        active_slot: 'primary',
+        slots: { primary: primarySlot, secondary: secondarySlot },
+      },
+    };
+    const refreshAuthUser = vi.fn(async () => {
+      view.rerenderPage({
+        authUser: {
+          ...authUser,
+          youtube: {
+            ...authUser.youtube,
+            slots: { primary: { ...primarySlot, quota_limit: 8000 }, secondary: { ...secondarySlot } },
+          },
+        },
+      });
+    });
+    const view = renderPage({ authUser, refreshAuthUser, section: 'routing' });
+    fireEvent.change(screen.getByLabelText('路由模式 (Routing Mode)'), { target: { value: 'manual' } });
+    fireEvent.change(document.getElementById('primary-quota-limit'), { target: { value: '8000' } });
+    fireEvent.change(document.getElementById('secondary-quota-limit'), { target: { value: '7000' } });
+    fireEvent.click(screen.getAllByRole('button', { name: '儲存 slot 設定' })[0]);
+
+    await waitFor(() => expect(refreshAuthUser).toHaveBeenCalled());
+    expect(api.updateYoutubeQuota).toHaveBeenCalledWith({
+      slot: 'primary',
+      quotaLimit: 8000,
+      safetyBufferUnits: 1000,
+    });
+    expect(document.getElementById('primary-quota-limit')).toHaveValue(8000);
+    expect(document.getElementById('secondary-quota-limit')).toHaveValue(7000);
+    expect(screen.getByLabelText('路由模式 (Routing Mode)')).toHaveValue('manual');
+    expect(screen.queryByText(/您已修改 Primary 的配額設定/)).not.toBeInTheDocument();
+    expect(screen.getByText(/您已修改 Secondary 的配額設定/)).toBeInTheDocument();
   });
 
   it('saves quota and playlist through separate actions without crossing unsaved drafts', async () => {

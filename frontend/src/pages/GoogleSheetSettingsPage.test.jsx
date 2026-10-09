@@ -18,10 +18,6 @@ vi.mock('../components/Toast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }),
 }));
 
-vi.mock('../components/SourceLinkInput', () => ({
-  default: ({ value, onChange }) => <input aria-label="Google Sheet" value={value} onChange={onChange} />,
-}));
-
 function renderPage(refreshSettings = vi.fn().mockResolvedValue({})) {
   return render(
     <MemoryRouter>
@@ -44,11 +40,42 @@ describe('GoogleSheetSettingsPage autosave lifecycle', () => {
     vi.useRealTimers();
   });
 
+  it('labels the real source input and explains its persistence', () => {
+    renderPage();
+    const input = screen.getByRole('textbox', { name: /預設 Google Sheet 網址或 Spreadsheet ID/ });
+    expect(input).toHaveAccessibleDescription('修改後會自動儲存至目前登入的 Google 帳號；換瀏覽器或重新登入仍可取回。');
+    expect(screen.getByRole('link', { name: '開啟資料來源' })).toHaveAttribute(
+      'href',
+      'https://docs.google.com/spreadsheets/d/old-sheet/edit'
+    );
+  });
+
+  it('saves a pasted source without surrounding whitespace', async () => {
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/預設 Google Sheet 網址或 Spreadsheet ID/), {
+      target: { value: '  https://docs.google.com/spreadsheets/d/sheet-1/edit  ' },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '立即儲存帳號設定' }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(sheetsSettingsApi.updateSettings).toHaveBeenCalledWith({
+      default_spreadsheet_id: 'https://docs.google.com/spreadsheets/d/sheet-1/edit',
+    });
+    expect(screen.getByText('目前帳號的 Google Sheet 設定已自動儲存。')).toBeInTheDocument();
+    expect(screen.queryByText('自動儲存失敗')).not.toBeInTheDocument();
+  });
+
   it('flushes the latest debounced value once when the page unmounts', async () => {
     const refreshSettings = vi.fn().mockResolvedValue({});
     const { unmount } = renderPage(refreshSettings);
 
-    fireEvent.change(screen.getByLabelText('Google Sheet'), { target: { value: 'latest-sheet' } });
+    fireEvent.change(screen.getByLabelText(/預設 Google Sheet 網址或 Spreadsheet ID/), {
+      target: { value: 'latest-sheet' },
+    });
     expect(sheetsSettingsApi.updateSettings).not.toHaveBeenCalled();
 
     unmount();
@@ -71,7 +98,9 @@ describe('GoogleSheetSettingsPage autosave lifecycle', () => {
     );
     const { unmount } = renderPage();
 
-    fireEvent.change(screen.getByLabelText('Google Sheet'), { target: { value: 'queued-sheet' } });
+    fireEvent.change(screen.getByLabelText(/預設 Google Sheet 網址或 Spreadsheet ID/), {
+      target: { value: 'queued-sheet' },
+    });
     await act(async () => {
       vi.advanceTimersByTime(500);
       await Promise.resolve();
@@ -91,7 +120,9 @@ describe('GoogleSheetSettingsPage autosave lifecycle', () => {
 
   it('shows a refresh warning after a confirmed settings write', async () => {
     renderPage(vi.fn().mockRejectedValue(new Error('refresh failed')));
-    fireEvent.change(screen.getByLabelText('Google Sheet'), { target: { value: 'new-sheet' } });
+    fireEvent.change(screen.getByLabelText(/預設 Google Sheet 網址或 Spreadsheet ID/), {
+      target: { value: 'new-sheet' },
+    });
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '立即儲存帳號設定' }));
@@ -102,6 +133,6 @@ describe('GoogleSheetSettingsPage autosave lifecycle', () => {
     expect(sheetsSettingsApi.updateSettings).toHaveBeenCalledWith({ default_spreadsheet_id: 'new-sheet' });
     expect(screen.getByText(/設定已儲存，但畫面更新失敗/)).toBeInTheDocument();
     expect(screen.queryByText('自動儲存失敗')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Google Sheet')).toHaveValue('new-sheet');
+    expect(screen.getByLabelText(/預設 Google Sheet 網址或 Spreadsheet ID/)).toHaveValue('new-sheet');
   });
 });

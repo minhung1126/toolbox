@@ -74,7 +74,6 @@ export default function FfmpegPlayer({ workflow }) {
           }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
         >
           <input
             type="file"
@@ -89,8 +88,11 @@ export default function FfmpegPlayer({ workflow }) {
           />
           <div className="dropzone-inner">
             <Upload size={40} className="dropzone-icon" />
-            <h3>點擊或拖曳本機影片至此處</h3>
+            <h3>選擇或拖曳本機影片至此處</h3>
             <p className="text-muted">支援 MP4, WebM, MOV, MKV, AVI 等常見影片格式</p>
+            <Button variant="primary" type="button" onClick={() => fileInputRef.current?.click()}>
+              選擇影片
+            </Button>
             <div className="dropzone-note">
               <span>🔒 本機極速即時預覽，影片資料不耗費流量上傳至伺服器</span>
             </div>

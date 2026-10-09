@@ -32,6 +32,7 @@ export const toolCatalog = getAllTools().map((tool) => ({
 }));
 
 export async function mockAuthenticatedBackend(page, responseOverrides: Record<string, unknown> = {}) {
+  const workState: Record<string, unknown> = {};
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     const responses: Record<string, unknown> = {
@@ -50,7 +51,13 @@ export async function mockAuthenticatedBackend(page, responseOverrides: Record<s
       '/api/v1/settings/shared': {},
       '/api/v1/settings/youtube': {},
       '/api/v1/settings/team-person-filter': { configured: false, team: '', selected_people: [] },
-      '/api/v1/settings/work-state': { state: {} },
+      '/api/v1/settings/work-state': async (workStateRoute) => {
+        if (workStateRoute.request().method() === 'PUT') {
+          const { key, value } = workStateRoute.request().postDataJSON();
+          workState[key] = value;
+        }
+        await workStateRoute.fulfill({ status: 200, json: { version: 1, state: workState } });
+      },
       '/api/v1/health': { commit_sha: 'development' },
       '/api/v1/tools': { tools: toolCatalog },
       '/api/v1/weverse-uploader/scan': {

@@ -20,7 +20,8 @@ export default function PlaylistSortApplyOptions({
 
       {quotaEstimate && (
         <div className="playlist-sort-quota-estimate">
-          {quotaEstimate.total_units === 0 ? (
+          {quotaEstimate.engine === 'ytmusic_innertube' ||
+          (!quotaEstimate.engine && quotaEstimate.units_per_move === 0) ? (
             <div className="playlist-sort-zero-quota">
               <CheckCircle2 size={18} />
               <span>
@@ -33,9 +34,18 @@ export default function PlaylistSortApplyOptions({
             <StatusMessage tone="warning" title="API 配額消耗預估">
               <div className="playlist-sort-quota-warning-row">
                 <span>
-                  本次排序將移動 <strong>{previewData.moved_count}</strong> 首歌曲， 預估消耗{' '}
-                  <strong>{quotaEstimate.total_units?.toLocaleString()}</strong> API 配額點數 （每次移動{' '}
-                  {quotaEstimate.units_per_move} 點）。
+                  {applyMode === 'new_playlist' ? (
+                    <>
+                      本次將建立新歌單並加入 <strong>{previewData.total}</strong> 首歌曲，
+                    </>
+                  ) : (
+                    <>
+                      本次排序將移動 <strong>{previewData.moved_count}</strong> 首歌曲，
+                    </>
+                  )}{' '}
+                  預估消耗 <strong>{quotaEstimate.total_units?.toLocaleString()}</strong> API 配額點數 （
+                  {applyMode === 'new_playlist' ? '建立歌單與每首加入各' : '每次移動'} {quotaEstimate.units_per_move}{' '}
+                  點）。
                 </span>
                 {!hasCustomToken && (
                   <Button
@@ -62,6 +72,7 @@ export default function PlaylistSortApplyOptions({
             name="apply_mode"
             value="in_place"
             checked={applyMode === 'in_place'}
+            disabled={applying}
             onChange={() => {
               setApplyMode('in_place');
               persistConfig({ applyMode: 'in_place' });
@@ -75,6 +86,7 @@ export default function PlaylistSortApplyOptions({
             name="apply_mode"
             value="new_playlist"
             checked={applyMode === 'new_playlist'}
+            disabled={applying}
             onChange={() => {
               setApplyMode('new_playlist');
               persistConfig({ applyMode: 'new_playlist' });
@@ -94,6 +106,7 @@ export default function PlaylistSortApplyOptions({
             type="text"
             className="form-input"
             value={newPlaylistTitle}
+            disabled={applying}
             onChange={(e) => setNewPlaylistTitle(e.target.value)}
             placeholder="輸入新播放清單名稱…"
           />
@@ -106,7 +119,7 @@ export default function PlaylistSortApplyOptions({
           type="button"
           className="btn btn-primary playlist-sort-action"
           onClick={handleApplyClick}
-          disabled={applying}
+          disabled={applying || (applyMode === 'in_place' && previewData.moved_count === 0)}
         >
           {applying ? <Loader2 size={15} className="spin" /> : <Check size={15} />}
           {applying ? '套用中…' : applyMode === 'new_playlist' ? '建立新排序歌單' : '套用排序'}

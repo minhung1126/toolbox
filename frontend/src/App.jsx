@@ -83,6 +83,7 @@ export function AppContent() {
   const [authUser, setAuthUser] = useState(null);
   const [sysSettings, setSysSettings] = useState({});
   const [workState, setWorkState] = useState({});
+  const [workStateReady, setWorkStateReady] = useState(false);
   const [authStatus, setAuthStatusState] = useState(AUTH_STATUS.LOADING);
   const [initializing, setInitializing] = useState(true);
   const [authError, setAuthError] = useState(null);
@@ -112,6 +113,7 @@ export function AppContent() {
     if (currentSubject !== nextSubject) {
       sidebarTouchedRef.current = false;
       setWorkState({});
+      setWorkStateReady(false);
       setSidebarCollapsed(false);
     }
     authUserRef.current = nextUser;
@@ -220,6 +222,7 @@ export function AppContent() {
       if (workStateResponse) {
         const nextWorkState = workStateResponse.state || {};
         setWorkState(nextWorkState);
+        setWorkStateReady(true);
         if (!sidebarTouchedRef.current) setSidebarCollapsed(nextWorkState.navigation?.sidebarCollapsed ?? false);
       }
 
@@ -406,6 +409,7 @@ export function AppContent() {
       authUser={authUser}
       authError={authError}
       workState={workState}
+      workStateReady={workStateReady}
       updateAvailable={updateAvailable}
       settingsStatus={settingsStatus}
       settingsRefreshing={settingsRefreshing}

@@ -5,6 +5,7 @@ import { COMMON_BCP47_LANGS, YOUTUBE_CATEGORIES } from '../model/options';
 export default function UploadPackageReview({
   handleReset,
   videoInfo,
+  packageSource,
   metadata,
   enabledSubsCount,
   subtitles,
@@ -24,7 +25,14 @@ export default function UploadPackageReview({
         <h3 className="weverse-review-title">
           <FileText size={20} color="var(--primary)" /> 步驟二：辨識結果複查與編輯
         </h3>
-        <Button variant="secondary" size="sm" type="button" className="btn btn-sm btn-secondary" onClick={handleReset}>
+        <Button
+          variant="secondary"
+          size="sm"
+          type="button"
+          className="btn btn-sm btn-secondary"
+          onClick={handleReset}
+          disabled={uploadStarting}
+        >
           重新選擇資料夾
         </Button>
       </div>
@@ -46,6 +54,17 @@ export default function UploadPackageReview({
         </div>
       )}
 
+      {uploadStarting && (
+        <StatusMessage
+          tone="info"
+          title={packageSource === 'browser_files' ? '正在傳送影片與字幕' : '正在建立上傳任務'}
+        >
+          {packageSource === 'browser_files'
+            ? '正在將檔案傳送至伺服器，完成後會加入 YouTube 上傳佇列。請保持此頁開啟，傳輸期間暫停編輯與重新選擇資料夾。'
+            : '正在將影片與字幕加入 YouTube 上傳佇列。請保持此頁開啟，任務建立期間暫停編輯與重新選擇資料夾。'}
+        </StatusMessage>
+      )}
+
       {/* Video Metadata Settings */}
       <div className="weverse-metadata-grid">
         <div className="weverse-metadata-field">
@@ -56,7 +75,8 @@ export default function UploadPackageReview({
           <input
             type="text"
             id="weverse-video-title"
-            className="input-field"
+            className="ui-text-field"
+            disabled={uploadStarting}
             value={metadata.title}
             maxLength={100}
             onChange={(e) => setMetadata({ ...metadata, title: e.target.value })}
@@ -70,7 +90,8 @@ export default function UploadPackageReview({
           </label>
           <select
             id="weverse-video-privacy"
-            className="input-field"
+            className="ui-text-field"
+            disabled={uploadStarting}
             value={metadata.privacy_status}
             onChange={(e) => setMetadata({ ...metadata, privacy_status: e.target.value })}
           >
@@ -86,7 +107,8 @@ export default function UploadPackageReview({
           </label>
           <select
             id="weverse-video-category"
-            className="input-field"
+            className="ui-text-field"
+            disabled={uploadStarting}
             value={metadata.category_id}
             onChange={(e) => setMetadata({ ...metadata, category_id: e.target.value })}
           >
@@ -105,7 +127,8 @@ export default function UploadPackageReview({
           <input
             type="text"
             id="weverse-video-tags"
-            className="input-field"
+            className="ui-text-field"
+            disabled={uploadStarting}
             value={metadata.tags}
             onChange={(e) => setMetadata({ ...metadata, tags: e.target.value })}
             placeholder="例如：weverse, live, idol"
@@ -125,7 +148,8 @@ export default function UploadPackageReview({
           value={metadata.description}
           onChange={(e) => setMetadata({ ...metadata, description: e.target.value })}
           placeholder="輸入影片詳細說明內容..."
-          className="input-field weverse-video-description-input"
+          className="ui-text-field weverse-video-description-input"
+          disabled={uploadStarting}
         />
       </div>
 
@@ -147,6 +171,7 @@ export default function UploadPackageReview({
               type="button"
               className="btn btn-sm btn-secondary"
               onClick={() => handleToggleAllSubs(true)}
+              disabled={uploadStarting}
             >
               全選
             </Button>
@@ -156,6 +181,7 @@ export default function UploadPackageReview({
               type="button"
               className="btn btn-sm btn-secondary"
               onClick={() => handleToggleAllSubs(false)}
+              disabled={uploadStarting}
             >
               全消
             </Button>
@@ -183,6 +209,7 @@ export default function UploadPackageReview({
                       <input
                         type="checkbox"
                         checked={sub.enabled}
+                        disabled={uploadStarting}
                         onChange={() => handleToggleSub(sub.id)}
                         className="weverse-subtitle-checkbox"
                       />
@@ -195,19 +222,19 @@ export default function UploadPackageReview({
                       <input
                         type="text"
                         value={sub.bcp47}
-                        disabled={!sub.enabled}
+                        disabled={uploadStarting || !sub.enabled}
                         onChange={(e) => handleSubChange(sub.id, 'bcp47', e.target.value)}
                         list="bcp47-suggestions"
-                        className="input-field input-sm weverse-subtitle-language-input"
+                        className="ui-text-field input-sm weverse-subtitle-language-input"
                       />
                     </td>
                     <td className="weverse-subtitle-cell">
                       <input
                         type="text"
                         value={sub.label}
-                        disabled={!sub.enabled}
+                        disabled={uploadStarting || !sub.enabled}
                         onChange={(e) => handleSubChange(sub.id, 'label', e.target.value)}
-                        className="input-field input-sm weverse-subtitle-label-input"
+                        className="ui-text-field input-sm weverse-subtitle-label-input"
                       />
                     </td>
                     <td className="weverse-subtitle-cell weverse-subtitle-cell-size">{sub.size_formatted}</td>
@@ -253,7 +280,13 @@ export default function UploadPackageReview({
         </StatusMessage>
       )}
       <div className="weverse-review-actions">
-        <Button variant="secondary" type="button" className="btn btn-secondary" onClick={handleReset}>
+        <Button
+          variant="secondary"
+          type="button"
+          className="btn btn-secondary"
+          onClick={handleReset}
+          disabled={uploadStarting}
+        >
           取消
         </Button>
         <Button

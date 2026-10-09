@@ -67,6 +67,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     configSaving,
     randomPreview,
     randomPreviewLoading,
+    loadingPreview,
     previewError,
     batchPreview,
     videos,
@@ -120,10 +121,12 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     setAllVideosSelected,
     applyBulkAssignment,
     doExecute,
+    requestPreview,
     requestExecute,
     sourceLabel,
     previewCounts,
   } = useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast });
+  const workflowBusy = executing || loadingSheet || loadingVideos || loadingPreview || estimateLoading;
   return (
     <div className="section-gap batch-update-page">
       <ConfirmDialog
@@ -174,6 +177,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
         onWorksheetChange={handleWorksheetChange}
         onRefresh={() => loadSheetResources({ showToast: true })}
         loading={loadingSheet}
+        disabled={workflowBusy}
         sourceReady={sourceReady}
         stale={sourceStale}
         error={sourceError}
@@ -269,7 +273,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
           onChange={(event) => handlePlaylistChange(event.target.value)}
           sourceType="youtube-playlist"
           placeholder="YouTube Playlist ID 或網址"
-          disabled={executing || loadingVideos}
+          disabled={workflowBusy || loadingVideos}
         />
         <p className="section-desc">修改後會自動儲存至目前登入的 Google 帳號；所有 YouTube 流程共用這個設定。</p>
       </div>
@@ -284,7 +288,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
         loadingTeams={loadingTeams}
         loadingPeople={loadingPeople}
         error={teamPeopleError}
-        disabled={!authUser || !hydrated || !sourceReady || sourceStale}
+        disabled={workflowBusy || !authUser || !hydrated || !sourceReady || sourceStale}
         teamEmptyLabel="請選擇團體"
         peopleDisabledMessage="請先選擇團體；選定後才能載入人物。"
         description="先選擇團體，再勾選要出現在每支影片人物選單中的人物。"
@@ -306,7 +310,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
               variant="primary"
               className="btn btn-primary"
               onClick={loadRandomPreview}
-              disabled={randomPreviewLoading || !visibleSelectedTeam}
+              disabled={workflowBusy || randomPreviewLoading || !visibleSelectedTeam}
             >
               <RefreshCw size={16} className={randomPreviewLoading ? 'spin' : ''} />{' '}
               {randomPreviewLoading ? '抽查中...' : randomPreview ? '換一位成員' : '隨機抽查'}
@@ -353,7 +357,12 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
         </div>
       )}
       <div className="page-actions">
-        <Button variant="primary" className="btn btn-primary" onClick={handleLoadVideos} disabled={loadingVideos}>
+        <Button
+          variant="primary"
+          className="btn btn-primary"
+          onClick={handleLoadVideos}
+          disabled={workflowBusy || !hydrated || !sourceReady || sourceStale}
+        >
           <RefreshCw size={16} className={loadingVideos ? 'spin' : ''} />{' '}
           {loadingVideos ? YOUTUBE_COPY.readLoading : `讀取 ${videoType} 草稿影片`}
         </Button>
@@ -378,6 +387,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
                 <input
                   type="checkbox"
                   checked={selectedVideoIds.length === videos.length}
+                  disabled={workflowBusy}
                   onChange={(e) => setAllVideosSelected(e.target.checked)}
                 />{' '}
                 全選 / 全不選
@@ -386,7 +396,12 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
             <div className="toolbar bulk-edit-controls">
               <div className="form-group bulk-person-field">
                 <label className="form-label">批次套用人物</label>
-                <select className="form-select" value={bulkPerson} onChange={(e) => setBulkPerson(e.target.value)}>
+                <select
+                  className="form-select"
+                  value={bulkPerson}
+                  onChange={(e) => setBulkPerson(e.target.value)}
+                  disabled={workflowBusy}
+                >
                   <option value="">請選擇人物</option>
                   <option value="不編輯">不編輯（略過）</option>
                   {availablePeople.map((person) => (
@@ -400,7 +415,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
                 variant="primary"
                 className="btn btn-primary"
                 onClick={applyBulkAssignment}
-                disabled={!selectedVideoIds.length || !bulkPerson}
+                disabled={workflowBusy || !selectedVideoIds.length || !bulkPerson}
               >
                 套用到已勾選影片
               </Button>
@@ -412,16 +427,18 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
                 key={video.video_id}
                 className={`glass-panel video-card ${assignments[video.video_id] && assignments[video.video_id] !== '不編輯' ? 'video-card-assigned' : 'video-card-skipped'}${selectedVideoIds.includes(video.video_id) ? ' video-card-selected' : ''}`}
                 role="button"
-                tabIndex={0}
+                tabIndex={workflowBusy ? -1 : 0}
+                aria-disabled={workflowBusy || undefined}
                 aria-pressed={selectedVideoIds.includes(video.video_id)}
                 aria-label={`${selectedVideoIds.includes(video.video_id) ? '取消選取' : '選取'}${video.title || '影片'}加入批次編輯`}
-                onClick={(event) => handleVideoCardClick(event, video.video_id)}
-                onKeyDown={(event) => handleVideoCardKeyDown(event, video.video_id)}
+                onClick={(event) => !workflowBusy && handleVideoCardClick(event, video.video_id)}
+                onKeyDown={(event) => !workflowBusy && handleVideoCardKeyDown(event, video.video_id)}
               >
                 <label className="video-select-label">
                   <input
                     type="checkbox"
                     checked={selectedVideoIds.includes(video.video_id)}
+                    disabled={workflowBusy}
                     onChange={() => toggleVideoSelection(video.video_id)}
                   />{' '}
                   加入批次編輯
@@ -443,6 +460,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
                   <select
                     className="form-select"
                     value={assignments[video.video_id] || '不編輯'}
+                    disabled={workflowBusy}
                     onChange={(e) => setAssignments((current) => ({ ...current, [video.video_id]: e.target.value }))}
                   >
                     <option value="不編輯">不編輯（略過）</option>
@@ -460,7 +478,9 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
             <section className="glass-panel card-padding batch-preview-panel" aria-label="完整批次變更預覽">
               <div className="page-header">
                 <h3>{YOUTUBE_COPY.batchUpdate}預覽</h3>
-                <p className="section-desc">逐片核對目前內容、更新後內容、人物與處理狀態；確認的是這份完整計畫。</p>
+                <p className="section-desc">
+                  逐片核對目前內容、更新後內容、人物與處理狀態，再按下方「確認這份預覽並更新」。修改設定或人物後需重新產生預覽。
+                </p>
               </div>
               <div className="batch-preview-summary" aria-label="批次預覽狀態摘要">
                 <span className="batch-preview-summary-item batch-preview-summary-success">
@@ -486,11 +506,41 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
           <div className="glass-panel execution-bar">
             <div>
               <strong>將處理目前清單中的 {formatVideoCount(videos.length)}</strong>
-              <p>人物為「不編輯」的影片會安全略過。</p>
+              <p>
+                {batchPreview
+                  ? '確認時會使用上方這份預覽；人物為「不編輯」的影片會略過。'
+                  : '先產生完整預覽，檢查逐片變更後再確認送出。'}
+              </p>
             </div>
-            <Button variant="success" className="btn btn-success" onClick={requestExecute} disabled={executing}>
-              <Send size={18} /> {executing ? YOUTUBE_COPY.updateLoading : `檢查並${YOUTUBE_COPY.updateMetadata}`}
-            </Button>
+            <div className="page-actions">
+              {batchPreview && (
+                <Button
+                  variant="secondary"
+                  className="btn btn-secondary"
+                  onClick={requestPreview}
+                  disabled={workflowBusy}
+                >
+                  <RefreshCw size={16} /> 重新產生預覽
+                </Button>
+              )}
+              <Button
+                variant="success"
+                className="btn btn-success"
+                onClick={batchPreview ? requestExecute : requestPreview}
+                disabled={workflowBusy || (Boolean(batchPreview) && !previewCounts.willUpdate)}
+              >
+                <Send size={18} />{' '}
+                {executing
+                  ? YOUTUBE_COPY.updateLoading
+                  : loadingPreview
+                    ? '建立預覽中…'
+                    : estimateLoading
+                      ? '估算配額中…'
+                      : batchPreview
+                        ? '確認這份預覽並更新'
+                        : '產生完整批次預覽'}
+              </Button>
+            </div>
           </div>
         </div>
       )}

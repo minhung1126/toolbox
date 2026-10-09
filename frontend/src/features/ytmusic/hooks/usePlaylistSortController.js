@@ -25,7 +25,7 @@ export function usePlaylistSortController({ authUser, refreshAuthUser }) {
     previewData,
     previewToken,
     previewing,
-    quotaEstimate,
+    quotaEstimate: baseQuotaEstimate,
     cachedOriginalTracks,
     isManuallyAdjusted,
     draggedRuleIdx,
@@ -58,6 +58,9 @@ export function usePlaylistSortController({ authUser, refreshAuthUser }) {
     setApplyResult,
     setReconciliationMessage,
   } = setters;
+  const applyInFlightRef = useRef(false);
+  const latestWorkflowState = useRef(state);
+  latestWorkflowState.current = state;
 
   const ytmusicAuth = authUser?.authorizations?.ytmusic;
   const isYtmusicConnected = Boolean(ytmusicAuth?.connected);
@@ -80,12 +83,13 @@ export function usePlaylistSortController({ authUser, refreshAuthUser }) {
   }, [playlists, playlistFilterQuery]);
 
   useEffect(() => {
+    if (applying || applyInFlightRef.current) return;
     if (playlistFilterQuery.trim() && filteredPlaylists.length > 0) {
       if (!filteredPlaylists.some((p) => p.id === selectedPlaylistId)) {
         setSelectedPlaylistId(filteredPlaylists[0].id);
       }
     }
-  }, [playlistFilterQuery, filteredPlaylists, selectedPlaylistId, setSelectedPlaylistId]);
+  }, [applying, playlistFilterQuery, filteredPlaylists, selectedPlaylistId, setSelectedPlaylistId]);
 
   // Preferences (including locale/region defaults to Taiwan)
   const { value: preferences } = useAccountWorkState('ytmusic_preferences', {
@@ -113,6 +117,14 @@ export function usePlaylistSortController({ authUser, refreshAuthUser }) {
   const playlistRequestId = useRef(0);
   const fetchPlaylists = useCallback(async () => {
     const requestId = ++playlistRequestId.current;
+    const initialState = latestWorkflowState.current;
+    const protectedPlaylistIdAtStart =
+      applyInFlightRef.current ||
+      initialState.previewData ||
+      initialState.applyResult ||
+      initialState.reconciliationMessage
+        ? initialState.selectedPlaylistId
+        : '';
     setLoadingPlaylists(true);
     try {
       const res = await playlistSortApi.list({
@@ -120,7 +132,24 @@ export function usePlaylistSortController({ authUser, refreshAuthUser }) {
         location: activeLocation,
       });
       if (requestId !== playlistRequestId.current) return;
-      setPlaylists(res.playlists || []);
+      const latest = latestWorkflowState.current;
+      const protectedPlaylistId =
+        applyInFlightRef.current ||
+        latest.previewData ||
+        latest.applyResult ||
+        latest.reconciliationMessage ||
+        (protectedPlaylistIdAtStart && protectedPlaylistIdAtStart === latest.selectedPlaylistId)
+          ? latest.selectedPlaylistId
+          : '';
+      setPlaylists((current) => {
+        const next = res.playlists || [];
+        if (!protectedPlaylistId) return next;
+        const currentPlaylist = current.find((playlist) => playlist.id === protectedPlaylistId);
+        if (!currentPlaylist) return next;
+        // Preserve the active preview/write source across delayed library reads.
+        // Otherwise a renamed/removed entry can make the filter discard its result.
+        return [currentPlaylist, ...next.filter((playlist) => playlist.id !== currentPlaylist.id)];
+      });
       setSelectedPlaylistId((currentId) => currentId || res.playlists?.[0]?.id || '');
     } catch (err) {
       if (requestId === playlistRequestId.current) {
@@ -272,6 +301,23 @@ export function usePlaylistSortController({ authUser, refreshAuthUser }) {
     return preset?.keys || [{ field: 'title', direction: 'asc' }];
   }, [presetMode, customKeys]);
 
+  const quotaEstimate = useMemo(() => {
+    if (!baseQuotaEstimate || !previewData) return baseQuotaEstimate;
+    const usesToken = baseQuotaEstimate.engine
+      ? baseQuotaEstimate.engine === 'ytmusic_innertube'
+      : baseQuotaEstimate.units_per_move === 0;
+    const unitsPerMove = usesToken ? 0 : baseQuotaEstimate.units_per_move;
+    return {
+      ...baseQuotaEstimate,
+      moved_count: previewData.moved_count,
+      total_units: usesToken
+        ? 0
+        : applyMode === 'new_playlist'
+          ? (previewData.total + 1) * unitsPerMove
+          : previewData.moved_count * unitsPerMove,
+    };
+  }, [applyMode, baseQuotaEstimate, previewData]);
+
   const accountKey = authUser?.sub || authUser?.email || '';
   const previousAccountKey = useRef(accountKey);
   useEffect(() => {
@@ -351,6 +397,7 @@ export function usePlaylistSortController({ authUser, refreshAuthUser }) {
   } = usePlaylistSortWorkflow({
     dispatchWorkflow,
     accountKey: authUser?.sub || authUser?.email || '',
+    applyLockRef: applyInFlightRef,
     reconciliationMessage,
     setReconciliationMessage,
     activeLanguage,
@@ -382,6 +429,7 @@ export function usePlaylistSortController({ authUser, refreshAuthUser }) {
 
   // Drag & drop handlers for sort rule keys
   const handleRuleDragStart = (e, index) => {
+    if (applying) return;
     setDraggedRuleIdx(index);
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -395,6 +443,7 @@ export function usePlaylistSortController({ authUser, refreshAuthUser }) {
 
   const handleRuleDrop = (e, targetIdx) => {
     e.preventDefault();
+    if (applying) return;
     if (draggedRuleIdx !== null && draggedRuleIdx !== targetIdx) {
       const next = [...customKeys];
       const [moved] = next.splice(draggedRuleIdx, 1);
@@ -413,28 +462,31 @@ export function usePlaylistSortController({ authUser, refreshAuthUser }) {
 
   const handleCustomKeyChange = useCallback(
     (index, newKey) => {
+      if (applying) return;
       const next = customKeys.map((k, i) => (i === index ? newKey : k));
       setCustomKeys(next);
       persistConfig({ customKeys: next });
     },
-    [customKeys, persistConfig]
+    [applying, customKeys, persistConfig]
   );
 
   const handleCustomKeyRemove = useCallback(
     (index) => {
+      if (applying) return;
       const next = customKeys.filter((_, i) => i !== index);
       setCustomKeys(next);
       persistConfig({ customKeys: next });
     },
-    [customKeys, persistConfig]
+    [applying, customKeys, persistConfig]
   );
 
   const handleAddCustomKey = useCallback(() => {
+    if (applying) return;
     if (customKeys.length >= 5) return;
     const next = [...customKeys, { field: 'title', direction: 'asc' }];
     setCustomKeys(next);
     persistConfig({ customKeys: next });
-  }, [customKeys, persistConfig]);
+  }, [applying, customKeys, persistConfig]);
 
   // Build original items for preview table
   const originalItems = cachedOriginalTracks

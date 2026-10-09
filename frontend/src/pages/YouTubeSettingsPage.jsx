@@ -114,6 +114,11 @@ export default function YouTubeSettingsPage({
   const [activeSlot, setActiveSlot] = useState(youtube.active_slot || 'primary');
   const [routingMode, setRoutingMode] = useState(youtube.routing_mode || YOUTUBE_ROUTING_MODES.AUTO_PRIMARY);
   const [routingModeDraft, setRoutingModeDraft] = useState(youtube.routing_mode || YOUTUBE_ROUTING_MODES.AUTO_PRIMARY);
+  const settingsSnapshotRef = useRef({
+    subject: authUser?.sub || authUser?.email,
+    routingMode: youtube.routing_mode || YOUTUBE_ROUTING_MODES.AUTO_PRIMARY,
+    slotRecords,
+  });
   const [busyAction, setBusyAction] = useState(null);
   const [disconnectTarget, setDisconnectTarget] = useState(null);
   const [msg, setMsg] = useState(null);
@@ -229,22 +234,36 @@ export default function YouTubeSettingsPage({
   }, [initial.playlistId, isPlaylistDirty, resetPlaylistAutosave]);
 
   useEffect(() => {
+    const previous = settingsSnapshotRef.current;
+    const subject = authUser?.sub || authUser?.email;
+    const sameAccount = subject === previous.subject;
     setActiveSlot(youtube.active_slot || 'primary');
     const nextRoutingMode = youtube.routing_mode || YOUTUBE_ROUTING_MODES.AUTO_PRIMARY;
     setRoutingMode(nextRoutingMode);
-    setRoutingModeDraft(nextRoutingMode);
-    setSlotDrafts(
+    setRoutingModeDraft((current) => (sameAccount && current !== previous.routingMode ? current : nextRoutingMode));
+    setSlotDrafts((current) =>
       Object.fromEntries(
         SLOT_ORDER.map((slot) => [
           slot,
           {
-            quotaLimit: slotRecords[slot].quota_limit,
-            quotaBuffer: slotRecords[slot].safety_buffer_units,
+            quotaLimit:
+              sameAccount &&
+              (current[slot].quotaLimit === '' ||
+                Number(current[slot].quotaLimit) !== previous.slotRecords[slot].quota_limit)
+                ? current[slot].quotaLimit
+                : slotRecords[slot].quota_limit,
+            quotaBuffer:
+              sameAccount &&
+              (current[slot].quotaBuffer === '' ||
+                Number(current[slot].quotaBuffer) !== previous.slotRecords[slot].safety_buffer_units)
+                ? current[slot].quotaBuffer
+                : slotRecords[slot].safety_buffer_units,
           },
         ])
       )
     );
-  }, [slotRecords, youtube.active_slot, youtube.routing_mode]);
+    settingsSnapshotRef.current = { subject, routingMode: nextRoutingMode, slotRecords };
+  }, [authUser?.sub, authUser?.email, slotRecords, youtube.active_slot, youtube.routing_mode]);
 
   const saveRoutingMode = async () => {
     if (busyAction) return;

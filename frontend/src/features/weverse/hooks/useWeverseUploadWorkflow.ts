@@ -132,6 +132,7 @@ export function useWeverseUploadWorkflow({
   };
 
   const handleReset = () => {
+    if (inFlight.current) return;
     setUploadOutcomeUncertain(false);
     setViewStep('pick');
     selection.resetPackage();

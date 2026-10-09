@@ -17,8 +17,10 @@ function emptyStatus() {
   };
 }
 
-export function AccountWorkStateProvider({ initialState = EMPTY_WORK_STATE, children }) {
+export function AccountWorkStateProvider({ initialState = EMPTY_WORK_STATE, ready = true, children }) {
   const [state, setState] = useState(() => asObject(initialState));
+  const [hydrated, setHydrated] = useState(ready);
+  const canSave = ready && hydrated;
   const [statuses, setStatuses] = useState({});
   const recordsRef = useRef(new Map());
   const mountedRef = useRef(true);
@@ -36,6 +38,12 @@ export function AccountWorkStateProvider({ initialState = EMPTY_WORK_STATE, chil
       return next;
     });
   }, [initialState]);
+
+  // Open writes only after the first successful read has reached local state.
+  // Child autosave effects otherwise run before the hydration effect above.
+  useEffect(() => {
+    setHydrated(ready);
+  }, [ready]);
 
   const updateStatus = useCallback((key, changes) => {
     if (!mountedRef.current) return;
@@ -148,6 +156,7 @@ export function AccountWorkStateProvider({ initialState = EMPTY_WORK_STATE, chil
 
   const save = useCallback(
     (key, value, { debounceMs = 450 } = {}) => {
+      if (!canSave) return Promise.resolve(null);
       const nextValue = asObject(value);
       const record = getRecord(key);
       record.desiredValue = nextValue;
@@ -157,18 +166,19 @@ export function AccountWorkStateProvider({ initialState = EMPTY_WORK_STATE, chil
       updateStatus(key, { saving: true, saved: false, error: '' });
       return scheduleSave(key, debounceMs);
     },
-    [getRecord, scheduleSave, updateStatus]
+    [canSave, getRecord, scheduleSave, updateStatus]
   );
 
   const retry = useCallback(
     (key) => {
+      if (!canSave) return Promise.resolve(null);
       const record = recordsRef.current.get(key);
       if (!record || record.desiredValue === null || record.desiredValue === undefined) return Promise.resolve(null);
       record.desiredVersion += 1;
       updateStatus(key, { saving: true, saved: false, error: '' });
       return scheduleSave(key, 0);
     },
-    [scheduleSave, updateStatus]
+    [canSave, scheduleSave, updateStatus]
   );
 
   useEffect(() => {
@@ -187,13 +197,13 @@ export function AccountWorkStateProvider({ initialState = EMPTY_WORK_STATE, chil
 
   const contextValue = useMemo(
     () => ({
-      ready: true,
+      ready: canSave,
       state,
       statuses,
       save,
       retry,
     }),
-    [retry, save, state, statuses]
+    [canSave, retry, save, state, statuses]
   );
 
   return createElement(AccountWorkStateContext.Provider, { value: contextValue }, children);

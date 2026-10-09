@@ -96,6 +96,7 @@ export default function AppRoutes({
   authUser,
   authError,
   workState,
+  workStateReady,
   updateAvailable,
   settingsStatus,
   settingsRefreshing,
@@ -112,6 +113,7 @@ export default function AppRoutes({
   const appShellProps = {
     authUser,
     workState,
+    workStateReady,
     authStatus,
     authError,
     updateAvailable,

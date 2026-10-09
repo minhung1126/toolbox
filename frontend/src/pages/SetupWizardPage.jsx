@@ -60,6 +60,7 @@ export default function SetupWizardPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!setupStatus || loadingStatus) return;
     setErrorMessage(null);
 
     if (!clientId.trim() || !clientSecret.trim()) {
@@ -80,7 +81,7 @@ export default function SetupWizardPage() {
       const res = await authApi.performSetup({
         googleClientId: clientId.trim(),
         googleClientSecret: clientSecret.trim(),
-        adminEmail: adminEmail.trim(),
+        adminEmail: adminEmail.trim().toLowerCase(),
         pin: pin.trim(),
       });
       toast.success(res.message || '初始設定完成！');
@@ -98,6 +99,30 @@ export default function SetupWizardPage() {
         <div className="login-card login-card-centered" role="status" aria-live="polite">
           <RefreshCw size={32} className="spin setup-loading-icon" aria-hidden="true" />
           <p>正在檢查系統設定狀態...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!setupStatus) {
+    return (
+      <div className="auth-page">
+        <div className="login-card">
+          <div className="login-header">
+            <h1 className="login-title">無法確認系統設定狀態</h1>
+            <p className="login-subtitle">請重新檢查後再進行初始設定。</p>
+          </div>
+          <div className="login-error-alert" role="alert">
+            <AlertCircle size={18} aria-hidden="true" />
+            <div className="login-error-content">
+              <span>{errorMessage || '無法取得系統初始設定狀態。'}</span>
+            </div>
+          </div>
+          <div className="login-actions">
+            <Button variant="primary" type="button" onClick={fetchStatus}>
+              <RefreshCw size={16} aria-hidden="true" /> 重新檢查設定狀態
+            </Button>
+          </div>
         </div>
       </div>
     );

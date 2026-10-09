@@ -581,10 +581,12 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
 
       <div className="glass-panel card-padding toolbar publish-source-panel">
         <div className="form-group publish-source-field">
-          <label className="form-label">
+          <label className="form-label" htmlFor="publish-playlist-source">
             <PlaySquare size={14} /> 共用 To-Post 播放清單
           </label>
           <SourceLinkInput
+            id="publish-playlist-source"
+            aria-describedby="publish-playlist-source-hint"
             type="text"
             value={playlistId}
             sourceType="youtube-playlist"
@@ -592,7 +594,7 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
             readOnly
             disabled={executing}
           />
-          <p className="section-desc">
+          <p id="publish-playlist-source-hint" className="section-desc">
             此播放清單由 YouTube 設定統一管理。如需修改，請至 <a href={PATHS.youtubePlaylist}>YouTube 播放清單設定</a>
             （修改後會自動儲存）。
           </p>

@@ -8,6 +8,8 @@ const TITLES = [
   [/^\/notes$/, '便利貼備忘錄｜Toolbox'],
   [/^\/photo-curator$/, 'Instagram 貼文排版｜Toolbox'],
   [/^\/ffmpeg-generator$/, 'FFmpeg 命令行生成器｜Toolbox'],
+  [/^\/weverse-uploader$/, 'Weverse 影片與字幕上傳｜Toolbox'],
+  [/^\/system\/design-system$/, '共用元件展示｜Toolbox'],
   [/^\/system\/health$/, 'API 健康度｜Toolbox'],
   [/^\/system\/info$/, '系統／部署資訊｜Toolbox'],
   [/^\/(?:system\/settings|settings\/system)$/, '系統安全與白名單｜Toolbox'],

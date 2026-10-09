@@ -205,4 +205,88 @@ describe('WeverseUploaderPage', () => {
     expect(weverseUploadApi.getHistory).toHaveBeenCalledWith(10);
     expect(mockToast.success).not.toHaveBeenCalledWith('上傳任務已啟動！正在背景傳輸至 YouTube。');
   });
+
+  it('keeps the selected files and review locked while the browser upload is being transferred', async () => {
+    const video = new File(['fake video'], 'sample.mp4', { type: 'video/mp4' });
+    weverseUploadApi.parseFiles.mockResolvedValueOnce({
+      packages: [
+        {
+          package_id: 'sample',
+          suggested_title: 'Sample Live',
+          video: { filename: 'sample.mp4', relative_path: 'sample/sample.mp4', size_formatted: '10 MB' },
+          subtitles: [{ filename: 'sample.ko.vtt', bcp47: 'ko', label: '韓文', size_formatted: '10 KB' }],
+        },
+      ],
+    });
+    let resolveUpload;
+    weverseUploadApi.uploadFiles.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveUpload = resolve;
+        })
+    );
+    weverseUploadApi.getTask.mockResolvedValueOnce({
+      task: { task_id: 'queued', title: 'Sample Live', status: 'completed', progress_percent: 100 },
+    });
+    const { container } = await renderPage({
+      authUser: { authorizations: { video_uploader: { connected: true } } },
+    });
+    fireEvent.change(container.querySelector('input[type="file"]'), { target: { files: [video] } });
+    fireEvent.click(await screen.findByRole('button', { name: '確認並開始上傳至 YouTube' }));
+    fireEvent.click(screen.getByRole('button', { name: '立即上傳' }));
+
+    expect(await screen.findByText('正在傳送影片與字幕')).toBeInTheDocument();
+    expect(screen.getByText(/完成後會加入 YouTube 上傳佇列/)).toBeInTheDocument();
+    const reset = screen.getByRole('button', { name: '重新選擇資料夾' });
+    const cancel = screen.getByRole('button', { name: '取消', exact: true });
+    expect(reset).toBeDisabled();
+    expect(cancel).toBeDisabled();
+    expect(screen.getByLabelText(/影片標題/)).toBeDisabled();
+    expect(screen.getByRole('button', { name: '全選' })).toBeDisabled();
+    expect(screen.getByRole('checkbox')).toBeDisabled();
+    fireEvent.click(reset);
+    fireEvent.click(cancel);
+    expect(screen.getByText('步驟二：辨識結果複查與編輯')).toBeInTheDocument();
+    expect(weverseUploadApi.uploadFiles).toHaveBeenCalledTimes(1);
+
+    await act(async () => resolveUpload({ task_id: 'queued' }));
+    expect(await screen.findByText('上傳成功！')).toBeInTheDocument();
+    expect(weverseUploadApi.getTask).toHaveBeenCalledWith('queued');
+    expect(screen.queryByText('正在傳送影片與字幕')).not.toBeInTheDocument();
+  });
+
+  it('unlocks the review after the upload start is definitively rejected', async () => {
+    weverseUploadApi.scanFolder.mockResolvedValueOnce({
+      packages: [
+        {
+          package_id: 'sample',
+          suggested_title: 'Sample Live',
+          video: { filename: 'sample.mp4', full_path: 'C:\\sample.mp4', size_formatted: '10 MB' },
+          subtitles: [],
+        },
+      ],
+    });
+    let rejectUpload;
+    weverseUploadApi.uploadFromPath.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectUpload = reject;
+        })
+    );
+    await renderPage({ authUser: { authorizations: { video_uploader: { connected: true } } } });
+    fireEvent.click(screen.getByRole('button', { name: '直接輸入本機路徑' }));
+    fireEvent.change(screen.getByPlaceholderText(/例如：D:\\Weverse/), { target: { value: 'C:\\sample' } });
+    fireEvent.click(screen.getByRole('button', { name: '掃描並辨識' }));
+    fireEvent.click(await screen.findByRole('button', { name: '確認並開始上傳至 YouTube' }));
+    fireEvent.click(screen.getByRole('button', { name: '立即上傳' }));
+    expect(await screen.findByText('正在建立上傳任務')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '取消', exact: true })).toBeDisabled();
+
+    await act(async () => rejectUpload({ status: 403, message: '授權失效' }));
+    expect(screen.getByRole('button', { name: '取消', exact: true })).toBeEnabled();
+    expect(screen.getByLabelText(/影片標題/)).toBeEnabled();
+    expect(screen.queryByText('正在建立上傳任務')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '取消', exact: true }));
+    expect(screen.getByRole('button', { name: '掃描並辨識' })).toBeInTheDocument();
+  });
 });

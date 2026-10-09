@@ -28,6 +28,7 @@ import Dialog from '../components/Dialog';
 import CuratorThumbnail from '../components/curator/CuratorThumbnail';
 import IgSlotImage from '../components/curator/IgSlotImage';
 import { usePhotoCuratorWorkflow } from '../features/photo-curator/hooks/usePhotoCuratorWorkflow';
+import { PhotoCuratorSessionProvider, usePhotoCuratorSession } from '../features/photo-curator/PhotoCuratorSession';
 import '../features/photo-curator/photo-curator.css';
 
 const THUMBNAIL_SIZES = [
@@ -39,6 +40,17 @@ const THUMBNAIL_SIZES = [
 ];
 
 export default function PhotoCuratorPage() {
+  const session = usePhotoCuratorSession();
+  return session ? (
+    <PhotoCuratorWorkbench />
+  ) : (
+    <PhotoCuratorSessionProvider>
+      <PhotoCuratorWorkbench />
+    </PhotoCuratorSessionProvider>
+  );
+}
+
+function PhotoCuratorWorkbench() {
   const toast = useToast();
   const [thumbnailSizeIndex, setThumbnailSizeIndex] = useState(1);
   const thumbnailSize = THUMBNAIL_SIZES[thumbnailSizeIndex];
@@ -114,7 +126,12 @@ export default function PhotoCuratorPage() {
           <div className="photo-curator-help-panel">
             <div className="help-panel-header">
               <strong>💡 貼文三部曲排版建議</strong>
-              <button type="button" className="btn btn-icon" onClick={() => setShowHelp(false)}>
+              <button
+                type="button"
+                className="btn btn-icon"
+                aria-label="關閉排版說明"
+                onClick={() => setShowHelp(false)}
+              >
                 <X size={14} />
               </button>
             </div>
@@ -142,6 +159,7 @@ export default function PhotoCuratorPage() {
         onDrop={handleDropzoneDrop}
         onClick={() => fileInputRef.current?.click()}
         role="button"
+        aria-label="匯入照片"
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -165,7 +183,7 @@ export default function PhotoCuratorPage() {
           <div>
             <h4>點擊或拖放照片至此處匯入</h4>
             <p className="text-muted">
-              支援多選 JPG、PNG、WebP 照片。照片會先進入「待分配防漏池」。本頁照片暫存於目前頁面，重新整理後會清空。
+              支援多選 JPG、PNG、WebP 照片。切換工具會保留照片與排版；重新整理或關閉分頁前，請先下載分組照片。
             </p>
           </div>
         </div>

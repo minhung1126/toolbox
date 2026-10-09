@@ -17,6 +17,7 @@ interface Props {
   isSelectedPinned: boolean;
   fetchPlaylists: () => Promise<void>;
   selectedPlaylist: PlaylistSummary | undefined;
+  disabled?: boolean;
 }
 export default function PlaylistSelector({
   playlists,
@@ -34,6 +35,7 @@ export default function PlaylistSelector({
   isSelectedPinned,
   fetchPlaylists,
   selectedPlaylist,
+  disabled = false,
 }: Props) {
   return (
     <section className="glass-panel card-padding">
@@ -60,12 +62,13 @@ export default function PlaylistSelector({
           placeholder="依播放清單名稱或說明快速篩選…"
           value={playlistFilterQuery}
           onChange={(e) => setPlaylistFilterQuery(e.target.value)}
-          disabled={loadingPlaylists || playlists.length === 0}
+          disabled={disabled || loadingPlaylists || playlists.length === 0}
         />
         {playlistFilterQuery && (
           <button
             type="button"
             className="playlist-sort-filter-clear"
+            disabled={disabled}
             onClick={() => setPlaylistFilterQuery('')}
             title="清除篩選"
             aria-label="清除篩選"
@@ -91,6 +94,7 @@ export default function PlaylistSelector({
                 <button
                   type="button"
                   className="playlist-sort-pinned-select"
+                  disabled={disabled}
                   aria-label={`快速切換至「${pl.title}」`}
                   onClick={() => {
                     setSelectedPlaylistId(pl.id);
@@ -103,6 +107,7 @@ export default function PlaylistSelector({
                 <button
                   type="button"
                   className="playlist-sort-pinned-remove"
+                  disabled={disabled}
                   aria-label={`取消釘選「${pl.title}」`}
                   onClick={() => togglePinPlaylist(pl.id)}
                 >
@@ -123,7 +128,7 @@ export default function PlaylistSelector({
             setSelectedPlaylistId(e.target.value);
             persistConfig({ selectedPlaylistId: e.target.value });
           }}
-          disabled={loadingPlaylists || filteredPlaylists.length === 0}
+          disabled={disabled || loadingPlaylists || filteredPlaylists.length === 0}
         >
           {loadingPlaylists ? (
             <option value="">載入中…</option>
@@ -154,7 +159,7 @@ export default function PlaylistSelector({
           type="button"
           className={`btn playlist-sort-pin-button ${isSelectedPinned ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => togglePinPlaylist(selectedPlaylistId)}
-          disabled={!selectedPlaylistId || loadingPlaylists}
+          disabled={disabled || !selectedPlaylistId || loadingPlaylists}
           title={isSelectedPinned ? '取消釘選此播放清單' : '釘選目前播放清單至頂端常用'}
           aria-label={isSelectedPinned ? '取消釘選此播放清單' : '釘選目前播放清單至頂端常用'}
         >
@@ -168,7 +173,7 @@ export default function PlaylistSelector({
           className="btn btn-secondary"
           aria-label="重新整理清單"
           onClick={fetchPlaylists}
-          disabled={loadingPlaylists}
+          disabled={disabled || loadingPlaylists}
           title="重新整理清單"
         >
           <RefreshCw size={14} className={loadingPlaylists ? 'spin' : ''} />

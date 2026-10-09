@@ -128,8 +128,16 @@ export function buildFfmpegCommand({
     if (cutMode === 'to') {
       const endSec = parseHmsToSeconds(endTime);
       const endFmt = secondsToHms(endSec);
-      args.push('-to', endFmt);
-      breakdown.push({ flag: `-to ${endFmt}`, label: `裁切至時間點 ${endFmt}` });
+      if (hasStart && seekMode === 'fast') {
+        // Input seeking resets the output timeline, so an absolute source end
+        // time must become a duration measured from the selected start.
+        const clipFmt = secondsToHms(Math.max(0, endSec - startSec));
+        args.push('-t', clipFmt);
+        breakdown.push({ flag: `-t ${clipFmt}`, label: `從起點裁切 ${clipFmt}，至原影片時間點 ${endFmt}` });
+      } else {
+        args.push('-to', endFmt);
+        breakdown.push({ flag: `-to ${endFmt}`, label: `裁切至時間點 ${endFmt}` });
+      }
     } else {
       const durSec = parseHmsToSeconds(durationCut);
       const durFmt = secondsToHms(durSec);

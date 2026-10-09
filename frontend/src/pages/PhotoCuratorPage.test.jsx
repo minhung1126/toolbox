@@ -3,6 +3,10 @@ import { createEvent, fireEvent, render, screen, waitFor } from '@testing-librar
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PhotoCuratorPage from './PhotoCuratorPage';
 import { api } from '../services/api';
+import { copyToClipboard } from '../utils/clipboard';
+import { exportCuratedZip } from '../features/photo-curator/model/curatorZip';
+import { PhotoCuratorSessionProvider } from '../features/photo-curator/PhotoCuratorSession';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
   api: {
@@ -23,12 +27,19 @@ vi.mock('../components/Toast', () => ({
 }));
 
 vi.mock('../utils/clipboard', () => ({
-  copyToClipboard: vi.fn().mockResolvedValue(true),
+  copyToClipboard: vi.fn(),
+}));
+
+vi.mock('../features/photo-curator/model/curatorZip', async (importOriginal) => ({
+  ...(await importOriginal()),
+  exportCuratedZip: vi.fn(),
 }));
 
 describe('PhotoCuratorPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    copyToClipboard.mockResolvedValue(undefined);
+    exportCuratedZip.mockResolvedValue(undefined);
     global.URL.createObjectURL = vi.fn((file) => `mock://preview/${file?.name || 'test'}`);
     global.URL.revokeObjectURL = vi.fn();
     api.getPhotoCuratorPresets.mockResolvedValue([
@@ -223,6 +234,86 @@ describe('PhotoCuratorPage', () => {
       expect(copyToClipboard).toHaveBeenCalled();
       expect(mockToast.success).toHaveBeenCalledWith('已複製發布對照清單至剪貼簿！');
     });
+  });
+
+  it('reports clipboard rejection without an unhandled failure or a success message', async () => {
+    copyToClipboard.mockRejectedValueOnce(new Error('permission denied'));
+    const { container } = render(<PhotoCuratorPage />);
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: { files: [new File(['photo'], 'copy.jpg', { type: 'image/jpeg' })] },
+    });
+    mockToast.success.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /複製對照表/ }));
+    await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('複製失敗，請手動選取。'));
+    expect(mockToast.success).not.toHaveBeenCalled();
+  });
+
+  it('keeps local files, titles and ordering when switching tools and releases them on logout', () => {
+    const { container, unmount } = render(
+      <MemoryRouter initialEntries={['/photo-curator']}>
+        <PhotoCuratorSessionProvider>
+          <Link to="/other">其他工具</Link>
+          <Link to="/photo-curator">返回排版</Link>
+          <Routes>
+            <Route path="/photo-curator" element={<PhotoCuratorPage />} />
+            <Route path="/other" element={<p>其他工具頁面</p>} />
+          </Routes>
+        </PhotoCuratorSessionProvider>
+      </MemoryRouter>
+    );
+    importAndAssign(container, ['a.jpg', 'b.jpg']);
+    fireEvent.change(screen.getByLabelText('Post 1 主題名稱'), { target: { value: '旅行' } });
+    fireEvent.click(screen.getByRole('button', { name: '往前移 b.jpg' }));
+    fireEvent.click(screen.getByRole('link', { name: '其他工具' }));
+    expect(screen.queryByText('貼文三部曲排版工作台')).not.toBeInTheDocument();
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    fireEvent.click(screen.getByRole('link', { name: '返回排版' }));
+    expect(screen.getByLabelText('Post 1 主題名稱')).toHaveValue('旅行');
+    expect(photoNames(container, 'post-1')).toEqual(['b.jpg', 'a.jpg']);
+    fireEvent.click(screen.getByRole('button', { name: /復原上一步/ }));
+    expect(photoNames(container, 'post-1')).toEqual(['a.jpg', 'b.jpg']);
+    unmount();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('mock://preview/a.jpg');
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('mock://preview/b.jpg');
+    const afterLogout = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(afterLogout);
+    expect(afterLogout.defaultPrevented).toBe(false);
+  });
+
+  it('warns before losing work until all photos are exported, and warns again after edits', async () => {
+    const { container } = render(<PhotoCuratorPage />);
+    importAndAssign(container, ['saved.jpg']);
+    const shouldWarn = () => {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(shouldWarn()).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: /下載分組照片/ }));
+    await waitFor(() => expect(shouldWarn()).toBe(false));
+    fireEvent.change(screen.getByLabelText('Post 1 主題名稱'), { target: { value: '新版主題' } });
+    expect(shouldWarn()).toBe(true);
+  });
+
+  it('keeps the unload warning for edits made while a ZIP export is still running', async () => {
+    let finishExport;
+    exportCuratedZip.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishExport = resolve;
+      })
+    );
+    const { container } = render(<PhotoCuratorPage />);
+    importAndAssign(container, ['pending.jpg']);
+    fireEvent.click(screen.getByRole('button', { name: /下載分組照片/ }));
+    fireEvent.change(screen.getByLabelText('Post 1 主題名稱'), { target: { value: '匯出後的新主題' } });
+    finishExport();
+    await waitFor(() => expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('已成功打包下載 ZIP')));
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
   });
   function importAndAssign(container, names) {
     fireEvent.change(container.querySelector('input[type="file"]'), {

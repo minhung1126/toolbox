@@ -43,8 +43,9 @@ export default function GoogleSheetSettingsPage({ sysSettings = {}, refreshSetti
     delay: 500,
     compareFn: sameGoogleSheetForm,
     onSave: async (nextData) => {
-      await sheetsSettingsApi.updateSettings(nextData);
-      confirmedSheetIdRef.current = nextData.default_spreadsheet_id;
+      const normalizedData = initialGoogleSheetForm(nextData.default_spreadsheet_id.trim());
+      await sheetsSettingsApi.updateSettings(normalizedData);
+      confirmedSheetIdRef.current = normalizedData.default_spreadsheet_id;
     },
     onSuccess: async (nextData, { notify }) => {
       await refreshSettings?.();
@@ -174,15 +175,19 @@ export default function GoogleSheetSettingsPage({ sysSettings = {}, refreshSetti
           )}
         </div>
         <div className="form-group">
-          <label className="form-label">
+          <label className="form-label" htmlFor="google-sheet-default-source">
             <FileSpreadsheet size={14} /> 預設 Google Sheet 網址或 Spreadsheet ID
           </label>
           <SourceLinkInput
+            id="google-sheet-default-source"
             value={formData.default_spreadsheet_id}
             onChange={(event) => handleChange(event.target.value)}
             sourceType="spreadsheet"
+            aria-describedby="google-sheet-default-source-help"
           />
-          <p className="section-desc">修改後會自動儲存至目前登入的 Google 帳號；換瀏覽器或重新登入仍可取回。</p>
+          <p id="google-sheet-default-source-help" className="section-desc">
+            修改後會自動儲存至目前登入的 Google 帳號；換瀏覽器或重新登入仍可取回。
+          </p>
         </div>
         <div className="page-actions settings-page-actions">
           <Button type="submit" loading={saving} icon={Save}>

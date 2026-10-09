@@ -135,7 +135,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
             <Sparkles size={14} aria-hidden="true" /> YouTube Music
           </Badge>
         }
-        description="讀取個人 YouTube Music 播放清單，以歌手／藝人、專輯名稱、歌曲曲目順序、歌名等多重規則自訂排序。支援拖曳順序與即時快取動態模擬比對，零配額消耗（0 API Credit）。"
+        description="讀取個人 YouTube Music 播放清單，以歌手／藝人、專輯名稱、歌曲曲目順序、歌名等多重規則自訂排序。支援拖曳順序與即時快取動態模擬比對；YouTube Music Token 模式不消耗 Google API 配額。"
       />
 
       {/* YouTube Music In-Place Authorization Status */}
@@ -172,6 +172,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
         isSelectedPinned={isSelectedPinned}
         fetchPlaylists={fetchPlaylists}
         selectedPlaylist={selectedPlaylist}
+        disabled={applying}
       />
 
       {/* Step 2: Sort Rules */}
@@ -207,11 +208,12 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
           handleReorderTracks={handleReorderTracks}
           isManuallyAdjusted={isManuallyAdjusted}
           handleResetToRuleOrder={handleResetToRuleOrder}
+          applying={applying}
         />
       )}
 
       {/* Step 4: Apply Configuration */}
-      {previewData && (previewData.moved_count > 0 || applyMode === 'new_playlist') && !applyResult && (
+      {previewData && !applyResult && (
         <PlaylistSortApplyOptions
           quotaEstimate={quotaEstimate}
           previewData={previewData}
@@ -252,14 +254,25 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
       >
         <div>
           <p>
-            即將對播放清單「<strong>{selectedPlaylist?.title || selectedPlaylistId}</strong>」套用排序， 將移動{' '}
-            <strong>{previewData?.moved_count || 0}</strong> 首歌曲。
+            {applyMode === 'new_playlist' ? (
+              <>
+                即將將播放清單「<strong>{selectedPlaylist?.title || selectedPlaylistId}</strong>」的{' '}
+                <strong>{previewData?.total || 0}</strong> 首歌曲另存為新排序歌單。
+              </>
+            ) : (
+              <>
+                即將對播放清單「<strong>{selectedPlaylist?.title || selectedPlaylistId}</strong>」套用排序，將移動{' '}
+                <strong>{previewData?.moved_count || 0}</strong> 首歌曲。
+              </>
+            )}
           </p>
-          {applyMode === 'new_playlist' ? (
+          {applyMode === 'new_playlist' && (
             <p className="playlist-sort-confirm-success">
               ✓ 將保留原始播放清單，並為您建立全新的已排序播放清單「<strong>{newPlaylistTitle}</strong>」。
             </p>
-          ) : quotaEstimate?.total_units === 0 ? (
+          )}
+          {quotaEstimate?.engine === 'ytmusic_innertube' ||
+          (!quotaEstimate?.engine && quotaEstimate?.units_per_move === 0) ? (
             <p className="playlist-sort-confirm-success">
               ✓ 使用 YouTube Music Token 更新，<strong>消耗 0 API 配額點數</strong>。
             </p>

@@ -1,7 +1,7 @@
 import type { ModelAction } from '../../../shared/model/useWorkflowModel';
 import type { PlaylistSortState } from './usePlaylistSortState';
 import { useCallback, useEffect, useRef } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { playlistSortApi } from '../api/playlistSortApi';
 import type {
   PlaylistSortApplyMode,
@@ -30,6 +30,7 @@ interface WorkflowToast {
 interface PlaylistSortWorkflowOptions {
   dispatchWorkflow: Dispatch<ModelAction<PlaylistSortState>>;
   accountKey: string;
+  applyLockRef?: MutableRefObject<boolean>;
   reconciliationMessage: string;
   setReconciliationMessage: Dispatch<SetStateAction<string>>;
   activeLanguage: string;
@@ -71,6 +72,7 @@ function isQuotaError(error: WorkflowError): boolean {
 export function usePlaylistSortWorkflow({
   dispatchWorkflow,
   accountKey,
+  applyLockRef,
   reconciliationMessage,
   setReconciliationMessage,
   activeLanguage,
@@ -99,16 +101,18 @@ export function usePlaylistSortWorkflow({
   setShowTokenDrawer,
   setStrictFallbackPrompt,
 }: PlaylistSortWorkflowOptions) {
-  const scope = `${accountKey}:${selectedPlaylistId}`;
-  const currentScope = useRef(scope);
-  const scopeVersion = useRef(0);
-  if (currentScope.current !== scope) {
-    currentScope.current = scope;
-    scopeVersion.current += 1;
+  const currentAccountKey = useRef(accountKey);
+  const accountVersion = useRef(0);
+  if (currentAccountKey.current !== accountKey) {
+    currentAccountKey.current = accountKey;
+    accountVersion.current += 1;
   }
+  const currentPlaylistId = useRef(selectedPlaylistId);
+  currentPlaylistId.current = selectedPlaylistId;
   const previewRequestId = useRef(0);
   const previewInFlight = useRef(false);
-  const applyInFlight = useRef(false);
+  const internalApplyInFlight = useRef(false);
+  const applyInFlight = applyLockRef || internalApplyInFlight;
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -127,6 +131,7 @@ export function usePlaylistSortWorkflow({
   }, [accountKey, activeLanguage, activeLocation, activeSortKeys, selectedPlaylistId, setPreviewing]);
 
   const handlePreview = useCallback(async () => {
+    if (applyInFlight.current) return;
     if (reconciliationMessage) {
       toast.warning('請先核對 YouTube Music 寫入結果，再重新預覽。');
       return;
@@ -192,6 +197,7 @@ export function usePlaylistSortWorkflow({
       }
     }
   }, [
+    applyInFlight,
     dispatchWorkflow,
     reconciliationMessage,
     activeLanguage,
@@ -223,6 +229,7 @@ export function usePlaylistSortWorkflow({
 
   const handleReorderTracks = useCallback(
     (sourceIndex: number, targetIndex: number) => {
+      if (applyInFlight.current) return;
       if (!previewData?.items || !cachedOriginalTracks) return;
       const reorderedItems = [...previewData.items];
       const [draggedItem] = reorderedItems.splice(sourceIndex, 1);
@@ -230,29 +237,40 @@ export function usePlaylistSortWorkflow({
       setPreviewData(buildPreviewFromSorted(cachedOriginalTracks, reorderedItems));
       setIsManuallyAdjusted(true);
     },
-    [cachedOriginalTracks, previewData, setIsManuallyAdjusted, setPreviewData]
+    [applyInFlight, cachedOriginalTracks, previewData, setIsManuallyAdjusted, setPreviewData]
   );
 
   const handleResetToRuleOrder = useCallback(() => {
+    if (applyInFlight.current) return;
     if (!cachedOriginalTracks) return;
     const orderedTracks = sortTracksLocally(cachedOriginalTracks, activeSortKeys, activeCollationLocale);
     setPreviewData(buildPreviewFromSorted(cachedOriginalTracks, orderedTracks));
     setIsManuallyAdjusted(false);
     toast.info('已重設為目前規則排序');
-  }, [activeCollationLocale, activeSortKeys, cachedOriginalTracks, setIsManuallyAdjusted, setPreviewData, toast]);
+  }, [
+    applyInFlight,
+    activeCollationLocale,
+    activeSortKeys,
+    cachedOriginalTracks,
+    setIsManuallyAdjusted,
+    setPreviewData,
+    toast,
+  ]);
 
   const handleApplyClick = useCallback(() => {
+    if (applyInFlight.current || previewInFlight.current) return;
     if (!previewData || (applyMode === 'in_place' && previewData.moved_count === 0)) {
       toast.info('清單順序無需變更');
       return;
     }
     setShowConfirm(true);
-  }, [applyMode, previewData, setShowConfirm, toast]);
+  }, [applyInFlight, applyMode, previewData, setShowConfirm, toast]);
 
   const handleApplyConfirm = useCallback(
     async (options: { forceAllowQuotaFallback?: boolean } = {}) => {
       if (applyInFlight.current || reconciliationMessage) return;
-      const applyVersion = scopeVersion.current;
+      const applyVersion = accountVersion.current;
+      const writingPlaylistId = selectedPlaylistId;
       applyInFlight.current = true;
       const { forceAllowQuotaFallback = false } = options;
       setShowConfirm(false);
@@ -275,7 +293,7 @@ export function usePlaylistSortWorkflow({
         }
 
         const response = await playlistSortApi.apply(payload);
-        if (!mounted.current || scopeVersion.current !== applyVersion) return;
+        if (!mounted.current || accountVersion.current !== applyVersion) return;
         dispatchWorkflow({ type: 'transition', phase: 'completed', patch: { applyResult: response } });
         const succeeded = response.succeeded ?? 0;
         const failed = response.failed ?? 0;
@@ -286,13 +304,15 @@ export function usePlaylistSortWorkflow({
         } else {
           toast.success(`排序成功套用！已移動 ${succeeded} 首歌曲`);
         }
-        setPreviewData(null);
-        setPreviewToken('');
-        setQuotaEstimate(null);
-        setCachedOriginalTracks(null);
-        setIsManuallyAdjusted(false);
+        if (currentPlaylistId.current === writingPlaylistId) {
+          setPreviewData(null);
+          setPreviewToken('');
+          setQuotaEstimate(null);
+          setCachedOriginalTracks(null);
+          setIsManuallyAdjusted(false);
+        }
       } catch (caughtError: unknown) {
-        if (!mounted.current || scopeVersion.current !== applyVersion) return;
+        if (!mounted.current || accountVersion.current !== applyVersion) return;
         const error = normalizeWorkflowError(caughtError);
         const errorCode = error.code || error.detail?.code;
         if (
@@ -306,23 +326,29 @@ export function usePlaylistSortWorkflow({
             type: 'transition',
             phase: 'reconciliation',
             patch: {
-              reconciliationMessage:
-                '無法確認排序寫入是否已完成；請先至 YouTube Music 核對播放清單與新歌單，再重新產生預覽。勿直接重送。',
+              reconciliationMessage: `無法確認排序寫入是否已完成；請先至 YouTube Music 核對播放清單「${writingPlaylistId}」與新歌單，再重新產生預覽。勿直接重送。`,
             },
           });
-          setPreviewData(null);
-          setPreviewToken('');
-          setCachedOriginalTracks(null);
-          setQuotaEstimate(null);
-          setStrictFallbackPrompt(null);
+          if (currentPlaylistId.current === writingPlaylistId) {
+            setPreviewData(null);
+            setPreviewToken('');
+            setCachedOriginalTracks(null);
+            setQuotaEstimate(null);
+            setStrictFallbackPrompt(null);
+          }
           toast.warning('排序寫入結果待核對');
           return;
         }
-        if (errorCode === 'TOKEN_FALLBACK_BLOCKED' || error.status === 401) {
+        if (
+          currentPlaylistId.current === writingPlaylistId &&
+          (errorCode === 'TOKEN_FALLBACK_BLOCKED' || error.status === 401)
+        ) {
           dispatchWorkflow({ type: 'transition', phase: 'ready', patch: {} });
           setStrictFallbackPrompt({
             message: error.message || error.detail?.message || 'YouTube Music Token 認證失效或已過期。',
-            quotaUnits: quotaEstimate?.total_units || (previewData?.moved_count || 0) * 50,
+            quotaUnits:
+              quotaEstimate?.total_units ||
+              (applyMode === 'new_playlist' ? (previewData?.total || 0) + 1 : previewData?.moved_count || 0) * 50,
           });
           return;
         }
@@ -335,10 +361,11 @@ export function usePlaylistSortWorkflow({
         toast.error(`套用排序失敗：${error.message || '未知錯誤'}`);
       } finally {
         applyInFlight.current = false;
-        if (mounted.current && scopeVersion.current === applyVersion) setApplying(false);
+        if (mounted.current) setApplying(false);
       }
     },
     [
+      applyInFlight,
       dispatchWorkflow,
       accountKey,
       reconciliationMessage,

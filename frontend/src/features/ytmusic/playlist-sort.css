@@ -226,7 +226,11 @@
 
 .playlist-sort-preset-row,
 .playlist-sort-custom-rules {
+  min-width: 0;
+  margin-inline: 0;
   margin-bottom: var(--space-3);
+  padding: 0;
+  border: 0;
 }
 
 .playlist-sort-preset-select {

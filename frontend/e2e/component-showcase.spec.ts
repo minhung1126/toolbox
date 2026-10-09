@@ -965,7 +965,10 @@ test('YouTube Batch Update checks a full preview before executing the update', a
   await page.getByRole('button', { name: '讀取 Video 草稿影片' }).click();
   await expect(page.getByText('舊標題一')).toBeVisible();
   await page.locator('.video-card-assignment select').first().selectOption('人物甲');
-  await page.getByRole('button', { name: '檢查並更新標題與描述' }).click();
+  await page.getByRole('button', { name: '產生完整批次預覽' }).click();
+  await expect(page.getByRole('region', { name: '完整批次變更預覽' })).toContainText('新標題一');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: '確認這份預覽並更新' }).click();
 
   const dialog = page.getByRole('dialog', { name: '確認批次更新 1 支影片' });
   await expect(dialog).toBeVisible();

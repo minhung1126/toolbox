@@ -142,6 +142,10 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
   const sheetRequestRef = useRef(0);
   const randomPreviewRequestRef = useRef(0);
   const previousAuthorizationKeyRef = useRef(authorizationKey);
+  const writeInFlightRef = useRef(false);
+  const sourceReadInFlightRef = useRef(false);
+  const latestWorkflowState = useRef(state);
+  latestWorkflowState.current = state;
 
   const sourceStale = spreadsheetId.trim() !== appliedSpreadsheetId.trim();
   const teamPersonFilter = useTeamPersonFilter({
@@ -211,6 +215,8 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
 
   const invalidateLoadedVideos = useCallback(() => {
     playlistRequestRef.current += 1;
+    sourceReadInFlightRef.current = false;
+    setLoadingVideos(false);
     setVideos([]);
     setPlaylistSource('');
     setPlaylistFallbackReason('');
@@ -286,6 +292,10 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
         draftAutosaveStatus: null,
         playlistAutosaveStatus: null,
         executing: false,
+        loadingSheet: false,
+        loadingVideos: false,
+        loadingPreview: false,
+        estimateLoading: false,
         awaitingReconciliation: false,
         result: null,
         errorMsg: null,
@@ -484,6 +494,16 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
 
   const loadSheetResources = useCallback(
     async ({ showToast = false } = {}) => {
+      const latest = latestWorkflowState.current;
+      if (
+        writeInFlightRef.current ||
+        sourceReadInFlightRef.current ||
+        latest.executing ||
+        latest.loadingVideos ||
+        latest.loadingPreview ||
+        latest.estimateLoading
+      )
+        return;
       const nextSource = spreadsheetId.trim();
       if (!nextSource) {
         if (showToast) toast.warning('請先填寫主要試算表 ID / URL');
@@ -491,6 +511,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
       }
       const requestId = sheetRequestRef.current + 1;
       sheetRequestRef.current = requestId;
+      sourceReadInFlightRef.current = true;
       const sourceChanged = nextSource !== appliedSpreadsheetId.trim();
       setLoadingSheet(true);
       setErrorMsg(null);
@@ -523,7 +544,10 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
         invalidateLoadedVideos();
         setSourceError(`刷新試算表失敗：${err.message}`);
       } finally {
-        if (requestId === sheetRequestRef.current) setLoadingSheet(false);
+        if (requestId === sheetRequestRef.current) {
+          sourceReadInFlightRef.current = false;
+          setLoadingSheet(false);
+        }
       }
     },
     [
@@ -545,6 +569,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
   }, [hydrated, authUser, appliedSpreadsheetId, loadSheetResources]);
 
   const handleSpreadsheetChange = (event: ChangeEvent<HTMLInputElement>) => {
+    if (writeInFlightRef.current || executing) return;
     const nextValue = event.target.value;
     sheetRequestRef.current += 1;
     setSpreadsheetId(nextValue);
@@ -556,6 +581,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
   };
 
   const handleWorksheetChange = (nextWorksheet: string) => {
+    if (writeInFlightRef.current || executing) return;
     sheetRequestRef.current += 1;
     setWorksheetName(nextWorksheet);
     clearConfigSaveError();
@@ -568,6 +594,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
   };
 
   const handlePlaylistChange = (nextPlaylist: string) => {
+    if (writeInFlightRef.current || executing) return;
     setPlaylistId(nextPlaylist);
     clearConfigSaveError();
     invalidateLoadedVideos();
@@ -590,6 +617,17 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
   }, [batchPreview, currentPreviewFingerprint, previewFingerprint]);
 
   const handleLoadVideos = async () => {
+    if (
+      writeInFlightRef.current ||
+      sourceReadInFlightRef.current ||
+      executing ||
+      loadingSheet ||
+      loadingVideos ||
+      loadingPreview ||
+      estimateLoading
+    )
+      return;
+    if (!hydrated || !sourceReady || sourceStale) return toast.warning('請先刷新資料來源，讓目前來源設定套用完成');
     if (!youtubeConnected) {
       toast.warning('請先在「YouTube 設定」連結 YouTube 頻道 Google 帳號！');
       return;
@@ -599,6 +637,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     const rememberedSelectedVideoIds = shouldRestore ? selectedVideoIds : [];
     invalidateLoadedVideos();
     const requestId = playlistRequestRef.current;
+    sourceReadInFlightRef.current = true;
     setLoadingVideos(true);
     setErrorMsg(null);
     setResult(null);
@@ -631,7 +670,10 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
       invalidateLoadedVideos();
       setErrorMsg(`載入草稿影片失敗：${err.message}`);
     } finally {
-      if (playlistRequestRef.current === requestId) setLoadingVideos(false);
+      if (playlistRequestRef.current === requestId) {
+        sourceReadInFlightRef.current = false;
+        setLoadingVideos(false);
+      }
     }
   };
 
@@ -667,7 +709,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     toast.success(`已套用到 ${selectedCount} 支影片，尚未送出`);
   };
 
-  const { doExecute, requestExecute } = useBatchExecution({
+  const { doExecute, requestPreview, requestExecute } = useBatchExecution({
     state,
     setters,
     dispatchWorkflow,
@@ -679,6 +721,9 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     youtubeConnected,
     sourceStale,
     activeSlot,
+    accountKey: authUser?.sub || authUser?.email || '',
+    executionLockRef: writeInFlightRef,
+    sourceReadLockRef: sourceReadInFlightRef,
   });
 
   const sourceLabel = playlistSource === 'youtube-api' ? 'YouTube API' : '';
@@ -706,6 +751,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     configSaving,
     randomPreview,
     randomPreviewLoading,
+    loadingPreview,
     previewError,
     batchPreview,
     videos,
@@ -718,7 +764,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     youtubeRoutingInfo,
     loadingSheet,
     loadingVideos,
-    executing,
+    executing: executing || writeInFlightRef.current,
     result,
     errorMsg,
     configSaveError,
@@ -759,6 +805,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     setAllVideosSelected,
     applyBulkAssignment,
     doExecute,
+    requestPreview,
     requestExecute,
     sourceLabel,
     previewCounts,

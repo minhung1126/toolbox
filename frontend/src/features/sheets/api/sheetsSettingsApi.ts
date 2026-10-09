@@ -53,12 +53,13 @@ export const sheetsSettingsApi: SheetsSettingsApi = {
     );
   },
   async updateSettings(settings) {
+    const normalizedSettings = { ...settings, default_spreadsheet_id: settings.default_spreadsheet_id.trim() };
     return requireResponse<SharedSheetSettingsUpdateResponse>(
-      await api.updateSharedSettings(settings),
+      await api.updateSharedSettings(normalizedSettings),
       (value) =>
         value.status === 'success' &&
         isRecord(value.settings) &&
-        value.settings.default_spreadsheet_id === settings.default_spreadsheet_id
+        value.settings.default_spreadsheet_id === normalizedSettings.default_spreadsheet_id
     );
   },
 };

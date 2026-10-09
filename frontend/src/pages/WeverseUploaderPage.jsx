@@ -45,6 +45,7 @@ function WeverseUploaderContent({ authUser, refreshAuthUser }) {
     scanning,
     isDragging,
     videoInfo,
+    packageSource,
     subtitles,
     metadata,
     setMetadata,
@@ -138,6 +139,7 @@ function WeverseUploaderContent({ authUser, refreshAuthUser }) {
         <UploadPackageReview
           handleReset={handleReset}
           videoInfo={videoInfo}
+          packageSource={packageSource}
           metadata={metadata}
           enabledSubsCount={enabledSubsCount}
           subtitles={subtitles}

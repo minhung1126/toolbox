@@ -49,7 +49,7 @@ export default function FfmpegEncodingControls({ workflow }) {
     <section className="glass-panel card-padding ffmpeg-controls-panel" aria-label="剪輯起訖與編碼設定">
       {/* Presets Bar */}
       <div className="section-block">
-        <label className="field-label">常用預設範本</label>
+        <label className="ui-field-label">常用預設範本</label>
         <div className="preset-pill-grid">
           {PRESET_LIST.map((preset) => {
             const Icon = preset.icon;
@@ -103,7 +103,7 @@ export default function FfmpegEncodingControls({ workflow }) {
             <div className="input-with-action">
               <input
                 type="text"
-                className="input-field"
+                className="ui-text-field"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
                 disabled={!enableStartCut}
@@ -183,7 +183,7 @@ export default function FfmpegEncodingControls({ workflow }) {
                 className={`btn btn-xs ${cutMode === 'to' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setCutMode('to')}
               >
-                結束時間 (-to)
+                結束時間
               </button>
               <button
                 type="button"
@@ -197,7 +197,7 @@ export default function FfmpegEncodingControls({ workflow }) {
             <div className="input-with-action">
               <input
                 type="text"
-                className="input-field"
+                className="ui-text-field"
                 value={cutMode === 'to' ? endTime : durationCut}
                 onChange={(e) => {
                   if (cutMode === 'to') setEndTime(e.target.value);
@@ -301,13 +301,13 @@ export default function FfmpegEncodingControls({ workflow }) {
         ) : (
           /* Re-encode detailed options */
           <div className="reencode-options-grid glass-panel card-padding">
-            <div className="field-group">
-              <label className="field-label" htmlFor="ffmpeg-video-codec">
+            <div className="ui-field">
+              <label className="ui-field-label" htmlFor="ffmpeg-video-codec">
                 視訊編碼器 (-c:v)
               </label>
               <select
                 id="ffmpeg-video-codec"
-                className="select-field"
+                className="ui-text-field"
                 value={videoCodec}
                 onChange={(e) => setVideoCodec(e.target.value)}
               >
@@ -320,8 +320,8 @@ export default function FfmpegEncodingControls({ workflow }) {
               </select>
             </div>
 
-            <div className="field-group">
-              <label className="field-label" htmlFor="ffmpeg-crf">
+            <div className="ui-field">
+              <label className="ui-field-label" htmlFor="ffmpeg-crf">
                 畫質係數 CRF (目前: {crf})
                 <span className="text-dim text-xs ml-2">
                   {crf <= 19 ? '超高畫質' : crf <= 24 ? '畫質平衡' : '高壓縮小檔'}
@@ -338,13 +338,13 @@ export default function FfmpegEncodingControls({ workflow }) {
               />
             </div>
 
-            <div className="field-group">
-              <label className="field-label" htmlFor="ffmpeg-resolution">
+            <div className="ui-field">
+              <label className="ui-field-label" htmlFor="ffmpeg-resolution">
                 解析度縮放
               </label>
               <select
                 id="ffmpeg-resolution"
-                className="select-field"
+                className="ui-text-field"
                 value={resolution}
                 onChange={(e) => setResolution(e.target.value)}
               >
@@ -356,11 +356,11 @@ export default function FfmpegEncodingControls({ workflow }) {
               </select>
             </div>
 
-            <div className="field-group">
-              <label className="field-label" htmlFor="ffmpeg-fps">
+            <div className="ui-field">
+              <label className="ui-field-label" htmlFor="ffmpeg-fps">
                 影格率 (FPS)
               </label>
-              <select id="ffmpeg-fps" className="select-field" value={fps} onChange={(e) => setFps(e.target.value)}>
+              <select id="ffmpeg-fps" className="ui-text-field" value={fps} onChange={(e) => setFps(e.target.value)}>
                 <option value="original">維持原始幀率</option>
                 <option value="24">24 fps (電影感)</option>
                 <option value="30">30 fps (標準影片)</option>
@@ -368,13 +368,13 @@ export default function FfmpegEncodingControls({ workflow }) {
               </select>
             </div>
 
-            <div className="field-group">
-              <label className="field-label" htmlFor="ffmpeg-audio-codec">
+            <div className="ui-field">
+              <label className="ui-field-label" htmlFor="ffmpeg-audio-codec">
                 音訊編碼器 (-c:a)
               </label>
               <select
                 id="ffmpeg-audio-codec"
-                className="select-field"
+                className="ui-text-field"
                 value={audioCodec}
                 onChange={(e) => setAudioCodec(e.target.value)}
               >
@@ -386,13 +386,13 @@ export default function FfmpegEncodingControls({ workflow }) {
               </select>
             </div>
 
-            <div className="field-group">
-              <label className="field-label" htmlFor="ffmpeg-audio-bitrate">
+            <div className="ui-field">
+              <label className="ui-field-label" htmlFor="ffmpeg-audio-bitrate">
                 音訊碼率 (-b:a)
               </label>
               <select
                 id="ffmpeg-audio-bitrate"
-                className="select-field"
+                className="ui-text-field"
                 value={audioBitrate}
                 onChange={(e) => setAudioBitrate(e.target.value)}
                 disabled={audioCodec === 'none' || audioCodec === 'copy'}

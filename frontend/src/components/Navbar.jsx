@@ -29,6 +29,8 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
   const { status: catalogStatus, tools } = useToolCatalog();
   const { value: savedNavigation, save: saveNavigation } = useAccountWorkState('navigation', {});
   const initialNavigationRef = useRef(savedNavigation);
+  const latestNavigationRef = useRef(savedNavigation);
+  latestNavigationRef.current = savedNavigation;
   const toolNavGroups = useMemo(
     () => getToolNavGroups(tools).filter((entry) => entry.sidebar !== false && entry.items?.length),
     [tools]
@@ -74,6 +76,30 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
+    let focusRetryFrame = null;
+
+    const focusWithinDrawer = (target) => {
+      if (focusRetryFrame !== null) window.cancelAnimationFrame(focusRetryFrame);
+      focusRetryFrame = null;
+      const origin = document.activeElement;
+      target.focus();
+      if (document.activeElement !== origin) return;
+
+      // Chromium can ignore a focus call while the drawer is animating.
+      // Retry once, without overriding any subsequent user focus movement.
+      focusRetryFrame = window.requestAnimationFrame(() => {
+        focusRetryFrame = null;
+        const drawer = drawerRef.current;
+        if (
+          document.activeElement === origin &&
+          target.isConnected &&
+          drawer?.classList.contains('is-open') &&
+          drawer.contains(target)
+        ) {
+          target.focus();
+        }
+      });
+    };
 
     const onKeyDown = (event) => {
       if (event.key === 'Escape') {
@@ -92,10 +118,10 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
       const last = focusable[focusable.length - 1];
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
-        last.focus();
+        focusWithinDrawer(last);
       } else if (!event.shiftKey && document.activeElement === last) {
         event.preventDefault();
-        first.focus();
+        focusWithinDrawer(first);
       }
     };
     const onResize = () => {
@@ -105,6 +131,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
     window.addEventListener('resize', onResize);
     return () => {
       window.cancelAnimationFrame(focusFrame);
+      if (focusRetryFrame !== null) window.cancelAnimationFrame(focusRetryFrame);
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('resize', onResize);
@@ -115,7 +142,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
     if (catalogStatus !== 'ready' || toolNavGroups.some((entry) => !(entry.id in openGroups))) return;
     saveNavigation(
       {
-        ...initialNavigationRef.current,
+        ...latestNavigationRef.current,
         sidebarCollapsed,
         ...Object.fromEntries(Object.entries(openGroups).map(([id, open]) => [`${id}Open`, open])),
       },

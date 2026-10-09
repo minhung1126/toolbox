@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject } from 'react';
 import type { FieldSetters, ModelAction } from '../../../shared/model/useWorkflowModel';
 import type { BatchWorkflowState } from './useBatchWorkflowState';
@@ -26,6 +26,9 @@ interface Options {
   youtubeConnected: boolean;
   sourceStale: boolean;
   activeSlot: string;
+  accountKey?: string;
+  executionLockRef?: MutableRefObject<boolean>;
+  sourceReadLockRef?: MutableRefObject<boolean>;
 }
 export function useBatchExecution({
   state,
@@ -39,6 +42,9 @@ export function useBatchExecution({
   youtubeConnected,
   sourceStale,
   activeSlot,
+  accountKey = '',
+  executionLockRef,
+  sourceReadLockRef,
 }: Options) {
   const {
     appliedSpreadsheetId,
@@ -51,6 +57,7 @@ export function useBatchExecution({
     previewToken,
     previewSnapshot,
     previewFingerprint,
+    batchPreview,
     awaitingReconciliation,
     executing,
     loadingPreview,
@@ -72,6 +79,15 @@ export function useBatchExecution({
   } = setters;
   const latestFingerprint = useRef(currentPreviewFingerprint);
   latestFingerprint.current = currentPreviewFingerprint;
+  const latestAccountKey = useRef(accountKey);
+  latestAccountKey.current = accountKey;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const loadBatchPreview = useCallback(async () => {
     if (previewInFlight.current) return null;
@@ -146,11 +162,22 @@ export function useBatchExecution({
     worksheetName,
   ]);
 
-  const executionInFlight = useRef(false);
+  const internalExecutionInFlight = useRef(false);
+  const executionInFlight = executionLockRef || internalExecutionInFlight;
   const previewInFlight = useRef(false);
   const confirmationInFlight = useRef(false);
   const doExecute = async () => {
-    if (executionInFlight.current || awaitingReconciliation) return;
+    if (
+      executionInFlight.current ||
+      awaitingReconciliation ||
+      sourceReadLockRef?.current ||
+      state.loadingSheet ||
+      state.loadingVideos ||
+      loadingPreview ||
+      state.estimateLoading
+    )
+      return;
+    if (!sourceReady || sourceStale) return toast.warning('請先刷新資料來源，讓目前來源設定套用完成');
     if (!youtubeConnected) {
       setConfirmOpen(false);
       toast.warning('請先連結 YouTube 頻道 Google 帳號！');
@@ -164,6 +191,7 @@ export function useBatchExecution({
     setConfirmOpen(false);
     executionInFlight.current = true;
     const executionVersion = playlistRequestRef.current;
+    const executionAccountKey = accountKey;
     dispatchWorkflow({ type: 'transition', phase: 'executing', patch: { executing: true } });
     setErrorMsg(null);
     setResult(null);
@@ -184,12 +212,14 @@ export function useBatchExecution({
         previewToken,
         previewSnapshot,
       });
-      if (executionVersion !== playlistRequestRef.current) return;
+      if (!mounted.current || latestAccountKey.current !== executionAccountKey) return;
       dispatchWorkflow({ type: 'transition', phase: 'completed', patch: { result: res } });
-      setBatchPreview(null);
-      setPreviewToken('');
-      setPreviewSnapshot(null);
-      setPreviewFingerprint('');
+      if (executionVersion === playlistRequestRef.current) {
+        setBatchPreview(null);
+        setPreviewToken('');
+        setPreviewSnapshot(null);
+        setPreviewFingerprint('');
+      }
       const summary = formatResultCounts(res);
       if (res.quota_blocked || res.not_attempted_count)
         toast.warning(`YouTube ${YOUTUBE_COPY.batchUpdate}部分完成：${summary}`);
@@ -197,7 +227,7 @@ export function useBatchExecution({
       else toast.success(`YouTube ${YOUTUBE_COPY.batchUpdate}完成：${summary}`);
     } catch (caughtError: unknown) {
       const err = workflowError(caughtError);
-      if (executionVersion !== playlistRequestRef.current) return;
+      if (!mounted.current || latestAccountKey.current !== executionAccountKey) return;
       if (err.code === 'stale_preview' || err.status === 409) {
         dispatchWorkflow({ type: 'transition', phase: 'idle', patch: {} });
         setResult(null);
@@ -232,17 +262,20 @@ export function useBatchExecution({
       toast.error('批次更新執行失敗');
     } finally {
       executionInFlight.current = false;
-      if (executionVersion === playlistRequestRef.current) setExecuting(false);
+      if (mounted.current) setExecuting(false);
     }
   };
 
-  const requestExecute = async () => {
+  const requestPreview = async () => {
     if (
       confirmationInFlight.current ||
       executionInFlight.current ||
       previewInFlight.current ||
       executing ||
-      loadingPreview
+      loadingPreview ||
+      state.loadingSheet ||
+      state.loadingVideos ||
+      sourceReadLockRef?.current
     )
       return;
     if (!sourceReady || sourceStale) return toast.warning('請先刷新資料來源，讓目前來源設定套用完成');
@@ -251,6 +284,8 @@ export function useBatchExecution({
     if (titleColumn === descriptionColumn) return toast.warning('標題與描述不能使用同一欄位');
     if (!selectedTeam) return toast.warning('請先選擇所屬團體');
     if (!videos.length) return toast.warning('請先讀取草稿影片');
+    if (awaitingReconciliation) return toast.warning('請先核對 YouTube Studio，再重新讀取草稿影片');
+    if (!sourceReady || sourceStale) return toast.warning('請先刷新資料來源，讓目前來源設定套用完成');
     confirmationInFlight.current = true;
     try {
       const requestVersion = playlistRequestRef.current;
@@ -277,12 +312,31 @@ export function useBatchExecution({
       } finally {
         if (requestVersion === playlistRequestRef.current) setEstimateLoading(false);
       }
-      if (requestVersion !== playlistRequestRef.current || fingerprint !== latestFingerprint.current) return;
-      setConfirmOpen(true);
     } finally {
       confirmationInFlight.current = false;
     }
   };
 
-  return { doExecute, requestExecute };
+  const requestExecute = () => {
+    if (
+      executionInFlight.current ||
+      previewInFlight.current ||
+      executing ||
+      loadingPreview ||
+      state.estimateLoading ||
+      state.loadingSheet ||
+      state.loadingVideos ||
+      sourceReadLockRef?.current
+    )
+      return;
+    if (awaitingReconciliation) return toast.warning('請先核對 YouTube Studio，再重新讀取草稿影片');
+    if (!batchPreview || !previewToken || !previewSnapshot || previewFingerprint !== currentPreviewFingerprint) {
+      setErrorMsg('完整批次預覽已過期，請重新產生預覽並檢查變更內容。');
+      return;
+    }
+    if (!batchPreview.some(isBatchPreviewUpdate)) return toast.warning('完整預覽中沒有可更新的影片');
+    setConfirmOpen(true);
+  };
+
+  return { doExecute, requestPreview, requestExecute };
 }

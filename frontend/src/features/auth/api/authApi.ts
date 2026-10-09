@@ -51,10 +51,13 @@ export const authApi: AuthApi = {
     );
   },
   async performSetup(request) {
+    const normalizedRequest = { ...request, adminEmail: request.adminEmail.trim().toLowerCase() };
     return requireResponse<SetupResponse>(
-      await api.performSetup(request),
+      await api.performSetup(normalizedRequest),
       (value) =>
-        value.status === 'success' && typeof value.message === 'string' && value.admin_email === request.adminEmail
+        value.status === 'success' &&
+        typeof value.message === 'string' &&
+        value.admin_email === normalizedRequest.adminEmail
     );
   },
 };

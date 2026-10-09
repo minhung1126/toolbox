@@ -1,40 +1,31 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { copyToClipboard } from '../../../utils/clipboard';
 import { exportCuratedZip, generateChecklistText } from '../model/curatorZip';
-
-const INITIAL_POSTS = [
-  { id: 'post-1', title: 'Post 1', photoIds: [] },
-  { id: 'post-2', title: 'Post 2', photoIds: [] },
-  { id: 'post-3', title: 'Post 3', photoIds: [] },
-];
+import { arrangementSignature, INITIAL_POSTS, usePhotoCuratorSession } from '../PhotoCuratorSession';
 
 export function usePhotoCuratorWorkflow({ toast }) {
   const fileInputRef = useRef(null);
 
-  const [photos, setPhotos] = useState([]); // Array of { id, name, file, previewUrl, size, lastModified }
-  const [unassignedIds, setUnassignedIds] = useState([]);
-  const [posts, setPosts] = useState(INITIAL_POSTS);
+  const {
+    photos,
+    setPhotos,
+    unassignedIds,
+    setUnassignedIds,
+    posts,
+    setPosts,
+    previousArrangement,
+    setPreviousArrangement,
+    setExportedSignature,
+  } = usePhotoCuratorSession();
 
   const [draggedPhotoId, setDraggedPhotoId] = useState(null);
   const [dragOverZone, setDragOverZone] = useState(null); // 'unassigned' | 'post-1' | 'post-2' | 'post-3'
   const [dropPosition, setDropPosition] = useState(null);
-  const [previousArrangement, setPreviousArrangement] = useState(null);
   const [autoConfirmOpen, setAutoConfirmOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [previewPhoto, setPreviewPhoto] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
-
-  // Clean up object URLs on unmount
-  const photosRef = useRef(photos);
-  photosRef.current = photos;
-  useEffect(() => {
-    return () => {
-      photosRef.current.forEach((p) => {
-        if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
-      });
-    };
-  }, []);
 
   // Map of photo id -> photo object for quick access
   const photoMap = useMemo(() => {
@@ -99,7 +90,7 @@ export function usePhotoCuratorWorkflow({ toast }) {
 
   const rememberArrangement = useCallback(() => {
     setPreviousArrangement({ posts, unassignedIds });
-  }, [posts, unassignedIds]);
+  }, [posts, unassignedIds, setPreviousArrangement]);
 
   const undoArrangement = () => {
     if (!previousArrangement) return;
@@ -132,7 +123,7 @@ export function usePhotoCuratorWorkflow({ toast }) {
         })
       );
     },
-    [photoMap, posts, rememberArrangement]
+    [photoMap, posts, rememberArrangement, setPosts, setUnassignedIds]
   );
 
   const returnPhotoToUnassigned = useCallback(
@@ -147,7 +138,7 @@ export function usePhotoCuratorWorkflow({ toast }) {
       );
       setUnassignedIds((prev) => [photoId, ...prev]);
     },
-    [photoMap, unassignedIds, rememberArrangement]
+    [photoMap, unassignedIds, rememberArrangement, setPosts, setUnassignedIds]
   );
 
   // Delete photo completely from workbench
@@ -168,7 +159,7 @@ export function usePhotoCuratorWorkflow({ toast }) {
       );
       toast.info('已自工作台移除該照片。');
     },
-    [toast]
+    [toast, setPhotos, setPosts, setPreviousArrangement, setUnassignedIds]
   );
 
   // Move photo inside post (set as cover or move up/down)
@@ -185,7 +176,7 @@ export function usePhotoCuratorWorkflow({ toast }) {
       );
       toast.info('已將照片設為該篇首圖 (Cover)！');
     },
-    [toast, posts, rememberArrangement]
+    [toast, posts, rememberArrangement, setPosts]
   );
 
   const movePhotoInPost = useCallback(
@@ -204,7 +195,7 @@ export function usePhotoCuratorWorkflow({ toast }) {
         })
       );
     },
-    [rememberArrangement]
+    [rememberArrangement, setPosts]
   );
 
   // Chronological Auto-Distribute
@@ -259,11 +250,10 @@ export function usePhotoCuratorWorkflow({ toast }) {
 
   // Copy checklist
   const handleCopyChecklist = async () => {
-    const text = getChecklistText();
-    const success = await copyToClipboard(text);
-    if (success) {
+    try {
+      await copyToClipboard(getChecklistText());
       toast.success('已複製發布對照清單至剪貼簿！');
-    } else {
+    } catch {
       toast.error('複製失敗，請手動選取。');
     }
   };
@@ -279,7 +269,9 @@ export function usePhotoCuratorWorkflow({ toast }) {
     setExporting(true);
     try {
       const checklistContent = getChecklistText();
+      const exportedArrangement = arrangementSignature(photos, posts, unassignedIds);
       await exportCuratedZip({ posts, photoMap, checklistContent });
+      setExportedSignature(exportedArrangement);
       toast.success('已成功打包下載 ZIP，包含分組資料夾與發布對照清單！');
     } catch (err) {
       toast.error(`打包失敗：${err.message || '未知錯誤'}`);

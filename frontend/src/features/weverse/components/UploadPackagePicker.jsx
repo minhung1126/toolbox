@@ -100,7 +100,7 @@ export default function UploadPackagePicker({
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleScanPath();
               }}
-              className="input-field weverse-manual-path-input"
+              className="ui-text-field weverse-manual-path-input"
             />
             <Button
               variant="primary"

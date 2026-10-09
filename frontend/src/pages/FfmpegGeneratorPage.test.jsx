@@ -30,7 +30,7 @@ describe('FfmpegGeneratorPage', () => {
     render(<FfmpegGeneratorPage />);
 
     expect(screen.getByRole('heading', { level: 1, name: 'FFmpeg 命令行生成器' })).toBeInTheDocument();
-    expect(screen.getByText('點擊或拖曳本機影片至此處')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '選擇影片', exact: true })).toBeInTheDocument();
     expect(screen.getByText('極速無損剪切')).toBeInTheDocument();
 
     // Default command block should include ffmpeg and -c copy
@@ -48,9 +48,10 @@ describe('FfmpegGeneratorPage', () => {
     fireEvent.change(endInput, { target: { value: '00:02:30.000' } });
 
     const codeEl = screen.getByText(
-      (content) => content.includes('-ss 00:01:15.000') && content.includes('-to 00:02:30.000')
+      (content) => content.includes('-ss 00:01:15.000') && content.includes('-t 00:01:15.000')
     );
     expect(codeEl).toBeInTheDocument();
+    expect(screen.getByText('(75.00 秒)', { exact: false })).toBeInTheDocument();
   });
 
   it('applies preset and updates encoding flags in command', () => {

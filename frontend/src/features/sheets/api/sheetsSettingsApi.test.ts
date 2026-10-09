@@ -42,6 +42,15 @@ describe('sheetsSettingsApi', () => {
     expect(api.updateSharedSettings).toHaveBeenCalledWith(settings);
   });
 
+  it('trims source values before saving and accepts the normalized confirmation', async () => {
+    const source = 'https://docs.google.com/spreadsheets/d/sheet-1/edit';
+    const updated = { status: 'success', settings: { default_spreadsheet_id: source } };
+    vi.mocked(api.updateSharedSettings).mockResolvedValueOnce(updated);
+
+    await expect(sheetsSettingsApi.updateSettings({ default_spreadsheet_id: `  ${source}  ` })).resolves.toBe(updated);
+    expect(api.updateSharedSettings).toHaveBeenCalledWith({ default_spreadsheet_id: source });
+  });
+
   it('rejects malformed responses and mismatched write confirmations', async () => {
     vi.mocked(api.getSharedSettings).mockResolvedValueOnce({});
     vi.mocked(api.updateSharedSettings).mockResolvedValueOnce({

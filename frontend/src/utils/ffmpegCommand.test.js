@@ -115,9 +115,12 @@ describe('ffmpegCommand utils', () => {
       });
 
       expect(cmd.singleLine).toContain(
-        'ffmpeg -ss 00:00:05.000 -i "video.mp4" -to 00:00:20.000 -c copy "video_cut.mp4"'
+        'ffmpeg -ss 00:00:05.000 -i "video.mp4" -t 00:00:15.000 -c copy "video_cut.mp4"'
       );
-      expect(cmd.breakdown.length).toBeGreaterThan(3);
+      expect(cmd.breakdown).toContainEqual({
+        flag: '-t 00:00:15.000',
+        label: '從起點裁切 00:00:15.000，至原影片時間點 00:00:20.000',
+      });
     });
 
     it('quotes files with spaces and retains quotes when already present', () => {

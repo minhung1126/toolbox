@@ -56,29 +56,29 @@ export default function FfmpegCommandOutput({ workflow }) {
 
       {/* Filename Inputs */}
       <div className="filename-inputs-grid">
-        <div className="field-group">
-          <label className="field-label" htmlFor="ffmpeg-input-name">
+        <div className="ui-field">
+          <label className="ui-field-label" htmlFor="ffmpeg-input-name">
             輸入檔名 (Input File)
             <span className="text-dim text-xs ml-2">自動雙引號防護</span>
           </label>
           <input
             id="ffmpeg-input-name"
             type="text"
-            className="input-field"
+            className="ui-text-field"
             value={inputName}
             onChange={(e) => setInputName(e.target.value)}
             placeholder="input.mp4"
           />
         </div>
-        <div className="field-group">
-          <label className="field-label" htmlFor="ffmpeg-output-name">
+        <div className="ui-field">
+          <label className="ui-field-label" htmlFor="ffmpeg-output-name">
             輸出檔名 (Output File)
             <span className="text-dim text-xs ml-2">自動雙引號防護</span>
           </label>
           <input
             id="ffmpeg-output-name"
             type="text"
-            className="input-field"
+            className="ui-text-field"
             value={outputName}
             onChange={(e) => setOutputName(e.target.value)}
             placeholder="output.mp4"

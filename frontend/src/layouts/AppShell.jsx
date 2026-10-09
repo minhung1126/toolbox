@@ -5,10 +5,12 @@ import Navbar from '../components/Navbar';
 import { AccountWorkStateProvider } from '../hooks/useAccountWorkState';
 import { recoverPage } from '../utils/pageRecovery';
 import { useToolCatalog } from '../tools/ToolCatalogProvider';
+import { PhotoCuratorSessionProvider } from '../features/photo-curator/PhotoCuratorSession';
 
 export default function AppShell({
   authUser,
   workState,
+  workStateReady,
   authStatus,
   authError,
   updateAvailable,
@@ -22,7 +24,7 @@ export default function AppShell({
 }) {
   const { status: catalogStatus, error: catalogError, retry: retryCatalog } = useToolCatalog();
   return (
-    <AccountWorkStateProvider key={authUser.sub || authUser.email} initialState={workState}>
+    <AccountWorkStateProvider key={authUser.sub || authUser.email} initialState={workState} ready={workStateReady}>
       <div className={`app-container${sidebarCollapsed ? ' sidebar-is-collapsed' : ''}`}>
         <Navbar
           authUser={authUser}
@@ -104,9 +106,11 @@ export default function AppShell({
               {settingsStatus.details.length > 0 && <small>{settingsStatus.details.join('；')}</small>}
             </StatusMessage>
           )}
-          <React.Suspense fallback={<div className="loading-center">載入中…</div>}>
-            <Outlet />
-          </React.Suspense>
+          <PhotoCuratorSessionProvider>
+            <React.Suspense fallback={<div className="loading-center">載入中…</div>}>
+              <Outlet />
+            </React.Suspense>
+          </PhotoCuratorSessionProvider>
         </main>
       </div>
     </AccountWorkStateProvider>

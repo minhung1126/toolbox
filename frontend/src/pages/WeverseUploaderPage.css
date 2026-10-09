@@ -189,6 +189,10 @@
   min-width: 0;
 }
 
+.weverse-review-panel .ui-text-field:disabled {
+  opacity: 0.65;
+}
+
 .weverse-field-label {
   display: flex;
   align-items: baseline;
@@ -210,16 +214,13 @@
   color: var(--danger);
 }
 
-.weverse-metadata-field .input-field {
-  width: 100%;
-}
-
 .weverse-description-field {
   margin-bottom: 1.75rem;
 }
 
 .weverse-video-description-input {
   width: 100%;
+  padding-block: var(--space-3);
   resize: vertical;
 }
 

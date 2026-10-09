@@ -69,7 +69,7 @@ describe('SetupWizardPage', () => {
     expect(screen.getByPlaceholderText(/123456789-abc.apps.googleusercontent.com/)).toBeInTheDocument();
   });
 
-  it('submits form successfully and redirects to login', async () => {
+  it('submits a normalized administrator email and redirects to login', async () => {
     authApi.getSetupStatus.mockResolvedValueOnce({
       is_configured: false,
       setup_completed: false,
@@ -92,7 +92,7 @@ describe('SetupWizardPage', () => {
       target: { value: 'client-secret-test' },
     });
     fireEvent.change(screen.getByPlaceholderText('admin@yourcompany.com'), {
-      target: { value: 'admin@example.com' },
+      target: { value: 'Admin@Example.com' },
     });
     fireEvent.change(screen.getByPlaceholderText('請輸入 6 位數安全碼'), {
       target: { value: '123456' },
@@ -112,6 +112,28 @@ describe('SetupWizardPage', () => {
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true });
     });
+  });
+
+  it('blocks setup until an unavailable status is successfully retried', async () => {
+    authApi.getSetupStatus.mockRejectedValueOnce(new Error('設定狀態暫時無法讀取'));
+    authApi.getSetupStatus.mockResolvedValueOnce({
+      is_configured: false,
+      setup_completed: false,
+      needs_pin: true,
+      redirect_uri: 'https://toolbox.example.com/api/v1/auth/callback',
+    });
+    renderPage();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('設定狀態暫時無法讀取');
+    expect(screen.queryByRole('button', { name: '儲存並完成系統初始化' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Google OAuth Client ID')).not.toBeInTheDocument();
+    expect(authApi.performSetup).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '重新檢查設定狀態' }));
+    expect(await screen.findByLabelText(/伺服器初次安裝安全碼/)).toBeInTheDocument();
+    expect(screen.getByText('https://toolbox.example.com/api/v1/auth/callback')).toBeInTheDocument();
+    expect(authApi.getSetupStatus).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('button', { name: '儲存並完成系統初始化' })).toBeEnabled();
   });
 
   it('displays error alert when setup fails', async () => {

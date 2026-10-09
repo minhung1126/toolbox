@@ -10,6 +10,7 @@ interface Props {
   handleReorderTracks: (source: number, target: number) => void;
   isManuallyAdjusted: boolean;
   handleResetToRuleOrder: () => void;
+  applying?: boolean;
 }
 export default function PlaylistSortPreview({
   previewData,
@@ -19,6 +20,7 @@ export default function PlaylistSortPreview({
   handleReorderTracks,
   isManuallyAdjusted,
   handleResetToRuleOrder,
+  applying = false,
 }: Props) {
   return (
     <section className="glass-panel card-padding">
@@ -35,7 +37,7 @@ export default function PlaylistSortPreview({
         </div>
       </div>
 
-      <div className="playlist-sort-preview-columns">
+      <div className="playlist-sort-preview-columns" {...(applying ? { inert: '' } : {})}>
         <PreviewTable
           icon={undefined}
           extraHeader={undefined}

@@ -4,17 +4,45 @@ import { mockAuthenticatedBackend } from './fixtures';
 async function dragPhoto(page: Page, source: Locator, target: Locator, edge: 'before' | 'after') {
   const grip = source.locator('.photo-drag-grip');
   await grip.hover();
-  const start = await grip.boundingBox();
+  const start = (await grip.boundingBox())!;
   await page.mouse.down();
-  await page.mouse.move(start!.x + start!.width / 2 + 8, start!.y + start!.height / 2, { steps: 3 });
-  // Start the drag before scrolling to a target in the photo list.
-  await expect(source).toHaveClass(/is-dragging/);
-  const targetAnchor = target.locator(edge === 'before' ? '.photo-drag-grip' : '.photo-card-name');
-  await targetAnchor.scrollIntoViewIfNeeded();
-  const end = await targetAnchor.boundingBox();
-  await page.mouse.move(end!.x + end!.width / 2, end!.y + end!.height / 2, { steps: 3 });
-  await page.mouse.up();
+  try {
+    await page.mouse.move(start.x + start.width / 2 + 8, start.y + start.height / 2, { steps: 3 });
+    // Start the native drag before scrolling to its destination.
+    await expect(source).toHaveClass(/is-dragging/);
+    const targetAnchor = target.locator(edge === 'before' ? '.photo-drag-grip' : '.photo-card-name');
+    await targetAnchor.scrollIntoViewIfNeeded();
+    const end = (await targetAnchor.boundingBox())!;
+    const x = end.x + end.width / 2;
+    const y = end.y + end.height / 2;
+    await page.mouse.move(x, y, { steps: 3 });
+    await page.mouse.move(x + 1, y + 1);
+    await expect(target).toHaveClass(new RegExp(`drop-${edge}`));
+  } finally {
+    await page.mouse.up();
+  }
 }
+
+test('switching tools preserves local photos, grouping and titles', async ({ page }) => {
+  await mockAuthenticatedBackend(page);
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await page.goto('/photo-curator');
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'retained.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"/>'),
+  });
+  await page.getByRole('button', { name: '+ P1', exact: true }).click();
+  await page.getByLabel('Post 1 主題名稱').fill('旅行照片');
+  await page.getByRole('button', { name: '開啟導覽選單' }).click();
+  await page.locator('.sidebar a[href="/dashboard"]').click();
+  await expect(page.getByRole('heading', { name: 'Toolbox 控制台' })).toBeVisible();
+  await page.getByRole('button', { name: '開啟導覽選單' }).click();
+  await page.locator('.sidebar a[href="/photo-curator"]').click();
+  await expect(page.getByLabel('Post 1 主題名稱')).toHaveValue('旅行照片');
+  await expect(page.locator('[data-post-id=post-1] .photo-card-name')).toHaveText(['retained.svg']);
+  await expect(page.locator('[data-post-id=post-1] img').first()).toHaveJSProperty('complete', true);
+});
 
 for (const width of [390, 1440]) {
   test(`photo grouping and precise sorting at ${width}px`, async ({ page }) => {

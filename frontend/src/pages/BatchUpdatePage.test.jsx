@@ -1,8 +1,9 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BatchUpdatePage, { buildBatchPreview } from './BatchUpdatePage';
 import BatchPreviewItem from '../components/batch/BatchPreviewItem';
+import { useBatchUpdateWorkflow } from '../features/youtube/hooks/useBatchUpdateWorkflow';
 
 describe('BatchPreviewItem', () => {
   it('uses the kebab-case class for items that will be updated', () => {
@@ -80,7 +81,14 @@ vi.mock('../utils/teamPersonFilterStorage', () => ({
   readSharedTeamPersonFilter: () => ({ exists: false, team: '', selectedPeople: [] }),
 }));
 vi.mock('../components/SheetDataSourcePanel', () => ({
-  default: ({ children }) => <div>{children}</div>,
+  default: ({ children, disabled, loading, onRefresh }) => (
+    <fieldset disabled={disabled}>
+      <button onClick={onRefresh} disabled={disabled || loading}>
+        刷新工作表與欄位
+      </button>
+      {children}
+    </fieldset>
+  ),
 }));
 vi.mock('../components/SourceLinkInput', () => ({
   default: ({ id, value, onChange, sourceType: _sourceType, ...props }) => (
@@ -120,6 +128,32 @@ function renderPage() {
       videoType="Video"
     />
   );
+}
+
+async function readDraftVideos() {
+  const button = await screen.findByRole('button', { name: '讀取 Video 草稿影片' });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+}
+
+async function reviewedWorkflow() {
+  const hook = renderHook(() =>
+    useBatchUpdateWorkflow({
+      authUser,
+      sysSettings: { default_spreadsheet_id: 'sheet-a', default_playlist_id: 'playlist-a' },
+      videoType: 'Video',
+      toast: mocks.toast,
+    })
+  );
+  await waitFor(() => expect(hook.result.current.sourceReady).toBe(true));
+  await act(async () => {
+    await hook.result.current.handleLoadVideos();
+  });
+  act(() => hook.result.current.setAssignments({ 'video-1': '人物甲', 'video-2': '不編輯' }));
+  await act(async () => {
+    await hook.result.current.requestPreview();
+  });
+  return hook;
 }
 
 describe('BatchUpdatePage preview and confirmation', () => {
@@ -206,22 +240,23 @@ describe('BatchUpdatePage preview and confirmation', () => {
 
   it('shows current and next content, skip reason, and a structured confirmation summary', async () => {
     const { container } = renderPage();
-    const loadButton = await screen.findByRole('button', { name: '讀取 Video 草稿影片' });
-    fireEvent.click(loadButton);
+    await readDraftVideos();
     await screen.findByText('舊標題一');
 
     const assignmentSelect = container.querySelector('.video-card-assignment select');
     fireEvent.change(assignmentSelect, { target: { value: '人物甲' } });
-    fireEvent.click(screen.getByRole('button', { name: '檢查並更新標題與描述' }));
+    fireEvent.click(screen.getByRole('button', { name: '產生完整批次預覽' }));
 
-    const dialog = await screen.findByRole('dialog', { name: '確認批次更新 1 支影片' });
     expect(await screen.findByText('批次更新預覽')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     const previewPanel = screen.getByRole('region', { name: '完整批次變更預覽' });
     expect(within(previewPanel).getAllByText('目前內容')).toHaveLength(2);
     expect(within(previewPanel).getAllByText('更新後內容')).toHaveLength(2);
     expect(within(previewPanel).getAllByText('舊標題一').length).toBeGreaterThan(0);
     expect(within(previewPanel).getByText('新標題一')).toBeInTheDocument();
     expect(within(previewPanel).getByText('原因：未指定人物')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: '確認這份預覽並更新' }));
+    const dialog = await screen.findByRole('dialog', { name: '確認批次更新 1 支影片' });
     expect(within(dialog).getByText('將更新')).toBeInTheDocument();
     expect(within(dialog).getByText('略過')).toBeInTheDocument();
     expect(within(dialog).getByText('100 單位')).toBeInTheDocument();
@@ -247,10 +282,10 @@ describe('BatchUpdatePage preview and confirmation', () => {
       plan: null,
     });
     const { container } = renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: '讀取 Video 草稿影片' }));
+    await readDraftVideos();
     await screen.findByText('舊標題一');
     fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: '人物甲' } });
-    fireEvent.click(screen.getByRole('button', { name: '檢查並更新標題與描述' }));
+    fireEvent.click(screen.getByRole('button', { name: '產生完整批次預覽' }));
 
     expect(await screen.findByText('建立完整批次預覽失敗：批次更新預覽回應格式不正確。')).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: /確認批次更新/ })).not.toBeInTheDocument();
@@ -263,10 +298,11 @@ describe('BatchUpdatePage preview and confirmation', () => {
   ])('requires provider reconciliation after an ambiguous batch %s', async (_label, response) => {
     mocks.api.batchUpdateMetadata.mockImplementationOnce(response);
     const { container } = renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: '讀取 Video 草稿影片' }));
+    await readDraftVideos();
     await screen.findByText('舊標題一');
     fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: '人物甲' } });
-    fireEvent.click(screen.getByRole('button', { name: '檢查並更新標題與描述' }));
+    fireEvent.click(screen.getByRole('button', { name: '產生完整批次預覽' }));
+    fireEvent.click(await screen.findByRole('button', { name: '確認這份預覽並更新' }));
     const dialog = await screen.findByRole('dialog', { name: '確認批次更新 1 支影片' });
     fireEvent.click(within(dialog).getByRole('button', { name: '開始批次更新' }));
 
@@ -296,5 +332,116 @@ describe('BatchUpdatePage preview and confirmation', () => {
         })
       )
     );
+  });
+
+  it('confirms the reviewed preview without fetching a new plan after cancellation', async () => {
+    const { container } = renderPage();
+    await readDraftVideos();
+    await screen.findByText('舊標題一');
+    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: '人物甲' } });
+    fireEvent.click(screen.getByRole('button', { name: '產生完整批次預覽' }));
+    await screen.findByText('新標題一');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: '確認這份預覽並更新' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '取消' }));
+    fireEvent.click(screen.getByRole('button', { name: '確認這份預覽並更新' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '開始批次更新' }));
+    await waitFor(() => expect(mocks.api.batchUpdateMetadata).toHaveBeenCalledOnce());
+    expect(mocks.api.getBatchPreview).toHaveBeenCalledOnce();
+    expect(mocks.api.batchUpdateMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({ previewToken: 'preview-token' })
+    );
+  });
+
+  it('locks reload and source controls during a write and displays its completed result', async () => {
+    let finish;
+    const response = await mocks.api.batchUpdateMetadata();
+    mocks.api.batchUpdateMetadata.mockClear();
+    mocks.api.batchUpdateMetadata.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    const { container } = renderPage();
+    await readDraftVideos();
+    await screen.findByText('舊標題一');
+    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: '人物甲' } });
+    fireEvent.click(screen.getByRole('button', { name: '產生完整批次預覽' }));
+    fireEvent.click(await screen.findByRole('button', { name: '確認這份預覽並更新' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '開始批次更新' }));
+    await waitFor(() => expect(mocks.api.batchUpdateMetadata).toHaveBeenCalledOnce());
+    const reload = screen.getByRole('button', { name: '讀取 Video 草稿影片' });
+    expect(reload).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: '共用 To-Post 播放清單' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: '標題套用欄位' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '刷新工作表與欄位' })).toBeDisabled();
+    expect(container.querySelector('.video-card-assignment select')).toBeDisabled();
+    fireEvent.click(reload);
+    expect(mocks.api.getPlaylistVideos).toHaveBeenCalledOnce();
+    await act(async () => {
+      finish(response);
+    });
+    expect(await screen.findByText('YouTube 批次更新已執行完成')).toBeInTheDocument();
+    expect(reload).toBeEnabled();
+  });
+
+  it('blocks confirmation and execution callbacks while source refresh is pending', async () => {
+    const hook = await reviewedWorkflow();
+    let finish;
+    mocks.api.getSpreadsheetMetadata.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    let refresh;
+    act(() => {
+      refresh = hook.result.current.loadSheetResources();
+    });
+    expect(hook.result.current.loadingSheet).toBe(true);
+    act(() => {
+      hook.result.current.requestExecute();
+    });
+    await act(async () => {
+      await hook.result.current.doExecute();
+    });
+    expect(hook.result.current.confirmOpen).toBe(false);
+    expect(mocks.api.batchUpdateMetadata).not.toHaveBeenCalled();
+    await act(async () => {
+      finish({ worksheets: [{ title: 'Youtube Video', columns: ['Youtube Title', 'Youtube Description'] }] });
+      await refresh;
+    });
+    act(() => {
+      hook.result.current.requestExecute();
+    });
+    expect(hook.result.current.confirmOpen).toBe(true);
+  });
+
+  it('blocks refresh and reload callbacks in the same turn that a write starts', async () => {
+    const hook = await reviewedWorkflow();
+    const response = await mocks.api.batchUpdateMetadata();
+    mocks.api.batchUpdateMetadata.mockClear();
+    let finish;
+    mocks.api.batchUpdateMetadata.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    let write;
+    act(() => {
+      write = hook.result.current.doExecute();
+      void hook.result.current.loadSheetResources();
+      void hook.result.current.handleLoadVideos();
+    });
+    expect(mocks.api.getSpreadsheetMetadata).toHaveBeenCalledOnce();
+    expect(mocks.api.getPlaylistVideos).toHaveBeenCalledOnce();
+    await act(async () => {
+      finish(response);
+      await write;
+    });
+    expect(hook.result.current.result).toEqual(response);
+    expect(hook.result.current.executing).toBe(false);
   });
 });

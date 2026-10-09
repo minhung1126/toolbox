@@ -49,4 +49,23 @@ describe('authApi response contracts', () => {
     });
     await expect(authApi.performSetup(request)).resolves.toMatchObject({ status: 'success' });
   });
+
+  it('normalizes the administrator email before submitting and confirming setup', async () => {
+    const request = { googleClientId: 'client', googleClientSecret: 'secret', adminEmail: ' Admin@Example.test ' };
+    vi.mocked(api.performSetup).mockResolvedValueOnce({
+      status: 'success',
+      message: '完成',
+      admin_email: 'admin@example.test',
+    });
+
+    await expect(authApi.performSetup(request)).resolves.toMatchObject({ status: 'success' });
+    expect(api.performSetup).toHaveBeenCalledWith({ ...request, adminEmail: 'admin@example.test' });
+
+    vi.mocked(api.performSetup).mockResolvedValueOnce({
+      status: 'success',
+      message: '完成',
+      admin_email: 'other@example.test',
+    });
+    await expect(authApi.performSetup(request)).rejects.toBeInstanceOf(AuthContractError);
+  });
 });
