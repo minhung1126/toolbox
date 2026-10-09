@@ -1,5 +1,5 @@
 import { Button } from '../shared/ui';
-import React from 'react';
+import React, { useState } from 'react';
 import {
   GripVertical,
   Undo2,
@@ -30,8 +30,18 @@ import IgSlotImage from '../components/curator/IgSlotImage';
 import { usePhotoCuratorWorkflow } from '../features/photo-curator/hooks/usePhotoCuratorWorkflow';
 import '../features/photo-curator/photo-curator.css';
 
+const THUMBNAIL_SIZES = [
+  { key: 'compact', label: '最小', pixels: 40 },
+  { key: 'small', label: '小', pixels: 64 },
+  { key: 'medium', label: '中', pixels: 96 },
+  { key: 'large', label: '大', pixels: 144 },
+  { key: 'xlarge', label: '最大', pixels: 192 },
+];
+
 export default function PhotoCuratorPage() {
   const toast = useToast();
+  const [thumbnailSizeIndex, setThumbnailSizeIndex] = useState(1);
+  const thumbnailSize = THUMBNAIL_SIZES[thumbnailSizeIndex];
   const {
     fileInputRef,
     photos,
@@ -232,6 +242,42 @@ export default function PhotoCuratorPage() {
             </Button>
           )}
         </div>
+
+        <div className="curator-thumbnail-size-control">
+          <div className="curator-thumbnail-size-summary">
+            <label htmlFor="curator-thumbnail-size">縮圖大小</label>
+            <span className="badge badge-info" aria-hidden="true">
+              {thumbnailSize.label} · {thumbnailSize.pixels}px
+            </span>
+            <p id="curator-thumbnail-size-hint">縮小方便排序，放大查看照片細節。</p>
+          </div>
+          <div className="curator-thumbnail-size-slider">
+            <input
+              id="curator-thumbnail-size"
+              type="range"
+              min="0"
+              max={THUMBNAIL_SIZES.length - 1}
+              step="1"
+              value={thumbnailSizeIndex}
+              onChange={(e) => setThumbnailSizeIndex(Number(e.target.value))}
+              aria-valuetext={`${thumbnailSize.label}縮圖，${thumbnailSize.pixels} 像素`}
+              aria-describedby="curator-thumbnail-size-hint"
+            />
+            <div className="curator-thumbnail-size-steps" role="group" aria-label="縮圖大小分段">
+              {THUMBNAIL_SIZES.map((size, index) => (
+                <button
+                  key={size.key}
+                  type="button"
+                  aria-label={`${size.label}縮圖`}
+                  aria-pressed={thumbnailSizeIndex === index}
+                  onClick={() => setThumbnailSizeIndex(index)}
+                >
+                  {size.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
       <p className="curator-arrangement-status" role="status">
@@ -241,7 +287,10 @@ export default function PhotoCuratorPage() {
       </p>
 
       {/* Main Workbench Layout: Left Unassigned Pool, Right 3 Post Columns */}
-      <div className="curator-workbench-grid">
+      <div
+        className={`curator-workbench-grid${thumbnailSizeIndex >= 2 ? ' curator-workbench-visual' : ''}`}
+        data-thumbnail-size={thumbnailSize.key}
+      >
         {/* Left: Unassigned Pool */}
         <div
           className={`glass-panel unassigned-pool-panel ${unassignedIds.length === 0 ? 'is-empty' : ''} ${dragOverZone === 'unassigned' ? 'is-drag-over' : ''}`}
