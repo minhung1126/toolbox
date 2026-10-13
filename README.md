@@ -141,6 +141,7 @@ Compose 預設把容器的 8000 port 綁到主機 `127.0.0.1:${HOST_PORT}`，並
 - [Docker 與 production 部署](docs/DEPLOYMENT.md)
 - [系統架構設計與模組化開發指南](docs/ARCHITECTURE.md)
 - [上傳工作流、字幕補傳與頁面重構紀錄](docs/UPLOAD_REFACTOR_2026-10-09.md)
+- [Weverse LIVE 自動錄影、字幕、Drive 存檔與 Discord 回報整合計劃（尚未啟用）](docs/WEVERSE_LIVE_PLAN.md)
 
 正式環境僅需在 `.env` 設定 `PUBLIC_BASE_URL`（例如 `https://toolbox.example.com`），`SECRET_KEY` 與 `CREDENTIAL_ENCRYPTION_KEY` 於首次啟動時自動生成並安全保存於 `data/.secrets.json`。Google OAuth 憑證、管理員白名單及 YouTube 槽位皆可在網頁端設定並即時熱更新生效。Google callback 由 `PUBLIC_BASE_URL` 組成：`/api/v1/auth/callback`。
 
