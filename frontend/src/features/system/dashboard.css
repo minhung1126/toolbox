@@ -219,7 +219,9 @@
 
 .dashboard-pin-button {
   width: 44px;
+  height: 44px;
   flex: 0 0 44px;
+  align-self: start;
   padding: 0;
   border-color: transparent;
   background: transparent;
@@ -228,6 +230,9 @@
 
 .feature-card .dashboard-pin-button {
   grid-area: 1 / -2;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
 }
 
 .dashboard-pin-button[aria-pressed='true'] {
