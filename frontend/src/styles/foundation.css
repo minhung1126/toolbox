@@ -17,6 +17,8 @@ body {
   background: var(--bg-canvas);
   color: var(--text-main);
   font-family: var(--font-sans);
+  font-size: var(--font-size-body);
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -80,19 +82,18 @@ h6 {
 }
 
 h1 {
-  font-size: clamp(1.75rem, 3vw, 2.25rem);
-  font-weight: 700;
-  line-height: 1.25;
+  font-size: var(--font-size-page-title);
+  line-height: 1.4;
 }
 
 h2 {
-  font-size: 1.35rem;
-  line-height: 1.35;
+  font-size: var(--font-size-section-title);
+  line-height: 1.5;
 }
 
 h3 {
-  font-size: 1.125rem;
-  line-height: 1.4;
+  font-size: var(--font-size-card-title);
+  line-height: 1.5;
 }
 
 ::selection {
@@ -101,7 +102,7 @@ h3 {
 }
 
 a:hover {
-  color: var(--info);
+  color: var(--accent-hover);
 }
 
 ::-webkit-scrollbar {
@@ -153,7 +154,7 @@ a:hover {
   align-items: center;
   gap: var(--space-2);
   font-size: 0.85rem;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-muted);
 }
 
@@ -167,7 +168,7 @@ a:hover {
   outline: none;
   background: var(--surface-inset);
   color: var(--text-main);
-  font-size: 0.92rem;
+  font-size: var(--font-size-body);
   transition:
     border-color 0.18s ease,
     box-shadow 0.18s ease,
@@ -191,8 +192,8 @@ a:hover {
 .section-desc,
 .panel-description {
   color: var(--text-muted);
-  font-size: 0.84rem;
-  line-height: 1.55;
+  font-size: var(--font-size-caption);
+  line-height: 1.65;
 }
 
 .source-link-button {
@@ -234,8 +235,8 @@ a:hover {
   padding: 9px 18px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  font-size: 0.92rem;
-  font-weight: 600;
+  font-size: var(--font-size-control);
+  font-weight: 500;
   line-height: 1.4;
   text-decoration: none;
   white-space: nowrap;
@@ -258,9 +259,8 @@ a:hover {
 }
 
 .btn-primary:hover {
-  transform: translateY(-1px);
   background: var(--primary-hover);
-  box-shadow: 0 4px 14px var(--primary-glow);
+  box-shadow: var(--shadow-sm);
 }
 
 .btn-primary:active {

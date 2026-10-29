@@ -310,11 +310,7 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
                         ))}
                       </div>
                     )}
-                    <Link
-                      className={`btn btn-${card.colorTheme === 'primary' ? 'primary' : 'secondary'} feature-card-action`}
-                      to={card.to}
-                      onClick={() => rememberTool(card.id)}
-                    >
+                    <Link className="feature-card-action" to={card.to} onClick={() => rememberTool(card.id)}>
                       {card.actionLabel} <ArrowRight size={16} />
                     </Link>
                   </Card>
