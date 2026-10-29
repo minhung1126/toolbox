@@ -22,7 +22,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
   background: var(--bg-card);
-  box-shadow: var(--shadow-modal);
+  box-shadow: var(--shadow-lg);
 }
 
 .auth-page .login-card-wide {
@@ -61,14 +61,14 @@
 
 .auth-page .login-title {
   color: var(--text-main);
-  font-size: 1.85rem;
-  font-weight: 700;
+  font-size: var(--font-size-page-title);
+  font-weight: 600;
   letter-spacing: -0.025em;
 }
 
 .auth-page .login-subtitle {
   color: var(--text-muted);
-  font-size: 0.95rem;
+  font-size: var(--font-size-body);
 }
 
 .auth-page .login-badge {
@@ -163,7 +163,7 @@
   width: 100%;
   padding: 12px 24px;
   border-radius: var(--radius-sm);
-  font-size: 1rem;
+  font-size: var(--font-size-body);
   font-weight: 600;
 }
 
@@ -299,7 +299,7 @@
   width: 100%;
   margin-top: var(--space-2);
   padding: var(--space-3);
-  font-size: 1rem;
+  font-size: var(--font-size-body);
   font-weight: 600;
 }
 

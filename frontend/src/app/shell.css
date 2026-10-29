@@ -44,7 +44,7 @@
   position: fixed;
   height: 100dvh;
   overflow: hidden;
-  background: #101114;
+  background: var(--bg-sidebar);
   border-right: 1px solid var(--border-subtle);
   padding: 1.25rem 0.875rem;
   display: flex;
@@ -60,7 +60,7 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -73,9 +73,9 @@
   width: 36px;
   height: 36px;
   border-radius: var(--radius-sm);
-  background: var(--surface-raised);
-  border: 1px solid var(--border-color);
-  color: var(--primary);
+  background: var(--primary-subtle);
+  border: 1px solid var(--primary-border);
+  color: var(--accent);
   box-shadow: none;
   flex-shrink: 0;
 }
@@ -88,15 +88,15 @@
 
 .sidebar-brand-copy h2 {
   white-space: nowrap;
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-main);
   letter-spacing: -0.02em;
 }
 
 .sidebar-brand-copy p {
   margin-top: 2px;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   color: var(--text-dim);
   white-space: nowrap;
 }
@@ -140,13 +140,13 @@
   text-align: left;
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 9px 13px;
+  gap: 10px;
+  padding: 9px 12px;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   text-decoration: none;
-  font-size: 0.92rem;
-  font-weight: 500;
+  font-size: var(--font-size-control);
+  font-weight: 400;
   transition: all 0.18s ease;
   border: 1px solid transparent;
   background: transparent;
@@ -161,10 +161,8 @@
 }
 
 .nav-item:hover {
-  border-left: 3px solid var(--primary);
-  background: rgb(255 255 255 / 5%);
+  background: rgb(255 255 255 / 4%);
   color: var(--text-main);
-  border-color: rgb(255 255 255 / 6%);
 }
 
 .nav-item:hover svg {
@@ -172,23 +170,21 @@
 }
 
 .nav-item.active {
-  border-left: 3px solid var(--primary);
-  background: rgb(99 102 241 / 14%);
-  color: #c7d2fe;
-  border-color: rgb(99 102 241 / 28%);
-  font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--primary);
+  background: var(--primary-subtle);
+  color: var(--accent);
+  font-weight: 500;
+  box-shadow: inset 2px 0 0 var(--primary);
 }
 
 .nav-item.active svg {
-  color: #818cf8;
+  color: var(--accent);
 }
 
 .nav-item-child {
   min-height: 42px;
   padding: 0.625rem 0.875rem;
   padding-left: 28px;
-  font-size: 0.88rem;
+  font-size: var(--font-size-caption);
 }
 
 .nav-submenu {
@@ -233,10 +229,9 @@
 .account-card {
   min-width: 0;
   font-size: 0.85rem;
-  background: var(--surface-inset);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 0.65rem 0.75rem;
+  background: transparent;
+  border-top: 1px solid var(--border-subtle);
+  padding: 0.875rem 0.25rem 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -344,7 +339,7 @@
 
 .mobile-app-bar {
   display: none;
-  background: #101114;
+  background: var(--bg-sidebar);
   border-bottom: 1px solid var(--border-subtle);
 }
 

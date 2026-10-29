@@ -395,7 +395,7 @@ test('Weverse folder picker styles stay usable across viewport widths', async ({
     const dropzone = page.locator('.weverse-dropzone');
     await dropzone.dispatchEvent('dragover');
     await expect(dropzone).toHaveClass(/is-dragging/);
-    await expect(dropzone).toHaveCSS('border-color', 'rgb(99, 102, 241)');
+    await expect(dropzone).toHaveCSS('border-color', 'rgb(99, 102, 182)');
     await dropzone.dispatchEvent('dragleave');
 
     await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
@@ -410,7 +410,7 @@ test('Weverse folder picker styles stay usable across viewport widths', async ({
     await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Sample Live');
     await expect(page.getByLabel(/影片標題 \(Title\)/)).toHaveValue('Sample Live');
     await expect(page.locator('.weverse-metadata-grid')).toHaveCSS('display', 'grid');
-    await expect(page.locator('.weverse-quota-card')).toHaveCSS('background-color', 'rgba(99, 102, 241, 0.12)');
+    await expect(page.locator('.weverse-quota-card')).toHaveCSS('background-color', 'rgba(135, 139, 215, 0.1)');
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
