@@ -10,4 +10,4 @@ GitHub CI 在 push 至 `main` 時執行 Linux Chromium 功能 E2E、Windows Edge
 
 瀏覽器測試由 GitHub CI 執行。本機可在需要排查時手動執行上列命令；CI 不會自動接受更新後的基準。
 
-Windows Edge 的 Dashboard 截圖容許最多 20 個不同像素。CI artifact 顯示差異僅落在少數圖示的字形柵格化；其餘畫面及 Linux Chromium 基準仍採逐像素比較。
+Windows Edge 的 Dashboard 截圖容許最多 20 個不同像素，共用元件與鍵盤焦點截圖容許 1 個不同像素。已人工核對 CI artifact，這些差異來自 Windows 主機間的圖示與邊緣柵格化。Linux Chromium 基準維持逐像素比較。
