@@ -127,7 +127,7 @@ describe('DashboardPage', () => {
     expect(screen.queryByRole('link', { name: /進入 Video 草稿/ })).not.toBeInTheDocument();
     expect(screen.getByText(/顯示 1 \/ .* 個工具入口/)).toBeInTheDocument();
 
-    fireEvent.change(search, { target: { value: '首圖橫排' } });
+    fireEvent.change(search, { target: { value: '首圖排版' } });
     expect(screen.getByRole('link', { name: /進入排版工作台/ })).toHaveAttribute('href', PATHS.photoCurator);
     expect(screen.queryByRole('link', { name: /進入生成器/ })).not.toBeInTheDocument();
 

@@ -67,8 +67,8 @@ describe('PhotoCuratorPage', () => {
   it('renders workbench with 3 post columns and unassigned pool', async () => {
     render(<PhotoCuratorPage />);
 
-    expect(screen.getByText('貼文三部曲排版工作台')).toBeInTheDocument();
-    expect(screen.getByText('Instagram 主頁三聯排效果預覽')).toBeInTheDocument();
+    expect(screen.getByText('Instagram 貼文排版工作台')).toBeInTheDocument();
+    expect(screen.getByText('Instagram 主頁排版效果預覽')).toBeInTheDocument();
     expect(screen.getByText('待分配防漏池')).toBeInTheDocument();
     expect(screen.getAllByText(/Post [123] 封面/).map((node) => node.textContent)).toEqual([
       'Post 3 封面',
@@ -81,6 +81,77 @@ describe('PhotoCuratorPage', () => {
       expect(screen.getByDisplayValue('Post 2')).toBeInTheDocument();
       expect(screen.getByDisplayValue('Post 3')).toBeInTheDocument();
     });
+  });
+
+  it('switches between 3, 6 and 9 post groups, covers and quick assignment buttons', () => {
+    const { container } = render(<PhotoCuratorPage />);
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: { files: [new File(['photo'], 'pending.jpg', { type: 'image/jpeg' })] },
+    });
+
+    for (const count of [6, 9, 3]) {
+      fireEvent.click(screen.getByRole('button', { name: `${count} 格` }));
+      expect(screen.getByRole('button', { name: `${count} 格` })).toHaveAttribute('aria-pressed', 'true');
+      expect(container.querySelectorAll('.post-column-card')).toHaveLength(count);
+      expect(container.querySelectorAll('.ig-grid-slot')).toHaveLength(count);
+      expect(container.querySelectorAll('.btn-quick-assign')).toHaveLength(count);
+    }
+  });
+
+  it('keeps existing titles and photos while returning photos from removed posts to the pool', () => {
+    const { container } = render(<PhotoCuratorPage />);
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: {
+        files: ['keep.jpg', 'six.jpg', 'nine.jpg'].map((name) => new File(['photo'], name, { type: 'image/jpeg' })),
+      },
+    });
+    fireEvent.click(screen.getAllByTitle('加入 Post 1')[0]);
+    fireEvent.change(screen.getByDisplayValue('Post 1'), { target: { value: '保留的主題' } });
+    fireEvent.click(screen.getByRole('button', { name: '9 格' }));
+    fireEvent.click(screen.getAllByTitle('加入 Post 6')[0]);
+    fireEvent.click(screen.getByTitle('加入 Post 9'));
+
+    fireEvent.click(screen.getByRole('button', { name: '6 格' }));
+    expect(container.querySelector('.pool-photo-list')).toHaveTextContent('nine.jpg');
+    expect(screen.getByDisplayValue('Post 6').closest('.post-column-card')).toHaveTextContent('six.jpg');
+
+    fireEvent.click(screen.getByRole('button', { name: '3 格' }));
+    expect(screen.getByDisplayValue('保留的主題').closest('.post-column-card')).toHaveTextContent('keep.jpg');
+    expect(container.querySelector('.pool-photo-list')).toHaveTextContent('nine.jpg');
+    expect(container.querySelector('.pool-photo-list')).toHaveTextContent('six.jpg');
+    expect(screen.getByAltText('Post 1 封面：keep.jpg')).toHaveAttribute('src', 'mock://preview/keep.jpg');
+
+    fireEvent.click(screen.getByRole('button', { name: '9 格' }));
+    fireEvent.click(screen.getByRole('button', { name: '9 格' }));
+    expect(container.querySelectorAll('.curator-photo-card')).toHaveLength(3);
+    expect(container.querySelectorAll('.pool-photo-list .curator-photo-card')).toHaveLength(2);
+    expect(screen.getByDisplayValue('Post 9').closest('.post-column-card')).not.toHaveTextContent('nine.jpg');
+  });
+
+  it.each([3, 6])('restores nine posts, titles and covers after undoing a switch to %i posts', (count) => {
+    const { container } = render(<PhotoCuratorPage />);
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: { files: [new File(['photo'], 'last.jpg', { type: 'image/jpeg' })] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '9 格' }));
+    fireEvent.click(screen.getByTitle('加入 Post 9'));
+    fireEvent.change(screen.getByDisplayValue('Post 9'), { target: { value: '最後一篇' } });
+    fireEvent.click(screen.getByRole('button', { name: `${count} 格` }));
+    fireEvent.change(screen.getByDisplayValue('Post 1'), { target: { value: '剛改的標題' } });
+    fireEvent.click(screen.getByRole('button', { name: /復原上一步/ }));
+
+    expect(screen.getByRole('button', { name: '9 格' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByDisplayValue('最後一篇').closest('.post-column-card')).toHaveTextContent('last.jpg');
+    expect(screen.getByDisplayValue('剛改的標題')).toBeInTheDocument();
+    expect(screen.getByAltText('Post 9 封面：last.jpg')).toBeInTheDocument();
+    expect(container.querySelectorAll('.pool-photo-list .curator-photo-card')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: /復原上一步/ })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: '3 格' }));
+    fireEvent.click(screen.getByRole('button', { name: '6 格' }));
+    fireEvent.click(screen.getByRole('button', { name: /復原上一步/ }));
+    expect(container.querySelectorAll('.post-column-card')).toHaveLength(3);
+    expect(container.querySelectorAll('.curator-photo-card')).toHaveLength(1);
   });
 
   it('allows importing photos and assigning them to post buckets', async () => {
@@ -156,26 +227,50 @@ describe('PhotoCuratorPage', () => {
     });
   });
 
-  it('auto-distributes photos by chronological order', async () => {
+  it.each([
+    [3, 11],
+    [6, 11],
+    [9, 11],
+    [9, 2],
+  ])('auto-distributes %i posts chronologically without losing any of %i photos', (count, total) => {
     const { container } = render(<PhotoCuratorPage />);
     const fileInput = container.querySelector('input[type="file"]');
-    const file1 = new File(['1'], 'photo1.jpg', { type: 'image/jpeg' });
-    const file2 = new File(['2'], 'photo2.jpg', { type: 'image/jpeg' });
-    const file3 = new File(['3'], 'photo3.jpg', { type: 'image/jpeg' });
+    const files = Array.from(
+      { length: total },
+      (_, index) => new File(['photo'], `photo${index + 1}.jpg`, { type: 'image/jpeg', lastModified: index + 1 })
+    );
+    fireEvent.change(fileInput, { target: { files: [...files].reverse() } });
+    fireEvent.click(screen.getByRole('button', { name: `${count} 格` }));
+    fireEvent.change(screen.getByDisplayValue('Post 1'), { target: { value: '自訂主題' } });
+    fireEvent.click(screen.getByRole('button', { name: /按時間均分/ }));
 
-    fireEvent.change(fileInput, { target: { files: [file1, file2, file3] } });
+    const columns = Array.from(container.querySelectorAll('.post-column-card'));
+    const namesByPost = columns.map((column) =>
+      Array.from(column.querySelectorAll('.photo-card-name'), (element) => element.textContent)
+    );
+    expect(namesByPost.flat()).toEqual(files.map((file) => file.name));
+    expect(namesByPost.map((names) => names.length)).toEqual(
+      Array.from({ length: count }, (_, index) => Math.floor(total / count) + (index < total % count ? 1 : 0))
+    );
+    expect(screen.getByDisplayValue('自訂主題')).toBeInTheDocument();
+    expect(screen.getByText('已全部分配')).toBeInTheDocument();
+    expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('已依時間軸自動均分'));
+  });
 
-    await waitFor(() => {
-      expect(screen.getByText('photo1.jpg')).toBeInTheDocument();
+  it('includes all nine posts in the copied checklist', async () => {
+    const { copyToClipboard } = await import('../utils/clipboard');
+    const { container } = render(<PhotoCuratorPage />);
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: { files: [new File(['photo'], 'last.jpg', { type: 'image/jpeg' })] },
     });
-
-    const autoBtn = screen.getByRole('button', { name: /按時間均分/ });
-    fireEvent.click(autoBtn);
-
+    fireEvent.click(screen.getByRole('button', { name: '9 格' }));
+    fireEvent.click(screen.getByTitle('加入 Post 9'));
+    fireEvent.click(screen.getByRole('button', { name: /複製對照表/ }));
     await waitFor(() => {
-      expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('已依時間軸自動均分'));
-      expect(screen.getByText('已全部分配')).toBeInTheDocument();
+      expect(copyToClipboard).toHaveBeenCalledWith(expect.stringContaining('【Post 9】Post 9（共 1 張）'));
     });
+    expect(copyToClipboard.mock.calls[0][0]).toContain('排版格數：9 格');
+    expect(copyToClipboard.mock.calls[0][0]).toContain('01. last.jpg [★ 首圖 Cover]');
   });
 
   it('allows returning photo from post to unassigned pool and deleting from workbench', async () => {
@@ -265,7 +360,7 @@ describe('PhotoCuratorPage', () => {
     fireEvent.change(screen.getByLabelText('Post 1 主題名稱'), { target: { value: '旅行' } });
     fireEvent.click(screen.getByRole('button', { name: '往前移 b.jpg' }));
     fireEvent.click(screen.getByRole('link', { name: '其他工具' }));
-    expect(screen.queryByText('貼文三部曲排版工作台')).not.toBeInTheDocument();
+    expect(screen.queryByText('Instagram 貼文排版工作台')).not.toBeInTheDocument();
     expect(URL.revokeObjectURL).not.toHaveBeenCalled();
     const unload = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(unload);

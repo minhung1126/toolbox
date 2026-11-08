@@ -1,4 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import JSZip from 'jszip';
+import { readFile } from 'node:fs/promises';
 import { mockAuthenticatedBackend } from './fixtures';
 
 async function dragPhoto(page: Page, source: Locator, target: Locator, edge: 'before' | 'after') {
@@ -27,22 +29,108 @@ test('switching tools preserves local photos, grouping and titles', async ({ pag
   await mockAuthenticatedBackend(page);
   await page.setViewportSize({ width: 390, height: 1000 });
   await page.goto('/photo-curator');
+  await page.getByRole('button', { name: '9 格', exact: true }).click();
   await page.locator('input[type=file]').setInputFiles({
     name: 'retained.svg',
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"/>'),
   });
-  await page.getByRole('button', { name: '+ P1', exact: true }).click();
-  await page.getByLabel('Post 1 主題名稱').fill('旅行照片');
+  await page.getByRole('button', { name: '+ P9', exact: true }).click();
+  await page.getByLabel('Post 9 主題名稱').fill('旅行照片');
   await page.getByRole('button', { name: '開啟導覽選單' }).click();
   await page.locator('.sidebar a[href="/dashboard"]').click();
   await expect(page.getByRole('heading', { name: 'Toolbox 控制台' })).toBeVisible();
   await page.getByRole('button', { name: '開啟導覽選單' }).click();
   await page.locator('.sidebar a[href="/photo-curator"]').click();
-  await expect(page.getByLabel('Post 1 主題名稱')).toHaveValue('旅行照片');
-  await expect(page.locator('[data-post-id=post-1] .photo-card-name')).toHaveText(['retained.svg']);
-  await expect(page.locator('[data-post-id=post-1] img').first()).toHaveJSProperty('complete', true);
+  await expect(page.getByRole('button', { name: '9 格', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.post-column-card')).toHaveCount(9);
+  await expect(page.getByLabel('Post 9 主題名稱')).toHaveValue('旅行照片');
+  await expect(page.locator('[data-post-id=post-9] .photo-card-name')).toHaveText(['retained.svg']);
+  await expect(page.locator('[data-post-id=post-9] img').first()).toHaveJSProperty('complete', true);
 });
+
+for (const width of [390, 768, 1440]) {
+  test(`3, 6 and 9 grid presets keep previews and quick assignment within ${width}px`, async ({ page }, testInfo) => {
+    await mockAuthenticatedBackend(page);
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/photo-curator');
+    await page.locator('input[type=file]').setInputFiles({
+      name: 'pending.svg',
+      mimeType: 'image/svg+xml',
+      buffer: Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="indigo"/></svg>'
+      ),
+    });
+
+    for (const count of [3, 6, 9]) {
+      const button = page.getByRole('button', { name: `${count} 格`, exact: true });
+      await button.click();
+      await expect(button).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.locator('.post-column-card')).toHaveCount(count);
+      await expect(page.locator('.btn-quick-assign')).toHaveCount(count);
+      await expect(page.locator('.ig-slot-badge')).toHaveText(
+        Array.from({ length: count }, (_, index) => `Post ${count - index} 封面`)
+      );
+      const columns = await page
+        .locator('.ig-preview-grid')
+        .evaluate((element) => getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length);
+      expect(columns).toBe(3);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(
+        1
+      );
+    }
+
+    await page.locator('.photo-curator-toolbar').screenshot({ path: testInfo.outputPath(`grid-presets-${width}.png`) });
+    await page.getByRole('button', { name: '+ P9', exact: true }).click();
+    await expect(page.getByAltText('Post 9 封面：pending.svg')).toBeVisible();
+    await page
+      .locator('.ig-preview-section')
+      .screenshot({ path: testInfo.outputPath(`nine-grid-preview-${width}.png`) });
+    await page.getByRole('button', { name: '3 格', exact: true }).click();
+    await expect(page.locator('.pool-photo-list .photo-card-name')).toHaveText(['pending.svg']);
+    await page.getByRole('button', { name: /復原上一步/ }).click();
+    await expect(page.locator('[data-post-id=post-9] .photo-card-name')).toHaveText(['pending.svg']);
+    await expect(page.getByAltText('Post 9 封面：pending.svg')).toBeVisible();
+  });
+}
+
+for (const count of [6, 9]) {
+  test(`exports all ${count} post folders and their cover images`, async ({ page }) => {
+    await mockAuthenticatedBackend(page);
+    await page.goto('/photo-curator');
+    await page.getByRole('button', { name: `${count} 格`, exact: true }).click();
+    const files = Array.from({ length: count }, (_, index) => ({
+      name: `photo-${index + 1}.svg`,
+      mimeType: 'image/svg+xml',
+      buffer: Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text y="50">${index + 1}</text></svg>`
+      ),
+    }));
+    await page.locator('input[type=file]').setInputFiles(files);
+    for (let index = 1; index <= count; index += 1) {
+      await page
+        .getByRole('button', { name: `+ P${index}`, exact: true })
+        .first()
+        .click();
+    }
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: '下載分組照片 (ZIP)' }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(
+      new RegExp(`^Instagram_${count}格貼文_\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}\\.zip$`)
+    );
+    const archive = await JSZip.loadAsync(await readFile((await download.path())!));
+    const checklist = await archive.file('貼文發布對照清單_Checklist.txt')?.async('string');
+    expect(checklist).toContain(`排版格數：${count} 格`);
+    for (let index = 1; index <= count; index += 1) {
+      const photo = archive.file(`Post_${index}_Post ${index}/01_COVER_photo-${index}.svg`);
+      expect(photo).not.toBeNull();
+      expect(await photo!.async('nodebuffer')).toEqual(files[index - 1].buffer);
+      expect(checklist).toContain(`photo-${index}.svg [★ 首圖 Cover]`);
+    }
+  });
+}
 
 for (const width of [390, 1440]) {
   test(`photo grouping and precise sorting at ${width}px`, async ({ page }) => {

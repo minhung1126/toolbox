@@ -15,7 +15,7 @@ describe('curatorZip utils', () => {
       const posts = [{ id: 'post-1', title: '首部曲', photoIds: ['ph-1', 'ph-2'] }];
 
       const text = generateChecklistText({ photos, posts, photoMap, unassignedIds: [] });
-      expect(text).toContain('# Instagram 貼文三部曲發布對照表');
+      expect(text).toContain('# Instagram 貼文排版發布對照表');
       expect(text).toContain('【Post 1】首部曲（共 2 張）');
       expect(text).toContain('01. photo1.jpg [★ 首圖 Cover]');
       expect(text).toContain('02. photo2.jpg');
@@ -58,11 +58,11 @@ describe('curatorZip utils', () => {
 
       expect(global.URL.createObjectURL).toHaveBeenCalled();
       expect(downloadedAnchor).toHaveAttribute('href', 'blob:mock-download-url');
-      expect(downloadedAnchor).toHaveAttribute('download', 'Instagram_三部曲貼文_2026-10-10_00-30-52.zip');
+      expect(downloadedAnchor).toHaveAttribute('download', 'Instagram_1格貼文_2026-10-10_00-30-52.zip');
 
       vi.setSystemTime(new Date('2026-10-09T16:30:53Z'));
       await exportCuratedZip({ posts, photoMap, checklistContent: 'test checklist' });
-      expect(downloadedAnchor).toHaveAttribute('download', 'Instagram_三部曲貼文_2026-10-10_00-30-53.zip');
+      expect(downloadedAnchor).toHaveAttribute('download', 'Instagram_1格貼文_2026-10-10_00-30-53.zip');
     });
   });
 });

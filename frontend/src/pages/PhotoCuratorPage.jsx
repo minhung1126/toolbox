@@ -60,6 +60,7 @@ function PhotoCuratorWorkbench() {
     unassignedIds,
     posts,
     setPosts,
+    handlePostCountChange,
     draggedPhotoId,
     dragOverZone,
     dropPosition,
@@ -106,8 +107,8 @@ function PhotoCuratorWorkbench() {
         </div>
         <div className="photo-curator-header-row">
           <div>
-            <h1>貼文三部曲排版工作台</h1>
-            <p className="section-desc">匯入照片、分成三篇，再拖曳調整每篇順序。第一張就是封面，排好後即可下載。</p>
+            <h1>Instagram 貼文排版工作台</h1>
+            <p className="section-desc">一次排好 3、6 或 9 格，拖曳調整每篇順序。第一張就是封面，排好後即可下載。</p>
           </div>
           <Button
             variant="secondary"
@@ -125,7 +126,7 @@ function PhotoCuratorWorkbench() {
         {showHelp && (
           <div className="photo-curator-help-panel">
             <div className="help-panel-header">
-              <strong>💡 貼文三部曲排版建議</strong>
+              <strong>💡 貼文排版建議</strong>
               <button
                 type="button"
                 className="btn btn-icon"
@@ -136,8 +137,8 @@ function PhotoCuratorWorkbench() {
               </button>
             </div>
             <p>
-              將一次出遊或活動的照片拆成 3 篇 IG 貼文時，建議每篇各放數張照片並依序排列。
-              確保三篇貼文的首圖風格相互呼應，在個人首頁並列時呈現具整體感的三聯排視覺效果！
+              選擇 3、6 或 9 格，將一次出遊或活動的照片分成對應篇數的 IG 貼文，每篇可放多張照片。
+              首圖以每排三格預覽，方便協調整體風格。縮減格數時，多出貼文中的照片會移回待分配池，也可以復原上一步。
             </p>
           </div>
         )}
@@ -198,6 +199,21 @@ function PhotoCuratorWorkbench() {
       {/* Toolbar & Action Bar */}
       <div className="photo-curator-toolbar glass-panel">
         <div className="toolbar-left">
+          <div className="curator-grid-presets" role="group" aria-label="排版格數">
+            <span>排版格數</span>
+            {[3, 6, 9].map((count) => (
+              <Button
+                key={count}
+                variant={posts.length === count ? 'primary' : 'secondary'}
+                size="sm"
+                aria-pressed={posts.length === count}
+                onClick={() => handlePostCountChange(count)}
+              >
+                {count} 格
+              </Button>
+            ))}
+          </div>
+
           <Button variant="secondary" size="sm" onClick={undoArrangement} disabled={!previousArrangement}>
             <Undo2 size={14} aria-hidden="true" /> 復原上一步
           </Button>
@@ -208,7 +224,7 @@ function PhotoCuratorWorkbench() {
             className="btn btn-secondary btn-sm"
             onClick={() => (assignedCount ? setAutoConfirmOpen(true) : handleAutoDistribute())}
             disabled={photos.length === 0}
-            title="依檔案修改時間均分為三篇（不是照片拍攝時間）"
+            title={`依檔案修改時間均分為 ${posts.length} 篇（不是照片拍攝時間）`}
           >
             <Clock size={14} aria-hidden="true" />
             <span>按時間均分</span>
@@ -304,7 +320,7 @@ function PhotoCuratorWorkbench() {
         {unassignedIds.length > 0 && ' 尚未分配的照片不會包含在 ZIP 中。'}
       </p>
 
-      {/* Main Workbench Layout: Left Unassigned Pool, Right 3 Post Columns */}
+      {/* Main Workbench Layout: Unassigned Pool and Post Groups */}
       <div
         className={`curator-workbench-grid${thumbnailSizeIndex >= 2 ? ' curator-workbench-visual' : ''}`}
         data-thumbnail-size={thumbnailSize.key}
@@ -332,7 +348,7 @@ function PhotoCuratorWorkbench() {
             </span>
           </div>
 
-          <p className="pool-desc">拖到任一貼文，或用 + P1／P2／P3 分組。已分組的照片也可以拖回這裡。</p>
+          <p className="pool-desc">拖到任一貼文，或用 + P1 至 P{posts.length} 分組。已分組的照片也可以拖回這裡。</p>
 
           <div className="pool-photo-list">
             {unassignedIds.length === 0 ? (
@@ -345,7 +361,7 @@ function PhotoCuratorWorkbench() {
                 ) : (
                   <>
                     <Check size={32} className="text-success" />
-                    <p>太棒了！所有照片都已妥善分配至三篇貼文中。</p>
+                    <p>太棒了！所有照片都已妥善分配至 {posts.length} 篇貼文中。</p>
                   </>
                 )}
               </div>
@@ -367,30 +383,17 @@ function PhotoCuratorWorkbench() {
                         {photo.name}
                       </div>
                       <div className="photo-card-quick-actions">
-                        <button
-                          type="button"
-                          className="btn-quick-assign"
-                          onClick={() => assignPhotoToPost(photo.id, 'post-1')}
-                          title="加入 Post 1"
-                        >
-                          + P1
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-quick-assign"
-                          onClick={() => assignPhotoToPost(photo.id, 'post-2')}
-                          title="加入 Post 2"
-                        >
-                          + P2
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-quick-assign"
-                          onClick={() => assignPhotoToPost(photo.id, 'post-3')}
-                          title="加入 Post 3"
-                        >
-                          + P3
-                        </button>
+                        {posts.map((post, index) => (
+                          <button
+                            key={post.id}
+                            type="button"
+                            className="btn-quick-assign"
+                            onClick={() => assignPhotoToPost(photo.id, post.id)}
+                            title={`加入 Post ${index + 1}`}
+                          >
+                            + P{index + 1}
+                          </button>
+                        ))}
                         <button
                           type="button"
                           className="btn-order-action btn-delete-photo"
@@ -409,7 +412,7 @@ function PhotoCuratorWorkbench() {
           </div>
         </div>
 
-        {/* Right: Three Post Columns */}
+        {/* Post groups wrap into rows of three on desktop */}
         <div className="posts-columns-grid">
           {posts.map((post, pIdx) => {
             const postPhotos = post.photoIds.map((id) => photoMap.get(id)).filter(Boolean);
@@ -568,14 +571,16 @@ function PhotoCuratorWorkbench() {
         </div>
       </div>
 
-      {/* Instagram 3-Grid Cover Live Preview */}
-      <section className="glass-panel ig-preview-section" aria-label="Instagram 主頁首圖橫排預覽">
+      {/* Instagram Cover Grid Live Preview */}
+      <section className="glass-panel ig-preview-section" aria-label="Instagram 主頁首圖排版預覽">
         <div className="ig-preview-header">
           <div className="ig-preview-title">
             <Grid3X3 size={18} className="text-accent" aria-hidden="true" />
-            <h3>Instagram 主頁三聯排效果預覽</h3>
+            <h3>Instagram 主頁排版效果預覽</h3>
           </div>
-          <span className="badge badge-info">依序發布 Post 1、2、3，主頁由左至右顯示 Post 3、2、1</span>
+          <span className="badge badge-info">
+            {posts.length} 格・{posts.length / 3} 排首圖，由 Post 1 依序發布，主頁從 Post {posts.length} 倒序顯示
+          </span>
         </div>
 
         <div className="ig-preview-grid">

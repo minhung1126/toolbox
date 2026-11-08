@@ -297,7 +297,7 @@ test('photo curator feature styles keep the workbench within supported viewport 
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/photo-curator');
-    await expect(page.getByRole('heading', { level: 1, name: '貼文三部曲排版工作台' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Instagram 貼文排版工作台' })).toBeVisible();
     await expect(page.locator('.curator-workbench-grid')).toHaveCSS('display', 'grid');
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -1129,7 +1129,7 @@ test('Photo Curator exports the assigned image and checklist in a ZIP download',
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: '下載分組照片 (ZIP)' }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/^Instagram_三部曲貼文_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.zip$/);
+  expect(download.suggestedFilename()).toMatch(/^Instagram_3格貼文_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.zip$/);
 
   const archive = await JSZip.loadAsync(await readFile(await download.path()));
   expect(archive.file('Post_1_Post 1/01_COVER_concert-photo.jpg')).not.toBeNull();
