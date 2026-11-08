@@ -119,6 +119,9 @@ describe('PhotoCuratorPage', () => {
     expect(screen.getByDisplayValue('保留的主題').closest('.post-column-card')).toHaveTextContent('keep.jpg');
     expect(container.querySelector('.pool-photo-list')).toHaveTextContent('nine.jpg');
     expect(container.querySelector('.pool-photo-list')).toHaveTextContent('six.jpg');
+    expect(
+      Array.from(container.querySelectorAll('.pool-photo-list .photo-card-name'), (node) => node.textContent)
+    ).toEqual(['six.jpg', 'nine.jpg']);
     expect(screen.getByAltText('Post 1 封面：keep.jpg')).toHaveAttribute('src', 'mock://preview/keep.jpg');
 
     fireEvent.click(screen.getByRole('button', { name: '9 格' }));
@@ -308,6 +311,46 @@ describe('PhotoCuratorPage', () => {
       expect(screen.queryByText('item.jpg')).not.toBeInTheDocument();
       expect(mockToast.info).toHaveBeenCalledWith('已自工作台移除該照片。');
     });
+  });
+
+  it.each(['button', 'drag'])('returns photos to their original import order via %s and supports undo', (method) => {
+    const { container } = render(<PhotoCuratorPage />);
+    const names = ['z.jpg', 'b.jpg', 'm.jpg', 'a.jpg', 'y.jpg'];
+    const files = names.map(
+      (name, index) => new File(['photo'], name, { type: 'image/jpeg', lastModified: 5 - index })
+    );
+    const fileInput = container.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: files.slice(0, 3) } });
+    fireEvent.click(screen.getByText('z.jpg').closest('.curator-photo-card').querySelector('.btn-quick-assign'));
+    fireEvent.click(screen.getByText('m.jpg').closest('.curator-photo-card').querySelector('.btn-quick-assign'));
+    fireEvent.change(fileInput, { target: { files: files.slice(3) } });
+    fireEvent.click(screen.getByText('y.jpg').closest('.curator-photo-card').querySelector('.btn-quick-assign'));
+
+    const pool = container.querySelector('.unassigned-pool-panel');
+    const poolNames = () => Array.from(pool.querySelectorAll('.photo-card-name'), (node) => node.textContent);
+    expect(poolNames()).toEqual(['b.jpg', 'a.jpg']);
+
+    for (const [name, expected] of [
+      ['y.jpg', ['b.jpg', 'a.jpg', 'y.jpg']],
+      ['z.jpg', ['z.jpg', 'b.jpg', 'a.jpg', 'y.jpg']],
+      ['m.jpg', names],
+    ]) {
+      if (method === 'button') {
+        fireEvent.click(screen.getByRole('button', { name: `移回待分配池 ${name}` }));
+      } else {
+        const source = screen.getByText(name).closest('.post-item-card');
+        const dataTransfer = { setData: vi.fn(), getData: () => source.dataset.photoId };
+        fireEvent.dragStart(source, { dataTransfer });
+        fireEvent.dragOver(pool, { dataTransfer });
+        fireEvent.drop(pool, { dataTransfer });
+      }
+      expect(poolNames()).toEqual(expected);
+      expect(container.querySelectorAll('.curator-photo-card')).toHaveLength(names.length);
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: /復原上一步/ }));
+    expect(poolNames()).toEqual(['z.jpg', 'b.jpg', 'a.jpg', 'y.jpg']);
+    expect(photoNames(container, 'post-1')).toEqual(['m.jpg']);
   });
 
   it('copies checklist text to clipboard', async () => {

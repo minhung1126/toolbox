@@ -92,6 +92,17 @@ export function usePhotoCuratorWorkflow({ toast }) {
     setPreviousArrangement({ posts, unassignedIds });
   }, [posts, unassignedIds, setPreviousArrangement]);
 
+  const restoreUnassignedPhotos = useCallback(
+    (photoIds) => {
+      setUnassignedIds((prev) => {
+        const nextIds = new Set([...prev, ...photoIds]);
+        // Photos retain their import order regardless of post arrangement or return order.
+        return photos.filter((photo) => nextIds.has(photo.id)).map((photo) => photo.id);
+      });
+    },
+    [photos, setUnassignedIds]
+  );
+
   const handlePostCountChange = (count) => {
     if (![3, 6, 9].includes(count) || count === posts.length) return;
 
@@ -103,7 +114,7 @@ export function usePhotoCuratorWorkflow({ toast }) {
         (_, index) => posts[index] || { id: `post-${index + 1}`, title: `Post ${index + 1}`, photoIds: [] }
       )
     );
-    setUnassignedIds((prev) => [...new Set([...prev, ...returnedIds])]);
+    restoreUnassignedPhotos(returnedIds);
     handleDragEnd();
     if (returnedIds.length > 0) {
       toast.info(`已切換為 ${count} 格，原多出貼文的 ${returnedIds.length} 張照片已移回待分配池。`);
@@ -155,9 +166,9 @@ export function usePhotoCuratorWorkflow({ toast }) {
           photoIds: post.photoIds.filter((id) => id !== photoId),
         }))
       );
-      setUnassignedIds((prev) => [photoId, ...prev]);
+      restoreUnassignedPhotos([photoId]);
     },
-    [photoMap, unassignedIds, rememberArrangement, setPosts, setUnassignedIds]
+    [photoMap, unassignedIds, rememberArrangement, restoreUnassignedPhotos, setPosts]
   );
 
   // Delete photo completely from workbench
