@@ -1,5 +1,5 @@
 import { Button } from '../shared/ui';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   GripVertical,
   Undo2,
@@ -26,6 +26,7 @@ import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Dialog from '../components/Dialog';
 import CuratorThumbnail from '../components/curator/CuratorThumbnail';
+import CuratorHoverPreview from '../components/curator/CuratorHoverPreview';
 import IgSlotImage from '../components/curator/IgSlotImage';
 import { usePhotoCuratorWorkflow } from '../features/photo-curator/hooks/usePhotoCuratorWorkflow';
 import { PhotoCuratorSessionProvider, usePhotoCuratorSession } from '../features/photo-curator/PhotoCuratorSession';
@@ -52,6 +53,7 @@ export default function PhotoCuratorPage() {
 
 function PhotoCuratorWorkbench() {
   const toast = useToast();
+  const workbenchRef = useRef(null);
   const [thumbnailSizeIndex, setThumbnailSizeIndex] = useState(1);
   const thumbnailSize = THUMBNAIL_SIZES[thumbnailSizeIndex];
   const {
@@ -99,7 +101,12 @@ function PhotoCuratorWorkbench() {
   const assignedCount = photos.length - unassignedIds.length;
 
   return (
-    <div className="section-gap photo-curator-page">
+    <div ref={workbenchRef} className="section-gap photo-curator-page">
+      <CuratorHoverPreview
+        containerRef={workbenchRef}
+        photoMap={photoMap}
+        disabled={Boolean(draggedPhotoId || previewPhoto || autoConfirmOpen || resetConfirmOpen)}
+      />
       {/* Header */}
       <header className="glass-panel page-header card-padding">
         <div className="badge badge-info dashboard-eyebrow">
@@ -283,7 +290,7 @@ function PhotoCuratorWorkbench() {
             <span className="badge badge-info" aria-hidden="true">
               {thumbnailSize.label} · {thumbnailSize.pixels}px
             </span>
-            <p id="curator-thumbnail-size-hint">縮小方便排序，放大查看照片細節。</p>
+            <p id="curator-thumbnail-size-hint">縮小方便排序，滑鼠停在照片上可預覽大圖。</p>
           </div>
           <div className="curator-thumbnail-size-slider">
             <input

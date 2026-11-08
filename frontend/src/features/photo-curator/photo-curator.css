@@ -727,6 +727,52 @@
   color: #7dd3fc;
 }
 
+/* Hover previews stay clear of the cursor and never intercept pointer input. */
+.curator-hover-preview {
+  position: fixed;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.5rem;
+  gap: 0.5rem;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  background: var(--bg-card);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+}
+
+.curator-hover-preview-image {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-inset);
+  border-radius: var(--radius-sm);
+}
+
+.curator-hover-preview-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.curator-hover-preview figcaption {
+  flex-shrink: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-size-caption);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Modal for Image Preview */
 .photo-preview-modal {
   max-width: 800px;

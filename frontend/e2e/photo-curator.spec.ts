@@ -25,6 +25,82 @@ async function dragPhoto(page: Page, source: Locator, target: Locator, edge: 'be
   }
 }
 
+for (const width of [390, 1440]) {
+  test(`hover previews stay clear of the pointer and preserve photo controls at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await mockAuthenticatedBackend(page);
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/photo-curator');
+    await page.locator('input[type=file]').setInputFiles({
+      name: 'hover-landscape.svg',
+      mimeType: 'image/svg+xml',
+      buffer: Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600"><rect width="900" height="600" fill="#c7d9e8"/><circle cx="670" cy="160" r="65" fill="#f4cf8c"/><path d="M0 500 250 180 520 500 720 270 900 500V600H0" fill="#435e68"/><path d="M0 520Q300 380 900 530V600H0" fill="#24454e"/></svg>'
+      ),
+    });
+
+    const preview = page.locator('.curator-hover-preview');
+    const poolPhoto = page.locator('.pool-photo-list .photo-card-thumb-wrap');
+    const checkHover = async (target: Locator) => {
+      await target.scrollIntoViewIfNeeded();
+      // Let deferred scroll events finish before placing the pointer on the photo.
+      await page.evaluate(
+        () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+      );
+      const source = (await target.boundingBox())!;
+      const cursor = { x: source.x + source.width / 2, y: source.y + source.height / 2 };
+      await page.mouse.move(cursor.x, cursor.y);
+      await expect(preview).toBeVisible();
+      await expect(preview).toHaveCSS('pointer-events', 'none');
+      await expect(preview.locator('img')).toHaveCSS('object-fit', 'contain');
+      await expect(preview.locator('figcaption')).toHaveText('hover-landscape.svg');
+      const box = (await preview.boundingBox())!;
+      const gap = Math.max(
+        box.x - cursor.x,
+        cursor.x - box.x - box.width,
+        box.y - cursor.y,
+        cursor.y - box.y - box.height
+      );
+      expect(gap).toBeGreaterThanOrEqual(63);
+      expect(box.x).toBeGreaterThanOrEqual(15);
+      expect(box.y).toBeGreaterThanOrEqual(15);
+      expect(box.x + box.width).toBeLessThanOrEqual(width - 15);
+      expect(box.y + box.height).toBeLessThanOrEqual(985);
+      return { cursor, box };
+    };
+
+    await checkHover(poolPhoto);
+    await page.screenshot({ path: testInfo.outputPath(`hover-preview-${width}.png`) });
+    await page.mouse.move(1, 1);
+    await expect(preview).toHaveCount(0);
+    await checkHover(poolPhoto);
+    await page.keyboard.press('Escape');
+    await expect(preview).toHaveCount(0);
+    await page.mouse.move(1, 1);
+    await checkHover(poolPhoto);
+    await page.mouse.down();
+    await expect(preview).toHaveCount(0);
+    await page.mouse.up();
+
+    await page.mouse.move(1, 1);
+    await checkHover(poolPhoto);
+    await page.getByRole('button', { name: '查看 hover-landscape.svg 大圖', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'hover-landscape.svg' })).toBeVisible();
+    await expect(preview).toHaveCount(0);
+    await page.getByRole('button', { name: '關閉預覽', exact: true }).click();
+    await page.getByRole('button', { name: '+ P3', exact: true }).click();
+    const assignedPhoto = page.locator('[data-post-id=post-3] .photo-card-thumb-wrap');
+    const { cursor, box } = await checkHover(assignedPhoto);
+    if (width === 1440) expect(box.x + box.width).toBeLessThanOrEqual(cursor.x - 63);
+    await page.mouse.wheel(0, 120);
+    await expect(preview).toHaveCount(0);
+    await checkHover(page.getByAltText('Post 3 封面：hover-landscape.svg', { exact: true }));
+    await page.mouse.move(1, 1);
+    await expect(preview).toHaveCount(0);
+  });
+}
+
 test('switching tools preserves local photos, grouping and titles', async ({ page }) => {
   await mockAuthenticatedBackend(page);
   await page.setViewportSize({ width: 390, height: 1000 });
