@@ -636,8 +636,8 @@ def get_user_status(request: Request):
 
     youtube_slots = {}
     for slot, slot_config in get_settings(settings).youtube_oauth_slots.items():
-        youtube_public = get_credential_store(credential_store).get_youtube_public(session_sub, slot=slot) or {}
         youtube_creds = get_youtube_credentials(session_id, slot=slot) if slot_config.configured else None
+        youtube_public = get_credential_store(credential_store).get_youtube_public(session_sub, slot=slot) or {}
         quota_limit, quota_buffer = get_runtime_config(runtime_config).get_youtube_quota_settings(slot)
         authenticated = bool(
             slot_config.configured and youtube_creds and youtube_creds.valid and youtube_public.get("channel_id")

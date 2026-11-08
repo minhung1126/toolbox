@@ -41,6 +41,7 @@ class MappedProviderError:
             retry_after_seconds=self.detail.get("retry_after_seconds"),
             reset_at=self.detail.get("reset_at"),
             youtube_slot=self.detail.get("youtube_slot"),
+            reauthorization_required=self.detail.get("reauthorization_required", False),
         )
 
 
@@ -89,6 +90,15 @@ def _provider_parts(exc: BaseException) -> tuple[int | None, set[str]]:
             reasons.add(str(error["reason"]))
         if error.get("status"):
             reasons.add(str(error["status"]))
+        details = error.get("details")
+        if isinstance(details, list):
+            reasons.update(
+                str(item["reason"])
+                for item in details
+                if isinstance(item, dict)
+                and item.get("@type") == "type.googleapis.com/google.rpc.ErrorInfo"
+                and item.get("reason")
+            )
     return status, {reason.casefold() for reason in reasons}
 
 
@@ -106,6 +116,7 @@ def _mapped(
     retry_after_seconds: int | None = None,
     reset_at: str | None = None,
     youtube_slot: str | None = None,
+    reauthorization_required: bool = False,
 ) -> MappedProviderError:
     return MappedProviderError(
         status_code,
@@ -116,6 +127,7 @@ def _mapped(
             retry_after_seconds=retry_after_seconds,
             reset_at=reset_at,
             youtube_slot=youtube_slot,
+            reauthorization_required=reauthorization_required,
         ),
     )
 
@@ -241,12 +253,30 @@ def map_google_sheets_error(exc: BaseException, *, operation: str = "read") -> M
     transient_reasons = {"backenderror", "internalerror", "serviceunavailable", "unavailable", "deadlineexceeded"}
 
     del operation
+    if reasons & {"accessnotconfigured", "service_disabled", "servicedisabled"}:
+        return _mapped(
+            403,
+            "sheets_api_disabled",
+            "Google 試算表 API 尚未啟用或已停用，請管理員在此 OAuth 用戶端所屬的 Google Cloud 專案啟用 Google Sheets API。",
+        )
+    if reasons & {"insufficientpermissions", "access_token_scope_insufficient"}:
+        return _mapped(
+            403,
+            "google_sheets_scope_required",
+            "Google 試算表權限不足，請重新授權 Google 試算表。",
+            reauthorization_required=True,
+        )
     if (
         status == 401
         or any(marker in text for marker in ("invalid_grant", "revoked", "token expired"))
         or reasons & reauth_reasons
     ):
-        return _mapped(401, "sheets_reauthorization_required", "Google 授權已失效，請重新登入並授權。")
+        return _mapped(
+            403,
+            "sheets_reauthorization_required",
+            "Google 試算表授權已失效，請重新授權 Google 試算表。",
+            reauthorization_required=True,
+        )
     if reasons & quota_reasons:
         return _mapped(
             429,
@@ -276,7 +306,11 @@ def map_google_sheets_error(exc: BaseException, *, operation: str = "read") -> M
             retry_after_seconds=30,
         )
     if reasons & permission_reasons or status == 403:
-        return _mapped(403, "sheets_permission_denied", "目前 Google 帳號沒有存取此試算表的權限。")
+        return _mapped(
+            403,
+            "sheets_permission_denied",
+            "Google 拒絕存取此試算表，請確認試算表已分享給授權 Google 試算表時選擇的帳號，並確認該帳號可直接開啟此試算表。",
+        )
     if status == 400 or isinstance(_unwrap(exc), ValueError):
         return _mapped(400, "sheets_invalid_request", "Google 試算表要求資料不正確，請檢查試算表、工作表與欄位設定。")
     if status in {500, 502, 503, 504}:

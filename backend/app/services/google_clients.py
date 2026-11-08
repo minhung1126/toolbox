@@ -27,7 +27,7 @@ def google_client_context(factory: GoogleClientFactory | None):
 def build_google_client(service: str, version: str, *, credentials: Any) -> Any:
     factory = _factory.get()
     if factory is None:
-        factory = googleapiclient.discovery.build
+        return googleapiclient.discovery.build(service, version, credentials=credentials, cache_discovery=False)
     return factory(service, version, credentials=credentials)
 
 
