@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 const TARGET_SELECTOR = '[data-curator-preview]';
-const HOVER_DELAY = 280;
+const HOVER_DELAY = 100;
 const CURSOR_GAP = 64;
 const VIEWPORT_MARGIN = 16;
 
