@@ -175,7 +175,7 @@ def fetch_playlist_items_for_sort(
     # Fallback to Google YouTube Data API v3 if ytm_items empty
     if not items:
         hl = lang.replace("_", "-")
-        raw_items = fetch_playlist_items(context, playlist_id, hl=hl)
+        raw_items = fetch_playlist_items(context, playlist_id)
         if not raw_items:
             return []
 

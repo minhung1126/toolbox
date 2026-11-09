@@ -65,7 +65,6 @@ def _snippet_thumbnail(snippet: Dict[str, Any], video_id: str) -> str:
 def fetch_playlist_items(
     context: YouTubeRequestContext,
     playlist_id: str,
-    hl: str = "zh-TW",
 ) -> List[Dict[str, Any]]:
     """Fetch all items from a YouTube playlist (handles pagination)."""
     service = get_youtube_service(context)
@@ -77,7 +76,6 @@ def fetch_playlist_items(
             playlistId=playlist_id,
             maxResults=50,
             pageToken=next_page_token,
-            hl=hl,
         )
         response = _execute_with_quota(request, "playlistItems.list", context)
         items.extend(response.get("items", []))
