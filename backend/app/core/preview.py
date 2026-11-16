@@ -49,17 +49,24 @@ def playlist_snapshot(raw_items: Iterable[Mapping[str, Any]] | None) -> dict[str
 
 
 def playlist_snapshot_from_preview(videos: Iterable[Mapping[str, Any]] | None) -> dict[str, Any]:
-    """Build the same public snapshot shape from parsed preview rows."""
+    """Rebuild raw playlist order, including repeated videos, from preview rows."""
 
-    entries = [
-        {
-            "id": str(video.get("playlist_item_id") or ""),
-            "contentDetails": {"videoId": str(video.get("video_id") or "")},
-        }
-        for video in videos or []
-        if isinstance(video, Mapping)
-    ]
-    return playlist_snapshot(entries)
+    entries = []
+    for position, video in enumerate(videos or []):
+        if not isinstance(video, Mapping) or not video.get("video_id"):
+            continue
+        members = video.get("playlist_items") or [
+            {"playlist_item_id": video.get("playlist_item_id"), "position": position}
+        ]
+        for member in members:
+            entries.append(
+                {
+                    "id": str(member.get("playlist_item_id") or ""),
+                    "contentDetails": {"videoId": str(video.get("video_id") or "")},
+                    "position": member.get("position", position),
+                }
+            )
+    return playlist_snapshot(sorted(entries, key=lambda entry: entry["position"]))
 
 
 def sheet_snapshot(

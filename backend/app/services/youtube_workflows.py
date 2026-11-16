@@ -474,14 +474,21 @@ class YoutubeWorkflowService:
                 )
                 response["message"] = "To-Post 播放清單目前沒有影片。"
                 return response
-            playlist_item_map: dict[str, str] = {}
+            playlist_item_map: dict[str, list[str]] = {}
             api_order: list[str] = []
             title_map: dict[str, str] = {}
             for item in raw_items:
                 video_id = item.get("contentDetails", {}).get("videoId")
-                if not video_id or video_id in playlist_item_map:
+                if not video_id:
                     continue
-                playlist_item_map[video_id] = item.get("id")
+                playlist_item_id = str(item.get("id") or "").strip()
+                if not playlist_item_id:
+                    raise ValueError("To-Post 缺少播放清單項目 ID，請重新讀取清單後再執行。")
+                if video_id in playlist_item_map:
+                    if playlist_item_id not in playlist_item_map[video_id]:
+                        playlist_item_map[video_id].append(playlist_item_id)
+                    continue
+                playlist_item_map[video_id] = [playlist_item_id]
                 api_order.append(video_id)
                 title_map[video_id] = item.get("snippet", {}).get("title", "")
             active_context, details = self.ports.run_youtube_operation_with_quota_fallback(
@@ -595,39 +602,43 @@ class YoutubeWorkflowService:
                         }
                     )
                     continue
-                try:
-                    _cleanup_result, cleanup_quota_error = execute_with_quota_fallback(
-                        lambda context: self.ports.remove_playlist_item(context, playlist_item_map.get(video_id)),
-                        estimated_units=50,
-                    )
-                except Exception as exc:
-                    item_error = self.ports.workflow_error_detail(exc, slot=active_context.slot)
+                cleanup_errors = []
+                pending_item_ids = []
+                item_ids = playlist_item_map[video_id]
+                for index, playlist_item_id in enumerate(item_ids):
+                    try:
+                        _cleanup_result, cleanup_quota_error = execute_with_quota_fallback(
+                            lambda context: self.ports.remove_playlist_item(context, playlist_item_id),
+                            estimated_units=52,
+                        )
+                    except Exception as exc:
+                        pending_item_ids.append(playlist_item_id)
+                        cleanup_errors.append(self.ports.workflow_error_detail(exc, slot=active_context.slot))
+                        continue
+                    if cleanup_quota_error is not None:
+                        quota_error = cleanup_quota_error
+                        pending_item_ids.extend(item_ids[index:])
+                        cleanup_errors.append(cleanup_quota_error.to_dict())
+                        break
+                if cleanup_errors:
+                    item_error = cleanup_errors[0]
                     results.append(
                         {
                             **base_result,
                             "youtube_slot": active_context.slot,
                             "status": "succeeded_with_warnings",
-                            "reason": f"影片已設為公開，但移出 To-Post 失敗：{item_error['message']}",
+                            "reason": (
+                                f"影片已設為公開，但仍有 {len(pending_item_ids)} 筆 To-Post 項目尚未確認移除："
+                                f"{item_error['message']} 請重新讀取清單後再執行；已公開的影片會跳過公開寫入。"
+                            ),
                             "error": item_error,
+                            "pending_playlist_item_ids": pending_item_ids,
                         }
                     )
                     continue
-                if cleanup_quota_error is None:
-                    results.append(
-                        {**base_result, "youtube_slot": active_context.slot, "status": "succeeded", "reason": None}
-                    )
-                else:
-                    exc = cleanup_quota_error
-                    quota_error = exc
-                    results.append(
-                        {
-                            **base_result,
-                            "youtube_slot": active_context.slot,
-                            "status": "succeeded_with_warnings",
-                            "reason": f"影片已設為公開，但尚未移出 To-Post：{exc.user_message}",
-                            "error": exc.to_dict(),
-                        }
-                    )
+                results.append(
+                    {**base_result, "youtube_slot": active_context.slot, "status": "succeeded", "reason": None}
+                )
             response = self.ports.direct_workflow_response(
                 "youtube.publish_cleanup",
                 results,
@@ -636,6 +647,7 @@ class YoutubeWorkflowService:
                 context=active_context,
             )
             response.update({"playlist_id": playlist_id, "sort_order": "published_at_ascending"})
+            response["completed"] = response["completed"] and all(item["status"] == "succeeded" for item in results)
             return response
         except YouTubeQuotaUnavailable as exc:
             raise self.ports.quota_http_exception(exc) from exc

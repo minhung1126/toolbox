@@ -90,8 +90,9 @@ def _quota_estimate(operation: str, item_count: int, *, slot: Optional[str] = No
     elif operation == "youtube.publish_cleanup":
         breakdown = [
             # The workflow reads To-Post once for the preview snapshot and a
-            # second time immediately before the first write.
-            {"method": "playlistItems.list", "calls": pages * 2, "units": pages * 2},
+            # second time immediately before the first write, then confirms
+            # each deletion with one-unit reads before and after the write.
+            {"method": "playlistItems.list", "calls": pages * 2 + count * 2, "units": pages * 2 + count * 2},
             {"method": "videos.list", "calls": pages, "units": pages},
             {"method": "videos.update", "calls": count, "units": count * 50},
             {"method": "playlistItems.delete", "calls": count, "units": count * 50},
@@ -116,7 +117,7 @@ def _quota_estimate(operation: str, item_count: int, *, slot: Optional[str] = No
         number_pages = math.ceil(number / 50) if number else 0
         if operation == "youtube.metadata_update":
             return number_pages + number * 50
-        return number_pages * 3 + number * 100
+        return number_pages * 3 + number * 102
 
     max_items_today = 0
     for number in range(1, count + 1):
@@ -213,6 +214,11 @@ def get_playlist_videos(
         videos, source, fallback_reason = fetch_playlist_preview(youtube_context, playlist_id)
         videos = [{**video, "youtube_slot": youtube_context.slot} for video in videos]
         preview_snapshot = playlist_snapshot_from_preview(videos)
+        # Keep the signed digest over every playlist occurrence, while exposing
+        # separate counts for the unique video rows and the cleanup writes.
+        preview_snapshot["playlist_item_count"] = preview_snapshot["video_count"]
+        preview_snapshot["video_ids"] = [video["video_id"] for video in videos]
+        preview_snapshot["video_count"] = len(videos)
         preview_snapshot["youtube_slot"] = youtube_context.slot
         preview_snapshot["youtube_channel_id"] = youtube_context.channel_id
         preview_snapshot["youtube_routing_mode"] = youtube_context.routing_mode

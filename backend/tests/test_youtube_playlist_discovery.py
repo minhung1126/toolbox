@@ -10,6 +10,8 @@ from googleapiclient.http import HttpMockSequence
 from backend.app.core.dependencies import require_youtube_context
 from backend.app.core.youtube_context import YouTubeRequestContext
 from backend.app.main import create_app
+from backend.app.services.google_clients import google_client_context
+from backend.app.services.youtube_service import remove_playlist_item
 
 
 @pytest.mark.parametrize("has_videos", [False, True], ids=["empty", "paginated"])
@@ -71,3 +73,29 @@ def test_playlist_preview_accepts_real_discovery_parameters_and_localizes_videos
         assert data["total"] == 0
         assert data["videos"] == []
         assert [method for method, _ in calls] == ["playlistItems.list"]
+
+
+def test_cleanup_accepts_real_discovery_parameters_for_targeted_membership_checks():
+    http = HttpMockSequence(
+        [
+            ({"status": "200"}, json.dumps({"items": [{"id": "item-1"}]})),
+            ({"status": "204"}, ""),
+            ({"status": "200"}, json.dumps({"items": []})),
+        ]
+    )
+    service = build("youtube", "v3", http=http, static_discovery=True)
+    calls = []
+
+    def execute(request, method):
+        calls.append((method, parse_qs(urlsplit(request.uri).query)))
+        return request.execute()
+
+    context = YouTubeRequestContext(
+        slot="primary", credentials=object(), quota_limiter=SimpleNamespace(execute=execute), owner_sub="test-user"
+    )
+    with google_client_context(lambda *_args, **_kwargs: service):
+        assert remove_playlist_item(context, "item-1") == {"deleted_playlist_item_id": "item-1"}
+    assert [method for method, _ in calls] == ["playlistItems.list", "playlistItems.delete", "playlistItems.list"]
+    assert calls[0][1]["id"] == ["item-1"]
+    assert calls[0][1]["fields"] == ["items(id)"]
+    assert calls[0][1]["part"] == ["id"]

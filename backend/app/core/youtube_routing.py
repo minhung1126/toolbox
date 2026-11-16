@@ -108,8 +108,13 @@ def estimate_youtube_request_units(
         count = _bounded_count(video_ids, MAX_PLAYLIST_ITEMS)
         if not count:
             count = MAX_PLAYLIST_ITEMS
-        playlist_pages = _pages(count)
-        return max((2 * playlist_pages) + _pages(count) + count * 100, 1)
+        item_count = (
+            max(count, _bounded_count(snapshot.get("playlist_item_count"), MAX_PLAYLIST_ITEMS))
+            if isinstance(snapshot, Mapping)
+            else count
+        )
+        playlist_pages = _pages(item_count)
+        return max((2 * playlist_pages) + _pages(count) + count * 50 + item_count * 52, 1)
 
     return 1
 

@@ -109,5 +109,12 @@ def test_workflow_estimates_are_conservative():
             "/api/v1/youtube/publish-and-cleanup",
             {"preview_snapshot": {"video_ids": ["video-1", "video-2"]}},
         )
-        == 203
+        == 207
+    )
+    assert (
+        youtube_routing.estimate_youtube_request_units(
+            "/api/v1/youtube/publish-and-cleanup",
+            {"preview_snapshot": {"video_ids": ["video-1"], "playlist_item_count": 3}},
+        )
+        == 209
     )

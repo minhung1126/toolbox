@@ -417,9 +417,12 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
     setEstimateLoading(true);
     setQuotaEstimate(null);
     try {
+      const playlistItemCount = candidateSnapshot.previewSnapshot?.playlist_item_count;
       const estimate = await publishCleanupApi.estimateQuota({
         operation: 'youtube.publish_cleanup',
-        itemCount: candidateSnapshot.videos.length,
+        itemCount: Number.isInteger(playlistItemCount)
+          ? Math.max(candidateSnapshot.videos.length, playlistItemCount)
+          : candidateSnapshot.videos.length,
         slot: candidateSnapshot.auth.slot,
       });
       if (!isRequestCurrent(requestRevision, requestedPlaylistId, requestedAuthKey, requestedDataVersion)) return;
@@ -466,7 +469,8 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
       invalidateSnapshot();
       setResult(response);
       const summary = formatResultCounts(response, { includeWarning: true });
-      if (response.quota_blocked || response.not_attempted_count) toast.warning(`發布草稿部分完成：${summary}`);
+      if (!response.completed || response.quota_blocked || response.not_attempted_count)
+        toast.warning(`發布草稿部分完成：${summary}`);
       else if (response.failed_count || response.warning_count) toast.warning(`發布草稿完成但有需注意項目：${summary}`);
       else toast.success(`發布草稿完成：${summary}`);
     } catch (error) {

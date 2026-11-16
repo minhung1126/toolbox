@@ -200,6 +200,60 @@ describe('PublishCleanerPage snapshot safety', () => {
     });
   });
 
+  it('includes duplicate playlist entries in the conservative quota estimate', async () => {
+    const response = playlistResponse('playlist-a');
+    response.preview_snapshot.playlist_item_count = 3;
+    api.getPlaylistVideos.mockResolvedValue(response);
+    renderPage();
+    await loadCurrentPlaylist();
+    expect(await screen.findByText('影片一')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '設為公開並移出清單' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(api.estimateYoutubeQuota).toHaveBeenCalledWith({
+      operation: 'youtube.publish_cleanup',
+      itemCount: 3,
+      slot: 'primary',
+    });
+    expect(screen.getByRole('dialog')).toHaveTextContent('影片數量：1 支影片');
+  });
+
+  it('shows unfinished cleanup as partial and allows a fresh preview for recovery', async () => {
+    api.getPlaylistVideos.mockResolvedValue(playlistResponse('playlist-a'));
+    api.publishAndCleanup.mockResolvedValueOnce({
+      operation: 'youtube.publish_cleanup',
+      completed: false,
+      total_count: 1,
+      succeeded_count: 0,
+      warning_count: 1,
+      skipped_count: 0,
+      failed_count: 0,
+      not_attempted_count: 0,
+      quota_blocked: false,
+      results: [
+        {
+          video_id: 'video-1',
+          title: '影片一',
+          status: 'succeeded_with_warnings',
+          reason: '影片已設為公開，To-Post 尚待確認移除，請重新讀取清單後再執行。',
+        },
+      ],
+    });
+    renderPage();
+    await loadCurrentPlaylist();
+    expect(await screen.findByText('影片一')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '設為公開並移出清單' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: '設為公開並移出清單' }));
+
+    expect(await screen.findByRole('heading', { name: '發布草稿部分完成' })).toBeInTheDocument();
+    expect(screen.getByText(/To-Post 尚待確認移除/)).toBeInTheDocument();
+    expect(mocks.toast.warning).toHaveBeenCalledWith(expect.stringContaining('發布草稿部分完成'));
+    expect(mocks.toast.success).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: '設為公開並移出清單' })).not.toBeInTheDocument();
+    fireEvent.click(loadButton());
+    expect(await screen.findByRole('button', { name: '設為公開並移出清單' })).toBeInTheDocument();
+  });
+
   it('rejects malformed playlist data instead of showing an empty executable preview', async () => {
     api.getPlaylistVideos.mockResolvedValue(playlistResponse('playlist-a', [videoOne], { videos: undefined }));
     renderPage();
