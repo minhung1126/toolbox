@@ -104,8 +104,14 @@ def test_team_person_filter_normalizes_and_persists_as_one_shared_record(monkeyp
         "google-user",
     )
 
-    assert updates == [("google-user", "shared_team_person_filter", {"team": "團體", "selected_people": ["甲"]})]
-    assert result == {"configured": True, "team": "團體", "selected_people": ["甲"]}
+    assert updates == [
+        (
+            "google-user",
+            "shared_team_person_filter",
+            {"team": "團體", "teams": ["團體"], "query": "", "selected_people": ["甲"]},
+        )
+    ]
+    assert result == {"configured": True, "team": "團體", "teams": ["團體"], "query": "", "selected_people": ["甲"]}
 
 
 def test_team_person_filter_requires_the_shared_record(monkeypatch):
@@ -117,6 +123,8 @@ def test_team_person_filter_requires_the_shared_record(monkeypatch):
     assert settings_api.get_team_person_filter(SimpleNamespace(), "google-user") == {
         "configured": False,
         "team": "",
+        "teams": [],
+        "query": "",
         "selected_people": [],
     }
 

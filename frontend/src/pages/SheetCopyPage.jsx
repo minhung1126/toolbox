@@ -7,6 +7,7 @@ import useTeamPersonFilter from '../hooks/useTeamPersonFilter';
 import useAccountWorkState from '../hooks/useAccountWorkState';
 import useSharedTeamPersonFilterPersistence from '../hooks/useSharedTeamPersonFilterPersistence';
 import { readSharedTeamPersonFilter } from '../utils/teamPersonFilterStorage';
+import { personKey } from '../features/sheets/model/personOptions';
 import { copyToClipboard } from '../utils/clipboard';
 import '../features/sheets/sheets.css';
 
@@ -57,14 +58,17 @@ export default function SheetCopyPage({ sysSettings }) {
     worksheetName,
     enabled: sourceReady,
     initialTeam: sharedFilter.team,
+    initialTeams: sharedFilter.teams,
+    initialQuery: sharedFilter.query,
     initialSelectedPeople: sharedFilter.selectedPeople,
-    defaultTeam: 'none',
     refreshKey: sourceRevision,
   });
   const {
     teams,
-    selectedTeam,
-    setSelectedTeam,
+    selectedTeams,
+    setSelectedTeams,
+    query: personQuery,
+    setQuery: setPersonQuery,
     people,
     selectedPeople,
     setSelectedPeople,
@@ -77,7 +81,10 @@ export default function SheetCopyPage({ sysSettings }) {
   const filterPersistenceReady = sourceReady && (!worksheetName || (teamPersonReady && !loadingPeople));
 
   useSharedTeamPersonFilterPersistence({
-    team: selectedTeam,
+    // Keep the legacy team as a migration anchor for remembered video assignments.
+    team: sharedFilter.team,
+    teams: selectedTeams,
+    query: personQuery,
     selectedPeople,
     ready: filterPersistenceReady,
     onError: setSharedFilterSaveError,
@@ -184,7 +191,10 @@ export default function SheetCopyPage({ sysSettings }) {
     ? []
     : rows.filter((row) => {
         const matchesPeople =
-          !selectedTeam || (row.team === selectedTeam && selectedPeople.includes(row.person_option));
+          !selectedPeople.length ||
+          selectedPeople.includes(
+            personKey({ team: row.team, person: row.person || '', kind: row.person ? 'person' : 'team' })
+          );
         const matchesQuery =
           !keyword ||
           visibleColumns.some((column) =>
@@ -219,11 +229,9 @@ export default function SheetCopyPage({ sysSettings }) {
   const allCandidateRowsHidden = candidateRows.length > 0 && filteredRows.length === 0;
   const emptyMessage = sourceStale
     ? '資料來源已修改，請先按刷新套用。'
-    : selectedTeam && !selectedPeople.length
-      ? '目前未勾選人物，沒有符合資料。'
-      : allCandidateRowsHidden
-        ? '所有符合條件的列皆已暫時移除。'
-        : '目前篩選條件沒有資料。';
+    : allCandidateRowsHidden
+      ? '所有符合條件的列皆已暫時移除。'
+      : '目前篩選條件沒有資料。';
 
   return (
     <div className="section-gap sheet-copy-page">
@@ -232,7 +240,7 @@ export default function SheetCopyPage({ sysSettings }) {
           <FileSpreadsheet size={28} /> Sheet 內容複製
         </h1>
         <p className="section-desc">
-          先確認資料來源與工作表，再選擇團體、人物及要顯示的內容；所有篩選與顯示選項會即時記住，點擊任一儲存格即可原樣複製，包含換行。
+          先確認資料來源與工作表，再選擇跨團體人物及要顯示的內容；所有篩選與顯示選項會即時記住，點擊任一儲存格即可原樣複製，包含換行。
         </p>
         <div className="sheet-copy-page-options">
           <label className="sheet-copy-auto-collapse" htmlFor="sheet-copy-auto-collapse">
@@ -264,18 +272,18 @@ export default function SheetCopyPage({ sysSettings }) {
 
       <TeamPersonFilterPanel
         teams={sourceStale ? [] : teams}
-        selectedTeam={sourceStale ? '' : selectedTeam}
-        onTeamChange={setSelectedTeam}
+        selectedTeams={selectedTeams}
+        onTeamsChange={setSelectedTeams}
+        query={personQuery}
+        onQueryChange={setPersonQuery}
         people={sourceStale ? [] : people}
-        selectedPeople={sourceStale ? [] : selectedPeople}
+        selectedPeople={selectedPeople}
         onSelectedPeopleChange={setSelectedPeople}
         loadingTeams={loadingTeams}
         loadingPeople={loadingPeople}
         error={teamPersonError}
         disabled={sourceStale || !sourceReady}
-        teamEmptyLabel="全部團體"
-        peopleDisabledMessage="未選定團體時顯示全部團體；請選擇團體後再篩選人物。"
-        description="未選定團體時顯示全部團體；選定團體後只顯示已勾選的人物。"
+        description="可跨團體選取人物；未選人物時顯示全部資料。搜尋與團體篩選只改變人物清單。"
       />
       {workStateError && (
         <div className="filter-panel-status filter-panel-status-error" role="alert">
@@ -302,14 +310,14 @@ export default function SheetCopyPage({ sysSettings }) {
           <div className="form-group">
             <label className="form-label" htmlFor="sheet-copy-query">
               <Search size={14} />
-              內容搜尋
+              搜尋表格內容
             </label>
             <input
               id="sheet-copy-query"
               className="form-input"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜尋顯示欄位"
+              placeholder="搜尋表格內容"
               disabled={displayDisabled}
             />
           </div>

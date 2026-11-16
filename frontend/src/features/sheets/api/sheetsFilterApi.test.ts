@@ -15,11 +15,15 @@ describe('sheetsFilterApi', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('passes valid ordered team and people options through', async () => {
-    api.parseSheetOptions.mockResolvedValue({ teams: ['團體 B', '團體 A'] });
+    api.parseSheetOptions.mockResolvedValue({
+      teams: ['團體 B', '團體 A'],
+      people: [{ team: '團體 A', person: '甲', kind: 'person' }],
+    });
     api.getTeamPeople.mockResolvedValue({ people: ['全團體', '乙', '甲'] });
 
     await expect(sheetsFilterApi.parseSheetOptions('sheet-id', '工作表')).resolves.toEqual({
       teams: ['團體 B', '團體 A'],
+      people: [{ team: '團體 A', person: '甲', kind: 'person' }],
     });
     await expect(sheetsFilterApi.getTeamPeople('sheet-id', '工作表', '團體 A')).resolves.toEqual({
       people: ['全團體', '乙', '甲'],

@@ -17,7 +17,7 @@ class VideoMetadataUpdateInput(BaseModel):
 
 class VideoAssignment(BaseModel):
     video_id: str = Field(min_length=1, max_length=128)
-    person: str = Field(max_length=200)
+    person: str = Field(max_length=1500)
 
 
 class BatchUpdateInput(BaseModel):
@@ -30,7 +30,7 @@ class BatchUpdateInput(BaseModel):
     worksheet_name: str = Field(min_length=1, max_length=200)
     title_column: str = Field(min_length=1, max_length=200)
     description_column: str = Field(min_length=1, max_length=200)
-    team: str = Field(min_length=1, max_length=200)
+    team: str = Field(default="", max_length=200)
     assignments: List[VideoAssignment] = Field(min_length=1, max_length=500)
 
 

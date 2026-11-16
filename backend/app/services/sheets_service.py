@@ -1,3 +1,4 @@
+import json
 import logging
 import random
 import re
@@ -76,12 +77,41 @@ def team_option_label(team: str) -> str:
     return f"{normalize_text(team)}{TEAM_OPTION_SUFFIX}"
 
 
+def person_identity(value: str, legacy_team: str = "") -> tuple[str, str, str]:
+    """Decode the composite UI key, retaining the old single-team contract."""
+    if value.startswith("person:"):
+        try:
+            parts = json.loads(value[7:])
+            if (
+                isinstance(parts, list)
+                and len(parts) == 3
+                and all(isinstance(part, str) for part in parts)
+                and parts[1] in {"person", "team"}
+            ):
+                return normalize_text(parts[0]), parts[1], normalize_text(parts[2])
+        except (ValueError, TypeError):
+            pass
+        # An invalid composite key must never fall back to a literal name.
+        return "", "invalid", ""
+    team = normalize_text(legacy_team)
+    kind = "team" if normalize_text(value) == normalize_text(team_option_label(team)) else "person"
+    return team, kind, normalize_text(value)
+
+
+def person_display(value: str, legacy_team: str = "") -> str:
+    if not value.startswith("person:"):
+        return value
+    team, kind, person = person_identity(value, legacy_team)
+    return f"{team_option_label(team) if kind == 'team' else person} · {team or '未分團體'}"
+
+
 def matches_team_person(row: Dict[str, Any], team: str, person: str) -> bool:
     """Match a named person or the selected team's whole-team row."""
-    if normalize_text(row.get("所屬團體") or "") != normalize_text(team):
+    team, kind, person = person_identity(person, team)
+    if kind == "invalid" or normalize_text(row.get("所屬團體") or "") != team:
         return False
     row_person = normalize_text(row.get("人") or "")
-    return (not row_person) if person == team_option_label(team) else row_person == normalize_text(person)
+    return (not row_person) if kind == "team" else bool(row_person) and row_person == person
 
 
 def read_sheet_data(service, spreadsheet_id: str, range_name: str) -> List[Dict[str, Any]]:
@@ -169,10 +199,39 @@ def parse_options_from_sheets(
     service = get_sheets_service(credentials)
     rows = read_sheet_data(service, spreadsheet_id, quote_sheet_name(worksheet_name))
     teams = [normalize_text(row.get("所屬團體")) for row in rows if row.get("所屬團體")]
+    people = {}
+    for row in rows:
+        team = normalize_text(row.get("所屬團體") or "")
+        person = normalize_text(row.get("人") or "")
+        if not team and not person:
+            continue
+        kind = "person" if person else "team"
+        option = people.setdefault(
+            (team, kind, person),
+            {"team": team, "person": person, "kind": kind, "aliases": [], "team_aliases": []},
+        )
+        for header, value in row.items():
+            header = normalize_text(header).casefold()
+            field = (
+                "team_aliases"
+                if header in {"團體別名", "所屬團體別名", "team alias", "team aliases"}
+                else "aliases"
+                if header in {"別名", "人物別名", "人別名", "alias", "aliases"}
+                else None
+            )
+            if field and value:
+                aliases = [normalize_text(alias) for alias in re.split(r"[,，、;；|\n]+", str(value))]
+                option[field] = list(dict.fromkeys([*option[field], *(alias for alias in aliases if alias)]))
+    team_aliases = {}
+    for option in people.values():
+        team_aliases.setdefault(option["team"], []).extend(option["team_aliases"])
+    for option in people.values():
+        option["team_aliases"] = list(dict.fromkeys(team_aliases[option["team"]]))
     return {
         "spreadsheet_id": spreadsheet_id,
         "worksheet_name": worksheet_name,
         "teams": list(dict.fromkeys(teams)),
+        "people": list(people.values()),
         "row_count": len(rows),
     }
 

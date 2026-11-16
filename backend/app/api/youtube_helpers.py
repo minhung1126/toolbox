@@ -8,7 +8,7 @@ from backend.app.core.error_contract import http_error
 from backend.app.core.preview import input_digest
 from backend.app.core.youtube_context import YouTubeRequestContext
 from backend.app.services.provider_errors import map_youtube_error
-from backend.app.services.sheets_service import normalize_text
+from backend.app.services.sheets_service import normalize_text, person_display, person_identity
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
 
 
@@ -121,10 +121,12 @@ def _resolve_person_metadata(
 ) -> Tuple[str, str, str]:
     """Resolve matched sheet row for a person into (skip_reason, new_title, new_description)."""
     row, match_error = resolve_assignment_row(matches, title_column, description_column)
+    target_team = person_identity(person, normalized_team)[0]
+    person = person_display(person, normalized_team)
     if match_error == "not_found":
-        return f"找不到團體 {normalized_team} 的選項 {person} 資料", "", ""
+        return f"找不到團體 {target_team} 的選項 {person} 資料", "", ""
     if match_error == "conflict":
-        return f"團體 {normalized_team} 的選項 {person} 有多筆且標題或描述內容不同", "", ""
+        return f"團體 {target_team} 的選項 {person} 有多筆且標題或描述內容不同", "", ""
     new_title = normalize_text((row or {}).get(title_column) or "")
     new_description = str((row or {}).get(description_column) or "")
     if not new_title:

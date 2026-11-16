@@ -8,6 +8,7 @@ from google.oauth2.credentials import Credentials
 
 from backend.app.api.youtube_models import BatchUpdateInput, PublishCleanupInput
 from backend.app.core.youtube_context import YouTubeRequestContext
+from backend.app.services.sheets_service import person_display, person_identity
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
 from backend.app.services.youtube_workflow_ports import YoutubeWorkflowPorts
 
@@ -98,7 +99,9 @@ class YoutubeWorkflowService:
                     {
                         "videoId": video_id,
                         "video_id": video_id,
-                        "person": person,
+                        "person": person_display(person, normalized_team),
+                        "team": person_identity(person, normalized_team)[0],
+                        "kind": person_identity(person, normalized_team)[1],
                         "currentTitle": current_title,
                         "currentDescription": current_description,
                         "newTitle": new_title,
@@ -310,6 +313,7 @@ class YoutubeWorkflowService:
             skip_reason, new_title, new_description = self.ports.resolve_person_metadata(
                 matches, normalized_team, person, title_column, description_column
             )
+            person = person_display(person, normalized_team)
             if skip_reason:
                 prepared.append({"video_id": video_id, "person": person, "status": "skipped", "reason": skip_reason})
             else:

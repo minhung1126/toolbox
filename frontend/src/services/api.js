@@ -246,10 +246,10 @@ export const api = {
     }),
   getYoutubeSlotSettings: () => request('/settings/youtube-slots'),
   getTeamPersonFilter: () => request('/settings/team-person-filter'),
-  updateTeamPersonFilter: ({ team = '', selectedPeople = [] }) =>
+  updateTeamPersonFilter: ({ team = '', teams = [], query = '', selectedPeople = [] }) =>
     request('/settings/team-person-filter', {
       method: 'PUT',
-      body: JSON.stringify({ team, selected_people: selectedPeople }),
+      body: JSON.stringify({ team, teams, query, selected_people: selectedPeople }),
     }),
   getYoutubeDraftSettings: () => request('/settings/youtube-drafts'),
   updateYoutubeDraftSettings: (videoType, config) =>

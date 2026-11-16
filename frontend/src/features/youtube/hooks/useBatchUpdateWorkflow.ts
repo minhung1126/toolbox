@@ -19,6 +19,7 @@ import useSharedTeamPersonFilterPersistence from '../../../hooks/useSharedTeamPe
 import { readSharedTeamPersonFilter } from '../../../utils/teamPersonFilterStorage';
 import { sortVideosByUploadTime } from '../../../utils/videoOrder';
 import { getYoutubeAuthorizationFingerprint, youtubeIsConnected, youtubePreferredUiSlot } from '../model/routing';
+import { legacyPersonKey, parsePersonKey, personKey } from '../../sheets/model/personOptions';
 import { YOUTUBE_COPY } from '../../../utils/youtubeCopy';
 import {
   DEFAULT_COLUMNS,
@@ -154,13 +155,16 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     enabled: Boolean(authUser && hydrated && sourceReady),
     initialTeam: initial.selectedTeam,
     initialSelectedPeople: initial.selectedPeople,
-    defaultTeam: 'first',
+    initialTeams: initial.selectedTeams,
+    initialQuery: initial.personQuery,
     refreshKey: sourceRevision,
   });
   const {
     teams,
-    selectedTeam,
-    setSelectedTeam,
+    selectedTeams,
+    setSelectedTeams,
+    query: personQuery,
+    setQuery: setPersonQuery,
     people: teamPeople,
     selectedPeople,
     setSelectedPeople,
@@ -170,7 +174,6 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     error: teamPeopleError,
     resetSelection,
   } = teamPersonFilter;
-  const visibleSelectedTeam = sourceStale ? '' : selectedTeam;
   const filterPersistenceReady = hydrated && sourceReady && (!worksheetName || (teamPersonReady && !loadingPeople));
   const currentPreviewFingerprint = useMemo(
     () =>
@@ -183,7 +186,6 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
         worksheetName,
         titleColumn,
         descriptionColumn,
-        team: selectedTeam,
         videos: videos.map((video) => ({
           video_id: video.video_id,
           title: video.title || '',
@@ -198,7 +200,6 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
       descriptionColumn,
       playlistId,
       playlistSource,
-      selectedTeam,
       titleColumn,
       videoType,
       videos,
@@ -207,7 +208,10 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
   );
 
   useSharedTeamPersonFilterPersistence({
-    team: selectedTeam,
+    // Keep the legacy team as a migration anchor for remembered video assignments.
+    team: sharedFilter.team,
+    teams: selectedTeams,
+    query: personQuery,
     selectedPeople,
     ready: filterPersistenceReady,
     onError: setConfigSaveError,
@@ -267,7 +271,21 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
       setWorksheetName(config.worksheetName);
       setTitleColumn(config.titleColumn);
       setDescriptionColumn(config.descriptionColumn);
-      resetSelection({ team: config.selectedTeam, selectedPeople: config.selectedPeople });
+      // Migrate before autosave opens, while the legacy team is still available.
+      if (config.selectedTeam) {
+        const migrate = (value: string) =>
+          value && value !== '不編輯' ? legacyPersonKey(value, config.selectedTeam) : value;
+        setAssignments((current) =>
+          Object.fromEntries(Object.entries(current).map(([videoId, value]) => [videoId, migrate(value)]))
+        );
+        setBulkPerson((current) => migrate(current));
+      }
+      resetSelection({
+        team: config.selectedTeam,
+        teams: config.selectedTeams,
+        query: config.personQuery,
+        selectedPeople: config.selectedPeople,
+      });
     },
     [resetSelection]
   );
@@ -395,34 +413,18 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     }
   }, [worksheets, worksheetName, titleColumn, descriptionColumn, defaults.title, defaults.description]);
 
+  const allPersonKeys = useMemo(() => teamPeople.map(personKey), [teamPeople]);
   const availablePeople = useMemo(
-    () => (sourceStale ? [] : teamPeople.filter((person) => selectedPeople.includes(person))),
-    [sourceStale, teamPeople, selectedPeople]
+    () =>
+      sourceStale
+        ? []
+        : selectedPeople.length
+          ? allPersonKeys.filter((key) => selectedPeople.includes(key))
+          : allPersonKeys,
+    [sourceStale, allPersonKeys, selectedPeople]
   );
-
-  useEffect(() => {
-    if (
-      !sourceStale &&
-      !loadingPeople &&
-      teamPersonReady &&
-      bulkPerson &&
-      bulkPerson !== '不編輯' &&
-      !availablePeople.includes(bulkPerson)
-    )
-      setBulkPerson('');
-  }, [availablePeople, bulkPerson, loadingPeople, sourceStale, teamPersonReady]);
-
-  useEffect(() => {
-    if (sourceStale || loadingPeople || !teamPersonReady || !videos.length) return;
-    setAssignments((current) =>
-      Object.fromEntries(
-        Object.entries(current).map(([videoId, person]) => [
-          videoId,
-          person === '不編輯' || availablePeople.includes(person) ? person : '不編輯',
-        ])
-      )
-    );
-  }, [availablePeople, loadingPeople, sourceStale, teamPersonReady, videos.length]);
+  const randomPreviewTeam =
+    parsePersonKey(availablePeople.find((key) => parsePersonKey(key)?.kind === 'person') || '')?.team || '';
 
   const loadRandomPreview = useCallback(async () => {
     if (
@@ -430,7 +432,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
       !sourceReady ||
       sourceStale ||
       !worksheetName ||
-      !selectedTeam ||
+      !randomPreviewTeam ||
       !titleColumn ||
       !descriptionColumn
     ) {
@@ -444,10 +446,12 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     setRandomPreviewLoading(true);
     setPreviewError('');
     try {
-      const preview = await youtubeBatchApi.getRandomMemberPreview(appliedSpreadsheetId, worksheetName, selectedTeam, [
-        titleColumn,
-        descriptionColumn,
-      ]);
+      const preview = await youtubeBatchApi.getRandomMemberPreview(
+        appliedSpreadsheetId,
+        worksheetName,
+        randomPreviewTeam,
+        [titleColumn, descriptionColumn]
+      );
       if (requestId !== randomPreviewRequestRef.current) return;
       setRandomPreview(preview);
     } catch (caughtError: unknown) {
@@ -458,7 +462,15 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     } finally {
       if (requestId === randomPreviewRequestRef.current) setRandomPreviewLoading(false);
     }
-  }, [appliedSpreadsheetId, sourceReady, sourceStale, worksheetName, selectedTeam, titleColumn, descriptionColumn]);
+  }, [
+    appliedSpreadsheetId,
+    sourceReady,
+    sourceStale,
+    worksheetName,
+    randomPreviewTeam,
+    titleColumn,
+    descriptionColumn,
+  ]);
 
   useEffect(() => {
     if (
@@ -468,7 +480,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
       !sourceReady ||
       sourceStale ||
       !worksheetName ||
-      !selectedTeam ||
+      !randomPreviewTeam ||
       !titleColumn ||
       !descriptionColumn
     ) {
@@ -486,7 +498,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     sourceReady,
     sourceStale,
     worksheetName,
-    selectedTeam,
+    randomPreviewTeam,
     titleColumn,
     descriptionColumn,
     loadRandomPreview,
@@ -585,8 +597,8 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     sheetRequestRef.current += 1;
     setWorksheetName(nextWorksheet);
     clearConfigSaveError();
-    setSelectedTeam('');
-    setSelectedPeople([]);
+    setSelectedTeams([]);
+    setPersonQuery('');
     setRandomPreview(null);
     setPreviewError('');
     invalidateLoadedVideos();
@@ -717,7 +729,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     currentPreviewFingerprint,
     videoType,
     toast,
-    selectedTeam,
+    selectedTeam: '',
     youtubeConnected,
     sourceStale,
     activeSlot,
@@ -780,15 +792,17 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     playlistAutosaveStatus,
     sourceStale,
     teams,
-    selectedTeam,
-    setSelectedTeam,
+    selectedTeams,
+    setSelectedTeams,
+    personQuery,
+    setPersonQuery,
     teamPeople,
     selectedPeople,
     setSelectedPeople,
     loadingTeams,
     loadingPeople,
     teamPeopleError,
-    visibleSelectedTeam,
+    randomPreviewTeam,
     clearConfigSaveError,
     scheduleDraftSave,
     saveDraftConfig,

@@ -1,3 +1,4 @@
+import { personKey } from '../src/features/sheets/model/personOptions';
 import { expect, test } from '@playwright/test';
 import JSZip from 'jszip';
 import { readFile } from 'node:fs/promises';
@@ -866,7 +867,10 @@ test('YouTube Batch Update checks a full preview before executing the update', a
       spreadsheet_title: 'Creator Data',
       worksheets: [{ title: 'Youtube Video', columns: ['Youtube Title', 'Youtube Description'] }],
     },
-    '/api/v1/sheets/parse-options': { teams: ['團體 A'] },
+    '/api/v1/sheets/parse-options': {
+      teams: ['團體 A'],
+      people: [{ team: '團體 A', person: '人物甲', kind: 'person' }],
+    },
     '/api/v1/sheets/people': { people: ['人物甲'] },
     '/api/v1/sheets/random-member-preview': { person: '人物甲', values: {} },
     '/api/v1/youtube/playlist-items': {
@@ -953,7 +957,7 @@ test('YouTube Batch Update checks a full preview before executing the update', a
       );
     }
   }
-  await expect(page.getByRole('combobox', { name: '所屬團體' })).toBeEnabled();
+  await expect(page.getByRole('checkbox', { name: '人物甲 團體 A' })).toBeEnabled();
   await page.getByRole('textbox', { name: '主要試算表 ID / URL' }).fill('sheet-b');
   const metadataResponsePromise = page.waitForResponse((response) =>
     response.url().endsWith('/api/v1/sheets/metadata')
@@ -961,10 +965,13 @@ test('YouTube Batch Update checks a full preview before executing the update', a
   await page.getByRole('button', { name: '刷新工作表與欄位' }).click();
   await metadataResponsePromise;
   await expect(page.getByRole('combobox', { name: '使用的工作表' })).toBeEnabled();
-  await expect(page.getByRole('combobox', { name: '所屬團體' })).toBeEnabled();
+  await expect(page.getByRole('checkbox', { name: '人物甲 團體 A' })).toBeEnabled();
   await page.getByRole('button', { name: '讀取 Video 草稿影片' }).click();
   await expect(page.getByText('舊標題一')).toBeVisible();
-  await page.locator('.video-card-assignment select').first().selectOption('人物甲');
+  await page
+    .locator('.video-card-assignment select')
+    .first()
+    .selectOption(personKey({ team: '團體 A', person: '人物甲', kind: 'person' }));
   await page.getByRole('button', { name: '產生完整批次預覽' }).click();
   await expect(page.getByRole('region', { name: '完整批次變更預覽' })).toContainText('新標題一');
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -984,7 +991,7 @@ test('YouTube Batch Update checks a full preview before executing the update', a
   expect(updateRequest.postDataJSON()).toMatchObject({
     preview_token: 'batch-preview-token',
     assignments: [
-      { video_id: 'video-1', person: '人物甲' },
+      { video_id: 'video-1', person: personKey({ team: '團體 A', person: '人物甲', kind: 'person' }) },
       { video_id: 'video-2', person: '不編輯' },
     ],
   });

@@ -13,11 +13,16 @@ function emptyStatus() {
 
 export default function useSharedTeamPersonFilterPersistence({
   team = '',
+  teams,
+  query = '',
   selectedPeople = /** @type {string[]} */ ([]),
   ready = false,
   onError,
 }) {
-  const filter = useMemo(() => normalizeTeamPersonFilter({ team, selectedPeople }), [selectedPeople, team]);
+  const filter = useMemo(
+    () => normalizeTeamPersonFilter({ team, teams, query, selectedPeople }),
+    [selectedPeople, team, teams, query]
+  );
   const serialized = useMemo(() => JSON.stringify(filter), [filter]);
   const recordRef = useRef({
     desiredFilter: null,
@@ -52,6 +57,7 @@ export default function useSharedTeamPersonFilterPersistence({
 
     const version = record.desiredVersion;
     const nextFilter = record.desiredFilter;
+    const nextSerialized = record.desiredSerialized;
     updateStatus({ saving: true, saved: false, error: '' });
 
     const request = Promise.resolve()
@@ -59,7 +65,7 @@ export default function useSharedTeamPersonFilterPersistence({
       .then((result) => {
         record.inFlightPromise = null;
         record.lastSavedVersion = version;
-        record.lastSavedSerialized = record.desiredSerialized;
+        record.lastSavedSerialized = nextSerialized;
         const hasNewerValue = record.desiredVersion > version;
         if (!hasNewerValue) {
           updateStatus({ saving: false, saved: true, error: '', lastSaved: nextFilter });

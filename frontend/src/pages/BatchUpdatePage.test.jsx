@@ -1,4 +1,6 @@
 import React from 'react';
+import { personKey } from '../features/sheets/model/personOptions';
+const memberKey = personKey({ team: '團體 A', person: '人物甲', kind: 'person' });
 import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BatchUpdatePage, { buildBatchPreview } from './BatchUpdatePage';
@@ -42,10 +44,11 @@ const mocks = vi.hoisted(() => ({
     success: vi.fn(),
   },
   saveWorkState: vi.fn(),
+  workState: {},
   resetSelection: vi.fn(),
   teams: ['團體 A'],
-  people: ['人物甲'],
-  selectedPeople: ['人物甲'],
+  people: [{ team: '團體 A', person: '人物甲', kind: 'person' }],
+  selectedPeople: ['person:["團體 A","person","人物甲"]'],
   setSelectedTeam: vi.fn(),
   setSelectedPeople: vi.fn(),
 }));
@@ -56,13 +59,15 @@ vi.mock('../services/api', () => ({
 }));
 vi.mock('../components/Toast', () => ({ useToast: () => mocks.toast }));
 vi.mock('../hooks/useAccountWorkState', () => ({
-  default: () => ({ value: {}, error: '', save: mocks.saveWorkState }),
+  default: () => ({ value: mocks.workState, error: '', save: mocks.saveWorkState }),
 }));
 vi.mock('../hooks/useTeamPersonFilter', () => ({
   default: () => ({
     teams: mocks.teams,
-    selectedTeam: '團體 A',
-    setSelectedTeam: mocks.setSelectedTeam,
+    selectedTeams: [],
+    setSelectedTeams: mocks.setSelectedTeam,
+    query: '',
+    setQuery: vi.fn(),
     people: mocks.people,
     selectedPeople: mocks.selectedPeople,
     setSelectedPeople: mocks.setSelectedPeople,
@@ -75,10 +80,6 @@ vi.mock('../hooks/useTeamPersonFilter', () => ({
 }));
 vi.mock('../hooks/useSharedTeamPersonFilterPersistence', () => ({
   default: () => ({ ready: true }),
-}));
-vi.mock('../utils/teamPersonFilterStorage', () => ({
-  normalizeTeamPersonFilter: (value) => value,
-  readSharedTeamPersonFilter: () => ({ exists: false, team: '', selectedPeople: [] }),
 }));
 vi.mock('../components/SheetDataSourcePanel', () => ({
   default: ({ children, disabled, loading, onRefresh }) => (
@@ -149,7 +150,7 @@ async function reviewedWorkflow() {
   await act(async () => {
     await hook.result.current.handleLoadVideos();
   });
-  act(() => hook.result.current.setAssignments({ 'video-1': '人物甲', 'video-2': '不編輯' }));
+  act(() => hook.result.current.setAssignments({ 'video-1': memberKey, 'video-2': '不編輯' }));
   await act(async () => {
     await hook.result.current.requestPreview();
   });
@@ -159,6 +160,7 @@ async function reviewedWorkflow() {
 describe('BatchUpdatePage preview and confirmation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.workState = {};
     mocks.api.getYoutubeDraftSettings.mockResolvedValue({});
     mocks.api.updateYoutubeDraftSettings.mockResolvedValue({});
     mocks.api.updateYoutubePlaylist.mockResolvedValue({});
@@ -231,7 +233,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
       team: '團體 A',
       titleColumn: '標題',
       descriptionColumn: '描述',
-      assignments: { 'video-1': '人物甲', 'video-2': '不編輯' },
+      assignments: { 'video-1': memberKey, 'video-2': '不編輯' },
     });
 
     expect(preview[0]).toMatchObject({ status: 'unchanged', willUpdate: false, reason: '標題與描述沒有變更' });
@@ -244,7 +246,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
     await screen.findByText('舊標題一');
 
     const assignmentSelect = container.querySelector('.video-card-assignment select');
-    fireEvent.change(assignmentSelect, { target: { value: '人物甲' } });
+    fireEvent.change(assignmentSelect, { target: { value: memberKey } });
     fireEvent.click(screen.getByRole('button', { name: '產生完整批次預覽' }));
 
     expect(await screen.findByText('批次更新預覽')).toBeInTheDocument();
@@ -268,7 +270,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
       expect.objectContaining({
         previewToken: 'preview-token',
         assignments: [
-          { video_id: 'video-1', person: '人物甲' },
+          { video_id: 'video-1', person: memberKey },
           { video_id: 'video-2', person: '不編輯' },
         ],
       })
@@ -284,7 +286,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
     const { container } = renderPage();
     await readDraftVideos();
     await screen.findByText('舊標題一');
-    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: '人物甲' } });
+    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
     fireEvent.click(screen.getByRole('button', { name: '產生完整批次預覽' }));
 
     expect(await screen.findByText('建立完整批次預覽失敗：批次更新預覽回應格式不正確。')).toBeInTheDocument();
@@ -300,7 +302,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
     const { container } = renderPage();
     await readDraftVideos();
     await screen.findByText('舊標題一');
-    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: '人物甲' } });
+    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
     fireEvent.click(screen.getByRole('button', { name: '產生完整批次預覽' }));
     fireEvent.click(await screen.findByRole('button', { name: '確認這份預覽並更新' }));
     const dialog = await screen.findByRole('dialog', { name: '確認批次更新 1 支影片' });
@@ -338,7 +340,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
     const { container } = renderPage();
     await readDraftVideos();
     await screen.findByText('舊標題一');
-    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: '人物甲' } });
+    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
     fireEvent.click(screen.getByRole('button', { name: '產生完整批次預覽' }));
     await screen.findByText('新標題一');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -366,7 +368,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
     const { container } = renderPage();
     await readDraftVideos();
     await screen.findByText('舊標題一');
-    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: '人物甲' } });
+    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
     fireEvent.click(screen.getByRole('button', { name: '產生完整批次預覽' }));
     fireEvent.click(await screen.findByRole('button', { name: '確認這份預覽並更新' }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '開始批次更新' }));
@@ -444,4 +446,27 @@ describe('BatchUpdatePage preview and confirmation', () => {
     expect(hook.result.current.result).toEqual(response);
     expect(hook.result.current.executing).toBe(false);
   });
+});
+
+it('migrates remembered assignments and bulk selection before saving the new shared filter', async () => {
+  mocks.workState = { assignments: { 'video-1': '人物甲' }, bulkPerson: '人物甲' };
+  mocks.api.getYoutubeDraftSettings.mockResolvedValue({ video: {}, shorts: {} });
+  mocks.api.getSpreadsheetMetadata.mockResolvedValue({
+    worksheets: [{ title: 'Youtube Video', columns: ['Youtube Title', 'Youtube Description'] }],
+  });
+  const sysSettings = {
+    default_spreadsheet_id: 'sheet-a',
+    shared_team_person_filter: { configured: true, team: '團體 A', selected_people: ['人物甲'] },
+  };
+  const hook = renderHook(() =>
+    useBatchUpdateWorkflow({ authUser, videoType: 'Video', toast: mocks.toast, sysSettings })
+  );
+  await waitFor(() => expect(hook.result.current.hydrated).toBe(true));
+  expect(hook.result.current.assignments['video-1']).toBe(memberKey);
+  expect(hook.result.current.bulkPerson).toBe(memberKey);
+  expect(mocks.saveWorkState).toHaveBeenLastCalledWith(
+    expect.objectContaining({ assignments: { 'video-1': memberKey }, bulkPerson: memberKey }),
+    {}
+  );
+  mocks.workState = {};
 });

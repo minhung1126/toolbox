@@ -73,7 +73,7 @@ describe('SheetCopyPage work-state persistence', () => {
 
     const autoCollapse = screen.getByLabelText('自動折疊內容格子');
     expect(autoCollapse).toBeChecked();
-    expect(screen.getByLabelText('內容搜尋')).toHaveValue('last search');
+    expect(screen.getByLabelText('搜尋表格內容')).toHaveValue('last search');
 
     fireEvent.click(autoCollapse);
     await act(async () => {

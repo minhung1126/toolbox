@@ -75,11 +75,18 @@ class YouTubeDraftConfigModel(BaseModel):
 
 class TeamPersonFilterModel(BaseModel):
     team: str = Field(default="", max_length=200)
-    selected_people: List[Annotated[str, Field(max_length=200)]] = Field(default_factory=list, max_length=200)
+    teams: List[Annotated[str, Field(max_length=200)]] | None = Field(default=None, max_length=5000)
+    query: str = Field(default="", max_length=1000)
+    selected_people: List[Annotated[str, Field(max_length=1500)]] = Field(default_factory=list, max_length=5000)
 
     @model_validator(mode="after")
     def normalize_values(self):
         self.team = self.team.strip()
+        self.teams = list(
+            dict.fromkeys(
+                team.strip() for team in (self.teams if self.teams is not None else [self.team]) if team.strip()
+            )
+        )
         self.selected_people = list(dict.fromkeys(person.strip() for person in self.selected_people if person.strip()))
         return self
 

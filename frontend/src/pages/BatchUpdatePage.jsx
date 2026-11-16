@@ -11,6 +11,7 @@ import ThumbnailDialog from '../components/ThumbnailDialog';
 import VideoThumbnail from '../components/VideoThumbnail';
 import SheetDataSourcePanel from '../components/SheetDataSourcePanel';
 import SourceLinkInput from '../components/SourceLinkInput';
+import { personLabel } from '../features/sheets/model/personOptions';
 import TeamPersonFilterPanel from '../components/TeamPersonFilterPanel';
 import { YOUTUBE_COPY, formatResultCounts, formatVideoCount, formatVideoId } from '../utils/youtubeCopy';
 import { youtubeRoutingReasonLabel } from '../features/youtube/model/routing';
@@ -96,15 +97,17 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     playlistAutosaveStatus,
     sourceStale,
     teams,
-    selectedTeam,
-    setSelectedTeam,
+    selectedTeams,
+    setSelectedTeams,
+    personQuery,
+    setPersonQuery,
     teamPeople,
     selectedPeople,
     setSelectedPeople,
     loadingTeams,
     loadingPeople,
     teamPeopleError,
-    visibleSelectedTeam,
+    randomPreviewTeam,
     clearConfigSaveError,
     scheduleDraftSave,
     saveDraftConfig,
@@ -280,18 +283,18 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
 
       <TeamPersonFilterPanel
         teams={sourceStale ? [] : teams}
-        selectedTeam={sourceStale ? '' : selectedTeam}
-        onTeamChange={setSelectedTeam}
+        selectedTeams={selectedTeams}
+        onTeamsChange={setSelectedTeams}
+        query={personQuery}
+        onQueryChange={setPersonQuery}
         people={sourceStale ? [] : teamPeople}
-        selectedPeople={sourceStale ? [] : selectedPeople}
+        selectedPeople={selectedPeople}
         onSelectedPeopleChange={setSelectedPeople}
         loadingTeams={loadingTeams}
         loadingPeople={loadingPeople}
         error={teamPeopleError}
         disabled={workflowBusy || !authUser || !hydrated || !sourceReady || sourceStale}
-        teamEmptyLabel="請選擇團體"
-        peopleDisabledMessage="請先選擇團體；選定後才能載入人物。"
-        description="先選擇團體，再勾選要出現在每支影片人物選單中的人物。"
+        description="可跨團體選取人物；未選人物時，影片人物選單顯示全部可用人物。"
       />
 
       <div className="glass-panel card-padding random-preview-panel card-stack">
@@ -301,7 +304,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
               <Shuffle size={19} /> 試算表隨機抽查
             </h2>
             <p className="panel-description">
-              從「{visibleSelectedTeam || '尚未選擇團體'}
+              從「{randomPreviewTeam || '尚無可用成員'}
               」隨機抽一位真實成員，顯示目前選用欄位的內容；全團體列不會被抽中。
             </p>
           </div>
@@ -310,7 +313,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
               variant="primary"
               className="btn btn-primary"
               onClick={loadRandomPreview}
-              disabled={workflowBusy || randomPreviewLoading || !visibleSelectedTeam}
+              disabled={workflowBusy || randomPreviewLoading || !randomPreviewTeam}
             >
               <RefreshCw size={16} className={randomPreviewLoading ? 'spin' : ''} />{' '}
               {randomPreviewLoading ? '抽查中...' : randomPreview ? '換一位成員' : '隨機抽查'}
@@ -326,7 +329,9 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
         {randomPreview && (
           <div className="random-preview-content">
             <div className="random-preview-person">
-              <strong>抽中成員：{randomPreview.person}</strong>
+              <strong>
+                抽中成員：{randomPreview.person} · {randomPreview.team}
+              </strong>
             </div>
             <div className="responsive-grid">
               <PreviewField label={`標題欄位：${titleColumn}`} value={randomPreview.values?.[titleColumn]} />
@@ -404,11 +409,13 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
                 >
                   <option value="">請選擇人物</option>
                   <option value="不編輯">不編輯（略過）</option>
-                  {availablePeople.map((person) => (
-                    <option key={person} value={person}>
-                      {person}
-                    </option>
-                  ))}
+                  {[...new Set([...availablePeople, bulkPerson].filter((person) => person && person !== '不編輯'))].map(
+                    (person) => (
+                      <option key={person} value={person}>
+                        {personLabel(person)}
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
               <Button
@@ -464,9 +471,15 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
                     onChange={(e) => setAssignments((current) => ({ ...current, [video.video_id]: e.target.value }))}
                   >
                     <option value="不編輯">不編輯（略過）</option>
-                    {availablePeople.map((person) => (
+                    {[
+                      ...new Set(
+                        [...availablePeople, assignments[video.video_id]].filter(
+                          (person) => person && person !== '不編輯'
+                        )
+                      ),
+                    ].map((person) => (
                       <option key={person} value={person}>
-                        {person}
+                        {personLabel(person)}
                       </option>
                     ))}
                   </select>
