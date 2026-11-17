@@ -151,8 +151,8 @@ for (const videoType of ['Video', 'Shorts']) {
       { video_id: 'video-2', person: personKey(people[1]) },
     ]);
     await expect(page.getByRole('heading', { name: `${videoType} 發布前暫存編輯` })).toBeVisible();
-    await expect(page.getByLabel('最終標題（7 / 100）').first()).toHaveValue('A title');
-    await expect(page.getByLabel('最終標題（7 / 100）').nth(1)).toHaveValue('B title');
+    await expect(page.getByRole('article', { name: '暫存影片 video-1' }).getByRole('heading')).toContainText('A title');
+    await expect(page.getByRole('article', { name: '暫存影片 video-2' }).getByRole('heading')).toContainText('B title');
     await savedAssignments;
     await page.getByRole('link', { name: '返回人物指定／重建暫存' }).click();
     await page.reload();

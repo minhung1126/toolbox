@@ -88,8 +88,8 @@ function invalid(): never {
   throw new Error('伺服器結果格式不完整，請至作業紀錄核對後再繼續。');
 }
 export const draftPublishApi = {
-  async prepare(source: DraftSource): Promise<DraftStage> {
-    const value: unknown = await api.prepareYoutubeDrafts(source);
+  async prepare(source: DraftSource, options: { signal?: AbortSignal } = {}): Promise<DraftStage> {
+    const value: unknown = await api.prepareYoutubeDrafts(source, options);
     if (!record(value) || typeof value.stage_token !== 'string' || !value.stage_token || !record(value.stage_snapshot))
       invalid();
     const snapshot = value.stage_snapshot;

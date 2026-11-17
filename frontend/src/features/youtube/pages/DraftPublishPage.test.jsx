@@ -64,7 +64,7 @@ function seed({ videoType = 'Video', twoActive = false } = {}) {
   const nextSource = { ...source, video_type: videoType };
   const draft = createSavedDraft(stage, 'owner', nextSource);
   savePublishDraft(draft);
-  rememberDraftContext('owner', nextSource);
+  rememberDraftContext('owner', nextSource, 'channel');
   return draft;
 }
 function renderPage(props = {}) {
@@ -129,15 +129,17 @@ describe('editable publish staging', () => {
     async (videoType) => {
       seed({ videoType });
       const view = renderPage({ videoType });
-      const title = screen.getAllByLabelText(/最終標題/)[0];
-      const description = screen.getAllByLabelText(/最終描述/)[0];
+      fireEvent.click(screen.getAllByRole('button', { name: '編輯', exact: true })[0]);
+      const title = screen.getByLabelText('標題');
+      const description = screen.getByLabelText('描述');
       fireEvent.change(title, { target: { value: 'My final title' } });
       fireEvent.change(description, { target: { value: 'Full long description\n'.repeat(200) } });
+      fireEvent.click(screen.getByRole('button', { name: '儲存暫存' }));
       expect(api.publishYoutubeDrafts).not.toHaveBeenCalled();
       view.unmount();
       renderPage({ videoType });
-      expect(screen.getAllByLabelText(/最終標題/)[0]).toHaveValue('My final title');
-      expect(screen.getAllByLabelText(/最終描述/)[0]).toHaveValue('Full long description\n'.repeat(200));
+      expect(screen.getByRole('article', { name: '暫存影片 one' })).toHaveTextContent('My final title');
+      expect(screen.getAllByLabelText('預計套用的描述')[0].textContent).toBe('Full long description\n'.repeat(200));
       fireEvent.click(screen.getByRole('button', { name: '檢查變更與配額' }));
       await screen.findByRole('region', { name: '最終變更摘要' });
       expect(api.previewYoutubeDrafts.mock.calls[0][0].edits[0].title).toBe('My final title');
@@ -159,7 +161,7 @@ describe('editable publish staging', () => {
         }),
         expect.objectContaining({ video_id: 'two', skip: true }),
       ]);
-      await waitFor(() => expect(screen.getAllByLabelText(/最終標題/)[0]).toBeDisabled());
+      await waitFor(() => expect(screen.getAllByRole('button', { name: '編輯', exact: true })[0]).toBeDisabled());
       expect(screen.getByText('已寫入 YouTube')).toBeInTheDocument();
       expect(api.previewYoutubeDrafts).toHaveBeenCalledOnce();
     }
@@ -168,20 +170,25 @@ describe('editable publish staging', () => {
   it('validates title and full description, invalidates a reviewed plan, and supports reset and skip', async () => {
     seed();
     renderPage();
-    const title = screen.getAllByLabelText(/最終標題/)[0];
+    fireEvent.click(screen.getAllByRole('button', { name: '編輯', exact: true })[0]);
+    const title = screen.getByLabelText('標題');
     fireEvent.change(title, { target: { value: ' ' } });
     expect(screen.getByText('標題不得為空。')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '檢查變更與配額' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '儲存暫存' })).toBeDisabled();
     fireEvent.change(title, { target: { value: '字'.repeat(101) } });
     expect(screen.getByText('標題最多 100 字元。')).toBeInTheDocument();
-    fireEvent.change(title, { target: { value: '字'.repeat(100) } });
-    fireEvent.change(screen.getAllByLabelText(/最終描述/)[0], { target: { value: '字'.repeat(5001) } });
+    fireEvent.change(title, { target: { value: '😀'.repeat(100) } });
+    fireEvent.change(screen.getByLabelText('描述'), { target: { value: '字'.repeat(5001) } });
     expect(screen.getByText('描述最多 5,000 字元。')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('描述'), { target: { value: 'Valid description' } });
+    fireEvent.click(screen.getByRole('button', { name: '儲存暫存' }));
     fireEvent.click(screen.getAllByRole('button', { name: '還原為套用人物後內容' })[0]);
-    expect(title).toHaveValue('Applied one');
+    expect(loadPublishDraft('owner', 'channel', 'Video').edits[0].title).toBe('Applied one');
     fireEvent.click(screen.getByRole('button', { name: '檢查變更與配額' }));
     await screen.findByRole('region', { name: '最終變更摘要' });
-    fireEvent.change(title, { target: { value: 'Changed after preview' } });
+    fireEvent.click(screen.getAllByRole('button', { name: '編輯', exact: true })[0]);
+    fireEvent.change(screen.getByLabelText('標題'), { target: { value: 'Changed after preview' } });
+    fireEvent.click(screen.getByRole('button', { name: '儲存暫存' }));
     expect(screen.getByRole('button', { name: '確認編輯並公開', exact: true })).toBeDisabled();
     expect(screen.queryByRole('region', { name: '最終變更摘要' })).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByLabelText('略過此片')[0]);
@@ -210,9 +217,9 @@ describe('editable publish staging', () => {
       expect(screen.queryByDisplayValue('Preserve this manual title')).not.toBeInTheDocument();
       view.unmount();
     }
-    rememberDraftContext('owner', { ...source, worksheet_name: 'Another source' });
+    rememberDraftContext('owner', { ...source, worksheet_name: 'Another source' }, 'channel');
     renderPage();
-    expect(screen.getByDisplayValue('Preserve this manual title')).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: '暫存影片 one' })).toHaveTextContent('Preserve this manual title');
     expect(screen.getByRole('button', { name: '檢查變更與配額' })).toBeDisabled();
     expect(api.previewYoutubeDrafts).not.toHaveBeenCalled();
   });
@@ -226,7 +233,7 @@ describe('editable publish staging', () => {
     expect(loadPublishDraft('owner', 'channel', 'Video').pending).toBeTruthy();
     view.unmount();
     renderPage();
-    expect(screen.getAllByLabelText(/最終標題/)[0]).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: '編輯', exact: true })[0]).toBeDisabled();
     expect(screen.getByRole('button', { name: '確認編輯並公開', exact: true })).toBeDisabled();
     const saved = loadPublishDraft('owner', 'channel', 'Video');
     api.getOperations.mockResolvedValue({
@@ -257,15 +264,15 @@ describe('editable publish staging', () => {
     renderPage();
     await confirmPublish();
     await waitFor(() => expect(api.publishYoutubeDrafts).toHaveBeenCalledOnce());
-    screen.getAllByLabelText(/最終標題/).forEach((input) => expect(input).toBeDisabled());
+    screen.getAllByRole('button', { name: '編輯', exact: true }).forEach((input) => expect(input).toBeDisabled());
     await act(async () => {
       const response = resultResponse(api.publishYoutubeDrafts.mock.calls[0][0]);
       response.completed = false;
       response.results[1].status = 'failed';
       finish(response);
     });
-    expect(screen.getAllByLabelText(/最終標題/)[0]).toBeDisabled();
-    expect(screen.getAllByLabelText(/最終標題/)[1]).toBeEnabled();
+    expect(screen.getAllByRole('button', { name: '編輯', exact: true })[0]).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: '編輯', exact: true })[1]).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: '檢查變更與配額' }));
     await screen.findByRole('region', { name: '最終變更摘要' });
     expect(api.previewYoutubeDrafts.mock.calls.at(-1)[0].edits.map((edit) => edit.skip)).toEqual([true, false]);
@@ -282,7 +289,7 @@ describe('editable publish staging', () => {
     renderPage();
     await confirmPublish();
     await screen.findByText('待核對');
-    expect(screen.getAllByLabelText(/最終標題/)[0]).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: '編輯', exact: true })[0]).toBeDisabled();
     expect(screen.getByRole('button', { name: '檢查變更與配額' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '唯讀核對發布結果' })).toBeEnabled();
   });
@@ -307,7 +314,33 @@ describe('editable publish staging', () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: '唯讀核對發布結果' }));
     await screen.findByText(/先前版本已寫入/);
-    expect(screen.getAllByLabelText(/最終標題/)[0]).toHaveValue('A newer manual edit');
+    expect(screen.getByRole('article', { name: '暫存影片 one' })).toHaveTextContent('A newer manual edit');
     expect(screen.queryByText('已寫入 YouTube', { exact: true })).not.toBeInTheDocument();
+  });
+  it('keeps complete multiline descriptions visible and protects unsaved modal changes', () => {
+    const draft = seed();
+    const full = '第一行\n' + 'https://example.com/' + 'x'.repeat(300) + '\n最後一行';
+    draft.edits[0].description = full;
+    savePublishDraft(draft);
+    renderPage();
+    expect(screen.getAllByLabelText('預計套用的描述')[0].textContent).toBe(full);
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    const edit = screen.getAllByRole('button', { name: '編輯', exact: true })[0];
+    edit.focus();
+    fireEvent.click(edit);
+    expect(screen.getByLabelText('標題')).toHaveFocus();
+    fireEvent.change(screen.getByLabelText('描述'), { target: { value: 'Unsaved replacement' } });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    const discard = screen.getByRole('dialog', { name: '捨棄尚未儲存的修改？' });
+    fireEvent.click(within(discard).getByRole('button', { name: '繼續編輯' }));
+    expect(screen.getByLabelText('描述')).toHaveValue('Unsaved replacement');
+    fireEvent.click(screen.getByRole('button', { name: '取消', exact: true }));
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: '捨棄尚未儲存的修改？' })).getByRole('button', { name: '捨棄修改' })
+    );
+    expect(loadPublishDraft('owner', 'channel', 'Video').edits[0].description).toBe(full);
+    expect(edit).toHaveFocus();
+    expect(api.previewYoutubeDrafts).not.toHaveBeenCalled();
+    expect(api.publishYoutubeDrafts).not.toHaveBeenCalled();
   });
 });

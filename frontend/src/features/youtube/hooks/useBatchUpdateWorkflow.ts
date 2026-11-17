@@ -702,8 +702,10 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     event.preventDefault();
     toggleVideoSelection(videoId);
   };
-  const setAllVideosSelected = (checked: boolean) =>
-    setSelectedVideoIds(checked ? videos.map((video) => video.video_id) : []);
+  const setAllVideosSelected = (checked: boolean, videoIds = videos.map((video) => video.video_id)) =>
+    setSelectedVideoIds((current) =>
+      checked ? [...new Set([...current, ...videoIds])] : current.filter((id) => !videoIds.includes(id))
+    );
 
   const applyBulkAssignment = () => {
     if (!selectedVideoIds.length) return toast.warning('請先勾選要批次編輯的影片');

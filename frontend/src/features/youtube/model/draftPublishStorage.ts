@@ -11,27 +11,34 @@ export interface SavedPublishDraft extends DraftStage {
 function key(account: string, channel: string, type: string) {
   return `toolbox:youtube-publish-draft:v1:${encodeURIComponent(account)}:${encodeURIComponent(channel)}:${type}`;
 }
-function contextKey(account: string, type: string) {
-  return `toolbox:youtube-draft-context:v1:${encodeURIComponent(account)}:${type}`;
+function contextKey(account: string, type: string, channel: string) {
+  return `toolbox:youtube-draft-context:v1:${encodeURIComponent(account)}:${encodeURIComponent(channel)}:${type}`;
 }
 export function draftContext(source: DraftSource) {
   return JSON.stringify(source);
 }
-export function rememberDraftContext(account: string, source: DraftSource) {
-  const storageKey = contextKey(account, source.video_type);
-  const previous = localStorage.getItem(storageKey);
+export function rememberDraftContext(account: string, source: DraftSource, channel: string) {
+  const storageKey = contextKey(account, source.video_type, channel);
+  const previous = currentDraftContext(account, source.video_type, channel);
   if (!source.assignments.length && previous) {
     try {
       const old = JSON.parse(previous) as DraftSource;
-      if (JSON.stringify({ ...old, assignments: [] }) === JSON.stringify(source)) return;
+      if (JSON.stringify({ ...old, assignments: [] }) === JSON.stringify(source)) {
+        localStorage.setItem(storageKey, previous);
+        return;
+      }
     } catch {
       /* Replace malformed context with the current explicit source. */
     }
   }
   localStorage.setItem(storageKey, draftContext(source));
 }
-export function currentDraftContext(account: string, type: string) {
-  return localStorage.getItem(contextKey(account, type));
+export function currentDraftContext(account: string, type: string, channel: string) {
+  // Preserve the old source-change guard until this channel is explicitly read again.
+  return (
+    localStorage.getItem(contextKey(account, type, channel)) ??
+    localStorage.getItem(`toolbox:youtube-draft-context:v1:${encodeURIComponent(account)}:${type}`)
+  );
 }
 export function createSavedDraft(stage: DraftStage, account: string, source: DraftSource): SavedPublishDraft {
   return {

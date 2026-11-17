@@ -26,6 +26,15 @@ function NavbarHarness({ initialEntry = '/dashboard', children }) {
 }
 
 describe('Navbar', () => {
+  it.each([PATHS.youtubeVideoStaging, PATHS.youtubeShortsStaging])(
+    'highlights the shared staging entry at %s',
+    (path) => {
+      render(<NavbarHarness initialEntry={path} />);
+      expect(screen.getByRole('link', { name: '發布前暫存編輯' })).toHaveAttribute('aria-current', 'page');
+      expect(screen.getByRole('link', { name: 'Video 草稿', exact: true })).not.toHaveClass('active');
+      expect(screen.getByRole('link', { name: 'Shorts 草稿', exact: true })).not.toHaveClass('active');
+    }
+  );
   it('renders an additional manifest without changing Navbar and expands its active route', () => {
     const groups = catalog.getToolNavGroups();
     const spy = vi.spyOn(catalog, 'getToolNavGroups').mockReturnValue([
@@ -109,7 +118,7 @@ describe('Navbar', () => {
       within(submenu)
         .getAllByRole('link')
         .map((link) => link.textContent.trim())
-    ).toEqual(['Video 草稿', 'Shorts 草稿', '發布草稿', 'YouTube 設定']);
+    ).toEqual(['Video 草稿', 'Shorts 草稿', '發布前暫存編輯', '發布草稿', 'YouTube 設定']);
   });
 
   it('lists Sheet workflow pages and settings', () => {

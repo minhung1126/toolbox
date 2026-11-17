@@ -6,26 +6,56 @@
 
 .draft-publish-list {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-3);
+}
+
+.draft-publish-card {
+  padding: var(--space-3);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.draft-publish-copy h2 {
+  font-size: var(--font-size-section-title);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.draft-publish-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
 }
 
 .draft-publish-heading {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr) auto;
   align-items: flex-start;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 .draft-publish-thumbnail {
-  width: 10rem;
+  width: 4rem;
   max-width: 100%;
   height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
   border-radius: var(--radius-md);
 }
 
 .draft-publish-copy {
-  flex: 1 1 14rem;
   min-width: 0;
+}
+
+.draft-publish-metadata,
+.draft-publish-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-caption);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .draft-publish-page input:not([type='checkbox']),

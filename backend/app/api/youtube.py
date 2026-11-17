@@ -26,6 +26,7 @@ from backend.app.api.youtube_models import (
     PublishCleanupInput,
     QuotaEstimateInput,
     VideoAssignment,
+    VideoEditStatusInput,
     VideoMetadataUpdateInput,
 )
 from backend.app.api.youtube_workflow_dependencies import (
@@ -67,6 +68,7 @@ from backend.app.services.sheets_service import (
     matches_team_person,
     normalize_text,
 )
+from backend.app.services.youtube_edit_status import video_edit_statuses
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
 from backend.app.services.youtube_quota_service import get_youtube_quota_tracker
 from backend.app.services.youtube_service import (
@@ -249,6 +251,20 @@ def get_playlist_videos(
         raise map_youtube_error(
             exc, method="playlistItems.list", youtube_slot=youtube_context.slot
         ).to_http_exception() from exc
+
+
+@router.post("/edit-status")
+def get_video_edit_status(
+    payload: VideoEditStatusInput,
+    context: YouTubeRequestContext = Depends(require_youtube_context),
+    operations: OperationStore = Depends(get_operation_store),
+):
+    if not context.channel_id:
+        raise http_error(409, "youtube_channel_required", "請先重新連線並確認 YouTube 頻道。")
+    return {
+        "channel_id": context.channel_id,
+        "statuses": video_edit_statuses(operations, context.owner_sub, context.channel_id, payload.video_ids),
+    }
 
 
 @router.post("/video-metadata")

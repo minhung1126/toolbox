@@ -462,3 +462,86 @@ def test_empty_running_plan_is_not_mistaken_for_a_completed_preflight(harness):
     assert checked.status_code == 200
     assert checked.json()["reconciliation"]["no_writes_attempted"] is True
     assert harness.provider.writes == []
+
+
+def edit_status(harness, ids=("one", "two")):
+    response = harness.client.post("/api/v1/youtube/edit-status", json={"video_ids": list(ids)})
+    assert response.status_code == 200, response.text
+    assert response.json()["channel_id"] == harness.context.channel_id
+    return response.json()["statuses"]
+
+
+@pytest.mark.parametrize("kind", ["Video", "Shorts"])
+def test_edit_status_tracks_only_confirmed_writes_and_survives_restart(harness, kind):
+    assert edit_status(harness) == {"one": "unknown", "two": "unknown"}
+    draft = harness.prepare(kind, people=("Alice", "Alice"))
+    draft["edits"][0]["title"] = "Manually staged only"
+    payload, _ = harness.preview(draft)
+    assert edit_status(harness) == {"one": "unknown", "two": "unknown"}
+    assert not harness.provider.writes
+    harness.provider.failures[("primary", "two")] = "forbidden"
+    result = harness.publish(payload)
+    assert result.status_code == 200
+    assert edit_status(harness) == {"one": "applied", "two": "not_applied"}
+    reads, writes = len(harness.provider.reads), len(harness.provider.writes)
+    harness.store = OperationStore(harness.store.path)
+    harness.client = harness.new_client()
+    assert edit_status(harness) == {"one": "applied", "two": "not_applied"}
+    assert (len(harness.provider.reads), len(harness.provider.writes)) == (reads, writes)
+    # A newer failed attempt must not erase an earlier confirmed application.
+    draft = harness.prepare(kind, people=("Alice", "不編輯"))
+    draft["edits"][0]["title"] = "Second attempt"
+    payload, _ = harness.preview(draft)
+    harness.provider.failures[("primary", "one")] = "forbidden"
+    assert harness.publish(payload).status_code == 200
+    assert edit_status(harness)["one"] == "applied"
+    original = harness.context
+    harness.context = replace(original, channel_id="other-channel")
+    assert edit_status(harness) == {"one": "unknown", "two": "unknown"}
+    harness.context = replace(original, owner_sub="other-owner")
+    assert edit_status(harness) == {"one": "unknown", "two": "unknown"}
+
+
+def test_edit_status_unknown_until_reconciliation_and_keeps_skips_unknown(harness):
+    draft = harness.prepare()
+    payload, _ = harness.preview(draft)
+    harness.provider.failures[("primary", "one")] = "timeout_absent"
+    response = harness.publish(payload).json()
+    assert response["results"][0]["status"] == "needs_reconciliation"
+    assert edit_status(harness) == {"one": "unknown", "two": "unknown"}
+    # The provider later confirms the exact intended final state through read-only reconciliation.
+    harness.provider.videos_by_id["one"]["snippet"].update(
+        title=draft["edits"][0]["title"], description=draft["edits"][0]["description"]
+    )
+    harness.provider.videos_by_id["one"]["status"]["privacyStatus"] = "public"
+    writes = len(harness.provider.writes)
+    checked = harness.client.post(f"/api/v1/operations/{response['operation_id']}/reconcile-youtube")
+    assert checked.status_code == 200, checked.text
+    assert edit_status(harness) == {"one": "applied", "two": "unknown"}
+    assert len(harness.provider.writes) == writes
+
+
+def test_edit_status_uses_all_history_and_requires_per_video_evidence(harness):
+    payload, _ = harness.preview(harness.prepare())
+    assert harness.publish(payload).status_code == 200
+    # More than a page of later records, including legacy completed records with no evidence.
+    for index in range(105):
+        operation, _ = harness.store.claim(
+            "owner-one",
+            "youtube.metadata_update",
+            SimpleNamespace(model_dump=lambda mode, index=index: {"request_id": str(index), "revision": index}),
+            channel_id="channel-one",
+        )
+        harness.store.update(
+            "owner-one",
+            operation["id"],
+            lambda op: op.update(
+                state="completed", items=[{"remote_id": "two", "phase": "metadata", "state": "completed"}]
+            ),
+        )
+    assert len(harness.store.list("owner-one")) == 100
+    assert edit_status(harness) == {"one": "applied", "two": "unknown"}
+    # Status never guesses from title, privacy or membership in To-Post.
+    harness.provider.videos_by_id["two"]["snippet"]["title"] = "Applied title"
+    harness.provider.videos_by_id["two"]["status"]["privacyStatus"] = "public"
+    assert edit_status(harness)["two"] == "unknown"
