@@ -84,7 +84,8 @@ async function readResponseData(response) {
     let raw;
     try {
       raw = await response.text();
-    } catch {
+    } catch (error) {
+      if (error?.name === 'AbortError') throw error;
       return {};
     }
     if (typeof raw !== 'string' || !raw.trim()) return {};
@@ -96,7 +97,8 @@ async function readResponseData(response) {
   }
   try {
     return response?.json ? await response.json() : {};
-  } catch {
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
     return {};
   }
 }
@@ -174,8 +176,10 @@ async function request(endpoint, options = {}) {
     signal: controller.signal,
   };
   let response;
+  let data;
   try {
     response = await fetch(`${API_BASE}${endpoint}`, config);
+    data = await readResponseData(response);
   } catch (error) {
     if (error?.name === 'AbortError') {
       if (fetchOptions.signal?.aborted) {
@@ -190,7 +194,6 @@ async function request(endpoint, options = {}) {
       fetchOptions.signal.removeEventListener('abort', callerAbortListener);
     }
   }
-  const data = await readResponseData(response);
   if (!response.ok) {
     const retryAfter = payloadRetryAfter(data, response);
     if (response.status === 401) announceSessionExpired();
@@ -329,9 +332,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ video_id: videoId, title, description }),
     }),
-  prepareYoutubeDrafts: (payload) =>
+  getYoutubeEditStatuses: (videoIds) =>
+    request('/youtube/edit-status', { method: 'POST', body: JSON.stringify({ video_ids: videoIds }) }),
+  prepareYoutubeDrafts: (payload, { signal } = {}) =>
     request('/youtube/drafts/prepare', {
       method: 'POST',
+      signal,
       timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
       body: JSON.stringify(payload),
     }),

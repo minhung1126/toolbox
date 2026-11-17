@@ -614,13 +614,32 @@ test('YouTube drafts preserve manual edits through reload and publish after fina
   });
   await page.getByRole('button', { name: '套用人物並產生暫存結果' }).click();
   await expect(page.getByRole('heading', { name: 'Video 發布前暫存編輯' })).toBeVisible();
-  await page.getByLabel('最終標題（4 / 100）').fill('最後人工修改');
-  await page.getByLabel('最終描述（8 / 5,000）').fill('最後完整描述\n第二行');
+  await page.getByRole('article').first().getByRole('button', { name: '編輯', exact: true }).click();
+  await page.getByLabel('標題', { exact: true }).fill('最後人工修改');
+  await page.getByLabel('描述', { exact: true }).fill('最後完整描述\n第二行');
+  await page.getByRole('button', { name: '儲存暫存', exact: true }).click();
   await page.reload();
-  await expect(page.getByLabel('最終標題（6 / 100）')).toHaveValue('最後人工修改');
+  await expect(page.getByRole('article').first()).toContainText('最後人工修改');
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth))
+      .toBeLessThanOrEqual(1);
+    const layout = await page.evaluate(() => ({
+      overflow: document.documentElement.scrollWidth - innerWidth,
+      body: document.body.getAttribute('style'),
+      overflowing: [...document.querySelectorAll('*')]
+        .filter((el) => el.getBoundingClientRect().right > innerWidth + 1 && el.getBoundingClientRect().width > 0)
+        .map((el) => ({
+          tag: el.tagName,
+          className: el.className,
+          right: el.getBoundingClientRect().right,
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        }))
+        .slice(0, 20),
+    }));
+    expect(layout.overflow, JSON.stringify(layout)).toBeLessThanOrEqual(1);
   }
   expect(writes).toHaveLength(0);
   await page.getByRole('button', { name: '檢查變更與配額' }).click();

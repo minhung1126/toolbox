@@ -18,6 +18,8 @@ import { getToolNavGroups } from '../tools/catalog';
 import { useToolCatalog } from '../tools/ToolCatalogProvider';
 
 function pathIsActive(pathname, item) {
+  if (item.activePaths) return item.activePaths.includes(pathname);
+  if (item.end) return pathname === item.to;
   if (item.activePrefix) return pathname === item.activePrefix || pathname.startsWith(`${item.activePrefix}/`);
   return pathname === item.to || pathname.startsWith(`${item.to}/`);
 }
@@ -157,7 +159,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
     return (
       <NavLink
         key={value.id}
-        to={value.to}
+        to={value.activePaths?.includes(pathname) ? pathname : value.to}
         end={!value.activePrefix}
         className={({ isActive }) =>
           `nav-item${child ? ' nav-item-child' : ''}${isActive || pathIsActive(pathname, value) ? ' active' : ''}`

@@ -1,12 +1,16 @@
 """Pydantic schemas and request models for YouTube operations."""
 
-from typing import Any, List, Literal, Optional
+from typing import Annotated, Any, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class PlaylistItemsInput(BaseModel):
     playlist_id: Optional[str] = Field(default="", max_length=256)
+
+
+class VideoEditStatusInput(BaseModel):
+    video_ids: list[Annotated[str, Field(min_length=1, max_length=128)]] = Field(min_length=1, max_length=500)
 
 
 class VideoMetadataUpdateInput(BaseModel):

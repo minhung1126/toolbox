@@ -121,7 +121,8 @@ export const api: {
   deleteNote(noteId: string): Promise<StickyNoteDeleteResponse>;
   getPlaylistVideos(playlistId: string): Promise<PlaylistPreviewResponse>;
   getBatchPreview(request: YoutubeBatchPreviewRequest): Promise<YoutubeBatchPreviewResponse>;
-  prepareYoutubeDrafts(payload: DraftSource): Promise<DraftStage>;
+  getYoutubeEditStatuses(videoIds: string[]): Promise<unknown>;
+  prepareYoutubeDrafts(payload: DraftSource, options?: { signal?: AbortSignal }): Promise<DraftStage>;
   previewYoutubeDrafts(payload: DraftPublishRequest): Promise<DraftPreview>;
   publishYoutubeDrafts(payload: DraftPublishRequest): Promise<DraftResult>;
   batchUpdateMetadata(request: YoutubeBatchUpdateRequest): Promise<YoutubeBatchUpdateResponse>;

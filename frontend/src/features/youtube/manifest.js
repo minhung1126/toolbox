@@ -1,6 +1,6 @@
 /** Feature manifest: tool metadata, navigation, and dashboard cards. */
 import { lazy } from 'react';
-import { Clapperboard, Send, Settings, Smartphone, Youtube } from 'lucide-react';
+import { Clapperboard, FilePenLine, Send, Settings, Smartphone, Youtube } from 'lucide-react';
 import { PATHS } from '../../routes/paths';
 
 const manifest = {
@@ -20,8 +20,27 @@ const manifest = {
       label: 'YouTube',
       icon: Youtube,
       items: [
-        { id: 'youtube_video_drafts', to: PATHS.youtubeVideoDrafts, label: 'Video 草稿', icon: Clapperboard },
-        { id: 'youtube_shorts_drafts', to: PATHS.youtubeShortsDrafts, label: 'Shorts 草稿', icon: Smartphone },
+        {
+          id: 'youtube_video_drafts',
+          to: PATHS.youtubeVideoDrafts,
+          label: 'Video 草稿',
+          icon: Clapperboard,
+          end: true,
+        },
+        {
+          id: 'youtube_shorts_drafts',
+          to: PATHS.youtubeShortsDrafts,
+          label: 'Shorts 草稿',
+          icon: Smartphone,
+          end: true,
+        },
+        {
+          id: 'youtube_staging',
+          to: PATHS.youtubeVideoStaging,
+          activePaths: [PATHS.youtubeVideoStaging, PATHS.youtubeShortsStaging],
+          label: '發布前暫存編輯',
+          icon: FilePenLine,
+        },
         { id: 'publish_clean', to: PATHS.youtubePublishCleanup, label: '發布草稿', icon: Send },
         {
           id: 'youtube_settings',

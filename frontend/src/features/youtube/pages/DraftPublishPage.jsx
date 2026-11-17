@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PATHS } from '../../../routes/paths';
 import { Button } from '../../../shared/ui';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import ResultStatus from '../../../components/ResultStatus';
+import YouTubeVideoEditDialog from '../../../components/YouTubeVideoEditDialog';
 import VideoThumbnail from '../../../components/VideoThumbnail';
 import { api } from '../../../services/api';
 import { draftPublishApi } from '../api/draftPublishApi';
@@ -43,6 +44,11 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
   const [busy, setBusy] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [editingIndex, setEditingIndex] = useState(null);
+  const editingVideo = useMemo(
+    () => (editingIndex === null || !draft ? null : draft.edits[editingIndex]),
+    [draft, editingIndex]
+  );
   const requestLock = useRef(false);
   const mounted = useRef(true);
   useEffect(() => {
@@ -53,7 +59,7 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
   }, []);
   let contextChanged = false;
   try {
-    const context = currentDraftContext(account, videoType);
+    const context = currentDraftContext(account, videoType, auth.channelId);
     contextChanged = Boolean(draft && context && context !== draft.context);
   } catch {
     contextChanged = true;
@@ -95,10 +101,10 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
     }
   };
   const updateEdit = (index, patch) => {
-    if (locked || results.get(draft.edits[index].video_id)?.status === 'succeeded') return;
+    if (locked || blocked || results.get(draft.edits[index].video_id)?.status === 'succeeded') return false;
     setPreview(null);
     setConfirmOpen(false);
-    persist({ ...draft, edits: draft.edits.map((edit, i) => (i === index ? { ...edit, ...patch } : edit)) });
+    return persist({ ...draft, edits: draft.edits.map((edit, i) => (i === index ? { ...edit, ...patch } : edit)) });
   };
   const payload = () => ({
     stage_token: draft.stage_token,
@@ -235,11 +241,32 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
       <header className="page-header">
         <h1>{videoType} 發布前暫存編輯</h1>
         <p className="section-desc">暫存與手動編輯不會寫入 YouTube。檢查變更後，最後確認才會編輯並設為公開。</p>
+        <nav className="page-actions" aria-label="暫存影片類型">
+          <Link to={PATHS.youtubeVideoStaging} aria-current={videoType === 'Video' ? 'page' : undefined}>
+            Video 暫存
+          </Link>
+          <Link to={PATHS.youtubeShortsStaging} aria-current={videoType === 'Shorts' ? 'page' : undefined}>
+            Shorts 暫存
+          </Link>
+        </nav>
         <div className="page-actions">
           <Link to={backPath}>返回人物指定／重建暫存</Link>
           <Link to={PATHS.operations}>作業紀錄與唯讀核對</Link>
         </div>
       </header>
+      <YouTubeVideoEditDialog
+        video={editingVideo}
+        dialogTitle="編輯發布前暫存"
+        saveLabel="儲存暫存"
+        notice={saveError || '只儲存此瀏覽器的暫存；最後確認編輯並公開前，不會寫入 YouTube。'}
+        saving={busy}
+        saveDisabled={locked || blocked}
+        confirmDiscard
+        onClose={() => setEditingIndex(null)}
+        onSave={(patch) => {
+          if (updateEdit(editingIndex, patch)) setEditingIndex(null);
+        }}
+      />
       {error && (
         <p role="alert" className="error-banner">
           {error}
@@ -285,7 +312,7 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
               return (
                 <article
                   key={item.video_id}
-                  className="glass-panel card-padding card-stack"
+                  className="glass-panel draft-publish-card"
                   aria-label={`暫存影片 ${item.video_id}`}
                 >
                   <div className="draft-publish-heading">
@@ -297,30 +324,51 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
                     />
                     <div className="draft-publish-copy">
                       <h2>
-                        {index + 1}. {item.person || '未指定人物'}
+                        {index + 1}. {edit.title || item.currentTitle || item.video_id}
                       </h2>
-                      <a
-                        href={`https://youtu.be/${encodeURIComponent(item.video_id)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        在 YouTube 查看影片
-                      </a>
+                      <div className="draft-publish-metadata text-muted">
+                        <span>
+                          {videoType} · {item.person || '未指定人物'}
+                        </span>
+                        <a
+                          href={`https://youtu.be/${encodeURIComponent(item.video_id)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          YouTube · {item.video_id}
+                        </a>
+                      </div>
                       <p>
                         {result ? (
                           <>
-                            <ResultStatus status={result.status} /> {succeeded ? '已寫入 YouTube' : result.reason}
+                            <ResultStatus status={result.status} />{' '}
+                            <span>{succeeded ? '已寫入 YouTube' : result.reason}</span>
                           </>
+                        ) : edit.skip || item.status === 'skipped' ? (
+                          '略過／尚未發布'
                         ) : (
                           '暫存／尚未發布'
                         )}
-                      </p>
-                      <p>
-                        預計狀態：
-                        {edit.skip || item.status === 'skipped' ? `略過，維持 ${item.currentPrivacy}` : '公開'}
+                        {' · '}
+                        {edit.skip || item.status === 'skipped'
+                          ? `維持 ${item.currentPrivacy}`
+                          : succeeded
+                            ? '公開'
+                            : '預計公開'}
                       </p>
                     </div>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={disabled || edit.skip}
+                      onClick={() => setEditingIndex(index)}
+                    >
+                      編輯
+                    </Button>
                   </div>
+                  <p className="draft-publish-description" aria-label="預計套用的描述">
+                    {edit.description || '（描述空白）'}
+                  </p>
                   <details>
                     <summary>原標題／描述與套用人物後內容</summary>
                     <div className="draft-publish-original">
@@ -335,43 +383,15 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
                     </div>
                   </details>
                   {item.reason && <p>{item.reason}</p>}
-                  <div className="form-group">
-                    <label className="form-label" htmlFor={`draft-title-${index}`}>
-                      最終標題（{Array.from(edit.title).length} / 100）
-                    </label>
-                    <input
-                      className="form-input"
-                      id={`draft-title-${index}`}
-                      value={edit.title}
-                      disabled={disabled || edit.skip}
-                      onChange={(event) => updateEdit(index, { title: event.target.value })}
-                      aria-invalid={Boolean(validation[index])}
-                      aria-describedby={validation[index] ? `draft-error-${index}` : undefined}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor={`draft-description-${index}`}>
-                      最終描述（{Array.from(edit.description).length} / 5,000）
-                    </label>
-                    <textarea
-                      className="form-input"
-                      id={`draft-description-${index}`}
-                      rows={10}
-                      value={edit.description}
-                      disabled={disabled || edit.skip}
-                      onChange={(event) => updateEdit(index, { description: event.target.value })}
-                      aria-invalid={Boolean(validation[index])}
-                      aria-describedby={validation[index] ? `draft-error-${index}` : undefined}
-                    />
-                  </div>
                   {validation[index] && (
                     <p id={`draft-error-${index}`} role="alert">
                       {validation[index]}
                     </p>
                   )}
-                  <div className="page-actions">
+                  <div className="draft-publish-actions">
                     <Button
                       variant="secondary"
+                      size="sm"
                       disabled={disabled}
                       onClick={() => updateEdit(index, { title: item.newTitle, description: item.newDescription })}
                     >

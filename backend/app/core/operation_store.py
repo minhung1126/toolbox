@@ -132,6 +132,15 @@ class OperationStore:
             ).fetchall()
         return [op for row in rows if (op := json.loads(row[0]))["channel_id"] == channel_id]
 
+    def youtube_metadata_attempts(self, owner, channel_id):
+        """Read the full history; the recent-operations UI's 100-row limit must not hide successes."""
+        with self.transaction() as db:
+            rows = db.execute(
+                "SELECT document FROM operations WHERE owner=? AND kind IN ('youtube.metadata_update', 'youtube.metadata_publish')",
+                (owner,),
+            ).fetchall()
+        return [op for row in rows if (op := json.loads(row[0])).get("channel_id") == channel_id]
+
     def backup(self, destination: Path):
         # sqlite backup takes a consistent snapshot, including concurrent committed writes.
         with self.transaction():

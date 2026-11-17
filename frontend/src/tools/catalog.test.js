@@ -208,7 +208,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(reconcileToolCatalog({ tools: [metadata(creator, 'future')] })).toEqual([]);
   });
 
-  it('accepts staged draft pages without navigation links and preserves route capabilities', () => {
+  it('accepts staged draft pages with a shared navigation entry and preserves route capabilities', () => {
     const creator = getToolById('creator-tools');
     const issues = [];
     const scopes = ['youtube', 'sheets_readonly'];
@@ -249,7 +249,7 @@ describe('Toolbox Frontend Tool Catalog', () => {
       getToolNavGroups(tools)
         .flatMap((group) => group.items)
         .map((item) => item.to)
-    ).not.toContain(PATHS.youtubeVideoStaging);
+    ).toContain(PATHS.youtubeVideoStaging);
   });
 
   it('accepts declared nested routes without treating a wildcard as support for unknown pages', () => {
