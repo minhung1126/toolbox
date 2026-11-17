@@ -61,7 +61,7 @@ from backend.app.core.preview import (
 )
 from backend.app.core.request_protection import enforce_workflow_rate_limit
 from backend.app.core.youtube_context import YouTubeRequestContext
-from backend.app.services.operation_journal import get_operation_store, run_youtube_recorded
+from backend.app.services.operation_journal import get_operation_store, run_youtube_recorded, tracked_write
 from backend.app.services.provider_errors import map_youtube_error
 from backend.app.services.sheets_service import (
     get_all_rows_for_sheet,
@@ -257,6 +257,21 @@ def get_playlist_videos(
         ).to_http_exception() from exc
 
 
+@router.post("/video-processing-status")
+def get_video_processing_status(
+    payload: VideoEditStatusInput,
+    context: YouTubeRequestContext = Depends(require_youtube_context),
+    operations: OperationStore = Depends(get_operation_store),
+):
+    if not context.channel_id:
+        raise http_error(409, "youtube_channel_required", "請先重新連線並確認 YouTube 頻道。")
+    return {
+        "version": 1,
+        "channel_id": context.channel_id,
+        "statuses": operations.video_processing_states(context.owner_sub, context.channel_id, payload.video_ids),
+    }
+
+
 @router.post("/edit-status")
 def get_video_edit_status(
     payload: VideoEditStatusInput,
@@ -276,8 +291,18 @@ def update_video_metadata(
     payload: VideoMetadataUpdateInput,
     creds: YouTubeRequestContext = Depends(require_youtube_context),
     _rate_limit: None = Depends(enforce_workflow_rate_limit),
+    operations: OperationStore = Depends(get_operation_store),
 ):
     """Update one video's title and description while preserving other metadata."""
+    if isinstance(operations, OperationStore):
+        return run_youtube_recorded(
+            operations,
+            payload,
+            creds,
+            None,
+            "youtube.metadata_update",
+            lambda _service: update_video_metadata(payload, creds=creds, _rate_limit=None, operations=None),
+        )
     youtube_context = creds
     video_id = normalize_text(payload.video_id)
     title = normalize_text(payload.title)
@@ -293,12 +318,13 @@ def update_video_metadata(
         if not detail:
             raise http_error(404, "youtube_not_found", "找不到指定的 YouTube 影片。", youtube_slot=context.slot)
 
-        update_single_video_metadata(
-            context,
+        tracked_write(
+            "metadata",
             video_id,
-            str(title),
-            description,
-            current_snippet=(detail.get("snippet") or {}),
+            lambda: update_single_video_metadata(
+                context, video_id, str(title), description, current_snippet=(detail.get("snippet") or {})
+            ),
+            {"title": str(title), "description": description, "parts": ["snippet"], "attempted_write": True},
         )
         return {
             "video_id": video_id,

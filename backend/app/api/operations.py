@@ -1,5 +1,7 @@
 """Account-scoped journal queries. Reconciliation performs provider reads only."""
 
+import time
+
 from fastapi import APIRouter, Depends
 
 from backend.app.api.playlist_sort import get_playlist_client_factory, get_playlist_credential_store
@@ -84,7 +86,7 @@ def reconcile_youtube(
                 matched = detail.get("status", {}).get("privacyStatus") == "public"
             else:
                 matched = bool(playlist) and item["remote_id"] not in playlist_ids
-            item["reconciliation"] = {"provider_read": True, "matches_intent": matched}
+            item["reconciliation"] = {"provider_read": True, "matches_intent": matched, "checked_at": time.time()}
             # An earlier success stays in history, while this read records current remote state.
             if matched:
                 item["state"] = "completed"
@@ -120,7 +122,7 @@ def _reconcile_cleanup_only(operation, context, store, service):
     def reconcile(op):
         for attempt in op["items"]:
             matched = attempt["phase"] == "cleanup" and attempt["remote_id"] not in members
-            attempt["reconciliation"] = {"provider_read": True, "matches_intent": matched}
+            attempt["reconciliation"] = {"provider_read": True, "matches_intent": matched, "checked_at": time.time()}
             if matched:
                 attempt["state"] = "completed"
         attempted = {item["remote_id"] for item in op["items"] if item["phase"] == "cleanup"}
@@ -167,7 +169,11 @@ def _reconcile_publish_progress(operation, context, store, service):
             matched = video_matches_public_draft(details.get(row["video_id"], {}), row["title"], row["description"])
             for attempt in op["items"]:
                 if attempt["remote_id"] == row["video_id"]:
-                    attempt["reconciliation"] = {"provider_read": True, "matches_intent": matched}
+                    attempt["reconciliation"] = {
+                        "provider_read": True,
+                        "matches_intent": matched,
+                        "checked_at": time.time(),
+                    }
                     if matched and attempt["state"] in {"running", "needs_reconciliation"}:
                         attempt["state"] = "completed"
             if matched:
@@ -231,7 +237,7 @@ def _reconcile_draft_publish(operation, context, store, service):
     def reconcile(op):
         for item in op["items"]:
             matched = matches.get(item["remote_id"], False)
-            item["reconciliation"] = {"provider_read": True, "matches_intent": matched}
+            item["reconciliation"] = {"provider_read": True, "matches_intent": matched, "checked_at": time.time()}
             if matched:
                 item["state"] = "completed"
         result = op.get("result")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import replace
@@ -57,6 +58,7 @@ class Recorder:
         item_id = len(self.store.get(self.owner, self.id)["items"])
         item = {
             "index": item_id,
+            "created_at": time.time(),
             "phase": phase,
             "remote_id": remote_id,
             "state": "running",
@@ -88,7 +90,9 @@ class Recorder:
         elif isinstance(result, str):
             evidence["id"] = result
         self.store.update(
-            self.owner, self.id, lambda op: op["items"][item_id].update(state="completed", evidence=evidence)
+            self.owner,
+            self.id,
+            lambda op: op["items"][item_id].update(state="completed", evidence=evidence, confirmed_at=time.time()),
         )
         return result
 
@@ -168,7 +172,9 @@ class Recorder:
 
 
 def start_operation(store, owner, kind, payload, *, channel_id=None):
-    operation, claimed = store.claim(owner, kind, payload, channel_id=channel_id)
+    operation, claimed = store.claim(
+        owner, kind, payload, channel_id=channel_id, executor_id=getattr(store, "executor_id", None)
+    )
     if not claimed:
         if operation["state"] == "completed" and operation["result"] is not None:
             return operation, None

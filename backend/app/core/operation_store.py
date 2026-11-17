@@ -17,7 +17,7 @@ from pathlib import Path
 
 from backend.app.core.data_paths import data_directory
 from backend.app.core.error_contract import http_error
-from backend.app.core.youtube_operation_state import change_progress, initial_progress, write_targets
+from backend.app.core.youtube_operation_state import change_progress, initial_progress, project_operation, write_targets
 
 STATES = {"prepared", "running", "completed", "partial", "needs_reconciliation", "failed_before_write"}
 
@@ -40,6 +40,11 @@ class OperationStore:
                 raise ValueError("Unsupported operation journal version")
             if version < 2:
                 self._migrate(db, version)
+            db.execute("CREATE TABLE IF NOT EXISTS youtube_projection_meta (version INTEGER PRIMARY KEY)")
+            if not db.execute("SELECT 1 FROM youtube_projection_meta WHERE version=1").fetchone():
+                for row in db.execute("SELECT document FROM operations ORDER BY rowid").fetchall():
+                    project_operation(db, json.loads(row[0]))
+                db.execute("INSERT INTO youtube_projection_meta VALUES (1)")
             yield db
             db.commit()
         except BaseException:
@@ -107,6 +112,7 @@ class OperationStore:
             (json.dumps(operation, ensure_ascii=False), operation["id"], operation["owner"]),
         )
         OperationStore._sync_targets(db, operation)
+        project_operation(db, operation)
 
     def claim(self, owner, kind, payload, *, channel_id=None, progress_plan=None, executor_id=None, acceptance=None):
         original = payload.model_dump(mode="json")
@@ -341,3 +347,49 @@ class OperationStore:
                     updated_at=time.time(),
                 )
                 self._save(db, op)
+
+    def video_processing_states(self, owner, channel_id, video_ids):
+        with self.transaction() as db:
+            result = {}
+            for video_id in dict.fromkeys(video_ids):
+                row = db.execute(
+                    "SELECT document FROM youtube_video_state WHERE owner=? AND channel_id=? AND video_id=?",
+                    (owner, channel_id, video_id),
+                ).fetchone()
+                state = json.loads(row[0]) if row else {"video_id": video_id}
+                pending = [
+                    row[0]
+                    for row in db.execute(
+                        "SELECT operation_id FROM youtube_write_targets WHERE owner=? AND channel_id=? AND video_id=?",
+                        (owner, channel_id, video_id),
+                    ).fetchall()
+                ]
+                state["pending_operations"] = pending
+                state["edit_status"] = (
+                    "applied"
+                    if state.get("person_application")
+                    else "unknown"
+                    if pending
+                    else "not_applied"
+                    if state.get("known_not_applied")
+                    else "unknown"
+                )
+                result[video_id] = state
+            return result
+
+    def cleanup_states(self, owner, channel_id, playlist_id):
+        with self.transaction() as db:
+            return [
+                json.loads(row[0])
+                for row in db.execute(
+                    "SELECT document FROM youtube_cleanup_state WHERE owner=? AND channel_id=? AND playlist_id=?",
+                    (owner, channel_id, playlist_id),
+                ).fetchall()
+            ]
+
+    def rebuild_youtube_projections(self):
+        with self.transaction() as db:
+            db.execute("DELETE FROM youtube_video_state")
+            db.execute("DELETE FROM youtube_cleanup_state")
+            for row in db.execute("SELECT document FROM operations ORDER BY rowid").fetchall():
+                project_operation(db, json.loads(row[0]))

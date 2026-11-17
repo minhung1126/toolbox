@@ -173,9 +173,15 @@ class DraftPublishWorkflow:
                 for operation in prior:
                     if operation["id"] == current_operation_id():
                         continue
-                    pending_ids = {
-                        edit["video_id"] for edit in operation["plan"].get("edits", []) if not edit.get("skip")
-                    }
+                    pending_ids = (
+                        {
+                            row["video_id"]
+                            for row in operation["progress"]["rows"]
+                            if row["status"] in {"queued", "running", "needs_reconciliation"}
+                        }
+                        if operation.get("progress")
+                        else {edit["video_id"] for edit in operation["plan"].get("edits", []) if not edit.get("skip")}
+                    )
                     if operation["state"] in {"prepared", "running"} and edit.video_id in pending_ids:
                         raise http_error(
                             409, "operation_requires_reconciliation", "此影片已有執行中的作業，請先核對結果。"

@@ -145,6 +145,7 @@ class YouTubePublishRunner:
                     db.execute(
                         "INSERT INTO operation_executors VALUES (?,?,?,'active')", (self.id, os.getpid(), time.time())
                     )
+                self.store.executor_id = self.id
                 self.stop_event.clear()
                 self.accepting = True
                 self.thread = threading.Thread(target=self._run, name="youtube-publish", daemon=True)
