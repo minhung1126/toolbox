@@ -44,6 +44,7 @@ P0 補充：系統 Chromium 執行基準 E2E 71 passed。鎖定版 Playwright �
 | P6 | `564860d61a57e0054cb818efffcf5a542e4888f6` |
 | P7 | `9b9c0ae322b84c54e5dbf94e05f6e6681b3c743c` |
 | P8 | `e1d935b6ef2855ea77826412b95643e881a31589` |
+| P9 程式／測試／文件 | `0fcd3934cfb8d56a3b83b1119b0517f139bc5056` |
 
 ## 最新檢查與剩餘限制
 
@@ -55,3 +56,12 @@ P0 補充：系統 Chromium 執行基準 E2E 71 passed。鎖定版 Playwright �
 - 鎖定版 Linux Chromium（153.0.8010.12）CDN 及官方 mirror 均回 403；Windows Edge 無此環境。系統 Chromium 156.0.8078.79 的 E2E／人工審視不冒充兩平台 golden 通過。未更新或自動接受基準。
 - 日誌：`/workspace/work/final-checks/`。畫面：`/workspace/work/visual-review/staged-{Video,Shorts}-{390,768,1440}.png`；已檢視三種寬度。初次 E2E 中途 rebuild 干擾及舊名稱斷言已修正，固定產物重跑 73 passed。
 - [整合說明與 issue→測試對照](YOUTUBE_INTEGRATION_REVIEW.md)。未驗證真實帳號、正式部署／回退、多副本；未 merge／關閉 issue。
+
+
+最終受測程式／測試提交：`0fcd3934cfb8d56a3b83b1119b0517f139bc5056`。本紀錄後續提交僅補 SHA／驗證結果，無程式變更。
+
+- 最終 `pytest-final.log`：479 passed、2 skipped（121.77 秒；同期執行容器／瀏覽器檢查）。
+- 最終 `frontend-tests-final.log`：89 files、569 tests passed（94.45 秒）；5 個 polling 契約測試確認不接受缺確認來源的 succeeded。
+- `e2e-final.log`：73 passed；`youtube-e2e-final.log`：最終 bundle 再核對 4 passed。
+- 最終 CA-assisted image：`sha256:42c8feec840bad96cd75ab6c0d00a0efa9d3a60ecf6e5eb94e60c46198505538`；`container-smoke-final.log` startup/shutdown passed。未推送 image 或啟動正式服務。
+- `git diff --check` 通過；原工作區仍為 `fa6df9d947a5724291984debb54b751a7b068b79` 且乾淨；實作僅存在整合 worktree／分支。
