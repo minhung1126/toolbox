@@ -98,9 +98,12 @@ def _quota_estimate(operation: str, item_count: int, *, slot: Optional[str] = No
             # The workflow reads To-Post once for the preview snapshot and a
             # second time immediately before the first write, then confirms
             # each deletion with one-unit reads before and after the write.
-            {"method": "playlistItems.list", "calls": pages * 2 + count * 2, "units": pages * 2 + count * 2},
-            {"method": "videos.list", "calls": pages, "units": pages},
-            {"method": "videos.update", "calls": count, "units": count * 50},
+            {
+                "method": "playlistItems.list",
+                "calls": pages * (2 + count) + count * 2,
+                "units": pages * (2 + count) + count * 2,
+            },
+            {"method": "videos.list", "calls": pages + count, "units": pages + count},
             {"method": "playlistItems.delete", "calls": count, "units": count * 50},
         ]
     else:  # defensive for callers outside Pydantic/FastAPI
@@ -123,7 +126,7 @@ def _quota_estimate(operation: str, item_count: int, *, slot: Optional[str] = No
         number_pages = math.ceil(number / 50) if number else 0
         if operation == "youtube.metadata_update":
             return number_pages + number * 50
-        return number_pages * 3 + number * 102
+        return number_pages * (3 + number) + number * 53
 
     max_items_today = 0
     for number in range(1, count + 1):
@@ -379,6 +382,15 @@ def run_batch_metadata_update(
     )
 
 
+@router.post("/cleanup-preview")
+def create_cleanup_preview(
+    payload: PlaylistItemsInput,
+    creds: YouTubeRequestContext = Depends(require_youtube_context),
+    workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
+):
+    return workflows.create_cleanup_preview(payload, creds=creds)
+
+
 @router.post("/publish-and-cleanup")
 def run_publish_and_cleanup(
     payload: PublishCleanupInput,
@@ -387,7 +399,7 @@ def run_publish_and_cleanup(
     workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
     operations: OperationStore = Depends(get_operation_store),
 ):
-    """Snapshot To-Post, sort oldest-first, then publish each video synchronously."""
+    """Remove only confirmed public playlist items; never change video metadata/privacy."""
     del _rate_limit
     workflows = _resolve_workflow_service(workflows)
     if not isinstance(operations, OperationStore):  # Direct Python callers retain their existing contract.

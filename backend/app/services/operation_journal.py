@@ -10,6 +10,7 @@ from fastapi import HTTPException, Request
 
 from backend.app.core.error_contract import http_error
 from backend.app.core.operation_store import OperationStore
+from backend.app.core.youtube_operation_state import initial_progress
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
 
 
@@ -41,6 +42,12 @@ class Recorder:
     def update(self, **changes):
         return self.store.update(self.owner, self.id, lambda op: op.update(changes))
 
+    def initialize_progress(self, plan):
+        return self.store.update(self.owner, self.id, lambda op: op.setdefault("progress", initial_progress(plan)))
+
+    def progress(self, video_id, **changes):
+        return self.store.progress_row(self.owner, self.id, video_id, **changes)
+
     def write(self, phase, remote_id, call, intended=None):
         item_id = len(self.store.get(self.owner, self.id)["items"])
         item = {
@@ -63,8 +70,9 @@ class Recorder:
         except BaseException as exc:
             state = (
                 "failed_before_write"
-                if (isinstance(exc, YouTubeQuotaUnavailable) and phase != "cleanup")
-                or (phase == "metadata_publish" and known_rejected_write(exc))
+                if type(exc).__name__ == "CleanupRetained"
+                or (isinstance(exc, YouTubeQuotaUnavailable) and phase != "cleanup")
+                or (phase in {"metadata_publish", "cleanup"} and known_rejected_write(exc))
                 else "needs_reconciliation"
             )
             self.store.update(self.owner, self.id, lambda op: op["items"][item_id].update(state=state))
@@ -177,3 +185,7 @@ def run_youtube_recorded(store, payload, context, service, kind, execute):
         if isinstance(exc, HTTPException):
             exc.headers = {**(exc.headers or {}), "X-Operation-Id": recorder.id}
         raise
+
+
+def current_recorder():
+    return _current.get()

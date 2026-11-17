@@ -121,19 +121,16 @@ def estimate_youtube_request_units(
         video_reads = pages if has_playlist else 2 * pages
         return max(playlist_reads + video_reads + assignments * 50, 1)
 
+    if route.endswith("/cleanup-preview"):
+        return PLAYLIST_ITEMS_MAX_UNITS * 2
+
     if route.endswith("/publish-and-cleanup"):
-        snapshot = payload.get("preview_snapshot")
-        video_ids = snapshot.get("video_ids") if isinstance(snapshot, Mapping) else None
-        count = _bounded_count(video_ids, MAX_PLAYLIST_ITEMS)
-        if not count:
-            count = MAX_PLAYLIST_ITEMS
-        item_count = (
-            max(count, _bounded_count(snapshot.get("playlist_item_count"), MAX_PLAYLIST_ITEMS))
-            if isinstance(snapshot, Mapping)
-            else count
-        )
-        playlist_pages = _pages(item_count)
-        return max((2 * playlist_pages) + _pages(count) + count * 50 + item_count * 52, 1)
+        snapshot = payload.get("preview_snapshot") or {}
+        items = snapshot.get("items")
+        count = _bounded_count(items, MAX_PLAYLIST_ITEMS) if isinstance(items, list) else MAX_PLAYLIST_ITEMS
+        candidates = sum(item.get("candidate") is True for item in items) if isinstance(items, list) else count
+        pages = _pages(count)
+        return max(pages * (2 + candidates) + _pages(count) + candidates * 53, 1)
 
     return 1
 

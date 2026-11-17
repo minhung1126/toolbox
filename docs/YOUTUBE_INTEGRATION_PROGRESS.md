@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | P0 | 完成 | Python 3.11.17、Node 22.23.4；後端 442 passed、2 skipped；ruff 通過。前端 format/lint/styles/typecheck/build 通過；88 檔、561 tests 通過；production audit 0。E2E/visual 因缺 Playwright browser 尚未執行，安裝處理中。 |
 | P1 | 完成 | schema v2 交易式遷移；request alias／精確查找；逐列 revision／互斥計數；原子目標保留含舊未知作業；備份恢復。78 passed、2 skipped（state、workflow、draft）；import side effects 亦通過。 |
-| P2 | 待辦 | cleanup-only 後端 |
+| P2 | 完成 | cleanup v2 簽章／逐 item 結果；每次實際 delete（含 retry/fallback）重驗 public 與成員；新舊 reconcile 分支；配額不含 videos.update。64 tests passed（cleanup/service/quota/routing/direct workflows）。 |
 | P3 | 待辦 | 清理前端 |
 | P4 | 待辦 | 背景受理與逐片進度 |
 | P5 | 待辦 | polling 與精確恢復 |
@@ -26,4 +26,6 @@
 
 ## 下一步
 
-P2；每項完成相關測試後提交並在此記錄證據。尚未完成的任務不得宣稱通過。
+P3；每項完成相關測試後提交並在此記錄證據。尚未完成的任務不得宣稱通過。
+
+P0 補充：系統 Chromium 執行基準 E2E 71 passed。鎖定版 Playwright 瀏覽器 CDN 被網路政策擋下（403 Domain forbidden），Linux visual 基準暫無法使用指定瀏覽器。

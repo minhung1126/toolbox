@@ -48,6 +48,12 @@ def reconcile_youtube(
     snapshot = operation["plan"].get("preview_snapshot") or {}
     if operation["kind"] == "youtube.metadata_publish":
         return _reconcile_draft_publish(operation, context, store, service)
+    if (
+        operation["kind"] == "youtube.publish_cleanup"
+        and snapshot.get("version") == 2
+        and snapshot.get("mode") == "cleanup_only"
+    ):
+        return _reconcile_cleanup_only(operation, context, store, service)
     expected_video_ids = snapshot.get("video_ids") or []
     ids = list(
         {item["remote_id"] for item in operation["items"] if item["phase"] in {"metadata", "publish"}}
@@ -102,6 +108,47 @@ def reconcile_youtube(
         op["reconciliation"] = {"provider_read": True, "matches_intent": complete}
 
     return public_operation(store.update(context.owner_sub, operation_id, reconcile))
+
+
+def _reconcile_cleanup_only(operation, context, store, service):
+    from backend.app.core.youtube_operation_state import change_progress
+
+    snapshot = operation["plan"]["preview_snapshot"]
+    playlist = snapshot["playlist_id"]
+    members = {item["id"] for item in service.ports.fetch_playlist_items(context, playlist)}
+
+    def reconcile(op):
+        for attempt in op["items"]:
+            matched = attempt["phase"] == "cleanup" and attempt["remote_id"] not in members
+            attempt["reconciliation"] = {"provider_read": True, "matches_intent": matched}
+            if matched:
+                attempt["state"] = "completed"
+        attempted = {item["remote_id"] for item in op["items"] if item["phase"] == "cleanup"}
+        for row in (op.get("progress") or {}).get("rows", []):
+            if row["playlist_item_id"] in attempted and row["playlist_item_id"] not in members:
+                change_progress(
+                    op,
+                    row["video_id"],
+                    playlist_item_id=row["playlist_item_id"],
+                    status="succeeded",
+                    confirmation="provider_read",
+                    reason="唯讀核對確認清單成員已移除。",
+                )
+        result = op.get("result")
+        if result:
+            for row in result["results"]:
+                if row["playlist_item_id"] in attempted and row["playlist_item_id"] not in members:
+                    row.update(status="succeeded", confirmation="provider_read", reason="唯讀核對確認清單成員已移除。")
+            for status in ("succeeded", "skipped", "failed", "not_attempted", "needs_reconciliation"):
+                result[f"{status}_count"] = sum(row["status"] == status for row in result["results"])
+            result["completed"] = all(row["status"] in {"succeeded", "skipped"} for row in result["results"])
+        unknown = any(item["state"] in {"running", "needs_reconciliation"} for item in op["items"])
+        op["state"] = (
+            "needs_reconciliation" if unknown else "completed" if result and result["completed"] else "partial"
+        )
+        op["reconciliation"] = {"provider_read": True, "matches_intent": op["state"] == "completed"}
+
+    return public_operation(store.update(context.owner_sub, operation["id"], reconcile))
 
 
 def _reconcile_draft_publish(operation, context, store, service):

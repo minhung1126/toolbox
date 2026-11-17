@@ -40,6 +40,8 @@ class BatchUpdateInput(BaseModel):
 
 
 class PublishCleanupInput(BaseModel):
+    version: Literal[2] = 2
+    mode: Literal["cleanup_only"] = "cleanup_only"
     request_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
     playlist_id: Optional[str] = Field(default="", max_length=256)
     youtube_slot: Optional[Literal["primary", "secondary"]] = None

@@ -107,14 +107,19 @@ def test_workflow_estimates_are_conservative():
     assert (
         youtube_routing.estimate_youtube_request_units(
             "/api/v1/youtube/publish-and-cleanup",
-            {"preview_snapshot": {"video_ids": ["video-1", "video-2"]}},
+            {"preview_snapshot": {"version": 2, "items": [{"candidate": True}, {"candidate": True}]}},
         )
-        == 207
+        == 111
     )
     assert (
         youtube_routing.estimate_youtube_request_units(
             "/api/v1/youtube/publish-and-cleanup",
-            {"preview_snapshot": {"video_ids": ["video-1"], "playlist_item_count": 3}},
+            {
+                "preview_snapshot": {
+                    "version": 2,
+                    "items": [{"candidate": True}, {"candidate": True}, {"candidate": False}],
+                }
+            },
         )
-        == 209
+        == 111
     )

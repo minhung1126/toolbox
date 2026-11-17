@@ -374,7 +374,9 @@ def _playlist_item_exists(context: YouTubeRequestContext, service, playlist_item
     return bool(response["items"])
 
 
-def remove_playlist_item(context: YouTubeRequestContext, playlist_item_id: Optional[str]) -> Dict[str, Any]:
+def remove_playlist_item(
+    context: YouTubeRequestContext, playlist_item_id: Optional[str], *, pre_delete_guard=None
+) -> Dict[str, Any]:
     """Delete and confirm removal, reconciling before spending quota on another delete."""
 
     if not playlist_item_id:
@@ -394,6 +396,8 @@ def remove_playlist_item(context: YouTubeRequestContext, playlist_item_id: Optio
                 confirmed_present = True
             if delete_required:
                 try:
+                    if pre_delete_guard is not None:
+                        pre_delete_guard()
                     request = service.playlistItems().delete(id=playlist_item_id)
                     _execute_with_quota(request, "playlistItems.delete", context)
                     delete_acknowledged = True
