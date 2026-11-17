@@ -6,8 +6,8 @@
 
 | 任務 | 狀態 | 提交／驗證 |
 | --- | --- | --- |
-| P0 | 已完成基準同步；基準驗證進行中 | Python 3.11.17、Node 22.23.4；後端 442 passed、2 skipped；ruff 通過。前端檢查已啟動。 |
-| P1 | 待辦 | schema v2、progress、原子目標保留 |
+| P0 | 完成 | Python 3.11.17、Node 22.23.4；後端 442 passed、2 skipped；ruff 通過。前端 format/lint/styles/typecheck/build 通過；88 檔、561 tests 通過；production audit 0。E2E/visual 因缺 Playwright browser 尚未執行，安裝處理中。 |
+| P1 | 完成 | schema v2 交易式遷移；request alias／精確查找；逐列 revision／互斥計數；原子目標保留含舊未知作業；備份恢復。78 passed、2 skipped（state、workflow、draft）；import side effects 亦通過。 |
 | P2 | 待辦 | cleanup-only 後端 |
 | P3 | 待辦 | 清理前端 |
 | P4 | 待辦 | 背景受理與逐片進度 |
@@ -26,4 +26,4 @@
 
 ## 下一步
 
-P1；每項完成相關測試後提交並在此記錄證據。尚未完成的任務不得宣稱通過。
+P2；每項完成相關測試後提交並在此記錄證據。尚未完成的任務不得宣稱通過。
