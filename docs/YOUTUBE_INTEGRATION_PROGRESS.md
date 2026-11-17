@@ -35,16 +35,16 @@ P0 補充：系統 Chromium 執行基準 E2E 71 passed。鎖定版 Playwright �
 
 | 任務 | commit |
 | --- | --- |
-| P0 | `3348539692364d1b48d9328a708d6314a55c5115` |
-| P1 | `ca6492a0c9a5371c6fcdc6bf7cc504163876cfd9` |
-| P2 | `ee8aba71946cde6f9c55f6f33088cb1282c62c28` |
-| P3 | `4e1649e883b03e93c1d3e887e9ef6b2e6b380b05` |
-| P4 | `e6fffb45e85e6fb1a38998ad3e295a3f492be715` |
-| P5 | `773822deb90e898dd4dd1e976ceaf8619e6cae1c` |
-| P6 | `564860d61a57e0054cb818efffcf5a542e4888f6` |
-| P7 | `9b9c0ae322b84c54e5dbf94e05f6e6681b3c743c` |
-| P8 | `e1d935b6ef2855ea77826412b95643e881a31589` |
-| P9 程式／測試／文件 | `0fcd3934cfb8d56a3b83b1119b0517f139bc5056` |
+| P0 | `9140f32b2111c09857aac0772c00c9f21f050f45` |
+| P1 | `19d8d8d03b0d453edfcb65f46ea6ccc0193218b9` |
+| P2 | `12da6395eb2ff6babb80f6565894e44511513cd5` |
+| P3 | `e07f65e33ecfadc8517b16fc50cbd88dabfd66b3` |
+| P4 | `c0fc1b0b38f0f6465ed51268dee0228a20a9d41a` |
+| P5 | `f99a0674c3ce85b964226973ff942a0f6fb1dec7` |
+| P6 | `3c378c4f3320b5949279dc2726e46fc3ae45b17a` |
+| P7 | `51028a47e265f28e64f32774ca2e3df0e771f95a` |
+| P8 | `7418683e479d951453456b7d4fbdb210daa0da1f` |
+| P9 程式／測試／文件 | `9daf4f29d7f32bfdddde68c160714b9a81d5c183` |
 
 ## 最新檢查與剩餘限制
 
@@ -58,10 +58,13 @@ P0 補充：系統 Chromium 執行基準 E2E 71 passed。鎖定版 Playwright �
 - [整合說明與 issue→測試對照](YOUTUBE_INTEGRATION_REVIEW.md)。未驗證真實帳號、正式部署／回退、多副本；未 merge／關閉 issue。
 
 
-最終受測程式／測試提交：`0fcd3934cfb8d56a3b83b1119b0517f139bc5056`。本紀錄後續提交僅補 SHA／驗證結果，無程式變更。
+最終受測程式／測試提交：`9daf4f29d7f32bfdddde68c160714b9a81d5c183`。本紀錄後續提交僅補 SHA／驗證結果，無程式變更。
 
 - 最終 `pytest-final.log`：479 passed、2 skipped（121.77 秒；同期執行容器／瀏覽器檢查）。
 - 最終 `frontend-tests-final.log`：89 files、569 tests passed（94.45 秒）；5 個 polling 契約測試確認不接受缺確認來源的 succeeded。
 - `e2e-final.log`：73 passed；`youtube-e2e-final.log`：最終 bundle 再核對 4 passed。
 - 最終 CA-assisted image：`sha256:42c8feec840bad96cd75ab6c0d00a0efa9d3a60ecf6e5eb94e60c46198505538`；`container-smoke-final.log` startup/shutdown passed。未推送 image 或啟動正式服務。
 - `git diff --check` 通過；原工作區仍為 `fa6df9d947a5724291984debb54b751a7b068b79` 且乾淨；實作僅存在整合 worktree／分支。
+
+
+PR 準備：GitHub 信箱隱私保護拒絕原推送後，本次未公開的提交改用帳號已驗證的 GitHub noreply 信箱；每份原／新 commit 的 tree 均相同。上表 SHA 已同步；程式與測試內容未因身份調整改變。原提交保留於本機備份分支，未推送。另將原交接文件 CRLF 正規化為 LF，文字內容不變。
