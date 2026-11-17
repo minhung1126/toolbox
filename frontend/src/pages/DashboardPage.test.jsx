@@ -61,7 +61,7 @@ describe('DashboardPage', () => {
       'href',
       PATHS.googleSettings
     );
-    const publishCard = screen.getByText('發布草稿').closest('.feature-card');
+    const publishCard = screen.getByText('清理 To-Post').closest('.feature-card');
     expect(publishCard).toHaveTextContent('連線 YouTube 頻道');
     expect(publishCard).not.toHaveTextContent('連線 Google 試算表');
     expect(screen.getByRole('link', { name: /進入 Video 草稿/ })).toHaveAttribute('href', PATHS.youtubeVideoDrafts);
@@ -104,7 +104,7 @@ describe('DashboardPage', () => {
     // Feature cards
     expect(screen.getByText('Video 草稿')).toBeInTheDocument();
     expect(screen.getByText('Shorts 草稿')).toBeInTheDocument();
-    expect(screen.getByText('發布草稿')).toBeInTheDocument();
+    expect(screen.getByText('清理 To-Post')).toBeInTheDocument();
     expect(screen.getByText('Sheet 內容複製')).toBeInTheDocument();
     expect(screen.getByText('系統設定')).toBeInTheDocument();
     expect(screen.getByText('系統／部署資訊')).toBeInTheDocument();
@@ -113,7 +113,7 @@ describe('DashboardPage', () => {
     // Links
     expect(screen.getByRole('link', { name: /進入 Video 草稿/ })).toHaveAttribute('href', PATHS.youtubeVideoDrafts);
     expect(screen.getByRole('link', { name: /進入 Shorts 草稿/ })).toHaveAttribute('href', PATHS.youtubeShortsDrafts);
-    expect(screen.getByRole('link', { name: /進入發布模組/ })).toHaveAttribute('href', PATHS.youtubePublishCleanup);
+    expect(screen.getByRole('link', { name: /前往清理 To-Post/ })).toHaveAttribute('href', PATHS.youtubePublishCleanup);
     expect(screen.getByRole('link', { name: /進入內容複製/ })).toHaveAttribute('href', PATHS.sheetCopy);
     expect(screen.getByRole('link', { name: /進入系統設定/ })).toHaveAttribute('href', PATHS.systemSettings);
   });

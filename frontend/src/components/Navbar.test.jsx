@@ -118,7 +118,7 @@ describe('Navbar', () => {
       within(submenu)
         .getAllByRole('link')
         .map((link) => link.textContent.trim())
-    ).toEqual(['Video 草稿', 'Shorts 草稿', '發布前暫存編輯', '發布草稿', 'YouTube 設定']);
+    ).toEqual(['Video 草稿', 'Shorts 草稿', '發布前暫存編輯', '清理 To-Post', 'YouTube 設定']);
   });
 
   it('lists Sheet workflow pages and settings', () => {

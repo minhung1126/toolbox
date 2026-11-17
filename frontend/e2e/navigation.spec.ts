@@ -11,7 +11,7 @@ test('missing capabilities show their own authorization destinations without hid
   await expect(page.getByRole('link', { name: '連線 YouTube Music' })).toHaveAttribute('href', '/ytmusic/settings');
   await expect(page.getByRole('link', { name: '進入 Video 草稿' })).toBeVisible();
   await expect(
-    page.locator('.feature-card').filter({ hasText: '發布草稿' }).getByRole('link', { name: '連線 Google 試算表' })
+    page.locator('.feature-card').filter({ hasText: '清理 To-Post' }).getByRole('link', { name: '連線 Google 試算表' })
   ).toHaveCount(0);
   await expect(
     page.locator('.feature-card').filter({ hasText: 'YouTube Music 設定' }).locator('.dashboard-card-capabilities')

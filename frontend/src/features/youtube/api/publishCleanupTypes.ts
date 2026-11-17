@@ -5,7 +5,6 @@ export interface PublishCleanupVideo {
   published_at?: string;
   [field: string]: unknown;
 }
-
 export interface PlaylistPreviewSnapshot {
   playlist_id?: string;
   youtube_slot?: string;
@@ -13,7 +12,6 @@ export interface PlaylistPreviewSnapshot {
   video_ids?: string[];
   [field: string]: unknown;
 }
-
 export interface PlaylistPreviewResponse {
   playlist_id: string;
   total?: number;
@@ -25,10 +23,41 @@ export interface PlaylistPreviewResponse {
   data_version?: string | number | null;
   preview_token?: string;
   preview_snapshot?: PlaylistPreviewSnapshot;
-  preview?: { token?: string; snapshot?: PlaylistPreviewSnapshot } | null;
-  snapshot?: PlaylistPreviewSnapshot | null;
+  [field: string]: unknown;
 }
-
+export type CleanupStatus = 'succeeded' | 'skipped' | 'failed' | 'not_attempted' | 'needs_reconciliation';
+export type CleanupPrivacy = 'public' | 'private' | 'unlisted' | 'unknown';
+export interface CleanupItem {
+  playlist_id: string;
+  playlist_item_id: string;
+  video_id: string;
+  title: string;
+  description: string;
+  observed_privacy: CleanupPrivacy;
+  candidate: boolean;
+  reason: string;
+}
+export interface CleanupSnapshot extends PlaylistPreviewSnapshot {
+  version: 2;
+  mode: 'cleanup_only';
+  youtube_channel_id: string;
+  youtube_slot: string;
+  playlist_id: string;
+  items: CleanupItem[];
+}
+export interface CleanupPreview {
+  version: 2;
+  mode: 'cleanup_only';
+  playlist_id: string;
+  youtube_channel_id: string;
+  youtube_slot: string;
+  total_count: number;
+  candidate_count: number;
+  counts: Record<CleanupPrivacy, number>;
+  items: CleanupItem[];
+  preview_token: string;
+  preview_snapshot: CleanupSnapshot;
+}
 export interface PublishCleanupQuotaEstimate {
   operation?: string;
   item_count?: number;
@@ -37,55 +66,39 @@ export interface PublishCleanupQuotaEstimate {
   can_complete_today?: boolean;
   [field: string]: unknown;
 }
-
 export interface PublishCleanupOptions {
   youtubeSlot?: string;
   previewToken?: string;
   previewSnapshot?: PlaylistPreviewSnapshot;
 }
-
 export interface PublishCleanupResult {
+  version: 2;
+  mode: 'cleanup_only';
   operation: 'youtube.publish_cleanup';
+  operation_id?: string;
   completed: boolean;
   total_count: number;
   succeeded_count: number;
-  warning_count: number;
   skipped_count: number;
   failed_count: number;
   not_attempted_count: number;
+  needs_reconciliation_count: number;
   quota_blocked: boolean;
-  results: Array<{
-    video_id: string;
-    status: 'succeeded' | 'succeeded_with_warnings' | 'skipped' | 'failed' | 'not_attempted';
-    title?: string;
-    description?: string;
-    reason?: string | null;
-    [field: string]: unknown;
-  }>;
+  results: Array<CleanupItem & { status: CleanupStatus }>;
   [field: string]: unknown;
 }
-
+// The general metadata API remains compatible; cleanup has no metadata method.
 export interface PublishCleanupMetadataUpdate {
   videoId: string;
   title: string;
   description: string;
 }
-
-export interface PublishCleanupMetadataUpdateResponse {
-  video_id: string;
-  title: string;
-  description: string;
-  status: 'succeeded';
-  [field: string]: unknown;
-}
-
 export interface PublishCleanupApi {
-  getPlaylistVideos(playlistId: string): Promise<PlaylistPreviewResponse>;
+  previewCleanup(playlistId: string): Promise<CleanupPreview>;
   estimateQuota(request: {
     operation: 'youtube.publish_cleanup';
     itemCount: number;
     slot?: string;
   }): Promise<PublishCleanupQuotaEstimate>;
-  publishAndCleanup(playlistId: string, options: PublishCleanupOptions): Promise<PublishCleanupResult>;
-  updateVideoMetadata(request: PublishCleanupMetadataUpdate): Promise<PublishCleanupMetadataUpdateResponse>;
+  cleanupPublicItems(playlistId: string, options: PublishCleanupOptions): Promise<PublishCleanupResult>;
 }

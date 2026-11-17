@@ -660,118 +660,35 @@ test('YouTube drafts preserve manual edits through reload and publish after fina
   });
 });
 
-test('Publish Cleaner confirms the loaded snapshot and completes the publish workflow', async ({ page }) => {
+test('cleanup previews exact public items and only removes members after confirmation', async ({ page }) => {
+  const items = [
+    { playlist_id: 'playlist-cleanup', playlist_item_id: 'item-1', video_id: 'video-1', title: '已公開影片', description: '', observed_privacy: 'public', candidate: true, reason: '已公開，可清理' },
+    { playlist_id: 'playlist-cleanup', playlist_item_id: 'item-2', video_id: 'video-1', title: '同片另一成員', description: '', observed_privacy: 'public', candidate: true, reason: '已公開，可清理' },
+    { playlist_id: 'playlist-cleanup', playlist_item_id: 'item-3', video_id: 'private', title: '私人影片', description: '', observed_privacy: 'private', candidate: false, reason: '尚未公開，保留' },
+  ];
+  const snapshot = { version: 2, mode: 'cleanup_only', playlist_id: 'playlist-cleanup', youtube_channel_id: 'channel-e2e', youtube_slot: 'primary', items };
+  let writes = 0;
   await mockAuthenticatedBackend(page, {
-    '/api/v1/auth/user': {
-      authenticated: true,
-      user: { sub: 'publish-cleaner-e2e', email: 'publisher@example.test' },
-      authorizations: {
-        sheets: { connected: false },
-        ytmusic: { connected: false },
-      },
-      google_scopes: {},
-      youtube: {
-        active_slot: 'primary',
-        routing_mode: 'manual',
-        slots: {
-          primary: {
-            authenticated: true,
-            channel_id: 'channel-e2e',
-            channel_title: '發布測試頻道',
-            token_status: 'active',
-            user: { email: 'publisher@example.test' },
-          },
-        },
-      },
-    },
-    '/api/v1/settings/system': { default_playlist_id: 'playlist-publish' },
-    '/api/v1/youtube/playlist-items': {
-      playlist_id: 'playlist-publish',
-      videos: [
-        { video_id: 'video-newer', title: '較新的影片', description: '描述二', published_at: '2026-02-02T00:00:00Z' },
-        { video_id: 'video-older', title: '較早的影片', description: '描述一', published_at: '2026-02-01T00:00:00Z' },
-      ],
-      source: 'youtube-api',
-      youtube_slot: 'primary',
-      preview_token: 'publish-preview-token',
-      preview_snapshot: {
-        playlist_id: 'playlist-publish',
-        youtube_slot: 'primary',
-        data_version: 'publish-version-1',
-        video_ids: ['video-newer', 'video-older'],
-      },
-      data_version: 'publish-version-1',
-    },
-    '/api/v1/youtube/quota-estimate': {
-      operation: 'youtube.publish_cleanup',
-      projected_units: 100,
-      max_items_today: 2,
-      can_complete_today: true,
-    },
-    '/api/v1/youtube/publish-and-cleanup': {
-      operation: 'youtube.publish_cleanup',
-      completed: true,
-      total_count: 2,
-      succeeded_count: 2,
-      warning_count: 0,
-      skipped_count: 0,
-      failed_count: 0,
-      not_attempted_count: 0,
-      quota_blocked: false,
-      results: [
-        { video_id: 'video-older', title: '較早的影片', status: 'succeeded' },
-        { video_id: 'video-newer', title: '較新的影片', status: 'succeeded' },
-      ],
+    '/api/v1/auth/user': { authenticated: true, user: { sub: 'cleanup-user' }, youtube: { active_slot: 'primary', slots: { primary: { authenticated: true, channel_id: 'channel-e2e' } } } },
+    '/api/v1/settings/system': { default_playlist_id: 'playlist-cleanup' },
+    '/api/v1/youtube/cleanup-preview': { ...snapshot, total_count: 3, candidate_count: 2, counts: { public: 2, private: 1, unlisted: 0, unknown: 0 }, preview_token: 'cleanup-token', preview_snapshot: snapshot },
+    '/api/v1/youtube/quota-estimate': { projected_units: 165 },
+    '/api/v1/youtube/publish-and-cleanup': async route => {
+      writes += 1;
+      expect(route.request().postDataJSON()).toMatchObject({ version: 2, mode: 'cleanup_only', preview_token: 'cleanup-token', preview_snapshot: snapshot });
+      await route.fulfill({ json: { version: 2, mode: 'cleanup_only', operation: 'youtube.publish_cleanup', operation_id: 'cleanup-operation', completed: true, total_count: 3, succeeded_count: 2, skipped_count: 1, failed_count: 0, not_attempted_count: 0, needs_reconciliation_count: 0, quota_blocked: false, results: items.map(row => ({ ...row, status: row.candidate ? 'succeeded' : 'skipped' })) } });
     },
   });
-
   await page.goto('/youtube/publish-cleanup');
-  const playlistRequestPromise = page.waitForRequest(
-    (request) => request.method() === 'POST' && request.url().endsWith('/api/v1/youtube/playlist-items')
-  );
   await page.getByRole('button', { name: '讀取 To-Post 播放清單' }).click();
-  await playlistRequestPromise;
-
-  const videos = page.getByRole('list', { name: '待處理影片清單' }).getByRole('listitem');
-  await expect(videos).toHaveCount(2);
-  await expect(videos.nth(0)).toContainText('較早的影片');
-  await expect(videos.nth(1)).toContainText('較新的影片');
-
-  const quotaRequestPromise = page.waitForRequest(
-    (request) => request.method() === 'POST' && request.url().endsWith('/api/v1/youtube/quota-estimate')
-  );
-  await page.getByRole('button', { name: '設為公開並移出清單' }).click();
-  expect((await quotaRequestPromise).postDataJSON()).toMatchObject({
-    operation: 'youtube.publish_cleanup',
-    item_count: 2,
-    slot: 'primary',
-  });
-
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('播放清單：playlist-publish');
-  await expect(dialog).toContainText('授權組合：primary／頻道 發布測試頻道／帳號 publisher@example.test');
-  await expect(dialog).toContainText('#1 較早的影片');
-  await expect(dialog).toContainText('#2 較新的影片');
-  await expect(dialog).toContainText('100 單位');
-
-  const publishRequestPromise = page.waitForRequest(
-    (request) => request.method() === 'POST' && request.url().endsWith('/api/v1/youtube/publish-and-cleanup')
-  );
-  await dialog.getByRole('button', { name: '設為公開並移出清單' }).click();
-  const publishRequest = await publishRequestPromise;
-  expect(publishRequest.postDataJSON()).toMatchObject({
-    playlist_id: 'playlist-publish',
-    youtube_slot: 'primary',
-    preview_token: 'publish-preview-token',
-    preview_snapshot: {
-      playlist_id: 'playlist-publish',
-      youtube_slot: 'primary',
-      video_ids: ['video-newer', 'video-older'],
-    },
-  });
-  await expect(page.getByRole('heading', { name: '發布草稿已執行完成' })).toBeVisible();
-  await expect(page.locator('.publish-result-panel')).toContainText('成功 2 支影片');
+  await expect(page.locator('.cleanup-item')).toHaveCount(3);
+  expect(writes).toBe(0);
+  await expect(page.getByRole('button', { name: '編輯', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '清理已公開影片' }).click();
+  await expect(page.getByRole('dialog')).toContainText('只移除預覽中的 2 筆清單成員');
+  await page.getByRole('button', { name: '確認清理', exact: true }).click();
+  await expect(page.getByText(/已移除 2 · 保留 1/)).toBeVisible();
+  expect(writes).toBe(1);
 });
 
 test('Photo Curator exports the assigned image and checklist in a ZIP download', async ({ page }) => {

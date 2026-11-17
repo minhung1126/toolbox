@@ -128,7 +128,8 @@ export const api: {
   batchUpdateMetadata(request: YoutubeBatchUpdateRequest): Promise<YoutubeBatchUpdateResponse>;
   estimateYoutubeQuota(request: YoutubeQuotaEstimateRequest): Promise<PublishCleanupQuotaEstimate>;
   getYoutubeQuotaUsage(slot: YoutubeSlot): Promise<YoutubeQuotaUsage>;
-  publishAndCleanup(playlistId: string, options?: PublishCleanupOptions): Promise<PublishCleanupResult>;
+  previewYoutubeCleanup(playlistId: string): Promise<unknown>;
+  cleanupPublicItems(playlistId: string, options?: PublishCleanupOptions): Promise<PublishCleanupResult>;
   updateYoutubeVideoMetadata(request: PublishCleanupMetadataUpdate): Promise<unknown>;
   updateYoutubePlaylist(request: { playlistId: string }): Promise<unknown>;
   updateYoutubeSlotConfig(slot: YoutubeSlot, patch: YoutubeSlotConfigPatch): Promise<unknown>;

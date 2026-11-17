@@ -41,7 +41,7 @@ const manifest = {
           label: '發布前暫存編輯',
           icon: FilePenLine,
         },
-        { id: 'publish_clean', to: PATHS.youtubePublishCleanup, label: '發布草稿', icon: Send },
+        { id: 'publish_clean', to: PATHS.youtubePublishCleanup, label: '清理 To-Post', icon: Send },
         {
           id: 'youtube_settings',
           to: PATHS.youtubeConnections,
@@ -73,10 +73,10 @@ const manifest = {
     },
     {
       id: 'publish_clean',
-      title: '發布草稿',
-      description: '依序設為公開並移出 To-Post 播放清單，完成後直接顯示結果。',
+      title: '清理 To-Post',
+      description: '核實已公開的影片後，只移除 To-Post 清單成員。',
       to: PATHS.youtubePublishCleanup,
-      actionLabel: '進入發布模組',
+      actionLabel: '前往清理 To-Post',
       icon: Send,
       colorTheme: 'secondary',
     },

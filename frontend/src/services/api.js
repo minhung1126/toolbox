@@ -383,11 +383,18 @@ export const api = {
         ...(previewSnapshot ? { preview_snapshot: previewSnapshot } : {}),
       }),
     }),
-  publishAndCleanup: (playlistId, { youtubeSlot, previewToken, previewSnapshot } = {}) =>
+  previewYoutubeCleanup: (playlistId) =>
+    request('/youtube/cleanup-preview', {
+      method: 'POST',
+      body: JSON.stringify({ playlist_id: normalizedYoutubePlaylistOrOriginal(playlistId) }),
+    }),
+  cleanupPublicItems: (playlistId, { youtubeSlot, previewToken, previewSnapshot } = {}) =>
     request('/youtube/publish-and-cleanup', {
       method: 'POST',
       timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
       body: JSON.stringify({
+        version: 2,
+        mode: 'cleanup_only',
         playlist_id: normalizedYoutubePlaylistOrOriginal(playlistId),
         ...(youtubeSlot ? { youtube_slot: youtubeSlot } : {}),
         ...(previewToken ? { preview_token: previewToken } : {}),

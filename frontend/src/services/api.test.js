@@ -179,7 +179,7 @@ describe('API request recovery', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(
-      api.publishAndCleanup('https://www.youtube.com/playlist?list=PL123_abc-789', {
+      api.cleanupPublicItems('https://www.youtube.com/playlist?list=PL123_abc-789', {
         previewToken: 'signed-preview-token',
         previewSnapshot: { playlist_id: 'PL123_abc-789', video_ids: ['video-1'] },
       })
@@ -188,6 +188,8 @@ describe('API request recovery', () => {
     const [url, options] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/v1/youtube/publish-and-cleanup');
     expect(JSON.parse(options.body)).toEqual({
+      version: 2,
+      mode: 'cleanup_only',
       playlist_id: 'PL123_abc-789',
       preview_token: 'signed-preview-token',
       preview_snapshot: { playlist_id: 'PL123_abc-789', video_ids: ['video-1'] },

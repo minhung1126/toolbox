@@ -27,7 +27,7 @@ describe('RouteEffects and titleForPath', () => {
       [PATHS.settings, 'Google 帳號與授權｜Toolbox'],
       [PATHS.youtubeVideoDrafts, 'Video 草稿｜Toolbox'],
       [PATHS.youtubeShortsDrafts, 'Shorts 草稿｜Toolbox'],
-      [PATHS.youtubePublishCleanup, '發布草稿｜Toolbox'],
+      [PATHS.youtubePublishCleanup, '清理 To-Post｜Toolbox'],
       [PATHS.youtubeSettings, 'YouTube 授權組合｜Toolbox'],
       [PATHS.youtubeConnections, 'YouTube 授權組合｜Toolbox'],
       [PATHS.youtubeRouting, 'YouTube 路由模式｜Toolbox'],

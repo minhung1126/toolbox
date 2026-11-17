@@ -53,8 +53,8 @@ class CreatorToolsPlugin(ToolPlugin):
                 ),
                 ToolRoute(
                     path="/youtube/publish-cleanup",
-                    label="發布並清理清單",
-                    description="核對後立即公開影片並從待發布清單移出",
+                    label="清理 To-Post",
+                    description="核實影片已公開後，只移除 To-Post 清單成員",
                     required_scopes=["youtube"],
                 ),
             ],
