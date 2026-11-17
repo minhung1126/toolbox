@@ -21,6 +21,7 @@ class VideoAssignment(BaseModel):
 
 
 class BatchUpdateInput(BaseModel):
+    request_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
     spreadsheet_url_or_id: Optional[str] = Field(default="", max_length=512)
     playlist_id: Optional[str] = Field(default="", max_length=256)
     youtube_slot: Optional[Literal["primary", "secondary"]] = None
@@ -35,6 +36,7 @@ class BatchUpdateInput(BaseModel):
 
 
 class PublishCleanupInput(BaseModel):
+    request_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
     playlist_id: Optional[str] = Field(default="", max_length=256)
     youtube_slot: Optional[Literal["primary", "secondary"]] = None
     preview_token: Optional[str] = Field(default=None, max_length=16_384)

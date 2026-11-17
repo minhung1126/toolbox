@@ -21,7 +21,13 @@ export function PhotoCuratorSessionProvider({ children }) {
   const [previousArrangement, setPreviousArrangement] = useState(null);
   const [exportedSignature, setExportedSignature] = useState(null);
   const photosRef = useRef(photos);
-  photosRef.current = photos;
+  useEffect(() => {
+    const retainedUrls = new Set(photos.map((photo) => photo.previewUrl));
+    photosRef.current.forEach((photo) => {
+      if (photo.previewUrl && !retainedUrls.has(photo.previewUrl)) URL.revokeObjectURL(photo.previewUrl);
+    });
+    photosRef.current = photos;
+  }, [photos]);
 
   const signature = arrangementSignature(photos, posts, unassignedIds);
   const hasUnexportedWork = photos.length > 0 && (unassignedIds.length > 0 || signature !== exportedSignature);

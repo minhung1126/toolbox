@@ -8,6 +8,7 @@ import useAccountWorkState from '../hooks/useAccountWorkState';
 import useSharedTeamPersonFilterPersistence from '../hooks/useSharedTeamPersonFilterPersistence';
 import { readSharedTeamPersonFilter } from '../utils/teamPersonFilterStorage';
 import { personKey } from '../features/sheets/model/personOptions';
+import { buildClipboardSelection } from '../features/sheets/model/clipboardSelection';
 import { copyToClipboard } from '../utils/clipboard';
 import '../features/sheets/sheets.css';
 
@@ -47,6 +48,9 @@ export default function SheetCopyPage({ sysSettings }) {
   const [loading, setLoading] = useState(false);
   const [sourceError, setSourceError] = useState('');
   const [sharedFilterSaveError, setSharedFilterSaveError] = useState('');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedCells, setSelectedCells] = useState(new Set());
+  const [copyFormat, setCopyFormat] = useState('tsv');
   const [copiedCell, setCopiedCell] = useState('');
   const [copyStatus, setCopyStatus] = useState('');
   const initialLoadRequestedRef = useRef(false);
@@ -113,6 +117,7 @@ export default function SheetCopyPage({ sysSettings }) {
       worksheetRequestRef.current = requestId;
       setWorksheetName(name);
       setRows([]);
+      setSelectedCells(new Set());
       setDismissedRowNumbers([]);
       setColumns([]);
       setSourceError('');
@@ -216,7 +221,27 @@ export default function SheetCopyPage({ sysSettings }) {
     setCopyStatus('已復原顯示所有列');
   };
 
+  const toggleCells = (ids) =>
+    setSelectedCells((current) => {
+      const next = new Set(current);
+      const remove = ids.every((id) => current.has(id));
+      ids.forEach((id) => (remove ? next.delete(id) : next.add(id)));
+      return next;
+    });
+  const selection = buildClipboardSelection(filteredRows, visibleColumns, selectedCells, copyFormat);
+  const copySelection = async () => {
+    try {
+      await copyToClipboard(selection.text);
+      setCopyStatus(`已複製 ${selection.rowCount} 列已選內容到剪貼簿`);
+    } catch (err) {
+      setCopyStatus(`複製失敗：${err.message}`);
+    }
+  };
   const handleCopy = async (row, column) => {
+    if (selectionMode) {
+      toggleCells([`${row.row_number}:${column.key}`]);
+      return;
+    }
     try {
       await copyToClipboard(String(row.cells[column.index] ?? ''));
       setCopiedCell(`${row.row_number}:${column.key}`);
@@ -237,10 +262,11 @@ export default function SheetCopyPage({ sysSettings }) {
     <div className="section-gap sheet-copy-page">
       <header className="page-header">
         <h1 className="sheet-copy-title">
-          <FileSpreadsheet size={28} /> Sheet 內容複製
+          <FileSpreadsheet size={28} /> 試算表內容複製
         </h1>
         <p className="section-desc">
-          先確認資料來源與工作表，再選擇跨團體人物及要顯示的內容；所有篩選與顯示選項會即時記住，點擊任一儲存格即可原樣複製，包含換行。
+          唯讀試算表，複製到剪貼簿，不會寫回 Google
+          Sheet。先選擇來源、跨團體人物及欄位；所有篩選與顯示選項會即時記住，點擊任一儲存格即可原樣複製，包含換行。
         </p>
         <div className="sheet-copy-page-options">
           <label className="sheet-copy-auto-collapse" htmlFor="sheet-copy-auto-collapse">
@@ -365,6 +391,32 @@ export default function SheetCopyPage({ sysSettings }) {
         </div>
       </section>
 
+      <section className="glass-panel card-padding" aria-label="複製已選內容">
+        <label>
+          <input type="checkbox" checked={selectionMode} onChange={(event) => setSelectionMode(event.target.checked)} />
+          選格模式（點格選取；關閉後點格即複製）
+        </label>
+        <label>
+          分隔格式{' '}
+          <select className="form-select" value={copyFormat} onChange={(event) => setCopyFormat(event.target.value)}>
+            <option value="tsv">TSV（含換行的欄位加引號）</option>
+            <option value="plain">純文字（每格一行）</option>
+          </select>
+        </label>
+        <button className="btn btn-primary" disabled={displayDisabled || !selection.rowCount} onClick={copySelection}>
+          複製已選內容
+        </button>
+        <button className="btn btn-secondary" onClick={() => setSelectedCells(new Set())}>
+          清除選格
+        </button>
+        <p>
+          依工作表列序與目前欄序輸出 {selection.rowCount} 列；欄序：{selection.columns.join(' → ')}
+          。篩選外或隱藏的列不會複製。
+        </p>
+        <pre className="selection-preview" aria-label="貼上預覽">
+          {selection.text}
+        </pre>
+      </section>
       <section className="glass-panel sheet-copy-panel">
         <header className="sheet-copy-panel-header">
           <div className="sheet-copy-panel-header-content">
@@ -430,6 +482,16 @@ export default function SheetCopyPage({ sysSettings }) {
                     <tr key={row.row_number}>
                       <th className="row-number">
                         <div className="sheet-copy-row-header-content">
+                          <input
+                            type="checkbox"
+                            aria-label={`選取第 ${row.row_number} 列`}
+                            checked={visibleColumns.every((column) =>
+                              selectedCells.has(`${row.row_number}:${column.key}`)
+                            )}
+                            onChange={() =>
+                              toggleCells(visibleColumns.map((column) => `${row.row_number}:${column.key}`))
+                            }
+                          />
                           <span className="sheet-copy-row-index">{row.row_number}</span>
                           <button
                             type="button"
@@ -451,6 +513,7 @@ export default function SheetCopyPage({ sysSettings }) {
                             <button
                               type="button"
                               className={`sheet-copy-cell${autoCollapse ? ' sheet-copy-cell-collapsed' : ''}${copied ? ' copied' : ''}`}
+                              aria-pressed={selectionMode ? selectedCells.has(id) : undefined}
                               title={value || '（空白）'}
                               onClick={() => handleCopy(row, column)}
                             >
@@ -464,7 +527,8 @@ export default function SheetCopyPage({ sysSettings }) {
                                   </>
                                 ) : (
                                   <>
-                                    <Clipboard size={14} /> 複製
+                                    <Clipboard size={14} />{' '}
+                                    {selectionMode ? (selectedCells.has(id) ? '已選取' : '選取') : '複製'}
                                   </>
                                 )}
                               </small>

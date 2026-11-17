@@ -57,18 +57,6 @@ import type {
   YtmusicDisconnectResponse,
 } from '../features/ytmusic/api/tokenTypes';
 import type {
-  WeverseFileMetadata,
-  WeversePackageListResponse,
-  WeverseRecentPathsResponse,
-  WeverseScanResponse,
-  WeverseUploadFromPathRequest,
-  WeverseUploadHistoryResponse,
-  WeverseUploadQueuedResponse,
-  WeverseUploadTaskResponse,
-  WeverseUploaderAuthUrlResponse,
-  WeverseUploaderDisconnectResponse,
-} from '../features/weverse/api/types';
-import type {
   AllowNewUsersUpdateResponse,
   SystemAllowlistMutationResponse,
   SystemAllowlistResponse,
@@ -87,6 +75,10 @@ import type { AccountWorkStateResponse, WorkStateValue } from '../features/setti
 export function normalizeYoutubePlaylistInput(value: unknown): string;
 
 export const api: {
+  getHealth(): Promise<Record<string, unknown>>;
+  getOperations(): Promise<{ version: number; operations: Array<Record<string, unknown>> }>;
+  getOperation(id: string): Promise<Record<string, unknown>>;
+  reconcileOperation(id: string, kind: string): Promise<Record<string, unknown>>;
   getWorkState(): Promise<AccountWorkStateResponse>;
   updateWorkState(key: string, value: WorkStateValue): Promise<AccountWorkStateResponse>;
   getAuthConfig(): Promise<LoginAuthConfig>;
@@ -134,16 +126,6 @@ export const api: {
   getYoutubeAuthUrl(slot: YoutubeSlot): Promise<YoutubeAuthUrlResponse>;
   activateYoutubeSlot(slot: YoutubeSlot): Promise<unknown>;
   disconnectYoutube(slot: YoutubeSlot, options: { confirm: boolean }): Promise<unknown>;
-  scanWeverseFolder(folderPath: string): Promise<WeverseScanResponse>;
-  getVideoUploaderAuthUrl(): Promise<WeverseUploaderAuthUrlResponse>;
-  disconnectVideoUploader(): Promise<WeverseUploaderDisconnectResponse>;
-  parseWeverseFiles(files: WeverseFileMetadata[]): Promise<WeversePackageListResponse>;
-  uploadWeverseFromPath(payload: WeverseUploadFromPathRequest): Promise<WeverseUploadQueuedResponse>;
-  uploadWeverseFiles(formData: FormData): Promise<WeverseUploadQueuedResponse>;
-  retryWeverseCaptions(taskId: string, formData: FormData): Promise<WeverseUploadQueuedResponse>;
-  getWeverseUploadTask(taskId: string): Promise<WeverseUploadTaskResponse>;
-  getWeverseUploadHistory(limit?: number): Promise<WeverseUploadHistoryResponse>;
-  getWeverseRecentPaths(): Promise<WeverseRecentPathsResponse>;
   getSystemCredentials(): Promise<SystemCredentialsResponse>;
   updateSystemCredentials(payload: SystemCredentialsUpdateRequest): Promise<SystemCredentialsResponse>;
   getAllowlist(): Promise<SystemAllowlistResponse>;

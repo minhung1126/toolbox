@@ -21,7 +21,7 @@ class PhotoCuratorPlugin(ToolPlugin):
             id="photo-curator",
             name="Photo Curator",
             title="Instagram 貼文排版",
-            description="Instagram 照片排版工作台，支援 3、6、9 格切換、照片分流、防漏分配池、首圖排版預覽與打包匯出。",
+            description="在本機安排首圖排版與輪播順序，編排為 3／6／9 篇貼文，輸出 ZIP、對照表及可攜排版專案；不自動發布 Instagram。",
             category="日常生產力",
             icon="Instagram",
             version="1.0.0",

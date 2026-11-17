@@ -205,6 +205,13 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
+  getOperations: () => request('/operations'),
+  getOperation: (id) => request(`/operations/${encodeURIComponent(id)}`),
+  reconcileOperation: (id, kind) =>
+    request(
+      `/operations/${encodeURIComponent(id)}/reconcile-${kind === 'youtube.playlist_sort' ? 'music' : 'youtube'}`,
+      { method: 'POST' }
+    ),
   getHealth: () => request('/health', { cache: 'no-store' }),
   getTools: () => request('/tools', { cache: 'no-store' }),
   getAuthConfig: () => request('/auth/config'),
@@ -514,36 +521,4 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(token ? { token } : {}),
     }),
-  getVideoUploaderAuthUrl: () => request('/auth/video-uploader/url'),
-  disconnectVideoUploader: () => request('/auth/video-uploader/disconnect', { method: 'POST' }),
-  scanWeverseFolder: (folderPath) =>
-    request('/weverse-uploader/scan', {
-      method: 'POST',
-      body: JSON.stringify({ folder_path: folderPath }),
-    }),
-  parseWeverseFiles: (files) =>
-    request('/weverse-uploader/parse-files', {
-      method: 'POST',
-      body: JSON.stringify({ files }),
-    }),
-  uploadWeverseFromPath: (payload) =>
-    request('/weverse-uploader/upload-from-path', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  uploadWeverseFiles: (formData) =>
-    request('/weverse-uploader/upload-files', {
-      method: 'POST',
-      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
-      body: formData,
-    }),
-  retryWeverseCaptions: (taskId, formData) =>
-    request(`/weverse-uploader/tasks/${encodeURIComponent(taskId)}/retry-captions`, {
-      method: 'POST',
-      body: formData,
-      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
-    }),
-  getWeverseUploadTask: (taskId) => request(`/weverse-uploader/tasks/${taskId}`),
-  getWeverseUploadHistory: (limit = 20) => request(`/weverse-uploader/history?limit=${limit}`),
-  getWeverseRecentPaths: () => request('/weverse-uploader/recent-paths'),
 };

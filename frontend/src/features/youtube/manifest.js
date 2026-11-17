@@ -5,9 +5,10 @@ import { PATHS } from '../../routes/paths';
 
 const manifest = {
   id: 'creator-tools',
+  purpose: '管理影片',
   name: 'Creator Tools',
   title: '影音創作工作流',
-  description: 'YouTube 影片與 Shorts 專屬草稿批次維護、標題說明套用與排程發布自動化。',
+  description: '批次預覽並更新 Video／Shorts 標題與說明；核對後立即公開並清理待發布清單。',
   category: '影音創作',
   icon: Youtube,
   badge: '創作核心',

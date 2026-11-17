@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { ResultExport } from '../shared/ui/ResultExport';
 import { Button } from '../shared/ui';
 import '../features/youtube/youtube-shared.css';
@@ -227,7 +228,9 @@ function PublishConfirmationContent({ snapshot, quotaEstimate }) {
 export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
   const toast = useToast();
   const { error: workStateError } = useAccountWorkState('youtube_publish_cleaner', {});
-  const initialPlaylistId = normalizePlaylistId(sysSettings.default_playlist_id);
+  const requestedPlaylist = new URLSearchParams(window.location.search).get('playlist');
+  const initialPlaylistId =
+    normalizePlaylistId(requestedPlaylist) || normalizePlaylistId(sysSettings.default_playlist_id);
   const [playlistId, setPlaylistId] = useState(initialPlaylistId);
   const [playlistSnapshot, setPlaylistSnapshot] = useState(null);
   const [loadStatus, setLoadStatus] = useState('idle');
@@ -565,6 +568,7 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
         onClose={() => setEditingVideo(null)}
       />
 
+      <Link to={PATHS.operations}>查看作業紀錄／核對先前結果</Link>
       <header className="page-header">
         <div className="section-header">
           <Send size={24} color="var(--secondary)" />

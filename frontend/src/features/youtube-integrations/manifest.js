@@ -6,6 +6,7 @@ import { PATHS } from '../../routes/paths';
 
 const manifest = {
   id: 'youtube-integrations',
+  purpose: '我的連線',
   name: 'Integrations & Quota',
   title: 'API 整合與配額控管',
   description: 'YouTube 雙槽位頻道連線、智慧容錯路由分流、即時 API Quota 監控與預設計帳清單。',

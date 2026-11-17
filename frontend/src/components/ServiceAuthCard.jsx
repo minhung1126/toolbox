@@ -9,6 +9,8 @@ export default function ServiceAuthCard({
   disconnectedBadgeText = '尚未授權',
   description,
   accountEmail,
+  channelTitle,
+  capabilities,
   accountEmailPrefix = '目前授權帳號：',
   warningText,
   connecting = false,
@@ -36,22 +38,27 @@ export default function ServiceAuthCard({
         )}
       </div>
 
-      {description && (
-        <p className="section-desc">
-          {description}
-          {accountEmail && `（${accountEmailPrefix}${accountEmail}）`}
+      {(accountEmail || channelTitle) && (
+        <p>
+          {accountEmailPrefix}
+          {channelTitle || accountEmail}
         </p>
       )}
+      {capabilities && <p>可執行：{capabilities}</p>}
+      {description && <p className="section-desc">{description}</p>}
 
       {connected ? (
-        <div className="page-actions settings-card-actions">
-          <button className="btn btn-secondary" type="button" onClick={onConnect} disabled={connecting}>
-            <RefreshCw size={16} /> {reconnectText}
-          </button>
-          <button className="btn btn-danger" type="button" onClick={onDisconnect}>
-            <Unlink size={16} /> {disconnectText}
-          </button>
-        </div>
+        <details>
+          <summary>管理連線（重新授權／解除）</summary>
+          <div className="page-actions settings-card-actions">
+            <button className="btn btn-secondary" type="button" onClick={onConnect} disabled={connecting}>
+              <RefreshCw size={16} /> {reconnectText}
+            </button>
+            <button className="btn btn-danger" type="button" onClick={onDisconnect}>
+              <Unlink size={16} /> {disconnectText}
+            </button>
+          </div>
+        </details>
       ) : (
         <div>
           {warningText && (

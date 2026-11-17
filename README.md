@@ -9,19 +9,20 @@ GitHub Actions 會先執行後端與前端檢查及容器建置，再將 `linux/
 ## 核心功能模組
 
 ### 1. 創作者工具模組 (Creator Tools - 核心必要功能)
-- **Google OAuth 登入與白名單控制**：僅允許授權的 Google 信箱登入，AES-256 加密保存 Refresh Token。
-- **Google Sheets 雙向連動**：欄位自動對應、團體與人物篩選。
-- **YouTube 雙授權槽位 (Primary / Secondary)**：支援多頻道或多授權組合切換。
-- **YouTube 智慧自動分流 (Auto Routing)**：Primary 配額充足時優先使用，不足時自動切換 Secondary；執行中若遇配額限制自動平滑切換另一個可用 slot 並重試。
+- **Google OAuth 登入與白名單控制**：僅允許授權的 Google 信箱登入，加密保存 Refresh Token。
+- **Google Sheets 唯讀來源**：讀取欄位與人物，複製文字到剪貼簿或套用至影片草稿，不寫回 Sheet。
+- **YouTube 雙授權槽位 (Primary / Secondary)**：同一頻道的獨立授權備援，頻道不一致禁止寫入。
+- **YouTube 智慧自動分流 (Auto Routing)**：Primary 配額充足時優先使用，不足時可選用同頻道 Secondary 備援；不會對結果不明的寫入自動重送。
 - **Video／Shorts 草稿管理**：各自指定工作表、標題與描述欄位，批次預覽與防髒寫入保護。
-- **Google Drive 批次上傳**：影片檔名自然排序，以可恢復的背景長任務 (`202 Accepted + job_id`) 串流上傳至 YouTube。
 - **發布草稿與播放清單清理**：自動發布為公開影片並移出 To-Post 清單。
-- **YouTube 配額安全記帳**：每日 10,000 點安全額度雙桶記帳日誌與預估保護。
+- **YouTube 配額安全記帳**：依各連線設定的每日上限、緩衝與本機估算帳本保護；預設上限為 10,000 點，並非官方即時餘額。
 
 ### 2. 系統診斷與工具箱目錄模組 (Toolbox Catalog & System Utility)
 - **工具箱目錄中心**：`/api/v1/tools` 提供已安裝工具的自描述元數據，便於前端與 API 動態註冊新工具。
-- **即時健康度檢查**：`/api/v1/health` 檢測 OAuth 憑證、YouTube 配額就緒度與環境配置。
+- **即時健康度檢查**：`/api/v1/health` 回報服務、工具與部署配置就緒度；不代表個人授權或官方即時配額。
 - **系統部署資訊**：`/system/info` 顯示 Commit SHA、版本一致性與容器運行狀態。
+
+已註冊 8 個工具，能力、輸入與輸出見 [能力清單](docs/TOOL_CAPABILITIES.md)。Weverse 已退役，舊頁面與 API 不再可用；既有持久資料與外部影片不刪除。
 
 ## 系統架構與資料持久化
 
@@ -84,7 +85,6 @@ npm run dev
 - `/dashboard`：儀表板
 - `/system/health`、`/system/info`、`/system/design-system`：API 健康度、部署資訊與共用元件展示
 - `/settings/system`：系統安全、Google OAuth 憑證與登入白名單管理
-- `/weverse-uploader`：Weverse 影片上傳工作台；歷史可開啟任務詳情，`?task=<id>` 支援重新整理後追蹤，並提供字幕核對、補傳及結果匯出
 - `/ffmpeg-generator`、`/photo-curator`、`/notes`：媒體工具與便利貼
 - `/youtube/drafts/videos`、`/youtube/drafts/shorts`：Video／Shorts 草稿
 - `/youtube/publish-cleanup`：發布並清理清單
@@ -150,7 +150,11 @@ Compose 預設把容器的 8000 port 綁到主機 `127.0.0.1:${HOST_PORT}`，並
 - [YouTube 配額說明](docs/YOUTUBE_QUOTA.md)
 - [Docker 與 production 部署](docs/DEPLOYMENT.md)
 - [系統架構設計與模組化開發指南](docs/ARCHITECTURE.md)
-- [上傳工作流、字幕補傳與頁面重構紀錄](docs/UPLOAD_REFACTOR_2026-10-09.md)
 
 正式環境僅需在 `.env` 設定 `PUBLIC_BASE_URL`（例如 `https://toolbox.example.com`），`SECRET_KEY` 與 `CREDENTIAL_ENCRYPTION_KEY` 於首次啟動時自動生成並安全保存於 `data/.secrets.json`。Google OAuth 憑證、管理員白名單及 YouTube 槽位皆可在網頁端設定並即時熱更新生效。Google callback 由 `PUBLIC_BASE_URL` 組成：`/api/v1/auth/callback`。
 
+
+## 工作流改善與作業紀錄
+
+本機實作範圍與驗收結果見 [TB-00–TB-10 實作紀錄](docs/TOOLBOX_WORKFLOW_PROGRESS.md)。
+影片更新、發布與歌單套用保留同步 API，新增可重新整理查詢的 [作業紀錄與唯讀對帳](docs/OPERATION_JOURNAL.md)；介面入口為 `/operations`。新紀錄保存在同一持久資料目錄的 `operations.sqlite3`，不轉換或刪除既有 JSON。

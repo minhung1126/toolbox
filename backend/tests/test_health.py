@@ -43,7 +43,7 @@ def test_health_marks_failed_active_tool_not_ready(monkeypatch):
     monkeypatch.setattr(
         main.tool_registry,
         "health_check",
-        lambda: {"weverse-uploader": {"status": "error", "error": "RuntimeError"}},
+        lambda: {"sticky-notes": {"status": "error", "error": "RuntimeError"}},
     )
 
     result = main.health_check()
@@ -51,7 +51,7 @@ def test_health_marks_failed_active_tool_not_ready(monkeypatch):
     assert result["status"] == "degraded"
     assert result["ready"] is False
     assert "部分工具模組未能初始化" in result["warnings"]
-    assert "weverse-uploader" in result["tools"]
+    assert "sticky-notes" in result["tools"]
 
 
 def test_system_health_endpoint_matches():

@@ -19,7 +19,7 @@ class SheetsToolsPlugin(ToolPlugin):
             id="sheets-tools",
             name="Sheets & Data Tools",
             title="試算表與資料服務",
-            description="Google 試算表結構與內容跨表複製、欄位對照與來源偏好管理。",
+            description="唯讀 Google 試算表，篩選人物與欄位後複製文字到剪貼簿。",
             category="資料處理",
             icon="FileSpreadsheet",
             version="1.0.0",

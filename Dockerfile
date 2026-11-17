@@ -10,6 +10,7 @@ RUN npm ci
 
 # 複製前端源碼並打包靜態資源
 COPY frontend/ ./
+COPY backend/app/resources/ /app/backend/app/resources/
 ARG APP_COMMIT_SHA=development
 ENV VITE_APP_COMMIT_SHA=${APP_COMMIT_SHA}
 RUN npm run build

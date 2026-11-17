@@ -32,7 +32,7 @@ for (const width of [390, 1440]) {
     await mockAuthenticatedBackend(page);
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/photo-curator');
-    await page.locator('input[type=file]').setInputFiles({
+    await page.locator('.photo-dropzone input[type=file]').setInputFiles({
       name: 'hover-landscape.svg',
       mimeType: 'image/svg+xml',
       buffer: Buffer.from(
@@ -106,7 +106,7 @@ test('switching tools preserves local photos, grouping and titles', async ({ pag
   await page.setViewportSize({ width: 390, height: 1000 });
   await page.goto('/photo-curator');
   await page.getByRole('button', { name: '9 格', exact: true }).click();
-  await page.locator('input[type=file]').setInputFiles({
+  await page.locator('.photo-dropzone input[type=file]').setInputFiles({
     name: 'retained.svg',
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"/>'),
@@ -130,7 +130,7 @@ for (const width of [390, 768, 1440]) {
     await mockAuthenticatedBackend(page);
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/photo-curator');
-    await page.locator('input[type=file]').setInputFiles({
+    await page.locator('.photo-dropzone input[type=file]').setInputFiles({
       name: 'pending.svg',
       mimeType: 'image/svg+xml',
       buffer: Buffer.from(
@@ -182,7 +182,7 @@ for (const count of [6, 9]) {
         `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text y="50">${index + 1}</text></svg>`
       ),
     }));
-    await page.locator('input[type=file]').setInputFiles(files);
+    await page.locator('.photo-dropzone input[type=file]').setInputFiles(files);
     for (let index = 1; index <= count; index += 1) {
       await page
         .getByRole('button', { name: `+ P${index}`, exact: true })
@@ -214,7 +214,7 @@ for (const width of [390, 1440]) {
     // Keep the larger photo cards visible together during pointer-based sorting.
     await page.setViewportSize({ width, height: width === 1440 ? 1600 : 1000 });
     await page.goto('/photo-curator');
-    await page.locator('input[type=file]').setInputFiles(
+    await page.locator('.photo-dropzone input[type=file]').setInputFiles(
       ['a', 'b', 'c', 'unassigned'].map((name) => ({
         name: `${name}.svg`,
         mimeType: 'image/svg+xml',

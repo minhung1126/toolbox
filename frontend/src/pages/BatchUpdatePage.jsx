@@ -1,7 +1,10 @@
 import { ResultExport } from '../shared/ui/ResultExport';
 import { Button } from '../shared/ui';
 import '../features/youtube/youtube-shared.css';
-import React from 'react';
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { PATHS } from '../routes/paths';
+import { normalizeYoutubePlaylistInput } from '../features/youtube/api/youtubeBatchApi';
 import '../features/youtube/batch-update.css';
 import '../features/youtube/bulk-edit.css';
 import { useToast } from '../components/Toast';
@@ -52,6 +55,7 @@ export {
 
 export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Video' }) {
   const toast = useToast();
+  const [previewFilter, setPreviewFilter] = useState('all');
   const {
     youtubeConnected,
     workStateError,
@@ -151,6 +155,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
         onConfirm={doExecute}
         onCancel={() => setConfirmOpen(false)}
       />
+      <Link to={PATHS.operations}>查看作業紀錄／核對先前結果</Link>
       <header className="page-header">
         <div className="section-header">
           <VideoIcon size={24} color="var(--primary)" />
@@ -172,7 +177,20 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
         )}
       </header>
 
+      <p role="status">
+        {executing
+          ? '4. 更新中'
+          : batchPreview
+            ? '3. 檢查逐片差異'
+            : videos.length
+              ? '2. 配對人物'
+              : '1. 讀取來源與影片'}{' '}
+        · {videos.length} 支影片 · 目標頻道：
+        {authUser?.youtube?.slots?.[authUser?.youtube?.active_slot || 'primary']?.channel_title || '待連線核對'}
+      </p>
       <SheetDataSourcePanel
+        collapsible
+        summary={`標題：${titleColumn || '未選'}／說明：${descriptionColumn || '未選'}`}
         spreadsheetId={spreadsheetId}
         onSpreadsheetIdChange={handleSpreadsheetChange}
         worksheets={worksheets}
@@ -509,10 +527,24 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
                   失敗 <strong>{formatVideoCount(previewCounts.failed)}</strong>
                 </span>
               </div>
+              <label>
+                預覽顯示{' '}
+                <select
+                  aria-label="預覽顯示"
+                  value={previewFilter}
+                  onChange={(event) => setPreviewFilter(event.target.value)}
+                >
+                  <option value="all">完整清單</option>
+                  <option value="willUpdate">有變更</option>
+                  <option value="failed">需處理</option>
+                </select>
+              </label>
               <div className="batch-preview-list">
-                {batchPreview.map((item, index) => (
-                  <BatchPreviewItem item={item} index={index} key={item.videoId || item.video_id} />
-                ))}
+                {batchPreview
+                  .filter((item) => previewFilter === 'all' || getBatchPreviewStatus(item).key === previewFilter)
+                  .map((item, index) => (
+                    <BatchPreviewItem item={item} index={index} key={item.videoId || item.video_id} />
+                  ))}
               </div>
             </section>
           )}
@@ -550,8 +582,8 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
                     : estimateLoading
                       ? '估算配額中…'
                       : batchPreview
-                        ? '確認這份預覽並更新'
-                        : '產生完整批次預覽'}
+                        ? `確認這份預覽並更新 ${previewCounts.willUpdate} 支影片`
+                        : `產生完整批次預覽（${videos.length} 支影片）`}
               </Button>
             </div>
           </div>
@@ -570,6 +602,12 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
               url: `https://youtu.be/${item.video_id}`,
             }))}
           />
+          <Link
+            className="btn btn-secondary"
+            to={`${PATHS.youtubePublishCleanup}${normalizeYoutubePlaylistInput(playlistId) ? `?playlist=${encodeURIComponent(normalizeYoutubePlaylistInput(playlistId))}` : ''}`}
+          >
+            前往發布檢查（重新讀取清單）
+          </Link>
           <h3
             className={
               result.completed ? 'result-heading result-heading-success' : 'result-heading result-heading-warning'

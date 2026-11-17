@@ -23,6 +23,9 @@ class SystemUtilityPlugin(ToolPlugin):
             entry_url="/system/settings",
             routes=[
                 ToolRoute(
+                    path="/operations", label="作業紀錄與對帳", description="查詢帳號自己的作業證據與讀取 provider 核對"
+                ),
+                ToolRoute(
                     path="/system/settings",
                     label="系統安全與憑證設定",
                     description="管理系統密鑰、Google OAuth 憑證與登入白名單",

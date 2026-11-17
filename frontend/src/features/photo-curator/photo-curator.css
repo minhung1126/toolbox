@@ -960,3 +960,12 @@
 .unassigned-pool-panel.is-empty .pool-empty-state {
   padding: 1rem;
 }
+
+.project-files {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.project-files input {
+  max-width: 100%;
+}

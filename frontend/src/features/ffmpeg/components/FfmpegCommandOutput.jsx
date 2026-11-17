@@ -1,14 +1,16 @@
 import { Check, ChevronDown, ChevronUp, Copy, Terminal } from 'lucide-react';
 export default function FfmpegCommandOutput({ workflow }) {
   const {
-    shellFormat,
+    shellDialect,
+    lineLayout,
+    setShellDialect,
+    setLineLayout,
     inputName,
     outputName,
     generatedCommand,
     copied,
     handleCopyCommand,
     showAdvanced,
-    setShellFormat,
     setInputName,
     setOutputName,
     setShowAdvanced,
@@ -23,34 +25,31 @@ export default function FfmpegCommandOutput({ workflow }) {
 
         {/* Shell dialect toggles */}
         <div className="shell-toggle-group">
-          <button
-            type="button"
-            className={`btn btn-xs ${shellFormat === 'single' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setShellFormat('single')}
-          >
-            單行指令
-          </button>
-          <button
-            type="button"
-            className={`btn btn-xs ${shellFormat === 'bash' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setShellFormat('bash')}
-          >
-            Bash ( \ )
-          </button>
-          <button
-            type="button"
-            className={`btn btn-xs ${shellFormat === 'powershell' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setShellFormat('powershell')}
-          >
-            PowerShell ( ` )
-          </button>
-          <button
-            type="button"
-            className={`btn btn-xs ${shellFormat === 'cmd' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setShellFormat('cmd')}
-          >
-            CMD ( ^ )
-          </button>
+          <label>
+            執行環境{' '}
+            <select
+              className="ui-text-field"
+              aria-label="執行環境"
+              value={shellDialect}
+              onChange={(event) => setShellDialect(event.target.value)}
+            >
+              <option value="bash">Bash</option>
+              <option value="powershell">PowerShell 7.3+</option>
+              <option value="cmd">CMD</option>
+            </select>
+          </label>
+          <label>
+            指令排版{' '}
+            <select
+              className="ui-text-field"
+              aria-label="指令排版"
+              value={lineLayout}
+              onChange={(event) => setLineLayout(event.target.value)}
+            >
+              <option value="single">單行指令</option>
+              <option value="multiline">多行指令</option>
+            </select>
+          </label>
         </div>
       </div>
 
@@ -59,7 +58,7 @@ export default function FfmpegCommandOutput({ workflow }) {
         <div className="ui-field">
           <label className="ui-field-label" htmlFor="ffmpeg-input-name">
             輸入檔名 (Input File)
-            <span className="text-dim text-xs ml-2">自動雙引號防護</span>
+            <span className="text-dim text-xs ml-2">依執行環境引用參數</span>
           </label>
           <input
             id="ffmpeg-input-name"
@@ -73,7 +72,7 @@ export default function FfmpegCommandOutput({ workflow }) {
         <div className="ui-field">
           <label className="ui-field-label" htmlFor="ffmpeg-output-name">
             輸出檔名 (Output File)
-            <span className="text-dim text-xs ml-2">自動雙引號防護</span>
+            <span className="text-dim text-xs ml-2">依執行環境引用參數</span>
           </label>
           <input
             id="ffmpeg-output-name"
@@ -86,6 +85,21 @@ export default function FfmpegCommandOutput({ workflow }) {
         </div>
       </div>
 
+      <p className="text-dim">請先在電腦安裝 FFmpeg，於檔案所在目錄開啟 {shellDialect}，貼上指令執行。影片不會上傳。</p>
+      {shellDialect === 'powershell' && (
+        <p>
+          需使用 PowerShell 7.3 以上，並設定 $PSNativeCommandArgumentPassing =
+          &apos;Standard&apos;，以原樣傳入含引號的參數。
+        </p>
+      )}
+      {Object.entries(generatedCommand.errors).map(([field, message]) => (
+        <p role="alert" key={field}>
+          {{ inputName: '輸入檔名', outputName: '輸出檔名', startTime: '起點', endTime: '終點', durationCut: '長度' }[
+            field
+          ] || field}
+          ：{message}
+        </p>
+      ))}
       {/* Code Terminal Box */}
       <div className="command-terminal-box">
         <pre className="command-code">
@@ -94,6 +108,7 @@ export default function FfmpegCommandOutput({ workflow }) {
         <button
           type="button"
           className={`btn btn-copy-command ${copied ? 'btn-success' : 'btn-primary'}`}
+          disabled={Object.keys(generatedCommand.errors).length > 0}
           onClick={handleCopyCommand}
           aria-label="一鍵複製命令行"
         >

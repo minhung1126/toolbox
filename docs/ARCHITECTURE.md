@@ -47,12 +47,12 @@ Toolbox 採用 **「平台核心 (Platform Core) + 工具外掛 (Tool Plugins)�
   - `ToolMetadata`: 定義工具的識別碼 (`id`)、名稱 (`name` / `title`)、圖示 (`icon`)、分類 (`category`)、入口與子路由清單 (`routes`)，以及所需 OAuth Scopes。
   - `ToolPlugin`: 抽象基礎類別，支援宣告 `metadata`、`router`、`on_startup` 與 `on_shutdown` 生命週期勾子。
 - **`registry.py`**:
-  - `ToolRegistry`: 集中管理所有已安裝工具，拒絕重複工具 ID，負責掛載路由、執行生命週期勾子（如背景上傳 Worker）與彙整健康度。外掛啟動失敗會出現在 `/api/v1/health` 的 `tools` 欄位，並使 `ready` 回傳 `false`。
+  - `ToolRegistry`: 集中管理所有已安裝工具，拒絕重複工具 ID，負責掛載路由、執行生命週期勾子與彙整健康度。外掛啟動失敗會出現在 `/api/v1/health` 的 `tools` 欄位，並使 `ready` 回傳 `false`。
 - **`builtin/`**:
-  - `creator_tools.py`: 創作者工具模組（封裝 YouTube、Google Sheets、Google Drive 批次上傳）。
+  - `creator_tools.py`: 創作者工具模組（封裝 YouTube、Google Sheets）。
   - `playlist_sorter.py`: YouTube Music 專屬音樂工具箱模組（支援 YouTube Music 獨立帳號授權、智慧多重排序、清單名稱即時搜尋篩選、雙欄模擬預覽與一鍵套用）。
   - `photo_curator.py`: Instagram 貼文排版工具模組。
-  - `sheets_tools.py`: 試算表內容複製與跨表設定模組。
+  - `sheets_tools.py`: 試算表內容複製與來源設定模組。
   - `sticky_notes.py`: 個人便利貼文字備忘錄模組。
   - `youtube_integrations.py`: YouTube 雙槽位頻道連線、路由分流與配額管理模組。
   - `system_utility.py`: 系統診斷與版本資訊模組。
@@ -157,7 +157,7 @@ export default manifest;
 
 ### 應用組裝與測試隔離
 
-`backend.app.main.create_app()` 接受 `app_settings`、`notes_store`、`account_state_store`、`session_store`、`credential_store`、`upload_worker`、`youtube_workflow_adapters`、`youtube_quota_trackers`、`request_limiter`、`registry` 與 `dependency_overrides`。每次呼叫預設建立獨立 registry 及上傳 worker；有資料隔離需求時傳入不同路徑的 repository。上傳 worker 的 provider factory 可替換成 fake，HTTP 整合測試會確認兩個 app 的 notes、上傳歷史及 provider 呼叫相互隔離。傳入 `app_settings` 可隔離設定與身分驗證政策；未注入的持久化 repository 與配額帳本仍可能共用，不能只傳入 settings 就宣稱整個平台已隔離。
+`backend.app.main.create_app()` 接受 `app_settings`、`notes_store`、`account_state_store`、`session_store`、`credential_store`、`youtube_workflow_adapters`、`youtube_quota_trackers`、`request_limiter`、`registry` 與 `dependency_overrides`。每次呼叫預設建立獨立 registry ；有資料隔離需求時傳入不同路徑的 repository。上傳 worker 的 provider factory 可替換成 fake，HTTP 整合測試會確認兩個 app 的 notes、上傳歷史及 provider 呼叫相互隔離。傳入 `app_settings` 可隔離設定與身分驗證政策；未注入的持久化 repository 與配額帳本仍可能共用，不能只傳入 settings 就宣稱整個平台已隔離。
 
 `account_state_store` 注入後，HTTP middleware 以 ContextVar 將既有 account helpers、動態 key 驗證與 YTMusic 地區偏好導向該 app 的 repository；同步 endpoint 的 threadpool 會繼承此 context，請求結束或失敗都會還原。工具 startup 也會向該 repository 登錄 key。未注入時保留預設 singleton；手動建立的背景執行緒需明確接收 repository，不能假設會繼承 HTTP context。此橋接保留既有函式契約，後續可逐步改為明確 service dependency。
 
@@ -165,7 +165,6 @@ export default manifest;
 
 所有預設資料路徑統一由 `core/data_paths.py` 解析；`TOOLBOX_DATA_DIR` 未設定時仍使用專案的 `data/`。pytest 的 `conftest.py` 會在應用匯入前配置暫存資料目錄，並禁止第三方網路連線（保留 Windows asyncio 所需的 loopback socket）。預設測試不需要复制整個 repository 才能保護正式資料。
 
-Weverse worker 在首次入列時才建立執行緒。停機先拒絕新工作，最多等待 20 秒；逾時工作標記 `interrupted`，排隊工作取消並清理暫存檔案，執行中工作在下一個 provider 呼叫前停止。晚到的影片 ID 可保留，但不能解除中斷狀態。Python 執行緒不能強制中止已進行的網路 I/O；容器另以 45 秒 grace period 作最後終止界線。重啟只提示確認 YouTube Studio，不會自動重送。
 
 ---
 
@@ -182,7 +181,6 @@ Toolbox 將過去綁定在一起的授權模型徹底解耦為 4 個完全獨立
    - 僅在用戶進入試算表相關功能時於設定頁或面板中獨立授權。
 3. **Google 雲端硬碟授權 (Google Drive)**:
    - 請求 `drive.readonly`。
-   - 僅在上傳 YouTube 影片時於 Drive 上傳頁面獨立授權。
 4. **YouTube 頻道授權 (YouTube Data API)**:
    - 請求 `youtube` scope。
    - 獨立支援 Primary 與 Secondary 雙槽位，配備自動切換與配額保護。
@@ -208,7 +206,6 @@ volumes:
 - `runtime_config.json`: 非敏感動態執行期設定（含 Google 白名單、YouTube 槽位開關/標籤/配額）。
 - `account_state.json`: 用戶 UI 偏好、導覽列摺疊與表格欄位設定。
 - `youtube_quota.json`: YouTube API 當日呼叫量雙桶計帳紀錄。
-- `youtube_jobs.json`: 背景影片上傳工作的斷點續傳進度狀態。
 
 
 `credential_store` 注入涵蓋 OAuth callback、服務授權查詢／解除、YouTube 槽位路由、YTMusic 自訂 token 與 Google token refresh 的讀寫。HTTP request context 會傳入 FastAPI 同步 threadpool，並在例外後還原；獨立背景執行緒須明確傳入 repository。未注入時維持既有 singleton 及 JSON 格式。獨立設定與金鑰透過下列組裝方式注入；未指定的 repository 仍可能使用預設路徑。
@@ -246,7 +243,6 @@ application = create_app(
 
 OAuth provider URL 固定使用 HTTPS；本機 HTTP callback 的授權 URL 產生不需要修改程序的 `OAUTHLIB_INSECURE_TRANSPORT`。未使用真實 provider 驗收 token exchange。預設模組 singleton 仍於 import 時建構，全面延後初始化仍是後續工作。
 
-`create_app(google_client_factory=...)` 可指定符合 `(service, version, *, credentials)` 的 discovery client 建構器，套用於 HTTP／lifespan 中的 Sheets、YouTube 查詢及 OAuth profile／channel 查詢。預設仍使用 Google discovery.build；每次傳入目前請求的 credentials，不快取不同使用者的 client。Context 在例外後還原，並行 app 不共用 factory。自行建立的背景執行緒不自動繼承此 scope；Weverse 上傳仍使用 UploadWorker 的顯式 provider 注入。OAuth token exchange／refresh transport 尚未納入此建構器。
 
 `create_app(ytmusic_client_factory=...)` 接受與 YTMusic 相容的 keyword arguments（`language`、`location`，有瀏覽器 Token 時含 `auth`），同時涵蓋一般查詢與線上 Token 驗證。同步 endpoint 與 Starlette `run_in_threadpool` 繼承此 context；每次操作重新建構 client，不共用認證狀態。Token 解析仍為純函式，既有自訂 Token 優先與公開查詢 fallback 策略維持相容。
 
@@ -258,3 +254,11 @@ SessionStore 與 CredentialStore 在首次使用時才載入 JSON，受各自的
 RuntimeConfig 同樣採首次存取載入；寫入失敗回復已保存的快取並拋出例外。SystemSecretsManager 對持久化／解密錯誤採明確失敗，Setup PIN 只在寫入成功後快取。設定 HTTP endpoint 使用既有標準錯誤回應，不將儲存失敗回報為成功；setup 的多檔案步驟仍非跨檔案交易。
 
 前端樣式由 `styles/tokens.css`、`styles/foundation.css`、`app/shell.css`、shared UI 與各 feature 管理。舊 `index.css`／`styles/app-theme.css` 已移除；新增頁面不得重建全域覆寫檔。桌面側欄收合與手機 drawer 使用不同響應式規則，drawer 開啟時位於遮罩上方並維持鍵盤焦點循環。
+
+## 工作流紀錄與本機素材恢復
+
+`create_app(operation_store=...)` 可注入獨立 OperationStore。預設 journal 以 SQLite schema version 1 持久化於 `data/operations.sqlite3`，交易確認帳號／request ID／輸入版本後才進入同步服務。YouTube workflow ports 與歌單 provider mutation boundary 保存逐項證據；查詢與對帳不會重送寫入。參閱 [作業紀錄](OPERATION_JOURNAL.md)。
+
+FFmpeg 預設為 `backend/app/resources/ffmpeg-presets.v1.json`；前後端各自擁有 Shell 引用與驗證程式，共用版本化測試案例。Docker 的 frontend builder 同時取得 resources，runtime 仍由 backend COPY 取得資料。
+
+Photo Curator 專案 JSON 不含 Blob、檔案內容或可重用的 preview URL，重載後需重新選檔。便利貼草稿僅保存在帳號隔離的 app shell 記憶體；重新整理前應匯出。這兩者不等同伺服器背景任務恢復。

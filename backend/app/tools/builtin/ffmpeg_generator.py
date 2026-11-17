@@ -20,7 +20,7 @@ class FfmpegGeneratorPlugin(ToolPlugin):
             id="ffmpeg-generator",
             name="FFmpeg Generator",
             title="FFmpeg 命令行生成器",
-            description="影片視覺化剪輯與 FFmpeg 命令行生成器，支援本地即時預覽、精確 Cut 前後時間軸、無損流複製與一鍵複製指令。",
+            description="本機影片預覽與片段設定，產生需在電腦執行的 FFmpeg 指令；不會上傳影片。",
             category="影音創作",
             icon="Video",
             version="1.0.0",

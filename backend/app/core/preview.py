@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import secrets
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -111,6 +112,7 @@ def build_preview_token(
 ) -> str:
     payload: dict[str, Any] = {
         "version": 1,
+        "nonce": secrets.token_urlsafe(16),
         "owner": _owner_binding(owner_sub),
         "youtube_slot": str(youtube_slot or ""),
         "operation": str(operation or ""),

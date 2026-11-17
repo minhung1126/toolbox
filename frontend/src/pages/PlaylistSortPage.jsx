@@ -1,3 +1,5 @@
+import { PATHS } from '../routes/paths';
+import { Link } from 'react-router-dom';
 import { usePlaylistSortController } from '../features/ytmusic/hooks/usePlaylistSortController';
 import PlaylistSortApplyOptions from '../features/ytmusic/components/PlaylistSortApplyOptions';
 import PlaylistSortRules from '../features/ytmusic/components/PlaylistSortRules';
@@ -139,6 +141,7 @@ export default function PlaylistSortPage({ authUser, refreshAuthUser }) {
       />
 
       {/* YouTube Music In-Place Authorization Status */}
+      <Link to={PATHS.operations}>查看作業紀錄／核對先前結果</Link>
       <PlaylistSortAuthorization
         hasCustomToken={hasCustomToken}
         isYtmusicConnected={isYtmusicConnected}

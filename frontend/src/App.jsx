@@ -316,11 +316,6 @@ export function AppContent() {
           await fetchUser({ source: 'ytmusic-oauth-callback' });
           setOauthReturnPath(consumeOAuthReturnPath('ytmusic', PATHS.ytmusicPlaylistSort));
           if (user) await fetchSettings();
-        } else if (authResult?.type === 'video_uploader_success') {
-          toast.success('影片上傳專屬 YouTube 頻道授權成功');
-          await fetchUser({ source: 'video-uploader-oauth-callback' });
-          setOauthReturnPath(consumeOAuthReturnPath('video_uploader', PATHS.weverseUploader));
-          if (user) await fetchSettings();
         } else if (authResult?.type === 'drive_success') {
           toast.success('Google 雲端硬碟授權成功');
           await fetchUser({ source: 'drive-oauth-callback' });
@@ -347,11 +342,6 @@ export function AppContent() {
           const message = 'YouTube Music 授權失敗，請重新嘗試。';
           toast.error(message);
           setOauthReturnPath(consumeOAuthReturnPath('ytmusic', PATHS.ytmusicPlaylistSort));
-          if (user) await fetchSettings();
-        } else if (authResult?.type === 'video_uploader_error') {
-          const message = '影片上傳 YouTube 頻道授權失敗，請重新嘗試。';
-          toast.error(message);
-          setOauthReturnPath(consumeOAuthReturnPath('video_uploader', PATHS.weverseUploader));
           if (user) await fetchSettings();
         } else if (authResult?.type === 'drive_error') {
           const message = 'Google 雲端硬碟授權失敗，請重新嘗試。';

@@ -3,6 +3,8 @@ import type { LucideIcon } from 'lucide-react';
 export type CutMode = 'to' | 'duration';
 export type SeekMode = 'fast' | 'accurate';
 export type TranscodeMode = 'copy' | 'reencode' | 'audio' | 'gif';
+export type ShellDialect = 'bash' | 'powershell' | 'cmd';
+export type LineLayout = 'single' | 'multiline';
 export type ShellFormat = 'single' | 'bash' | 'powershell' | 'cmd';
 
 export interface CutOptions {
@@ -40,10 +42,14 @@ export interface CommandOptions extends CutOptions {
   customFilters?: string;
   audioBitrate?: string;
   audioVolume?: string;
-  shellFormat?: ShellFormat;
+  shellFormat?: ShellFormat; // Legacy API: single uses Bash.
+  shellDialect?: ShellDialect;
+  lineLayout?: LineLayout;
+  sourceDuration?: number;
 }
 
 export interface GeneratedCommand {
+  errors: Record<string, string>;
   singleLine: string;
   multiLine: string;
   activeCommand: string;
@@ -63,5 +69,5 @@ export interface FfmpegPreset {
   preset?: string;
   resolution?: string;
   audioBitrate?: string;
-  outputExt?: string;
+  outputExt: string;
 }

@@ -23,13 +23,6 @@ const YOUTUBE_REQUIREMENTS = Object.freeze({
   },
 });
 
-const VIDEO_UPLOADER_REQUIREMENT = Object.freeze({
-  key: 'video-uploader',
-  label: '影片上傳頻道',
-  settingsPath: PATHS.weverseUploader,
-  connected: (authUser) => Boolean(authUser?.authorizations?.video_uploader?.connected),
-});
-
 const SHEETS_REQUIREMENT = Object.freeze({
   key: 'sheets-readonly',
   label: 'Google 試算表',
@@ -40,7 +33,6 @@ const SHEETS_REQUIREMENT = Object.freeze({
 
 function requirementFor(toolId, scope) {
   if (scope === 'sheets_readonly') return SHEETS_REQUIREMENT;
-  if (scope === 'video_uploader' && toolId === 'weverse-uploader') return VIDEO_UPLOADER_REQUIREMENT;
   if (scope === 'youtube') return YOUTUBE_REQUIREMENTS[toolId];
   return null;
 }

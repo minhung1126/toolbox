@@ -4,12 +4,13 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.core.credential_store import CredentialStore, credential_store
 from backend.app.core.dependencies import require_ytmusic_context
 from backend.app.core.error_contract import http_error
+from backend.app.core.operation_store import OperationStore
 from backend.app.core.preview import (
     build_preview_token,
     playlist_snapshot_from_preview,
@@ -17,6 +18,7 @@ from backend.app.core.preview import (
 )
 from backend.app.core.request_protection import enforce_workflow_rate_limit
 from backend.app.core.youtube_context import YouTubeRequestContext
+from backend.app.services.operation_journal import get_operation_store, recording, start_operation
 from backend.app.services.playlist_sort_service import (
     apply_sort_to_playlist,
     build_sort_preview,
@@ -70,6 +72,7 @@ class SortPreviewInput(BaseModel):
 
 
 class SortApplyInput(BaseModel):
+    request_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
     playlist_id: str
     sort_keys: list[SortKeyInput]
     preview_token: str
@@ -189,9 +192,9 @@ async def preview_sort(
         raise http_error(500, "PREVIEW_FAILED", "產生排序預覽失敗，請稍後再試。") from e
 
 
-@router.post("/apply")
-async def apply_sort(
+async def _apply_sort(
     input_data: SortApplyInput,
+    recorder=None,
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
     rate_limit=Depends(enforce_workflow_rate_limit),
     token_store: CredentialStore = Depends(get_playlist_credential_store),
@@ -246,6 +249,17 @@ async def apply_sort(
         effective_fallback = input_data.allow_quota_fallback or (not has_custom_token)
         preview = build_sort_preview(original_items, sorted_items)
 
+        if recorder:
+            recorder.store.update(
+                recorder.owner,
+                recorder.id,
+                lambda operation: operation["plan"].update(
+                    validated_order=[
+                        {"playlist_item_id": item["playlist_item_id"], "video_id": item.get("video_id")}
+                        for item in sorted_items
+                    ]
+                ),
+            )
         result = await run_in_threadpool(
             apply_sort_to_playlist,
             context,
@@ -283,3 +297,50 @@ async def apply_sort(
                 "YouTube Music Token 執行失敗。已啟動嚴格防禦保護，阻止自動降級至 Google API 配額模式（避免無預警消耗配額）。請更新 Token 或確認以 Google API 配額繼續。",
             ) from e
         raise http_error(500, "APPLY_FAILED", "套用排序失敗，請稍後再試。") from e
+
+
+@router.post("/apply")
+async def apply_sort(
+    input_data: SortApplyInput,
+    context: YouTubeRequestContext = Depends(require_ytmusic_context),
+    rate_limit=Depends(enforce_workflow_rate_limit),
+    token_store: CredentialStore = Depends(get_playlist_credential_store),
+    client_factory: YtmusicClientFactory | None = Depends(get_playlist_client_factory),
+    operations: OperationStore = Depends(get_operation_store),
+):
+    if not isinstance(operations, OperationStore):
+        return await _apply_sort(
+            input_data, context=context, rate_limit=rate_limit, token_store=token_store, client_factory=client_factory
+        )
+    operation, recorder = start_operation(
+        operations,
+        context.owner_sub,
+        "youtube.playlist_sort",
+        input_data,
+        channel_id=getattr(context, "channel_id", None),
+    )
+    if recorder is None:
+        return {**operation["result"], "operation_id": operation["id"]}
+    try:
+        with recording(recorder):
+            result = await _apply_sort(
+                input_data,
+                recorder,
+                context=context,
+                rate_limit=rate_limit,
+                token_store=token_store,
+                client_factory=client_factory,
+            )
+            recorder.finish(result)
+        return {**result, "operation_id": recorder.id}
+    except BaseException as exc:
+        if (
+            isinstance(exc, HTTPException)
+            and isinstance(exc.detail, dict)
+            and exc.detail.get("code") == "playlist_write_unknown"
+        ):
+            recorder.update(outcome_unknown=True)
+        recorder.finish(failed=True)
+        if isinstance(exc, HTTPException):
+            exc.headers = {**(exc.headers or {}), "X-Operation-Id": recorder.id}
+        raise

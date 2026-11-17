@@ -1,10 +1,12 @@
 import React from 'react';
+import RecentToolRoutes from '../routes/RecentToolRoutes';
 import { Outlet } from 'react-router-dom';
 import { StatusMessage } from '../components/StatusMessage';
 import Navbar from '../components/Navbar';
 import { AccountWorkStateProvider } from '../hooks/useAccountWorkState';
 import { recoverPage } from '../utils/pageRecovery';
 import { useToolCatalog } from '../tools/ToolCatalogProvider';
+import { NoteDraftsProvider } from '../features/notes/NoteDrafts';
 import { PhotoCuratorSessionProvider } from '../features/photo-curator/PhotoCuratorSession';
 
 export default function AppShell({
@@ -22,9 +24,10 @@ export default function AppShell({
   sidebarCollapsed,
   setSidebarCollapsed,
 }) {
-  const { status: catalogStatus, error: catalogError, retry: retryCatalog } = useToolCatalog();
+  const { status: catalogStatus, error: catalogError, issues = [], retry: retryCatalog } = useToolCatalog();
   return (
     <AccountWorkStateProvider key={authUser.sub || authUser.email} initialState={workState} ready={workStateReady}>
+      <RecentToolRoutes />
       <div className={`app-container${sidebarCollapsed ? ' sidebar-is-collapsed' : ''}`}>
         <Navbar
           authUser={authUser}
@@ -33,6 +36,17 @@ export default function AppShell({
           setSidebarCollapsed={setSidebarCollapsed}
         />
         <main className="main-content">
+          {!!issues.length && (
+            <StatusMessage tone="warning" title="部分工具暫不可用">
+              <ul>
+                {issues.map((issue) => (
+                  <li key={issue.id}>
+                    {issue.id}：{issue.message}
+                  </li>
+                ))}
+              </ul>
+            </StatusMessage>
+          )}
           {catalogStatus === 'error' && (
             <StatusMessage
               tone="warning"
@@ -106,11 +120,13 @@ export default function AppShell({
               {settingsStatus.details.length > 0 && <small>{settingsStatus.details.join('；')}</small>}
             </StatusMessage>
           )}
-          <PhotoCuratorSessionProvider>
-            <React.Suspense fallback={<div className="loading-center">載入中…</div>}>
-              <Outlet />
-            </React.Suspense>
-          </PhotoCuratorSessionProvider>
+          <NoteDraftsProvider>
+            <PhotoCuratorSessionProvider>
+              <React.Suspense fallback={<div className="loading-center">載入中…</div>}>
+                <Outlet />
+              </React.Suspense>
+            </PhotoCuratorSessionProvider>
+          </NoteDraftsProvider>
         </main>
       </div>
     </AccountWorkStateProvider>

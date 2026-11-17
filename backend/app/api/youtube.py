@@ -46,6 +46,7 @@ from backend.app.core.dependencies import (
     require_youtube_context,
 )
 from backend.app.core.error_contract import http_error
+from backend.app.core.operation_store import OperationStore
 from backend.app.core.preview import (
     build_preview_token,
     input_digest,
@@ -56,6 +57,7 @@ from backend.app.core.preview import (
 )
 from backend.app.core.request_protection import enforce_workflow_rate_limit
 from backend.app.core.youtube_context import YouTubeRequestContext
+from backend.app.services.operation_journal import get_operation_store, run_youtube_recorded
 from backend.app.services.provider_errors import map_youtube_error
 from backend.app.services.sheets_service import (
     get_all_rows_for_sheet,
@@ -342,11 +344,21 @@ def run_batch_metadata_update(
     sheet_creds: Credentials = Depends(require_sheets_credentials),
     _rate_limit: None = Depends(enforce_workflow_rate_limit),
     workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
+    operations: OperationStore = Depends(get_operation_store),
 ):
     """Validate and update selected videos synchronously, returning one result per video."""
     del _rate_limit
     workflows = _resolve_workflow_service(workflows)
-    return workflows.run_batch_metadata_update(payload, creds=creds, sheet_creds=sheet_creds)
+    if not isinstance(operations, OperationStore):  # Direct Python callers retain their existing contract.
+        return workflows.run_batch_metadata_update(payload, creds=creds, sheet_creds=sheet_creds)
+    return run_youtube_recorded(
+        operations,
+        payload,
+        creds,
+        workflows,
+        "youtube.metadata_update",
+        lambda service: service.run_batch_metadata_update(payload, creds=creds, sheet_creds=sheet_creds),
+    )
 
 
 @router.post("/publish-and-cleanup")
@@ -355,11 +367,21 @@ def run_publish_and_cleanup(
     creds: YouTubeRequestContext = Depends(require_youtube_context),
     _rate_limit: None = Depends(enforce_workflow_rate_limit),
     workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
+    operations: OperationStore = Depends(get_operation_store),
 ):
     """Snapshot To-Post, sort oldest-first, then publish each video synchronously."""
     del _rate_limit
     workflows = _resolve_workflow_service(workflows)
-    return workflows.run_publish_and_cleanup(payload, creds=creds)
+    if not isinstance(operations, OperationStore):  # Direct Python callers retain their existing contract.
+        return workflows.run_publish_and_cleanup(payload, creds=creds)
+    return run_youtube_recorded(
+        operations,
+        payload,
+        creds,
+        workflows,
+        "youtube.publish_cleanup",
+        lambda service: service.run_publish_and_cleanup(payload, creds=creds),
+    )
 
 
 __all__ = [

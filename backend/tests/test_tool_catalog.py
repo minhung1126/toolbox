@@ -98,7 +98,6 @@ def test_backend_tool_catalog_matches_frontend_manifest_contract():
         "creator-tools": ["youtube", "sheets_readonly"],
         "youtube-music": ["youtube"],
         "sheets-tools": ["sheets_readonly"],
-        "weverse-uploader": ["video_uploader"],
         "youtube-integrations": ["youtube"],
     }
 
@@ -115,3 +114,24 @@ def test_backend_tool_catalog_matches_frontend_manifest_contract():
     assert routes_by_tool["youtube-music"]["/ytmusic/settings"]["required_scopes"] == []
     assert routes_by_tool["sheets-tools"]["/sheets/settings"]["required_scopes"] == []
     assert routes_by_tool["youtube-integrations"]["/youtube/settings/connections"]["required_scopes"] == []
+
+
+def test_tool_capability_copy_matches_runtime_and_does_not_promise_missing_writes():
+    """Metadata copy stays aligned without a second tool registry."""
+    tools = {tool["id"]: tool for tool in TestClient(app).get("/api/v1/tools").json()["tools"]}
+    root = Path(__file__).resolve().parents[2]
+    for manifest in (root / "frontend/src/features").rglob("manifest.js"):
+        source = manifest.read_text(encoding="utf-8")
+        tool_id = re.search(r"^  id: '([^']+)'", source, re.M)[1]
+        description = re.search(r"^  description:\s*'([^']+)'", source, re.M)[1]
+        assert description == tools[tool_id]["description"]
+    assert tools["sheets-tools"]["required_scopes"] == ["sheets_readonly"]
+    assert "剪貼簿" in tools["sheets-tools"]["description"]
+    assert "立即公開" in tools["creator-tools"]["description"]
+    assert "排程" not in tools["creator-tools"]["description"]
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    assert "**Google Drive 批次上傳**" not in readme
+    assert "**Google Sheets 雙向連動**" not in readme
+    capabilities = (root / "docs/TOOL_CAPABILITIES.md").read_text(encoding="utf-8")
+    for tool_id in tools:
+        assert f"| {tool_id} |" in capabilities

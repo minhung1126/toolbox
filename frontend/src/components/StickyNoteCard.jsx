@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Check, Copy, CopyPlus, Pin, Tag, Trash2 } from 'lucide-react';
 import { isAmbiguousNoteMutation, notesApi } from '../features/notes/api/notesApi';
 import { renderTemplate, templateVariables } from '../features/notes/model/template';
+import { useNoteDrafts } from '../features/notes/NoteDrafts';
+import { downloadJson } from '../utils/download';
 import { copyToClipboard } from '../utils/clipboard';
 import { useToast } from './Toast';
 import ConfirmDialog from './ConfirmDialog';
@@ -22,7 +24,14 @@ export function formatNoteDate(isoString) {
 
 export default function StickyNoteCard({ note, onUpdated, onDeleted, onReconcile, onDuplicate, duplicateDisabled }) {
   const toast = useToast();
-  const [localNote, setLocalNote] = useState(note);
+  const sharedDrafts = useNoteDrafts();
+  const fallbackDrafts = useRef(new Map());
+  const drafts = sharedDrafts || fallbackDrafts;
+  const [localNote, setLocalNote] = useState(() => ({ ...note, ...drafts.current.get(note.id) }));
+  const uncertainRef = useRef(Boolean(drafts.current.get(note.id)?.saveUncertain));
+  const [remoteNote, setRemoteNote] = useState(null);
+  const [checkingRemote, setCheckingRemote] = useState(false);
+  const rememberDraft = (next) => drafts.current.set(note.id, { ...next, saveUncertain: uncertainRef.current });
   const [copied, setCopied] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -39,20 +48,33 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted, onReconcile
     remark: value.remark,
     ...(value.note_type === 'template' ? { variables: value.variables || {} } : {}),
   });
-  const { saving, dirty, mutate } = useDebouncedAutosave({
+  const {
+    dirty,
+    mutate,
+    error: saveError,
+    status: saveStatus,
+    reset: resetAutosave,
+    flush: flushAutosave,
+  } = useDebouncedAutosave({
     value: draftOf(localNote),
     delay: 500,
     compareFn: (a, b) =>
       a.content === b.content && a.remark === b.remark && JSON.stringify(a.variables) === JSON.stringify(b.variables),
     onSave: async (nextData) => {
+      if (uncertainRef.current) throw new Error('上次儲存結果待核對；請先匯出草稿並核對伺服器內容。');
       const res = await notesApi.updateNote(note.id, nextData);
+      const current = drafts.current.get(note.id);
+      if (current && JSON.stringify(draftOf(current)) === JSON.stringify(nextData)) drafts.current.delete(note.id);
       // A completed request must not overwrite edits made while it was in flight.
       setLocalNote((prev) => ({ ...prev, updated_at: res.note.updated_at }));
       onUpdated?.(res.note);
     },
     onError: (err) => {
       if (isAmbiguousNoteMutation(err)) {
-        toast.error('無法確認便利貼是否已儲存；請重新整理清單核對內容。');
+        uncertainRef.current = true;
+        const latest = drafts.current.get(note.id);
+        if (latest) drafts.current.set(note.id, { ...latest, saveUncertain: true });
+        toast.error('無法確認是否已儲存；新文字仍保留。請先複製或匯出草稿，再重新讀取清單核對。');
         onReconcile?.();
       } else {
         toast.error(`便利貼自動儲存失敗：${err?.message || '未知錯誤'}`);
@@ -61,26 +83,56 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted, onReconcile
   });
 
   useEffect(() => {
-    if (!dirty) {
+    if (!dirty && !drafts.current.has(note.id)) {
       setLocalNote(note);
     }
-  }, [note, dirty]);
+  }, [note, dirty, drafts]);
+
+  const checkRemote = async () => {
+    setCheckingRemote(true);
+    try {
+      const response = await notesApi.getNote(note.id);
+      setRemoteNote(response.note);
+      if (JSON.stringify(draftOf(response.note)) === JSON.stringify(draftOf(localNote))) {
+        uncertainRef.current = false;
+        drafts.current.delete(note.id);
+        resetAutosave(draftOf(localNote));
+        setLocalNote(response.note);
+        onUpdated?.(response.note);
+        toast.success('已讀回核對，伺服器內容與目前文字一致。');
+      }
+    } catch (err) {
+      toast.error(`核對失敗，草稿仍保留：${err.message}`);
+    } finally {
+      setCheckingRemote(false);
+    }
+  };
+  const saveAfterReview = () => {
+    uncertainRef.current = false;
+    rememberDraft(localNote);
+    mutate(draftOf(localNote));
+    flushAutosave();
+    setRemoteNote(null);
+  };
 
   const handleContentChange = (e) => {
     const newContent = e.target.value;
     setLocalNote((prev) => ({ ...prev, content: newContent }));
+    rememberDraft({ ...localNote, content: newContent });
     mutate(draftOf({ ...localNote, content: newContent }));
   };
 
   const handleRemarkChange = (e) => {
     const newRemark = e.target.value;
     setLocalNote((prev) => ({ ...prev, remark: newRemark }));
+    rememberDraft({ ...localNote, remark: newRemark });
     mutate(draftOf({ ...localNote, remark: newRemark }));
   };
 
   const handleVariableChange = (name, value) => {
     const next = { ...localNote, variables: { ...localNote.variables, [name]: value } };
     setLocalNote(next);
+    rememberDraft(next);
     mutate(draftOf(next));
   };
 
@@ -119,6 +171,7 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted, onReconcile
       await notesApi.deleteNote(note.id);
       toast.success('便利貼已刪除');
       setConfirmDelete(false);
+      drafts.current.delete(note.id);
       onDeleted?.(note.id);
     } catch (err) {
       if (isAmbiguousNoteMutation(err) || err?.status === 404) {
@@ -174,6 +227,26 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted, onReconcile
           </div>
         </div>
 
+        {uncertainRef.current && (
+          <div className="info-banner card-stack" role="alert">
+            <p>上次儲存結果待核對；本次工作階段保留草稿並暫停自動儲存。請先複製或匯出。</p>
+            <button type="button" className="btn btn-secondary" disabled={checkingRemote} onClick={checkRemote}>
+              核對伺服器內容
+            </button>
+            {remoteNote && (
+              <>
+                <details open>
+                  <summary>伺服器目前內容（與上方草稿比較）</summary>
+                  <pre>{remoteNote.content}</pre>
+                  <p>{remoteNote.remark}</p>
+                </details>
+                <button type="button" className="btn btn-primary" onClick={saveAfterReview}>
+                  已核對，儲存目前草稿
+                </button>
+              </>
+            )}
+          </div>
+        )}
         <div className="sticky-note-body">
           {isTemplate && <span className="sticky-note-template-label">模板 · 使用 {'{變數名稱}'}</span>}
           <textarea
@@ -218,15 +291,37 @@ export default function StickyNoteCard({ note, onUpdated, onDeleted, onReconcile
             </span>
             <span className="sticky-note-divider">•</span>
             <span className="sticky-note-count">{charCount} 字</span>
-            {saving && (
-              <>
-                <span className="sticky-note-divider">•</span>
-                <span className="sticky-note-status">儲存中…</span>
-              </>
+            <span className="sticky-note-status" role="status">
+              {saveStatus === 'failed'
+                ? '儲存失敗 · 文字仍保留'
+                : saveStatus === 'saving'
+                  ? '儲存中…'
+                  : dirty || drafts.current.has(note.id)
+                    ? '有未儲存變更'
+                    : '已儲存'}
+            </span>
+            {saveError && (
+              <span role="alert">
+                {saveError.message}；請複製或匯出草稿後再核對。
+                {uncertainRef.current ? '結果不明，已停止後續自動儲存。' : ''}
+              </span>
             )}
           </div>
 
           <div className="sticky-note-footer-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() =>
+                downloadJson('note-draft.json', {
+                  version: 1,
+                  note: localNote,
+                  saved: !dirty && !drafts.current.has(note.id),
+                })
+              }
+            >
+              匯出此張（含草稿）
+            </button>
             <button
               type="button"
               className="btn btn-secondary sticky-note-copy-btn"

@@ -145,7 +145,7 @@ describe('Navbar', () => {
       within(submenu)
         .getAllByRole('link')
         .map((link) => link.textContent.trim())
-    ).toEqual(['系統設定', '系統／部署資訊', 'API 健康度']);
+    ).toEqual(['系統設定', '作業紀錄與對帳', '系統／部署資訊', 'API 健康度']);
   });
 
   it('exposes Instagram curation tool in navigation with active state', () => {
@@ -179,17 +179,6 @@ describe('Navbar', () => {
     expect(ffmpegLink).toHaveAttribute('href', PATHS.ffmpegGenerator);
     expect(ffmpegLink).toHaveAttribute('aria-current', 'page');
     expect(ffmpegLink).toHaveClass('active');
-  });
-
-  it('exposes Weverse Uploader in navigation with active state', () => {
-    window.localStorage.clear();
-    render(<NavbarHarness initialEntry={PATHS.weverseUploader} />);
-
-    const weverseLink = screen.getByRole('link', { name: 'Weverse 影片上傳' });
-    expect(weverseLink).toBeVisible();
-    expect(weverseLink).toHaveAttribute('href', PATHS.weverseUploader);
-    expect(weverseLink).toHaveAttribute('aria-current', 'page');
-    expect(weverseLink).toHaveClass('active');
   });
 });
 

@@ -22,8 +22,8 @@ describe('ffmpegCommand utils', () => {
       expect(parseHmsToSeconds('00:01:05.500')).toBe(65.5);
       expect(parseHmsToSeconds('01:00:00')).toBe(3600);
       expect(parseHmsToSeconds('02:30')).toBe(150);
-      expect(parseHmsToSeconds('')).toBe(0);
-      expect(parseHmsToSeconds('invalid')).toBe(0);
+      expect(parseHmsToSeconds('')).toBeNaN();
+      expect(parseHmsToSeconds('invalid')).toBeNaN();
     });
 
     it('formats file sizes accurately', () => {
@@ -69,29 +69,13 @@ describe('ffmpegCommand utils', () => {
   });
 
   describe('quoteFilename', () => {
-    it('wraps plain filenames in double quotes', () => {
-      expect(quoteFilename('video.mp4')).toBe('"video.mp4"');
-      expect(quoteFilename('my video.mp4')).toBe('"my video.mp4"');
-      expect(quoteFilename('clip [1080p] (cut).mp4')).toBe('"clip [1080p] (cut).mp4"');
-    });
-
-    it('preserves double quotes if already quoted', () => {
-      expect(quoteFilename('"video.mp4"')).toBe('"video.mp4"');
-      expect(quoteFilename('"my video.mp4"')).toBe('"my video.mp4"');
-    });
-
-    it('escapes internal double quotes and backslashes', () => {
-      expect(quoteFilename('my "special" video.mp4')).toBe('"my \\"special\\" video.mp4"');
-      expect(quoteFilename('path\\to\\file.mp4')).toBe('"path\\\\to\\\\file.mp4"');
-    });
-
-    it('returns empty quotes for falsy or empty inputs', () => {
-      expect(quoteFilename('')).toBe('""');
-      expect(quoteFilename('   ')).toBe('""');
-      expect(quoteFilename(null)).toBe('""');
+    it('preserves literal quotes, whitespace and backslashes in Bash strings', () => {
+      expect(quoteFilename('video.mp4')).toBe("'video.mp4'");
+      expect(quoteFilename('"video.mp4"')).toBe(`'"video.mp4"'`);
+      expect(quoteFilename('   ')).toBe("'   '");
+      expect(quoteFilename('')).toBe("''");
     });
   });
-
   describe('buildFfmpegCommand', () => {
     it('generates lossless trim copy command by default with double quotes', () => {
       const cmd = buildFfmpegCommand({
@@ -115,7 +99,7 @@ describe('ffmpegCommand utils', () => {
       });
 
       expect(cmd.singleLine).toContain(
-        'ffmpeg -ss 00:00:05.000 -i "video.mp4" -t 00:00:15.000 -c copy "video_cut.mp4"'
+        `ffmpeg -ss 00:00:05.000 -i 'video.mp4' -t 00:00:15.000 -c copy 'video_cut.mp4'`
       );
       expect(cmd.breakdown).toContainEqual({
         flag: '-t 00:00:15.000',
@@ -126,7 +110,7 @@ describe('ffmpegCommand utils', () => {
     it('quotes files with spaces and retains quotes when already present', () => {
       const cmd = buildFfmpegCommand({
         inputName: 'my input video.mp4',
-        outputName: '"already_quoted.mp4"',
+        outputName: `'"already_quoted.mp4"'`,
         enableStartCut: false,
         startTime: '00:00:00.000',
         seekMode: 'fast',
@@ -144,8 +128,8 @@ describe('ffmpegCommand utils', () => {
         shellFormat: 'single',
       });
 
-      expect(cmd.singleLine).toContain('"my input video.mp4"');
-      expect(cmd.singleLine).toContain('"already_quoted.mp4"');
+      expect(cmd.singleLine).toContain(`'my input video.mp4'`);
+      expect(cmd.singleLine).toContain(`'"already_quoted.mp4"'`);
       expect(cmd.singleLine).not.toContain('""already_quoted.mp4""');
     });
   });

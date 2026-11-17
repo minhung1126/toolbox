@@ -1,4 +1,5 @@
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { personKey } from '../features/sheets/model/personOptions';
 const memberKey = personKey({ team: '團體 A', person: '人物甲', kind: 'person' });
 import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
@@ -123,11 +124,13 @@ const videoTwo = {
 
 function renderPage() {
   return render(
-    <BatchUpdatePage
-      authUser={authUser}
-      sysSettings={{ default_spreadsheet_id: 'sheet-a', default_playlist_id: 'playlist-a' }}
-      videoType="Video"
-    />
+    <MemoryRouter>
+      <BatchUpdatePage
+        authUser={authUser}
+        sysSettings={{ default_spreadsheet_id: 'sheet-a', default_playlist_id: 'playlist-a' }}
+        videoType="Video"
+      />
+    </MemoryRouter>
   );
 }
 
@@ -247,7 +250,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
 
     const assignmentSelect = container.querySelector('.video-card-assignment select');
     fireEvent.change(assignmentSelect, { target: { value: memberKey } });
-    fireEvent.click(screen.getByRole('button', { name: '產生完整批次預覽' }));
+    fireEvent.click(screen.getByRole('button', { name: /產生完整批次預覽/ }));
 
     expect(await screen.findByText('批次更新預覽')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -257,7 +260,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
     expect(within(previewPanel).getAllByText('舊標題一').length).toBeGreaterThan(0);
     expect(within(previewPanel).getByText('新標題一')).toBeInTheDocument();
     expect(within(previewPanel).getByText('原因：未指定人物')).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole('button', { name: '確認這份預覽並更新' }));
+    fireEvent.click(await screen.findByRole('button', { name: /確認這份預覽並更新/ }));
     const dialog = await screen.findByRole('dialog', { name: '確認批次更新 1 支影片' });
     expect(within(dialog).getByText('將更新')).toBeInTheDocument();
     expect(within(dialog).getByText('略過')).toBeInTheDocument();
@@ -287,7 +290,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
     await readDraftVideos();
     await screen.findByText('舊標題一');
     fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
-    fireEvent.click(screen.getByRole('button', { name: '產生完整批次預覽' }));
+    fireEvent.click(screen.getByRole('button', { name: /產生完整批次預覽/ }));
 
     expect(await screen.findByText('建立完整批次預覽失敗：批次更新預覽回應格式不正確。')).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: /確認批次更新/ })).not.toBeInTheDocument();
@@ -303,8 +306,8 @@ describe('BatchUpdatePage preview and confirmation', () => {
     await readDraftVideos();
     await screen.findByText('舊標題一');
     fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
-    fireEvent.click(screen.getByRole('button', { name: '產生完整批次預覽' }));
-    fireEvent.click(await screen.findByRole('button', { name: '確認這份預覽並更新' }));
+    fireEvent.click(screen.getByRole('button', { name: /產生完整批次預覽/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /確認這份預覽並更新/ }));
     const dialog = await screen.findByRole('dialog', { name: '確認批次更新 1 支影片' });
     fireEvent.click(within(dialog).getByRole('button', { name: '開始批次更新' }));
 
@@ -341,12 +344,12 @@ describe('BatchUpdatePage preview and confirmation', () => {
     await readDraftVideos();
     await screen.findByText('舊標題一');
     fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
-    fireEvent.click(screen.getByRole('button', { name: '產生完整批次預覽' }));
+    fireEvent.click(screen.getByRole('button', { name: /產生完整批次預覽/ }));
     await screen.findByText('新標題一');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    fireEvent.click(await screen.findByRole('button', { name: '確認這份預覽並更新' }));
+    fireEvent.click(await screen.findByRole('button', { name: /確認這份預覽並更新/ }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '取消' }));
-    fireEvent.click(screen.getByRole('button', { name: '確認這份預覽並更新' }));
+    fireEvent.click(screen.getByRole('button', { name: /確認這份預覽並更新/ }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '開始批次更新' }));
     await waitFor(() => expect(mocks.api.batchUpdateMetadata).toHaveBeenCalledOnce());
     expect(mocks.api.getBatchPreview).toHaveBeenCalledOnce();
@@ -369,8 +372,8 @@ describe('BatchUpdatePage preview and confirmation', () => {
     await readDraftVideos();
     await screen.findByText('舊標題一');
     fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
-    fireEvent.click(screen.getByRole('button', { name: '產生完整批次預覽' }));
-    fireEvent.click(await screen.findByRole('button', { name: '確認這份預覽並更新' }));
+    fireEvent.click(screen.getByRole('button', { name: /產生完整批次預覽/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /確認這份預覽並更新/ }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '開始批次更新' }));
     await waitFor(() => expect(mocks.api.batchUpdateMetadata).toHaveBeenCalledOnce());
     const reload = screen.getByRole('button', { name: '讀取 Video 草稿影片' });

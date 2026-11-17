@@ -36,7 +36,6 @@ vi.mock('../pages/SystemSettingsPage', () => ({ default: () => <div>system setti
 vi.mock('../pages/StickyNotesPage', () => ({ default: () => <div>notes route</div> }));
 vi.mock('../pages/PhotoCuratorPage', () => ({ default: () => <div>photo curator route</div> }));
 vi.mock('../pages/FfmpegGeneratorPage', () => ({ default: () => <div>FFmpeg route</div> }));
-vi.mock('../pages/WeverseUploaderPage', () => ({ default: () => <div>Weverse uploader route</div> }));
 vi.mock('../pages/LoginPage', () => ({ default: ({ returnTo }) => <div>login route {returnTo || 'none'}</div> }));
 
 function LocationProbe() {
@@ -137,7 +136,7 @@ describe('AppRoutes', () => {
       })),
     });
     renderRoutes(PATHS.youtubeVideoDrafts);
-    expect(await screen.findByText('工具 creator-tools 的版本不受支援。')).toBeInTheDocument();
+    expect(await screen.findByText('此工具目前無法使用。')).toBeInTheDocument();
     expect(screen.queryByText('Video batch route')).not.toBeInTheDocument();
   });
 
@@ -172,11 +171,6 @@ describe('AppRoutes', () => {
   ])('renders %s', async (path, expected) => {
     renderRoutes(path);
     expect(await screen.findByText(expected)).toBeInTheDocument();
-  });
-
-  it('renders the lazy-loaded Weverse uploader route', async () => {
-    renderRoutes(PATHS.weverseUploader);
-    expect(await screen.findByText('Weverse uploader route')).toBeInTheDocument();
   });
 
   it.each([

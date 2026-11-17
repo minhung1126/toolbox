@@ -9,7 +9,6 @@ test('missing capabilities show their own authorization destinations without hid
     '/youtube/settings/connections'
   );
   await expect(page.getByRole('link', { name: '連線 YouTube Music' })).toHaveAttribute('href', '/ytmusic/settings');
-  await expect(page.getByRole('link', { name: '連線 影片上傳頻道' })).toHaveAttribute('href', '/weverse-uploader');
   await expect(page.getByRole('link', { name: '進入 Video 草稿' })).toBeVisible();
   await expect(
     page.locator('.feature-card').filter({ hasText: '發布草稿' }).getByRole('link', { name: '連線 Google 試算表' })
@@ -30,16 +29,14 @@ test('YT Music does not claim missing authorization when the channel fallback is
       authorizations: {
         sheets: { connected: false },
         ytmusic: { connected: false },
-        video_uploader: { connected: false },
       },
       google_scopes: {},
       youtube: { slots: { primary: { authenticated: true } } },
     },
   });
   await page.goto('/dashboard');
-  await expect(page.getByText('9 個工具模組已啟用')).toBeVisible();
+  await expect(page.getByText('8 個工具模組已啟用')).toBeVisible();
   await expect(page.getByRole('link', { name: '連線 YouTube Music' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: '連線 影片上傳頻道' })).toBeVisible();
 });
 
 test('mismatched YouTube channels are not presented as a usable connection', async ({ page }) => {
@@ -50,7 +47,6 @@ test('mismatched YouTube channels are not presented as a usable connection', asy
       authorizations: {
         sheets: { connected: true },
         ytmusic: { connected: false },
-        video_uploader: { connected: false },
       },
       youtube: {
         routing_mode: 'auto_primary',
@@ -79,7 +75,7 @@ for (const [label, override] of [
       },
     });
     await page.goto('/dashboard');
-    await expect(page.getByText('8 個工具模組已啟用')).toBeVisible();
+    await expect(page.getByText('7 個工具模組已啟用')).toBeVisible();
     await expect(page.getByRole('link', { name: '便利貼' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: '進入便利貼' })).toHaveCount(0);
 

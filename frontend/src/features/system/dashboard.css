@@ -376,3 +376,10 @@
     grid-template-columns: 1fr;
   }
 }
+
+.operation-evidence {
+  max-height: 30rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

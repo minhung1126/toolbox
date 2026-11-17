@@ -210,10 +210,10 @@ def create_app(
     *,
     app_settings=None,
     notes_store=None,
+    operation_store=None,
     account_state_store=None,
     session_store=None,
     credential_store=None,
-    upload_worker=None,
     youtube_workflow_adapters=None,
     youtube_quota_trackers=None,
     request_limiter=None,
@@ -224,7 +224,7 @@ def create_app(
     dependency_overrides=None,
     initialize_config=True,
 ) -> FastAPI:
-    """Compose per-app repositories, workflow adapters, registry and worker lifecycle."""
+    """Compose per-app repositories, workflow adapters and registry lifecycle."""
     if youtube_quota_trackers is not None:
         youtube_quota_trackers = dict(youtube_quota_trackers)
         if set(youtube_quota_trackers) != {"primary", "secondary"}:
@@ -239,11 +239,6 @@ def create_app(
     if registry is None:
         registry = ToolRegistry()
         register_builtin_tools(registry)
-    if upload_worker is None:
-        from backend.app.core.weverse_upload_store import WeverseUploadStore
-        from backend.app.services.weverse_uploader_service import UploadWorker
-
-        upload_worker = UploadWorker(WeverseUploadStore())
     application = FastAPI(
         title="Toolbox API",
         description="FastAPI backend for the Toolbox platform, Google OAuth, Google Sheets, and YouTube workflows.",
@@ -263,6 +258,9 @@ def create_app(
     application.state.youtube_quota_trackers = youtube_quota_trackers
     application.add_middleware(YouTubeQuotaMiddleware, trackers=youtube_quota_trackers)
     application.state.tool_registry = registry
+    from backend.app.core.operation_store import OperationStore
+
+    application.state.operation_store = operation_store if operation_store is not None else OperationStore()
     application.state.notes_store = notes_store
     application.state.account_state_store = (
         default_account_state_store if account_state_store is None else account_state_store
@@ -272,7 +270,6 @@ def create_app(
     application.add_middleware(SessionStoreMiddleware, store=session_store)
     application.state.credential_store = credential_store
     application.add_middleware(CredentialStoreMiddleware, store=credential_store)
-    application.state.upload_worker = upload_worker
     application.state.youtube_workflow_adapters = dict(youtube_workflow_adapters or {})
     application.dependency_overrides.update(dependency_overrides or {})
     application.add_exception_handler(RequestValidationError, request_validation_error_handler)
@@ -304,6 +301,14 @@ def create_app(
 
     application.add_middleware(SettingsMiddleware, config=config)
     application.include_router(create_api_router(registry))
+
+    @application.api_route(
+        "/api/{unknown_path:path}",
+        include_in_schema=False,
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    )
+    def unknown_api_path(unknown_path: str):
+        raise http_error(404, "not_found", "找不到要求的 API。")
 
     if frontend_dist.is_dir():
         assets_dir = frontend_dist / "assets"

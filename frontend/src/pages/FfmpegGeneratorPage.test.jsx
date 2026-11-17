@@ -31,7 +31,7 @@ describe('FfmpegGeneratorPage', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'FFmpeg 命令行生成器' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '選擇影片', exact: true })).toBeInTheDocument();
-    expect(screen.getByText('極速無損剪切')).toBeInTheDocument();
+    expect(screen.getByText(/極速無損剪切/)).toBeInTheDocument();
 
     // Default command block should include ffmpeg and -c copy
     const codeEl = screen.getByText((content) => content.includes('ffmpeg') && content.includes('-c copy'));
@@ -58,10 +58,10 @@ describe('FfmpegGeneratorPage', () => {
     render(<FfmpegGeneratorPage />);
 
     // Click H.264 preset
-    const h264Btn = screen.getByRole('button', { name: /H\.264 高相容/ });
+    const h264Btn = screen.getByRole('button', { name: /高相容 H\.264/ });
     fireEvent.click(h264Btn);
 
-    expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('H.264 高相容'));
+    expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('高相容 H.264'));
 
     const codeEl = screen.getByText((content) => content.includes('-c:v libx264') && content.includes('-crf 23'));
     expect(codeEl).toBeInTheDocument();
@@ -70,8 +70,8 @@ describe('FfmpegGeneratorPage', () => {
   it('switches shell formatting to PowerShell', () => {
     const { container } = render(<FfmpegGeneratorPage />);
 
-    const psBtn = screen.getByRole('button', { name: /PowerShell/ });
-    fireEvent.click(psBtn);
+    fireEvent.change(screen.getByLabelText('執行環境'), { target: { value: 'powershell' } });
+    fireEvent.change(screen.getByLabelText('指令排版'), { target: { value: 'multiline' } });
 
     // Multiline powershell command uses backtick `
     const codeEl = container.querySelector('pre.command-code code');

@@ -8,6 +8,7 @@ from typing import Any
 
 from backend.app.core.credential_store import CredentialStore
 from backend.app.core.youtube_context import YouTubeRequestContext
+from backend.app.services.operation_journal import tracked_write
 from backend.app.services.playlist_write_outcome import PlaylistWriteNotStarted, PlaylistWriteOutcomeUnknown
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
 from backend.app.services.youtube_service import (
@@ -648,7 +649,12 @@ def apply_sort_to_playlist(
             },
         )
         try:
-            new_pl = _execute_with_quota(req, "playlists.insert", context)
+            new_pl = tracked_write(
+                "playlists.insert",
+                "",
+                lambda: _execute_with_quota(req, "playlists.insert", context),
+                {"title": safe_title},
+            )
         except YouTubeQuotaUnavailable:
             raise
         except Exception as exc:
@@ -683,7 +689,12 @@ def apply_sort_to_playlist(
                         },
                     },
                 )
-                _execute_with_quota(add_req, "playlistItems.insert", context)
+                tracked_write(
+                    "playlistItems.insert",
+                    str(vid),
+                    lambda: _execute_with_quota(add_req, "playlistItems.insert", context),
+                    {"playlist_id": new_playlist_id, "position": index},
+                )
                 succeeded += 1
                 quota_used += 50
             except YouTubeQuotaUnavailable:
@@ -776,7 +787,12 @@ def apply_sort_to_playlist(
                         },
                     },
                 )
-                _execute_with_quota(request, "playlistItems.update", context)
+                tracked_write(
+                    "playlistItems.update",
+                    str(target_id),
+                    lambda: _execute_with_quota(request, "playlistItems.update", context),
+                    {"playlist_id": playlist_id, "position": target_pos},
+                )
                 succeeded += 1
                 quota_used += 50
             except YouTubeQuotaUnavailable:

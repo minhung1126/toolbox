@@ -252,7 +252,9 @@ export function usePhotoCuratorWorkflow({ toast }) {
 
     setPosts(distributedPosts);
     setUnassignedIds([]);
-    toast.success(`已依時間軸自動均分：${distributedPosts.map((post) => `${post.photoIds.length} 張`).join('、')}`);
+    toast.success(
+      `已依檔案修改時間（非拍攝時間）自動均分：${distributedPosts.map((post) => `${post.photoIds.length} 張`).join('、')}`
+    );
   };
 
   // Reset all
@@ -286,6 +288,10 @@ export function usePhotoCuratorWorkflow({ toast }) {
 
   // Export structured ZIP
   const handleExportZip = async () => {
+    if (photos.some((photo) => !photo.file)) {
+      toast.warning('請先補齊缺少的本機照片再下載 ZIP。');
+      return;
+    }
     const assignedCount = posts.reduce((sum, post) => sum + post.photoIds.length, 0);
     if (assignedCount === 0) {
       toast.warning('目前尚未分配任何照片至貼文。');

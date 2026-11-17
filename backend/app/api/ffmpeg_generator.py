@@ -1,5 +1,9 @@
 """API router for FFmpeg Command Generator tool."""
 
+import json
+import math
+import re
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter
@@ -24,11 +28,13 @@ class FfmpegPreset(BaseModel):
     audio_filters: Optional[str] = None
     output_ext: str = "mp4"
     extra_args: Optional[str] = None
+    audio_bitrate: Optional[str] = None
+    resolution: str = "original"
 
 
 class ParseTimeRequest(BaseModel):
     time_str: Optional[str] = Field(default=None, max_length=50)
-    seconds: Optional[float] = Field(default=None, ge=0)
+    seconds: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
 
 
 class ParseTimeResponse(BaseModel):
@@ -58,6 +64,9 @@ class BuildCommandRequest(BaseModel):
     remove_video: bool = False
     custom_filters: Optional[str] = Field(default=None, max_length=500)
     shell: str = Field(default="bash", pattern="^(bash|powershell|cmd)$")
+    shell_dialect: Optional[str] = Field(default=None, pattern="^(bash|powershell|cmd)$")
+    line_layout: str = Field(default="multiline", pattern="^(single|multiline)$")
+    source_duration: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
 
 
 class CommandParamExplanation(BaseModel):
@@ -66,88 +75,15 @@ class CommandParamExplanation(BaseModel):
 
 
 class BuildCommandResponse(BaseModel):
+    command_active: str
     command_single: str
     command_multi: str
     breakdown: List[CommandParamExplanation]
 
 
-PRESET_TEMPLATES: List[FfmpegPreset] = [
-    FfmpegPreset(
-        id="lossless-trim",
-        name="極速無損剪切 (Stream Copy)",
-        description="不經過重新編碼，以最快速度無失真裁剪片段，保留原始畫面與音質。",
-        category="剪輯裁剪",
-        mode="copy",
-        video_codec="copy",
-        audio_codec="copy",
-        output_ext="mp4",
-    ),
-    FfmpegPreset(
-        id="high-quality-h264",
-        name="高相容 H.264 (x264 平衡畫質)",
-        description="最通用的 MP4/H.264 編碼，CRF 23 視覺平衡，相容於幾乎所有播放器與社交平台。",
-        category="標準轉檔",
-        mode="reencode",
-        video_codec="libx264",
-        audio_codec="aac",
-        crf=23,
-        preset="medium",
-        output_ext="mp4",
-    ),
-    FfmpegPreset(
-        id="efficient-h265",
-        name="高效壓縮 H.265 (HEVC)",
-        description="在維持高畫質的同時顯著減少檔案大小，適合存檔與現代行動裝置播放。",
-        category="標準轉檔",
-        mode="reencode",
-        video_codec="libx265",
-        audio_codec="aac",
-        crf=26,
-        preset="medium",
-        output_ext="mp4",
-    ),
-    FfmpegPreset(
-        id="vertical-shorts",
-        name="社群 9:16 Shorts/Reels (黑邊補齊)",
-        description="將橫向影片等比例縮放至 1080x1920，並自動在上下居中補黑邊，適用於 Shorts 或 TikTok。",
-        category="社群短片",
-        mode="reencode",
-        video_codec="libx264",
-        audio_codec="aac",
-        crf=22,
-        preset="fast",
-        video_filters="scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2",
-        output_ext="mp4",
-    ),
-    FfmpegPreset(
-        id="extract-audio-mp3",
-        name="擷取音訊為 MP3",
-        description="移除視訊軌，直接輸出高品質 192kbps MP3 音訊檔案。",
-        category="音訊處理",
-        mode="audio",
-        audio_codec="libmp3lame",
-        audio_bitrate="192k",
-        output_ext="mp3",
-    ),
-    FfmpegPreset(
-        id="mute-video",
-        name="移除音軌 (影片靜音)",
-        description="保留視訊流複製，移除所有音軌，生成純靜音影片。",
-        category="音訊處理",
-        mode="copy",
-        video_codec="copy",
-        output_ext="mp4",
-        extra_args="-an",
-    ),
-    FfmpegPreset(
-        id="animated-gif",
-        name="高品質動態 GIF",
-        description="透過兩階段調色盤優化 (palettegen/paletteuse) 產生不失真的高流暢 GIF 動圖。",
-        category="特效轉檔",
-        mode="gif",
-        video_filters="fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
-        output_ext="gif",
-    ),
+PRESET_TEMPLATES = [
+    FfmpegPreset(**item)
+    for item in json.loads((Path(__file__).parents[1] / "resources/ffmpeg-presets.v1.json").read_text())["presets"]
 ]
 
 
@@ -163,32 +99,15 @@ def seconds_to_hhmmss(total_seconds: float) -> str:
 
 def parse_time_string(time_str: str) -> Optional[float]:
     """Parse a time string (hh:mm:ss, mm:ss, ss.mmm) into seconds float."""
-    s = time_str.strip()
-    if not s:
+    if not re.fullmatch(r"(?:\d+:)?(?:[0-5]?\d:)?\d+(?:\.\d+)?", time_str):
         return None
-    # Check simple float
-    try:
-        val = float(s)
-        return max(0.0, val)
-    except ValueError:
-        pass
-
-    # Match hh:mm:ss[.mmm] or mm:ss[.mmm]
-    parts = s.split(":")
-    try:
-        if len(parts) == 3:
-            h = float(parts[0])
-            m = float(parts[1])
-            sec = float(parts[2])
-            return max(0.0, h * 3600 + m * 60 + sec)
-        elif len(parts) == 2:
-            m = float(parts[0])
-            sec = float(parts[1])
-            return max(0.0, m * 60 + sec)
-    except ValueError:
+    parts = [float(part) for part in time_str.split(":")]
+    if len(parts) > 1 and parts[-1] >= 60 or len(parts) == 3 and parts[1] >= 60:
         return None
-
-    return None
+    total = 0.0
+    for part in parts:
+        total = total * 60 + part
+    return total if math.isfinite(total) else None
 
 
 @router.get("/presets", response_model=List[FfmpegPreset])
@@ -212,25 +131,65 @@ def parse_time(req: ParseTimeRequest) -> ParseTimeResponse:
     raise http_error(400, "invalid_time_format", "無法解析提供的時間格式。請使用 hh:mm:ss.mmm 或秒數。")
 
 
-def safe_quote_filename(name: str) -> str:
-    """Ensure filenames are safely wrapped in double quotes for CLI execution, escaping quotes."""
-    cleaned = (name or "").strip()
-    if not cleaned:
-        return '""'
-    if cleaned.startswith('"') and cleaned.endswith('"') and len(cleaned) >= 2:
-        cleaned = cleaned[1:-1]
-    escaped = cleaned.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'
+def safe_quote_filename(name: str, shell: str = "bash") -> str:
+    """Quote exactly one argument. CMD expansion characters are deliberately rejected."""
+    if re.search(r"[\x00-\x1f\x7f]", name):
+        raise ValueError("不可包含換行或控制字元。")
+    if shell == "cmd":
+        if any(char in name for char in '%!"'):
+            raise ValueError("CMD 無法可靠保留 %、! 或雙引號；請改用 Bash 或 PowerShell。")
+        return '"' + re.sub(r"(\\+)$", r"\1\1", name) + '"'
+    if shell == "powershell":
+        return "'" + name.replace("'", "''") + "'"
+    return "'" + name.replace("'", "'\"'\"'") + "'"
 
 
 @router.post("/build", response_model=BuildCommandResponse)
 def build_command(req: BuildCommandRequest) -> BuildCommandResponse:
     """Generate the FFmpeg command line and breakdown."""
-    input_file = req.input_file.strip() or "input.mp4"
-    output_file = req.output_file.strip() or "output.mp4"
+    import ntpath
+    import posixpath
 
-    in_safe = safe_quote_filename(input_file)
-    out_safe = safe_quote_filename(output_file)
+    shell = req.shell_dialect or req.shell
+    errors = {}
+    for field, value in req.model_dump().items():
+        if isinstance(value, str) and not (field == "volume" and value == "100%"):
+            try:
+                safe_quote_filename(value, shell)
+            except ValueError as exc:
+                errors[field] = str(exc)
+    for field in ("input_file", "output_file"):
+        value = getattr(req, field)
+        if not value.strip() or value.startswith("-"):
+            errors[field] = "請填寫檔名；開頭不可為 -。"
+
+    def normalize(name):
+        return (
+            ntpath.normcase(ntpath.normpath(name)) if re.search(r"^[a-z]:|\\", name, re.I) else posixpath.normpath(name)
+        )
+
+    if normalize(req.input_file) == normalize(req.output_file):
+        errors["output_file"] = "輸入與輸出不可為同一路徑。"
+    for field in ("start_time", "end_time", "duration"):
+        value = getattr(req, field)
+        if value is not None and parse_time_string(value) is None:
+            errors[field] = "請輸入有效的非負時間。"
+    start = parse_time_string(req.start_time or "0") or 0
+    end = (
+        parse_time_string(req.end_time or "")
+        if req.cut_mode == "to"
+        else start + (parse_time_string(req.duration or "") or 0)
+        if req.duration is not None
+        else None
+    )
+    if end is not None and end <= start:
+        errors["end_time" if req.cut_mode == "to" else "duration"] = "終點須晚於起點，長度須大於零。"
+    if req.source_duration and (start >= req.source_duration or end is not None and end > req.source_duration + 0.001):
+        errors["end_time"] = "裁切範圍超過已知影片長度。"
+    if errors:
+        raise http_error(400, "invalid_command", "請修正欄位後再複製指令。", field_errors=errors)
+    input_file, output_file = req.input_file, req.output_file
+    in_safe, out_safe = input_file, output_file
 
     breakdown: List[CommandParamExplanation] = []
     args: List[str] = ["ffmpeg"]
@@ -268,7 +227,10 @@ def build_command(req: BuildCommandRequest) -> BuildCommandResponse:
         end_sec = parse_time_string(req.end_time)
         if end_sec is not None:
             time_fmt = seconds_to_hhmmss(end_sec)
-            args.extend(["-to", time_fmt])
+            if start_sec and req.seek_mode == "fast":
+                args.extend(["-t", seconds_to_hhmmss(end_sec - start_sec)])
+            else:
+                args.extend(["-to", time_fmt])
             breakdown.append(
                 CommandParamExplanation(
                     param=f"-to {time_fmt}",
@@ -352,12 +314,12 @@ def build_command(req: BuildCommandRequest) -> BuildCommandResponse:
             v_filters.append(f"fps={req.fps}")
 
         if req.custom_filters:
-            clean_filter = req.custom_filters.strip().replace('"', '\\"')
+            clean_filter = req.custom_filters.strip()
             v_filters.append(clean_filter)
 
         if v_filters:
             combined_vf = ",".join(v_filters)
-            args.extend(["-vf", f'"{combined_vf}"'])
+            args.extend(["-vf", combined_vf])
             breakdown.append(
                 CommandParamExplanation(
                     param=f'-vf "{combined_vf}"', explanation="套用視訊濾鏡（解析度、幀率或自訂縮放）"
@@ -387,7 +349,7 @@ def build_command(req: BuildCommandRequest) -> BuildCommandResponse:
 
         if req.volume and req.volume != "100%":
             clean_vol = req.volume.strip().replace('"', "").replace("'", "")
-            args.extend(["-af", f'"volume={clean_vol}"'])
+            args.extend(["-af", f"volume={clean_vol}"])
             breakdown.append(
                 CommandParamExplanation(
                     param=f'-af "volume={clean_vol}"', explanation=f"音訊濾鏡：音量調整為 {clean_vol}"
@@ -399,7 +361,13 @@ def build_command(req: BuildCommandRequest) -> BuildCommandResponse:
     breakdown.append(CommandParamExplanation(param=out_safe, explanation=f"輸出目標檔案路徑：{out_safe}"))
 
     # Generate single-line and multi-line commands
-    line_sep = " \\\n  " if req.shell == "bash" else (" `\n  " if req.shell == "powershell" else " ^\n  ")
+    line_sep = " \\\n  " if shell == "bash" else (" `\n  " if shell == "powershell" else " ^\n  ")
+    args = [
+        arg
+        if index == 0 or re.fullmatch(r"[a-zA-Z0-9_.:/-]+", arg) and arg != input_file and index != len(args) - 1
+        else safe_quote_filename(arg, shell)
+        for index, arg in enumerate(args)
+    ]
     command_single = " ".join(args)
 
     # Multi-line formatting grouping
@@ -417,6 +385,7 @@ def build_command(req: BuildCommandRequest) -> BuildCommandResponse:
     command_multi = line_sep.join(multi_groups)
 
     return BuildCommandResponse(
+        command_active=command_single if req.line_layout == "single" else command_multi,
         command_single=command_single,
         command_multi=command_multi,
         breakdown=breakdown,

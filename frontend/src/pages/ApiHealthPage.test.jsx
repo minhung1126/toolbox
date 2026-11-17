@@ -1,8 +1,16 @@
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ApiHealthPage from './ApiHealthPage';
 
+vi.mock('../services/api', () => ({
+  api: {
+    getHealth: vi
+      .fn()
+      .mockResolvedValue({ ready: true, status: 'healthy', configuration: {}, tools: {}, warnings: [] }),
+  },
+}));
 vi.mock('../components/YouTubeQuotaBanner', () => ({
   default: ({ refreshKey }) => <div data-testid="quota-refresh-key">{refreshKey}</div>,
 }));
@@ -23,7 +31,11 @@ describe('ApiHealthPage visibility polling', () => {
   });
 
   it('stops background polling and refreshes once when visible again', async () => {
-    render(<ApiHealthPage authUser={{ youtube: {} }} />);
+    render(
+      <MemoryRouter>
+        <ApiHealthPage authUser={{ youtube: {} }} />
+      </MemoryRouter>
+    );
     expect(screen.getByTestId('quota-refresh-key')).toHaveTextContent('0');
 
     await act(async () => {

@@ -1,4 +1,5 @@
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../services/api';
@@ -79,7 +80,7 @@ function playlistResponse(playlistId, videos = [videoOne], overrides = {}) {
 }
 
 function renderPage({ authUser = primaryAuthUser, sysSettings = { default_playlist_id: 'playlist-a' } } = {}) {
-  return render(<PublishCleanerPage authUser={authUser} sysSettings={sysSettings} />);
+  return render(<PublishCleanerPage authUser={authUser} sysSettings={sysSettings} />, { wrapper: MemoryRouter });
 }
 
 function loadButton() {

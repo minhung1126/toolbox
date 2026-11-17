@@ -6,9 +6,9 @@ export const PATHS = Object.freeze({
   systemInfo: '/system/info',
   componentShowcase: '/system/design-system',
   notes: '/notes',
+  operations: '/operations',
   photoCurator: '/photo-curator',
   ffmpegGenerator: '/ffmpeg-generator',
-  weverseUploader: '/weverse-uploader',
 
   youtubeVideoDrafts: '/youtube/drafts/videos',
   youtubeShortsDrafts: '/youtube/drafts/shorts',
@@ -42,9 +42,9 @@ const RETURN_PATH_ALIASES = Object.freeze({
 const STATIC_RETURN_PATHS = new Set([
   PATHS.dashboard,
   PATHS.notes,
+  PATHS.operations,
   PATHS.photoCurator,
   PATHS.ffmpegGenerator,
-  PATHS.weverseUploader,
   PATHS.systemHealth,
   PATHS.systemInfo,
   PATHS.componentShowcase,

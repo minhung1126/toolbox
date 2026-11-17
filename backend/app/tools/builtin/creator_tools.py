@@ -20,7 +20,7 @@ class CreatorToolsPlugin(ToolPlugin):
             id="creator-tools",
             name="Creator Tools",
             title="影音創作工作流",
-            description="YouTube 影片與 Shorts 專屬草稿批次維護、標題說明套用與排程發布自動化。",
+            description="批次預覽並更新 Video／Shorts 標題與說明；核對後立即公開並清理待發布清單。",
             category="影音創作",
             icon="Youtube",
             version="1.2.0",
@@ -42,7 +42,7 @@ class CreatorToolsPlugin(ToolPlugin):
                 ToolRoute(
                     path="/youtube/publish-cleanup",
                     label="發布並清理清單",
-                    description="批次公開已排程影片並從工作清單移出",
+                    description="核對後立即公開影片並從待發布清單移出",
                     required_scopes=["youtube"],
                 ),
             ],

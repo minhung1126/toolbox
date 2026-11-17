@@ -199,32 +199,41 @@ export default function YouTubeSlotCard({
         </div>
       )}
 
-      <div className="settings-grid">
-        <div className="glass-panel settings-info-card">
-          <strong>Google 帳號</strong>
-          <p>{record.user?.email || '—'}</p>
+      <p>
+        頻道：<strong>{record.channel_title || record.channel_id || '尚未連線'}</strong> ·{' '}
+        {record.authenticated && !record.channel_mismatch
+          ? '可讀取與核對影片；確認後更新／立即公開'
+          : '需要連線或處理頻道一致性'}
+      </p>
+      <details>
+        <summary>進階憑證資訊（{record.label}）</summary>
+        <div className="settings-grid">
+          <div className="glass-panel settings-info-card">
+            <strong>Google 帳號</strong>
+            <p>{record.user?.email || '—'}</p>
+          </div>
+          <div className="glass-panel settings-info-card">
+            <strong>YouTube Channel</strong>
+            <p>{record.channel_title || record.channel_id || '尚未驗證'}</p>
+          </div>
+          <div className="glass-panel settings-info-card">
+            <strong>Token 狀態</strong>
+            <p>{tokenStatusLabel(record.token_status)}</p>
+          </div>
+          <div className="glass-panel settings-info-card">
+            <strong>Token 到期</strong>
+            <p>{formatTokenDate(record.token_expires_at)}</p>
+          </div>
+          <div className="glass-panel settings-info-card">
+            <strong>最近 refresh</strong>
+            <p>{formatTokenDate(record.last_refreshed_at)}</p>
+          </div>
+          <div className="glass-panel settings-info-card">
+            <strong>Client fingerprint</strong>
+            <p>{record.client_fingerprint || '—'}</p>
+          </div>
         </div>
-        <div className="glass-panel settings-info-card">
-          <strong>YouTube Channel</strong>
-          <p>{record.channel_title || record.channel_id || '尚未驗證'}</p>
-        </div>
-        <div className="glass-panel settings-info-card">
-          <strong>Token 狀態</strong>
-          <p>{tokenStatusLabel(record.token_status)}</p>
-        </div>
-        <div className="glass-panel settings-info-card">
-          <strong>Token 到期</strong>
-          <p>{formatTokenDate(record.token_expires_at)}</p>
-        </div>
-        <div className="glass-panel settings-info-card">
-          <strong>最近 refresh</strong>
-          <p>{formatTokenDate(record.last_refreshed_at)}</p>
-        </div>
-        <div className="glass-panel settings-info-card">
-          <strong>Client fingerprint</strong>
-          <p>{record.client_fingerprint || '—'}</p>
-        </div>
-      </div>
+      </details>
       {record.last_refresh_error && (
         <div className="info-banner">
           <XCircle size={16} />

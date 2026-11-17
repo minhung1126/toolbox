@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  */
 export function useDebouncedAutosave({ value, onSave, delay = 500, compareFn, onSuccess, onError }) {
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
   const [dirty, setDirty] = useState(false);
   const latestValueRef = useRef(value);
   const mountedRef = useRef(true);
@@ -34,6 +35,7 @@ export function useDebouncedAutosave({ value, onSave, delay = 500, compareFn, on
         if (version !== editVersionRef.current) return { status: 'superseded' };
         if (mountedRef.current) {
           setSaving(true);
+          setError(null);
         }
         let saveConfirmed = false;
         try {
@@ -49,7 +51,10 @@ export function useDebouncedAutosave({ value, onSave, delay = 500, compareFn, on
           return { status: 'saved' };
         } catch (error) {
           if (version !== editVersionRef.current) return { status: 'superseded' };
-          if (mountedRef.current) callbacksRef.current.onError?.(error, { notify, saveConfirmed });
+          if (mountedRef.current) {
+            setError(error);
+            callbacksRef.current.onError?.(error, { notify, saveConfirmed });
+          }
           return { status: saveConfirmed ? 'saved' : 'failed', error };
         } finally {
           if (version === editVersionRef.current && mountedRef.current) {
@@ -90,6 +95,8 @@ export function useDebouncedAutosave({ value, onSave, delay = 500, compareFn, on
       latestValueRef.current = nextData;
       dirtyRef.current = true;
       setDirty(true);
+      setSaving(false);
+      setError(null);
       scheduleSave(nextData);
     },
     [scheduleSave]
@@ -107,8 +114,11 @@ export function useDebouncedAutosave({ value, onSave, delay = 500, compareFn, on
   const reset = useCallback((nextData) => {
     window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = null;
+    editVersionRef.current += 1;
     dirtyRef.current = false;
     setDirty(false);
+    setSaving(false);
+    setError(null);
     latestValueRef.current = nextData;
   }, []);
 
@@ -133,6 +143,8 @@ export function useDebouncedAutosave({ value, onSave, delay = 500, compareFn, on
   return {
     saving,
     dirty,
+    error,
+    status: error ? 'failed' : saving ? 'saving' : dirty ? 'dirty' : 'saved',
     mutate,
     flush,
     reset,

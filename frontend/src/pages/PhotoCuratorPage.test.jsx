@@ -257,7 +257,7 @@ describe('PhotoCuratorPage', () => {
     );
     expect(screen.getByDisplayValue('自訂主題')).toBeInTheDocument();
     expect(screen.getByText('已全部分配')).toBeInTheDocument();
-    expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('已依時間軸自動均分'));
+    expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('已依檔案修改時間（非拍攝時間）自動均分'));
   });
 
   it('includes all nine posts in the copied checklist', async () => {

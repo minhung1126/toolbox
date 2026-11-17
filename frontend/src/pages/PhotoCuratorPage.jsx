@@ -1,3 +1,4 @@
+import ProjectFiles from '../features/photo-curator/components/ProjectFiles';
 import { Button } from '../shared/ui';
 import React, { useRef, useState } from 'react';
 import {
@@ -191,7 +192,8 @@ function PhotoCuratorWorkbench() {
           <div>
             <h4>點擊或拖放照片至此處匯入</h4>
             <p className="text-muted">
-              支援多選 JPG、PNG、WebP 照片。切換工具會保留照片與排版；重新整理或關閉分頁前，請先下載分組照片。
+              支援多選 JPG、PNG、WebP
+              照片。切換工具會保留照片與排版；重新整理或關閉分頁前，請先匯出排版專案及下載分組照片。
             </p>
           </div>
         </div>
@@ -203,6 +205,7 @@ function PhotoCuratorWorkbench() {
         </div>
       </div>
 
+      <ProjectFiles />
       {/* Toolbar & Action Bar */}
       <div className="photo-curator-toolbar glass-panel">
         <div className="toolbar-left">

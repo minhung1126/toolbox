@@ -3,7 +3,6 @@ import ytmusicManifest from '../features/ytmusic/manifest';
 import sheetsManifest from '../features/sheets/manifest';
 import photoCuratorManifest from '../features/photo-curator/manifest';
 import ffmpegManifest from '../features/ffmpeg/manifest';
-import weverseManifest from '../features/weverse/manifest';
 import notesManifest from '../features/notes/manifest';
 import youtubeIntegrationsManifest from '../features/youtube-integrations/manifest';
 import systemManifest from '../features/system/manifest';
@@ -21,7 +20,6 @@ export const TOOL_MODULES = Object.freeze(
     sheetsManifest,
     photoCuratorManifest,
     ffmpegManifest,
-    weverseManifest,
     notesManifest,
     youtubeIntegrationsManifest,
     systemManifest,
@@ -108,59 +106,65 @@ export function validateFeatureManifests(manifests) {
 }
 
 /** Join server-owned availability and metadata to locally controlled views. */
-export function reconcileToolCatalog(payload) {
+export function reconcileToolCatalog(payload, { onIssue = () => {} } = {}) {
   if (!Array.isArray(payload?.tools)) throw new Error('工具目錄回應格式不正確。');
   const known = new Map(TOOL_MODULES.map((tool) => [tool.id, tool]));
-  const seen = new Set();
+  if (payload.tools.some((item) => !item || typeof item !== 'object' || typeof item.id !== 'string' || !item.id.trim()))
+    throw new Error('工具目錄包含無法辨識的項目。');
+  const counts = new Map();
+  payload.tools.forEach((item) => counts.set(item.id, (counts.get(item.id) || 0) + 1));
   const available = new Map();
   for (const metadata of payload.tools) {
-    const manifest = known.get(metadata?.id);
-    if (!manifest) throw new Error(`未知的後端工具 ID：${String(metadata?.id)}`);
-    if (seen.has(metadata.id)) throw new Error(`重複的後端工具 ID：${metadata.id}`);
-    seen.add(metadata.id);
-    if (!['active', 'beta', 'disabled'].includes(metadata.status)) {
-      throw new Error(`工具 ${metadata.id} 的狀態不受支援。`);
-    }
-    if (
-      metadata.runtime_status &&
-      !['ready', 'disabled', 'startup_failed', 'unhealthy'].includes(metadata.runtime_status)
-    ) {
-      throw new Error(`工具 ${metadata.id} 的執行狀態不受支援。`);
-    }
-    const version = /^(\d+)\.(\d+)\.(\d+)$/.exec(metadata.version);
-    if (!version || Number(version[1]) !== SUPPORTED_TOOL_MAJOR_VERSION) {
-      throw new Error(`工具 ${metadata.id} 的版本不受支援。`);
-    }
-    if (metadata.entry_url !== manifest.entryUrl) {
-      throw new Error(`工具 ${metadata.id} 的入口與前端路由不一致。`);
-    }
-    validateToolScopes(metadata.id, metadata.required_scopes);
-    const knownRoutes = new Set([
-      ...(manifest.featureCards || []).map((card) => card.to),
-      ...(manifest.navGroups || []).flatMap((group) => (group.items || []).map((item) => item.to)),
-    ]);
-    const routeScopes = {};
-    for (const route of metadata.routes || []) {
-      if (!knownRoutes.has(route.path)) {
-        throw new Error(`工具 ${metadata.id} 的路由不受支援：${route.path}`);
+    try {
+      const manifest = known.get(metadata?.id);
+      if (!manifest) throw new Error(`未知的後端工具 ID：${String(metadata?.id)}`);
+      if (counts.get(metadata.id) > 1) throw new Error(`重複的後端工具 ID：${metadata.id}`);
+      if (!['active', 'beta', 'disabled'].includes(metadata.status)) {
+        throw new Error(`工具 ${metadata.id} 的狀態不受支援。`);
       }
-      if (Object.hasOwn(routeScopes, route.path)) throw new Error(`工具 ${metadata.id} 的路由重複：${route.path}`);
-      const scopes = route.required_scopes ?? metadata.required_scopes;
-      validateToolScopes(metadata.id, scopes);
-      routeScopes[route.path] = scopes;
+      if (
+        metadata.runtime_status &&
+        !['ready', 'disabled', 'startup_failed', 'unhealthy'].includes(metadata.runtime_status)
+      ) {
+        throw new Error(`工具 ${metadata.id} 的執行狀態不受支援。`);
+      }
+      const version = /^(\d+)\.(\d+)\.(\d+)$/.exec(metadata.version);
+      if (!version || Number(version[1]) !== SUPPORTED_TOOL_MAJOR_VERSION) {
+        throw new Error(`工具 ${metadata.id} 的版本不受支援。`);
+      }
+      if (metadata.entry_url !== manifest.entryUrl) {
+        throw new Error(`工具 ${metadata.id} 的入口與前端路由不一致。`);
+      }
+      validateToolScopes(metadata.id, metadata.required_scopes);
+      const knownRoutes = new Set([
+        ...(manifest.featureCards || []).map((card) => card.to),
+        ...(manifest.navGroups || []).flatMap((group) => (group.items || []).map((item) => item.to)),
+      ]);
+      const routeScopes = {};
+      for (const route of metadata.routes || []) {
+        if (!knownRoutes.has(route.path)) {
+          throw new Error(`工具 ${metadata.id} 的路由不受支援：${route.path}`);
+        }
+        if (Object.hasOwn(routeScopes, route.path)) throw new Error(`工具 ${metadata.id} 的路由重複：${route.path}`);
+        const scopes = route.required_scopes ?? metadata.required_scopes;
+        validateToolScopes(metadata.id, scopes);
+        routeScopes[route.path] = scopes;
+      }
+      if (metadata.status === 'disabled' || (metadata.runtime_status && metadata.runtime_status !== 'ready')) continue;
+      available.set(metadata.id, {
+        ...manifest,
+        name: metadata.name,
+        title: metadata.title,
+        description: metadata.description,
+        category: metadata.category,
+        status: metadata.status,
+        version: metadata.version,
+        requiredScopes: metadata.required_scopes,
+        routeScopes,
+      });
+    } catch (error) {
+      onIssue({ id: metadata.id, message: error.message });
     }
-    if (metadata.status === 'disabled' || (metadata.runtime_status && metadata.runtime_status !== 'ready')) continue;
-    available.set(metadata.id, {
-      ...manifest,
-      name: metadata.name,
-      title: metadata.title,
-      description: metadata.description,
-      category: metadata.category,
-      status: metadata.status,
-      version: metadata.version,
-      requiredScopes: metadata.required_scopes,
-      routeScopes,
-    });
   }
   return TOOL_MODULES.flatMap((tool) => (available.has(tool.id) ? [available.get(tool.id)] : []));
 }
