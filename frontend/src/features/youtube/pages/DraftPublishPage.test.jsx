@@ -364,6 +364,21 @@ describe('editable publish staging', () => {
     expect(screen.getByRole('article', { name: '暫存影片 one' })).toHaveTextContent('A newer manual edit');
     expect(screen.queryByText('已寫入 YouTube', { exact: true })).not.toBeInTheDocument();
   });
+  it('can reinclude default skipped rows without replacing manual content', () => {
+    const draft = seed();
+    draft.stage_snapshot.plan[0].default_skip = true;
+    draft.stage_snapshot.plan[0].skip_reason = '可信人物與遠端內容相同';
+    draft.edits[0].skip = true;
+    draft.edits[0].title = 'Keep my saved manual title';
+    savePublishDraft(draft);
+    renderPage();
+    expect(screen.getAllByLabelText('略過此片')[0]).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: '將預設略過影片全部重新納入' }));
+    expect(screen.getAllByLabelText('略過此片')[0]).not.toBeChecked();
+    expect(loadPublishDraft('owner', 'channel', 'Video').edits[0].title).toBe('Keep my saved manual title');
+    expect(api.submitYoutubePublishJob).not.toHaveBeenCalled();
+  });
+
   it('keeps complete multiline descriptions visible and protects unsaved modal changes', () => {
     const draft = seed();
     const full = '第一行\n' + 'https://example.com/' + 'x'.repeat(300) + '\n最後一行';

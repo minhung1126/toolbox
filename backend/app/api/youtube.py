@@ -447,8 +447,14 @@ def prepare_draft_publish(
     creds: YouTubeRequestContext = Depends(require_youtube_context),
     sheet_creds: Credentials = Depends(require_sheets_credentials),
     workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
+    operations: OperationStore = Depends(get_operation_store),
 ):
-    return workflows.prepare_draft_publish(payload, creds=creds, sheet_creds=sheet_creds)
+    return workflows.prepare_draft_publish(
+        payload,
+        creds=creds,
+        sheet_creds=sheet_creds,
+        operations=operations if isinstance(operations, OperationStore) else None,
+    )
 
 
 @router.post("/drafts/preview")

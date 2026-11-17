@@ -53,7 +53,7 @@ export function createSavedDraft(stage: DraftStage, account: string, source: Dra
       video_id: item.video_id,
       title: item.newTitle,
       description: item.newDescription,
-      skip: item.status === 'skipped',
+      skip: item.status === 'skipped' || item.default_skip === true,
     })),
   };
 }

@@ -344,6 +344,26 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
                 資料來源、人物指定、影片清單或授權頻道已變更。請返回人物指定核對並重建暫存，現有手動內容仍保留。
               </p>
             )}
+            {draft.stage_snapshot.plan.some((item) => item.default_skip) && (
+              <Button
+                variant="secondary"
+                disabled={locked || blocked}
+                onClick={() => {
+                  setPreview(null);
+                  persist({
+                    ...draft,
+                    edits: draft.edits.map((edit, index) =>
+                      draft.stage_snapshot.plan[index].default_skip &&
+                      results.get(edit.video_id)?.status !== 'succeeded'
+                        ? { ...edit, skip: false }
+                        : edit
+                    ),
+                  });
+                }}
+              >
+                將預設略過影片全部重新納入
+              </Button>
+            )}
             {draft.pending && <p role="alert">發布請求已送出，正在查詢逐片進度。編輯與再次發布已暫停。</p>}
             {(draft.pending || draft.result) && (
               <Button variant="secondary" disabled={busy || blocked} onClick={reconcile}>
@@ -435,6 +455,8 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
                     </div>
                   </details>
                   {item.reason && <p>{item.reason}</p>}
+                  {item.default_skip && <p>{item.skip_reason} 可取消「略過此片」重新編輯。</p>}
+                  {item.pending_operations?.length > 0 && <p>此影片有執行中或待核對作業；重新納入仍須先核對。</p>}
                   {validation[index] && (
                     <p id={`draft-error-${index}`} role="alert">
                       {validation[index]}

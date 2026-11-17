@@ -153,11 +153,13 @@ class YoutubeWorkflowService:
                 exc, method="videos.list", youtube_slot=youtube_context.slot
             ).to_http_exception() from exc
 
-    def prepare_draft_publish(self, payload, *, creds, sheet_creds):
+    def prepare_draft_publish(self, payload, *, creds, sheet_creds, operations=None):
         from backend.app.services.youtube_draft_publish import DraftPublishWorkflow
 
         return self._draft_publish_call(
-            lambda: DraftPublishWorkflow(self.ports).prepare(payload, creds, sheet_creds), creds, "videos.list"
+            lambda: DraftPublishWorkflow(self.ports).prepare(payload, creds, sheet_creds, operations),
+            creds,
+            "videos.list",
         )
 
     def preview_draft_publish(self, payload, *, creds, sheet_creds, operations):

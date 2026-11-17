@@ -23,6 +23,10 @@ export interface StagedVideo {
   status: 'ready' | 'skipped';
   reason: string;
   thumbnailUrl: string;
+  default_skip?: boolean;
+  skip_reason?: string;
+  can_reinclude?: boolean;
+  pending_operations?: string[];
 }
 export interface DraftStage {
   stage_token: string;
@@ -113,7 +117,11 @@ export const draftPublishApi = {
           ['currentTitle', 'currentDescription', 'newTitle', 'newDescription', 'person'].every(
             (key) => typeof item[key] === 'string'
           ) &&
-          ['ready', 'skipped'].includes(String(item.status))
+          ['ready', 'skipped'].includes(String(item.status)) &&
+          (item.default_skip === undefined || typeof item.default_skip === 'boolean') &&
+          (item.skip_reason === undefined || typeof item.skip_reason === 'string') &&
+          (item.pending_operations === undefined ||
+            (Array.isArray(item.pending_operations) && item.pending_operations.every((id) => typeof id === 'string')))
       )
     )
       invalid();

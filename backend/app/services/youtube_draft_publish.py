@@ -54,7 +54,7 @@ class DraftPublishWorkflow:
         ):
             raise self.ports.stale_preview_exception()
 
-    def prepare(self, payload, context, sheet_creds):
+    def prepare(self, payload, context, sheet_creds, operations=None):
         spreadsheet, title_col, desc_col, assignments, _ = self.ports.validate_batch_inputs(payload, context.owner_sub)
         if not context.channel_id:
             raise http_error(409, "youtube_channel_required", "請先重新連線並確認 YouTube 頻道。")
@@ -74,6 +74,11 @@ class DraftPublishWorkflow:
         ids = [video_id for video_id, _ in assignments]
         context, details = self._read(context, lambda ctx: self.ports.fetch_video_details(ctx, ids), attempted)
         details = {item["id"]: item for item in details}
+        history = (
+            operations.video_processing_states(context.owner_sub, context.channel_id, ids)
+            if operations is not None
+            else {}
+        )
         plan, baseline = [], {}
         team = self.ports.normalize_text(payload.team)
         for video_id, person in assignments:
@@ -89,12 +94,29 @@ class DraftPublishWorkflow:
                 reason, title, description = self.ports.resolve_person_metadata(
                     matches, team, person, title_col, desc_col
                 )
+            state = history.get(video_id) or {}
+            application = state.get("person_application") or {}
+            target = content_fingerprint(title, description)
+            default_skip = bool(
+                not reason
+                and application.get("person_key") == person
+                and application.get("content_fingerprint") == target
+                and content_fingerprint(snippet.get("title", ""), snippet.get("description", "")) == target
+                and (detail.get("status") or {}).get("privacyStatus") == "public"
+                and not state.get("pending_operations")
+            )
             baseline[video_id] = self.ports.input_digest(video_publish_state(detail))
             plan.append(
                 {
                     "video_id": video_id,
                     "person": person_display(person, team),
                     "person_key": person,
+                    "default_skip": default_skip,
+                    "skip_reason": "相同人物與最終內容已有可信成功紀錄，遠端仍已公開且文字相同。"
+                    if default_skip
+                    else "",
+                    "can_reinclude": default_skip,
+                    "pending_operations": state.get("pending_operations", []),
                     "currentTitle": str(snippet.get("title") or ""),
                     "currentDescription": str(snippet.get("description") or ""),
                     "currentPrivacy": (detail.get("status") or {}).get("privacyStatus", "unknown"),
