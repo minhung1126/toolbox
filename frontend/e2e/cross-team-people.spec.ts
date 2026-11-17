@@ -143,14 +143,14 @@ for (const videoType of ['Video', 'Shorts']) {
     await expect(assignments.nth(1)).toHaveValue(personKey(people[1]));
     await expect(assignments.nth(0).locator('option')).toHaveCount(people.length + 1);
     const previewRequest = page.waitForRequest('**/youtube/drafts/prepare');
-    await page.getByRole('button', { name: '套用人物並產生暫存結果' }).click();
+    await page.getByRole('button', { name: '套用人物並建立草稿' }).click();
     const payload = (await previewRequest).postDataJSON();
     expect(payload.team).toBe('');
     expect(payload.assignments).toEqual([
       { video_id: 'video-1', person: personKey(people[0]) },
       { video_id: 'video-2', person: personKey(people[1]) },
     ]);
-    await expect(page.getByRole('heading', { name: `${videoType} 發布前暫存編輯` })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `${videoType} 編輯草稿並公開` })).toBeVisible();
     await expect(page.getByRole('article', { name: '暫存影片 video-1' }).getByRole('heading')).toContainText('A title');
     await expect(page.getByRole('article', { name: '暫存影片 video-2' }).getByRole('heading')).toContainText('B title');
     await savedAssignments;

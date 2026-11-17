@@ -20,7 +20,7 @@ class CreatorToolsPlugin(ToolPlugin):
             id="creator-tools",
             name="Creator Tools",
             title="影音創作工作流",
-            description="套用人物到暫存，手動編輯 Video／Shorts 後確認並立即公開；另提供待發布清單清理。",
+            description="快速套用人物並建立草稿，編輯確認後公開，再獨立清理已公開的 To-Post 清單成員。",
             category="影音創作",
             icon="Youtube",
             version="1.2.0",
@@ -29,26 +29,26 @@ class CreatorToolsPlugin(ToolPlugin):
             routes=[
                 ToolRoute(
                     path="/youtube/drafts/videos/staged",
-                    label="Video 發布前暫存編輯",
+                    label="Video 編輯草稿並公開",
                     description="手動修改暫存標題與描述，最後確認編輯並公開",
                     required_scopes=["youtube", "sheets_readonly"],
                 ),
                 ToolRoute(
                     path="/youtube/drafts/shorts/staged",
-                    label="Shorts 發布前暫存編輯",
+                    label="Shorts 編輯草稿並公開",
                     description="手動修改暫存標題與描述，最後確認編輯並公開",
                     required_scopes=["youtube", "sheets_readonly"],
                 ),
                 ToolRoute(
                     path="/youtube/drafts/videos",
-                    label="Video 草稿管理",
-                    description="讀取試算表並批次維護 Video 草稿標題與說明",
+                    label="Video 快速套用",
+                    description="讀取試算表，套用人物並建立 Video 草稿",
                     required_scopes=["youtube", "sheets_readonly"],
                 ),
                 ToolRoute(
                     path="/youtube/drafts/shorts",
-                    label="Shorts 草稿管理",
-                    description="讀取試算表並批次維護 Shorts 草稿標題與說明",
+                    label="Shorts 快速套用",
+                    description="讀取試算表，套用人物並建立 Shorts 草稿",
                     required_scopes=["youtube", "sheets_readonly"],
                 ),
                 ToolRoute(

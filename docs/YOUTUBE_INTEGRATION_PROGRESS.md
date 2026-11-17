@@ -14,7 +14,7 @@
 | P5 | 完成 | 送出前保存 payload/request ID；202 operation reference；單一 in-flight polling、2/5/10 秒退避與 Retry-After；精確 request/stage 恢復；revision/identity/count 契約；保留 unknown 與手動編輯。14 項 page/hook tests passed，typecheck/lint 通過。 |
 | P6 | 完成 | journal 與人物/公開觀察/cleanup item 投影同交易；只信實際 snippet parts＋人物關聯；status-only/unchanged 不冒充人物成功；失敗保留舊成功；indexed 批次查詢與可重建投影。8 專項 tests passed；相關回歸見 p6-complete.log。一般單片 metadata 寫入亦使用同一原子目標保護。 |
 | P7 | 完成 | prepare 比對可信人物/指紋、最新遠端文字/public、pending；可撤銷 default_skip；單片/整批重新納入不覆蓋手動內容；保持既有篩選與 prepare availability。47 backend tests、41 frontend 回歸通過，補充重新納入 page test 與 typecheck 通過。 |
-| P8 | 待辦 | 三階段導覽及全文閱讀 |
+| P8 | 完成 | 三階段名稱/導覽/dashboard/後端目錄一致；全文標題/描述可見標籤、主文字對比及行距；沿用 modal。67 前端專項 tests、typecheck/styles 通過；Video/Shorts 100 字標題與 5,000 字描述在 390/768/1440 px 無溢位；3 個 staging/cleanup E2E passed。已檢視手機與桌面截圖（work/visual-review），平台 snapshot 限制另列。 |
 | P9 | 待辦 | 整合驗收、文件、交付 |
 
 ## 環境與基準
@@ -26,6 +26,6 @@
 
 ## 下一步
 
-P8；每項完成相關測試後提交並在此記錄證據。尚未完成的任務不得宣稱通過。
+P9；每項完成相關測試後提交並在此記錄證據。尚未完成的任務不得宣稱通過。
 
 P0 補充：系統 Chromium 執行基準 E2E 71 passed。鎖定版 Playwright 瀏覽器 CDN 被網路政策擋下（403 Domain forbidden），Linux visual 基準暫無法使用指定瀏覽器。

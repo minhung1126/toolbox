@@ -610,10 +610,10 @@ test('YouTube drafts preserve manual edits through reload and publish after fina
     .selectOption(personKey({ team: '團體 A', person: '人物甲', kind: 'person' }));
   const writes = [];
   page.on('request', (request) => {
-    if (request.url().endsWith('/youtube/drafts/publish')) writes.push(request);
+    if (request.url().endsWith('/youtube/drafts/publish-jobs')) writes.push(request);
   });
-  await page.getByRole('button', { name: '套用人物並產生暫存結果' }).click();
-  await expect(page.getByRole('heading', { name: 'Video 發布前暫存編輯' })).toBeVisible();
+  await page.getByRole('button', { name: '套用人物並建立草稿' }).click();
+  await expect(page.getByRole('heading', { name: 'Video 編輯草稿並公開' })).toBeVisible();
   await page.getByRole('article').first().getByRole('button', { name: '編輯', exact: true }).click();
   await page.getByLabel('標題', { exact: true }).fill('最後人工修改');
   await page.getByLabel('描述', { exact: true }).fill('最後完整描述\n第二行');

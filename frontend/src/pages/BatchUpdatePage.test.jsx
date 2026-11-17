@@ -313,7 +313,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
     await readDraftVideos();
     await screen.findByText('舊標題一');
     fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
-    fireEvent.click(screen.getByRole('button', { name: '套用人物並產生暫存結果' }));
+    fireEvent.click(screen.getByRole('button', { name: '套用人物並建立草稿' }));
     await waitFor(() => expect(mocks.api.prepareYoutubeDrafts).toHaveBeenCalledOnce());
     expect(mocks.api.prepareYoutubeDrafts).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -337,7 +337,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
     await readDraftVideos();
     await screen.findByText('舊標題一');
     fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
-    fireEvent.click(screen.getByRole('button', { name: '套用人物並產生暫存結果' }));
+    fireEvent.click(screen.getByRole('button', { name: '套用人物並建立草稿' }));
     expect(await screen.findByText(/建立暫存失敗/)).toBeInTheDocument();
     expect(container.querySelector('.video-card-assignment select')).toHaveValue(memberKey);
     expect(mocks.api.batchUpdateMetadata).not.toHaveBeenCalled();
@@ -381,7 +381,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
       const { container } = renderPage(videoType);
       await readDraftVideos(videoType);
       fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
-      const button = screen.getByRole('button', { name: '套用人物並產生暫存結果' });
+      const button = screen.getByRole('button', { name: '套用人物並建立草稿' });
       fireEvent.click(button);
       await screen.findByRole('dialog', { name: '重建發布前暫存？' });
       expect(mocks.api.prepareYoutubeDrafts).not.toHaveBeenCalled();
@@ -401,7 +401,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
     async (videoType) => {
       const { container } = renderPage(videoType);
       await readDraftVideos(videoType);
-      const button = screen.getByRole('button', { name: '套用人物並產生暫存結果' });
+      const button = screen.getByRole('button', { name: '套用人物並建立草稿' });
       expect(button).toBeDisabled();
       expect(screen.getByText('請先為至少一支影片指定人物。')).toBeInTheDocument();
       fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
@@ -420,8 +420,8 @@ describe('BatchUpdatePage preview and confirmation', () => {
         reject(new Error('連線逾時，請重試'));
       });
       expect(screen.getByText(/建立暫存失敗：連線逾時/)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: '套用人物並產生暫存結果' })).toBeEnabled();
-      fireEvent.click(screen.getByRole('button', { name: '套用人物並產生暫存結果' }));
+      expect(screen.getByRole('button', { name: '套用人物並建立草稿' })).toBeEnabled();
+      fireEvent.click(screen.getByRole('button', { name: '套用人物並建立草稿' }));
       await waitFor(() => expect(mocks.api.prepareYoutubeDrafts).toHaveBeenCalledTimes(2));
     }
   );
@@ -438,7 +438,7 @@ describe('BatchUpdatePage preview and confirmation', () => {
         finish = resolve;
       });
     });
-    fireEvent.click(screen.getByRole('button', { name: '套用人物並產生暫存結果' }));
+    fireEvent.click(screen.getByRole('button', { name: '套用人物並建立草稿' }));
     const signal = mocks.api.prepareYoutubeDrafts.mock.calls[0][1].signal;
     view.rerender(
       <MemoryRouter>
@@ -471,11 +471,11 @@ describe('BatchUpdatePage preview and confirmation', () => {
           signal.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')));
         })
     );
-    fireEvent.click(screen.getByRole('button', { name: '套用人物並產生暫存結果' }));
+    fireEvent.click(screen.getByRole('button', { name: '套用人物並建立草稿' }));
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '取消產生暫存' }));
     });
-    expect(screen.getByRole('button', { name: '套用人物並產生暫存結果' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '套用人物並建立草稿' })).toBeEnabled();
     expect(screen.getByText(/已取消產生暫存/)).toBeInTheDocument();
     expect(loadPublishDraft('owner-1', 'channel-one', 'Video')).toBeNull();
     expect(mocks.api.batchUpdateMetadata).not.toHaveBeenCalled();

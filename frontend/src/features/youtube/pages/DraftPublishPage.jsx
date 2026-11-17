@@ -266,7 +266,8 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
   return (
     <div className="section-gap draft-publish-page">
       <header className="page-header">
-        <h1>{videoType} 發布前暫存編輯</h1>
+        <p className="section-desc">② 編輯草稿並公開</p>
+        <h1>{videoType} 編輯草稿並公開</h1>
         <p className="section-desc">暫存與手動編輯不會寫入 YouTube。檢查變更後，最後確認才會編輯並設為公開。</p>
         <nav className="page-actions" aria-label="暫存影片類型">
           <Link to={PATHS.youtubeVideoStaging} aria-current={videoType === 'Video' ? 'page' : undefined}>
@@ -391,6 +392,7 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
                       alt={item.currentTitle}
                     />
                     <div className="draft-publish-copy">
+                      <p className="draft-publish-field-label">最終標題</p>
                       <h2>
                         {index + 1}. {edit.title || item.currentTitle || item.video_id}
                       </h2>
@@ -438,9 +440,12 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
                       編輯
                     </Button>
                   </div>
-                  <p className="draft-publish-description" aria-label="預計套用的描述">
-                    {edit.description || '（描述空白）'}
-                  </p>
+                  <div className="draft-publish-final-description">
+                    <p className="draft-publish-field-label">最終描述</p>
+                    <p className="draft-publish-description" aria-label="預計套用的描述">
+                      {edit.description || '（描述空白）'}
+                    </p>
+                  </div>
                   <details>
                     <summary>原標題／描述與套用人物後內容</summary>
                     <div className="draft-publish-original">

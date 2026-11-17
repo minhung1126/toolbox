@@ -64,7 +64,7 @@ describe('DashboardPage', () => {
     const publishCard = screen.getByText('清理 To-Post').closest('.feature-card');
     expect(publishCard).toHaveTextContent('連線 YouTube 頻道');
     expect(publishCard).not.toHaveTextContent('連線 Google 試算表');
-    expect(screen.getByRole('link', { name: /進入 Video 草稿/ })).toHaveAttribute('href', PATHS.youtubeVideoDrafts);
+    expect(screen.getByRole('link', { name: /前往 Video 快速套用/ })).toHaveAttribute('href', PATHS.youtubeVideoDrafts);
   });
 
   it('renders dashboard with user status and tool feature cards', () => {
@@ -102,8 +102,8 @@ describe('DashboardPage', () => {
     expect(screen.getByText('playlist-456')).toBeInTheDocument();
 
     // Feature cards
-    expect(screen.getByText('Video 草稿')).toBeInTheDocument();
-    expect(screen.getByText('Shorts 草稿')).toBeInTheDocument();
+    expect(screen.getByText('Video 快速套用')).toBeInTheDocument();
+    expect(screen.getByText('Shorts 快速套用')).toBeInTheDocument();
     expect(screen.getByText('清理 To-Post')).toBeInTheDocument();
     expect(screen.getByText('Sheet 內容複製')).toBeInTheDocument();
     expect(screen.getByText('系統設定')).toBeInTheDocument();
@@ -111,8 +111,11 @@ describe('DashboardPage', () => {
     expect(screen.getByText('API 健康度')).toBeInTheDocument();
 
     // Links
-    expect(screen.getByRole('link', { name: /進入 Video 草稿/ })).toHaveAttribute('href', PATHS.youtubeVideoDrafts);
-    expect(screen.getByRole('link', { name: /進入 Shorts 草稿/ })).toHaveAttribute('href', PATHS.youtubeShortsDrafts);
+    expect(screen.getByRole('link', { name: /前往 Video 快速套用/ })).toHaveAttribute('href', PATHS.youtubeVideoDrafts);
+    expect(screen.getByRole('link', { name: /前往 Shorts 快速套用/ })).toHaveAttribute(
+      'href',
+      PATHS.youtubeShortsDrafts
+    );
     expect(screen.getByRole('link', { name: /前往清理 To-Post/ })).toHaveAttribute('href', PATHS.youtubePublishCleanup);
     expect(screen.getByRole('link', { name: /進入內容複製/ })).toHaveAttribute('href', PATHS.sheetCopy);
     expect(screen.getByRole('link', { name: /進入系統設定/ })).toHaveAttribute('href', PATHS.systemSettings);
@@ -124,7 +127,7 @@ describe('DashboardPage', () => {
 
     fireEvent.change(search, { target: { value: '  ffmpeg  ' } });
     expect(screen.getByRole('link', { name: /進入生成器/ })).toHaveAttribute('href', PATHS.ffmpegGenerator);
-    expect(screen.queryByRole('link', { name: /進入 Video 草稿/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /前往 Video 快速套用/ })).not.toBeInTheDocument();
     expect(screen.getByText(/顯示 1 \/ .* 個工具入口/)).toBeInTheDocument();
 
     fireEvent.change(search, { target: { value: '首圖排版' } });
@@ -135,7 +138,7 @@ describe('DashboardPage', () => {
     expect(screen.getByText('找不到符合的工具')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '顯示全部工具' }));
     expect(search).toHaveValue('');
-    expect(screen.getByRole('link', { name: /進入 Video 草稿/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /前往 Video 快速套用/ })).toBeInTheDocument();
   });
 
   it('pins and removes a shortcut while preserving the other navigation preferences', async () => {
@@ -215,7 +218,7 @@ describe('DashboardPage', () => {
       },
     });
 
-    await screen.findByRole('link', { name: /進入 Video 草稿/ });
+    await screen.findByRole('link', { name: /前往 Video 快速套用/ });
     expect(within(screen.getByRole('region', { name: '常用工具' })).queryByRole('link')).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: '最近使用' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /進入生成器/ })).not.toBeInTheDocument();

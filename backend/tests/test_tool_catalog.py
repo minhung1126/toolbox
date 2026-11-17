@@ -127,7 +127,8 @@ def test_tool_capability_copy_matches_runtime_and_does_not_promise_missing_write
         assert description == tools[tool_id]["description"]
     assert tools["sheets-tools"]["required_scopes"] == ["sheets_readonly"]
     assert "剪貼簿" in tools["sheets-tools"]["description"]
-    assert "立即公開" in tools["creator-tools"]["description"]
+    assert "編輯確認後公開" in tools["creator-tools"]["description"]
+    assert "獨立清理" in tools["creator-tools"]["description"]
     assert "排程" not in tools["creator-tools"]["description"]
     readme = (root / "README.md").read_text(encoding="utf-8")
     assert "**Google Drive 批次上傳**" not in readme
