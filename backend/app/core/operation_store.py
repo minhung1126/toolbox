@@ -108,7 +108,7 @@ class OperationStore:
         )
         OperationStore._sync_targets(db, operation)
 
-    def claim(self, owner, kind, payload, *, channel_id=None, progress_plan=None, executor_id=None):
+    def claim(self, owner, kind, payload, *, channel_id=None, progress_plan=None, executor_id=None, acceptance=None):
         original = payload.model_dump(mode="json")
         request_id = original.pop("request_id", None)
         digest = hashlib.sha256(
@@ -156,6 +156,7 @@ class OperationStore:
                 operation["progress"] = initial_progress(progress_plan)
             if executor_id:
                 operation["executor_id"] = executor_id
+                operation["acceptance"] = acceptance or {}
             for video_id in write_targets(operation):
                 if db.execute(
                     "SELECT 1 FROM youtube_write_targets WHERE owner=? AND channel_id=? AND video_id=?",
@@ -291,3 +292,52 @@ class OperationStore:
         with self.transaction() as db:
             row = db.execute("SELECT state FROM operation_executors WHERE id=?", (executor_id,)).fetchone()
             return bool(row and row[0] == "active")
+
+    def existing(self, owner, kind, payload, channel_id):
+        original = payload.model_dump(mode="json")
+        request_id = original.pop("request_id", None)
+        digest = hashlib.sha256(
+            json.dumps({"input": original, "channel_id": channel_id}, sort_keys=True, ensure_ascii=False).encode()
+        ).hexdigest()
+        with self.transaction() as db:
+            row = db.execute(
+                "SELECT o.document, r.digest FROM operation_requests r JOIN operations o ON o.id=r.operation_id WHERE r.owner=? AND r.kind=? AND r.request_id=?",
+                (owner, kind, request_id),
+            ).fetchone()
+            if row and row["digest"] != digest:
+                raise http_error(409, "operation_input_changed", "同一請求 ID 的輸入版本已變更，請重新預覽。")
+            if not row:
+                row = db.execute(
+                    "SELECT document FROM operations WHERE owner=? AND kind=? AND digest=?", (owner, kind, digest)
+                ).fetchone()
+            return json.loads(row["document"]) if row else None
+
+    def recover_lost_executor_jobs(self):
+        """Only call while holding the exclusive runner file lock; never replay a write."""
+        with self.transaction() as db:
+            db.execute("UPDATE operation_executors SET state='lost'")
+            rows = db.execute(
+                "SELECT document FROM operations WHERE json_extract(document, '$.executor_id') IS NOT NULL AND json_extract(document, '$.state') IN ('prepared','running')"
+            ).fetchall()
+            for row in rows:
+                op = json.loads(row[0])
+                for progress_row in (op.get("progress") or {}).get("rows", []):
+                    if progress_row["status"] in {"queued", "running"}:
+                        change_progress(
+                            op,
+                            progress_row["video_id"],
+                            status="needs_reconciliation" if progress_row["status"] == "running" else "not_attempted",
+                            reason="原執行程序已結束；未自動重送。",
+                        )
+                uncertain = any(
+                    row["status"] == "needs_reconciliation" for row in (op.get("progress") or {}).get("rows", [])
+                )
+                op.update(
+                    state="needs_reconciliation"
+                    if uncertain
+                    else "partial"
+                    if op.get("items")
+                    else "failed_before_write",
+                    updated_at=time.time(),
+                )
+                self._save(db, op)

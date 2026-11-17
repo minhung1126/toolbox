@@ -2,7 +2,7 @@ import logging
 import math
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from google.oauth2.credentials import Credentials
 
 from backend.app.api.youtube_helpers import (
@@ -22,6 +22,7 @@ from backend.app.api.youtube_models import (
     BatchUpdateInput,
     DraftPrepareInput,
     DraftPublishInput,
+    DraftPublishJobInput,
     PlaylistItemsInput,
     PublishCleanupInput,
     QuotaEstimateInput,
@@ -433,6 +434,39 @@ def preview_draft_publish(
     operations: OperationStore = Depends(get_operation_store),
 ):
     return workflows.preview_draft_publish(payload, creds=creds, sheet_creds=sheet_creds, operations=operations)
+
+
+@router.post("/drafts/publish-jobs", status_code=202)
+def submit_draft_publish_job(
+    payload: DraftPublishJobInput,
+    request: Request,
+    context: YouTubeRequestContext = Depends(require_youtube_context),
+    sheet_creds: Credentials = Depends(require_sheets_credentials),
+    _rate_limit: None = Depends(enforce_workflow_rate_limit),
+):
+    return request.app.state.youtube_publish_runner.submit(payload, context)
+
+
+@router.get("/drafts/publish-jobs/by-request/{request_id}")
+def find_draft_publish_job(
+    request_id: str,
+    context: YouTubeRequestContext = Depends(require_youtube_context),
+    operations: OperationStore = Depends(get_operation_store),
+):
+    from backend.app.services.operation_journal import public_operation
+
+    return public_operation(operations.find_request(context.owner_sub, context.channel_id, request_id), operations)
+
+
+@router.get("/drafts/publish-jobs/by-stage/{stage_id}")
+def find_legacy_draft_publish_job(
+    stage_id: str,
+    context: YouTubeRequestContext = Depends(require_youtube_context),
+    operations: OperationStore = Depends(get_operation_store),
+):
+    from backend.app.services.operation_journal import public_operation
+
+    return public_operation(operations.find_stage(context.owner_sub, context.channel_id, stage_id), operations)
 
 
 @router.post("/drafts/publish")

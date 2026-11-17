@@ -95,6 +95,10 @@ class DraftPublishInput(BaseModel):
         return self
 
 
+class DraftPublishJobInput(DraftPublishInput):
+    request_id: str = Field(min_length=1, max_length=128)
+
+
 class QuotaEstimateInput(BaseModel):
     operation: Literal["youtube.metadata_update", "youtube.publish_cleanup"]
     item_count: int = Field(ge=0, le=500)

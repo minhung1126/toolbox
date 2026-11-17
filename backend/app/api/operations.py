@@ -15,20 +15,20 @@ router = APIRouter(prefix="/operations", tags=["Operations"])
 
 @router.get("")
 def list_operations(owner=Depends(require_account_subject), store: OperationStore = Depends(get_operation_store)):
-    return {"version": 1, "operations": [public_operation(operation) for operation in store.list(owner)]}
+    return {"version": 1, "operations": [public_operation(operation, store) for operation in store.list(owner)]}
 
 
 @router.get("/{operation_id}")
 def get_operation(
     operation_id: str, owner=Depends(require_account_subject), store: OperationStore = Depends(get_operation_store)
 ):
-    return public_operation(store.get(owner, operation_id))
+    return public_operation(store.get(owner, operation_id), store)
 
 
 def _check_channel(operation, context):
     if operation["channel_id"] and operation["channel_id"] != context.channel_id:
         raise http_error(409, "operation_channel_mismatch", "請連線至此作業原本的頻道再核對。")
-    if operation["state"] == "running":
+    if operation["state"] in {"prepared", "running"}:
         # Reads may run during another process's write. Never mark an active plan completed.
         raise http_error(409, "operation_still_running", "作業仍在執行或已中斷；請稍後讀取紀錄。服務重啟後可重新核對。")
 
@@ -43,7 +43,7 @@ def reconcile_youtube(
     operation = store.get(context.owner_sub, operation_id)
     if operation["kind"] not in {"youtube.metadata_update", "youtube.publish_cleanup", "youtube.metadata_publish"}:
         raise http_error(400, "operation_kind_mismatch", "此作業需要使用音樂播放清單核對。")
-    operation = public_operation(operation)
+    operation = public_operation(operation, store)
     _check_channel(operation, context)
     snapshot = operation["plan"].get("preview_snapshot") or {}
     if operation["kind"] == "youtube.metadata_publish":
@@ -151,8 +151,57 @@ def _reconcile_cleanup_only(operation, context, store, service):
     return public_operation(store.update(context.owner_sub, operation["id"], reconcile))
 
 
+def _reconcile_publish_progress(operation, context, store, service):
+    from backend.app.core.youtube_operation_state import change_progress
+    from backend.app.services.youtube_service import video_matches_public_draft
+
+    pending = [row for row in operation["progress"]["rows"] if row["status"] == "needs_reconciliation"]
+    details = (
+        {item["id"]: item for item in service.ports.fetch_video_details(context, [row["video_id"] for row in pending])}
+        if pending
+        else {}
+    )
+
+    def reconcile(op):
+        for row in pending:
+            matched = video_matches_public_draft(details.get(row["video_id"], {}), row["title"], row["description"])
+            for attempt in op["items"]:
+                if attempt["remote_id"] == row["video_id"]:
+                    attempt["reconciliation"] = {"provider_read": True, "matches_intent": matched}
+                    if matched and attempt["state"] in {"running", "needs_reconciliation"}:
+                        attempt["state"] = "completed"
+            if matched:
+                change_progress(
+                    op,
+                    row["video_id"],
+                    status="succeeded" if row["attempted_parts"] else "unchanged",
+                    confirmation="provider_read",
+                    reason="唯讀核對確認最終文字與公開狀態。",
+                )
+        rows = op["progress"]["rows"]
+        counts = op["progress"]["counts"]
+        complete = all(row["status"] in {"succeeded", "unchanged", "skipped"} for row in rows)
+        op["result"] = {
+            "operation": "youtube.metadata_publish",
+            "operation_id": op["id"],
+            "completed": complete,
+            "total_count": len(rows),
+            "results": [dict(row) for row in rows],
+            **{f"{key}_count": value for key, value in counts.items()},
+        }
+        op["state"] = (
+            "needs_reconciliation" if counts["needs_reconciliation"] else "completed" if complete else "partial"
+        )
+        op["reconciliation"] = {"provider_read": bool(pending), "matches_intent": complete}
+
+    return public_operation(store.update(context.owner_sub, operation["id"], reconcile), store)
+
+
 def _reconcile_draft_publish(operation, context, store, service):
     from backend.app.services.youtube_service import video_matches_public_draft
+
+    if operation.get("progress"):
+        return _reconcile_publish_progress(operation, context, store, service)
 
     if not operation["items"] and operation.get("result") is None:
         # An empty running plan may belong to another live worker. Only a

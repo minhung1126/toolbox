@@ -21,16 +21,21 @@ def known_rejected_write(exc):
 
 
 _current = ContextVar("operation_recorder", default=None)
-_active = set()
 
 
 def get_operation_store(request: Request) -> OperationStore:
     return request.app.state.operation_store
 
 
-def public_operation(operation):
+def public_operation(operation, store=None):
     result = {key: value for key, value in operation.items() if key not in {"owner", "request_id"}}
-    if operation["state"] in {"prepared", "running"} and operation["id"] not in _active:
+    active = False
+    if store is not None:
+        with store.active_lock:
+            active = operation["id"] in store.active
+        if operation.get("executor_id"):
+            active = store.executor_alive(operation["executor_id"])
+    if operation["state"] in {"prepared", "running"} and not active:
         result = {**result, "state": "needs_reconciliation", "interrupted": True}
     return result
 
@@ -88,6 +93,27 @@ class Recorder:
         return result
 
     def finish(self, result=None, *, failed=False):
+        if failed:
+
+            def stop_progress(op):
+                from backend.app.core.youtube_operation_state import change_progress
+
+                for row in (op.get("progress") or {}).get("rows", []):
+                    if row["status"] in {"queued", "running"}:
+                        attempted = any(
+                            item["remote_id"] == row["video_id"]
+                            and item["state"] in {"running", "needs_reconciliation"}
+                            for item in op["items"]
+                        )
+                        change_progress(
+                            op,
+                            row["video_id"],
+                            playlist_item_id=row.get("playlist_item_id"),
+                            status="needs_reconciliation" if attempted else "not_attempted",
+                            reason="作業未完成，請核對結果或重新預覽。",
+                        )
+
+            self.store.update(self.owner, self.id, stop_progress)
         operation = self.store.get(self.owner, self.id)
         items = operation["items"]
         uncertain = operation.get("outcome_unknown", False) or any(
@@ -113,6 +139,7 @@ class Recorder:
             original = getattr(service.ports, name)
 
             def call(context, remote_id, *args, **kwargs):
+                journal_evidence = kwargs.pop("_journal_evidence", None)
                 intended = (
                     {"title": args[0], "description": args[1]}
                     if name in {"update_single_video_metadata", "update_and_publish_video"}
@@ -120,6 +147,8 @@ class Recorder:
                 )
                 if name == "update_and_publish_video":
                     intended["privacyStatus"] = "public"
+                if journal_evidence:
+                    intended.update(journal_evidence)
                 return self.write(phase, remote_id, lambda: original(context, remote_id, *args, **kwargs), intended)
 
             return call
@@ -151,14 +180,16 @@ def start_operation(store, owner, kind, payload, *, channel_id=None):
 
 @contextmanager
 def recording(recorder):
-    _active.add(recorder.id)
+    with recorder.store.active_lock:
+        recorder.store.active.add(recorder.id)
     token = _current.set(recorder)
     recorder.update(state="running")
     try:
         yield
     finally:
         _current.reset(token)
-        _active.discard(recorder.id)
+        with recorder.store.active_lock:
+            recorder.store.active.discard(recorder.id)
 
 
 def tracked_write(phase, remote_id, call, intended=None):

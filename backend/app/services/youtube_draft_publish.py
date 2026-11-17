@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import math
+import time
 import uuid
 
 from backend.app.core.error_contract import http_error
-from backend.app.services.operation_journal import current_operation_id, known_rejected_write
+from backend.app.core.youtube_operation_state import content_fingerprint
+from backend.app.services.operation_journal import current_operation_id, current_recorder, known_rejected_write
 from backend.app.services.sheets_service import person_display
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
 from backend.app.services.youtube_service import video_matches_public_draft, video_publish_state
@@ -202,6 +204,7 @@ class DraftPublishWorkflow:
                 {
                     "video_id": edit.video_id,
                     "person": prepared["person"],
+                    "person_key": prepared.get("person_key"),
                     "title": edit.title,
                     "description": edit.description,
                     "status": "skipped" if skipped else "ready" if parts else "unchanged",
@@ -242,21 +245,66 @@ class DraftPublishWorkflow:
             },
         }
 
-    def execute(self, payload, context, sheet_creds, operations):
+    def validate_submission(self, payload, context):
         self._verify(payload.preview_token, payload.preview_snapshot, context, "youtube.metadata_publish")
+        self._verify(payload.stage_token, payload.stage_snapshot, context, "youtube.draft.prepare", stage=True)
+        snapshot = payload.preview_snapshot
+        if snapshot.get("stage_id") != payload.stage_snapshot.get("stage_id") or snapshot.get("edits") != [
+            edit.model_dump() for edit in payload.edits
+        ]:
+            raise self.ports.stale_preview_exception()
+        if [item["video_id"] for item in snapshot.get("plan", [])] != [edit.video_id for edit in payload.edits]:
+            raise self.ports.stale_preview_exception()
+
+    def execute(self, payload, context, sheet_creds, operations, *, accepted_operation=None):
+        recorder = current_recorder()
+        if accepted_operation is None:
+            self.validate_submission(payload, context)
+        elif (
+            not recorder
+            or recorder.id != accepted_operation["id"]
+            or time.time() > accepted_operation["acceptance"]["preview_expires_at"]
+        ):
+            raise self.ports.stale_preview_exception()
+        if recorder:
+            recorder.initialize_progress(payload.preview_snapshot["plan"])
         snapshot, details, context, attempted = self._plan(payload, context, sheet_creds, operations)
         if self.ports.input_digest(snapshot) != self.ports.input_digest(payload.preview_snapshot):
             raise self.ports.stale_preview_exception()
         results, quota_error = [], None
+
+        def append_result(result, item):
+            results.append(result)
+            if recorder:
+                recorder.progress(
+                    item["video_id"],
+                    **{
+                        key: result[key]
+                        for key in ("status", "reason", "confirmation", "attempted_parts")
+                        if key in result
+                    },
+                )
+
         for item in snapshot["plan"]:
             base = {key: item[key] for key in ("video_id", "title", "description", "person")}
             base["youtube_slot"] = context.slot
             if not item["parts"]:
-                results.append({**base, "status": "skipped", "reason": item["reason"]})
+                append_result(
+                    {
+                        **base,
+                        "status": "skipped" if item["status"] == "skipped" else "unchanged",
+                        "reason": item["reason"],
+                        "confirmation": "provider_read" if item["status"] == "unchanged" else None,
+                    },
+                    item,
+                )
                 continue
             if quota_error:
-                results.append({**base, "status": "not_attempted", "reason": quota_error.user_message})
+                append_result({**base, "status": "not_attempted", "reason": quota_error.user_message}, item)
                 continue
+            if recorder:
+                recorder.progress(item["video_id"], status="running")
+            write_started = False
             try:
                 # Revalidate all writable metadata immediately before this video's sole update.
                 context, current = self._read(
@@ -264,50 +312,71 @@ class DraftPublishWorkflow:
                 )
                 detail = next((video for video in current if video.get("id") == item["video_id"]), {})
                 if video_publish_state(detail) != item["current"]:
-                    results.append(
+                    append_result(
                         {
                             **base,
                             "status": "failed",
                             "reason": "影片在確認後變更，請重建暫存。",
                             "code": "stale_preview",
-                        }
+                        },
+                        item,
                     )
                     continue
 
                 def write(candidate):
+                    nonlocal write_started
                     if candidate.channel_id != snapshot["youtube_channel_id"]:
                         raise self.ports.stale_preview_exception()
+                    write_started = True
+                    if recorder:
+                        recorder.progress(item["video_id"], attempted_parts=item["parts"])
                     return self.ports.update_and_publish_video(
-                        candidate, item["video_id"], item["title"], item["description"], current_video=detail
+                        candidate,
+                        item["video_id"],
+                        item["title"],
+                        item["description"],
+                        current_video=detail,
+                        _journal_evidence={
+                            "parts": item["parts"],
+                            "person_key": item.get("person_key"),
+                            "content_fingerprint": content_fingerprint(item["title"], item["description"]),
+                            "attempted_write": True,
+                        },
                     )
 
                 context, response = self.ports.run_youtube_operation_with_quota_fallback(
                     context, write, estimated_units=50, attempted_slots=attempted
                 )
-                results.append(
+                append_result(
                     {
                         **base,
                         "youtube_slot": context.slot,
                         "status": "succeeded",
                         "reconciled": bool(response.get("reconciled")),
-                    }
+                        "confirmation": "provider_read" if response.get("reconciled") else "provider_response",
+                        "attempted_parts": item["parts"],
+                    },
+                    item,
                 )
             except YouTubeQuotaUnavailable as exc:
                 quota_error = exc
-                results.append({**base, "status": "not_attempted", "reason": exc.user_message})
+                append_result({**base, "status": "not_attempted", "reason": exc.user_message}, item)
             except Exception as exc:
                 error = self.ports.workflow_error_detail(exc, slot=context.slot)
-                results.append(
+                append_result(
                     {
                         **base,
-                        "status": "failed" if known_rejected_write(exc) else "needs_reconciliation",
+                        "status": "failed"
+                        if not write_started or known_rejected_write(exc)
+                        else "needs_reconciliation",
                         "reason": error["message"],
                         "error": error,
-                    }
+                    },
+                    item,
                 )
         counts = {
             status: sum(item["status"] == status for item in results)
-            for status in ("succeeded", "skipped", "failed", "not_attempted", "needs_reconciliation")
+            for status in ("succeeded", "unchanged", "skipped", "failed", "not_attempted", "needs_reconciliation")
         }
         return {
             "operation": "youtube.metadata_publish",

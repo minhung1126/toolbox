@@ -267,11 +267,13 @@ def test_stages_manual_content_without_writes_then_updates_and_publishes_once(ha
     methods = harness.context.quota_limiter.get_usage()["methods"]
     assert next(item for item in methods if item["method"] == "videos.update")["units"] == 50
     operation = harness.store.get("owner-one", result["operation_id"])
-    assert operation["items"][0]["intended"] == {
-        "title": "My final manual title",
-        "description": "line\n" * 900,
-        "privacyStatus": "public",
-    }
+    intended = operation["items"][0]["intended"]
+    assert intended["title"] == "My final manual title"
+    assert intended["description"] == "line\n" * 900
+    assert intended["privacyStatus"] == "public"
+    assert intended["parts"] == ["snippet", "status"]
+    assert intended["person_key"] == "Alice"
+    assert intended["attempted_write"] is True
     # Restart/replay returns the recorded result without another provider call.
     harness.client = harness.new_client()
     assert harness.publish(payload).json()["operation_id"] == result["operation_id"]
@@ -429,7 +431,7 @@ def test_existing_cleanup_removes_newly_published_video_without_another_publish_
     payload, _ = harness.preview(harness.prepare())
     assert harness.publish(payload).status_code == 200
     harness.provider.members = ["one"]
-    loaded = harness.client.post("/api/v1/youtube/playlist-items", json={"playlist_id": "PLdrafts_test"})
+    loaded = harness.client.post("/api/v1/youtube/cleanup-preview", json={"playlist_id": "PLdrafts_test"})
     assert loaded.status_code == 200, loaded.text
     snapshot = loaded.json()
     response = harness.client.post(
