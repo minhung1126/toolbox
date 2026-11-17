@@ -1,5 +1,7 @@
 import type { DraftStage, DraftSource, FinalEdit, DraftResult, DraftPublishRequest } from '../api/draftPublishApi';
 
+import type { OperationReference } from '../hooks/useDraftPublishOperation';
+
 export interface SavedPublishDraft extends DraftStage {
   account: string;
   source: DraftSource;
@@ -7,6 +9,7 @@ export interface SavedPublishDraft extends DraftStage {
   edits: FinalEdit[];
   result?: DraftResult;
   pending?: DraftPublishRequest;
+  operation_ref?: OperationReference;
 }
 function key(account: string, channel: string, type: string) {
   return `toolbox:youtube-publish-draft:v1:${encodeURIComponent(account)}:${encodeURIComponent(channel)}:${type}`;

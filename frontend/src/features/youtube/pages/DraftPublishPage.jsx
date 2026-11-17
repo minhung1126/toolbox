@@ -8,6 +8,8 @@ import YouTubeVideoEditDialog from '../../../components/YouTubeVideoEditDialog';
 import VideoThumbnail from '../../../components/VideoThumbnail';
 import { api } from '../../../services/api';
 import { draftPublishApi } from '../api/draftPublishApi';
+import { parsePublishAcceptance, parsePublishOperation } from '../api/draftPublishOperation';
+import { useDraftPublishOperation } from '../hooks/useDraftPublishOperation';
 import { normalizeYoutubePlaylistInput } from '../model/playlistInput';
 import { getYoutubeAuthContext } from '../model/routing';
 import { currentDraftContext, loadPublishDraft, savePublishDraft } from '../model/draftPublishStorage';
@@ -38,6 +40,8 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
     }
   });
   const [draft, setDraft] = useState(initial.draft);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const [error, setError] = useState(initial.error);
   const [saveError, setSaveError] = useState('');
   const [preview, setPreview] = useState(null);
@@ -88,6 +92,7 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
   const invalid = validation.some(Boolean);
 
   const persist = (next) => {
+    draftRef.current = next;
     setDraft(next);
     try {
       savePublishDraft(next);
@@ -131,6 +136,50 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
       if (mounted.current) setBusy(false);
     }
   };
+  const receiveOperation = (operation) => {
+    const current = draftRef.current;
+    if (!current) return;
+    const merged = new Map(
+      (current.result?.results || []).filter((item) => item.status === 'succeeded').map((item) => [item.video_id, item])
+    );
+    operation.progress.rows.forEach((row) => {
+      if (merged.has(row.video_id)) return;
+      const edit = current.edits.find((item) => item.video_id === row.video_id);
+      merged.set(
+        row.video_id,
+        row.status === 'succeeded' && (row.title !== edit?.title || row.description !== edit?.description)
+          ? { ...row, status: 'failed', reason: '先前版本已寫入；目前手動修改尚未發布，請保留內容並重建暫存。' }
+          : row
+      );
+    });
+    const active = ['prepared', 'running'].includes(operation.state);
+    const unknown = operation.progress.counts.needs_reconciliation > 0;
+    const rows = [...merged.values()];
+    persist({
+      ...current,
+      operation_ref: {
+        version: 1,
+        operation_id: operation.id,
+        request_id: current.pending?.request_id || current.operation_ref?.request_id,
+        revision: operation.progress.revision,
+      },
+      pending: active || unknown ? current.pending : undefined,
+      result: {
+        operation: 'youtube.metadata_publish',
+        operation_id: operation.id,
+        completed: rows.every((row) => ['succeeded', 'unchanged', 'skipped'].includes(row.status)),
+        results: rows,
+      },
+    });
+    setPreview(null);
+  };
+  const { operation, pollError, refresh } = useDraftPublishOperation({
+    pending: draft?.pending,
+    reference: draft?.operation_ref,
+    enabled: !blocked,
+    onOperation: receiveOperation,
+  });
+
   const publish = async () => {
     if (requestLock.current || blocked || locked || invalid || !preview || saveError) return;
     requestLock.current = true;
@@ -143,36 +192,31 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
       preview_token: preview.preview_token,
       preview_snapshot: preview.preview_snapshot,
     };
-    const next = { ...draft, pending: request };
-    if (!persist(next)) {
+    if (
+      !persist({
+        ...draft,
+        pending: request,
+        operation_ref: { version: 1, request_id: request.request_id, revision: 0 },
+      })
+    ) {
       requestLock.current = false;
       setBusy(false);
       return;
     }
     try {
-      const result = await draftPublishApi.publish(request);
+      const accepted = parsePublishAcceptance(await api.submitYoutubePublishJob(request), request);
       if (!mounted.current) return;
-      // Successful rows remain locked and skipped in later submissions from this stage.
-      const merged = new Map(
-        (draft.result?.results || []).filter((item) => item.status === 'succeeded').map((item) => [item.video_id, item])
-      );
-      result.results.forEach((item) => {
-        if (!merged.has(item.video_id)) merged.set(item.video_id, item);
+      persist({
+        ...draftRef.current,
+        operation_ref: { version: 1, operation_id: accepted.operation_id, request_id: request.request_id, revision: 0 },
       });
-      persist({ ...draft, pending: undefined, result: { ...result, results: [...merged.values()] } });
       setPreview(null);
     } catch (caught) {
       if (!mounted.current) return;
-      // An HTTP validation rejection has not written anything; transport/contract failures remain locked.
-      if (
-        caught.status >= 400 &&
-        caught.status < 500 &&
-        !['operation_requires_reconciliation', 'operation_input_changed'].includes(caught.code)
-      ) {
-        persist({ ...draft, pending: undefined });
-      }
+      if ([400, 401, 403, 422, 503].includes(caught.status) || caught.code === 'stale_preview')
+        persist({ ...draftRef.current, pending: undefined });
       setPreview(null);
-      setError(`${caught.message} 如結果不明，請先唯讀核對；暫存與手動修改仍保留。`);
+      setError(`${caught.message} 受理結果不明時保留原請求 ID，請重新查詢；手動內容仍保留。`);
     } finally {
       requestLock.current = false;
       if (mounted.current) {
@@ -187,47 +231,29 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
     setBusy(true);
     setError('');
     try {
-      const list = await api.getOperations();
-      const operation = list.operations.find(
-        (op) =>
-          op.kind === 'youtube.metadata_publish' && op.plan?.stage_snapshot?.stage_id === draft.stage_snapshot.stage_id
-      );
-      if (!operation) throw new Error('尚未找到已受理的作業。請稍後再核對或至作業紀錄檢查，避免重送。');
-      const checked = await api.reconcileOperation(operation.id, operation.kind);
+      const current = draftRef.current;
+      const id = current.operation_ref?.operation_id || current.result?.operation_id;
+      const found = id
+        ? await api.getOperation(id)
+        : current.pending?.request_id
+          ? await api.findYoutubePublishJob(current.pending.request_id)
+          : await api.findYoutubePublishStage(current.stage_snapshot.stage_id);
+      if (
+        !found?.id ||
+        found.kind !== 'youtube.metadata_publish' ||
+        found.channel_id !== auth.channelId ||
+        found.plan?.stage_snapshot?.stage_id !== current.stage_snapshot.stage_id
+      )
+        throw new Error('作業與目前草稿或頻道不符。');
+      const checked = await api.reconcileOperation(found.id, found.kind);
       if (!mounted.current) return;
-      const result = checked.result;
-      if (!result && checked.state === 'failed_before_write' && checked.items?.length === 0) {
-        persist({ ...draft, pending: undefined });
-        setPreview(null);
-        setError('已確認尚未嘗試寫入。手動內容仍保留，可重新檢查變更與配額。');
-        return;
-      }
-      const stillUnknown = checked.items?.some((item) => ['running', 'needs_reconciliation'].includes(item.state));
-      if (result) {
-        const succeeded = new Map(
-          (draft.result?.results || [])
-            .filter((item) => item.status === 'succeeded')
-            .map((item) => [item.video_id, item])
-        );
-        result.results.forEach((item) => {
-          if (!succeeded.has(item.video_id)) {
-            const edit = draft.edits.find((candidate) => candidate.video_id === item.video_id);
-            succeeded.set(
-              item.video_id,
-              item.status === 'succeeded' && (edit?.title !== item.title || edit?.description !== item.description)
-                ? { ...item, status: 'failed', reason: '先前版本已寫入；目前手動修改尚未發布，請保留內容並重建暫存。' }
-                : item
-            );
-          }
-        });
-        persist({
-          ...draft,
-          result: { ...result, operation_id: operation.id, results: [...succeeded.values()] },
-          pending: stillUnknown ? draft.pending : undefined,
-        });
-      }
-      setPreview(null);
-      if (stillUnknown || !result) setError('部分結果仍待核對，請至作業紀錄查看；不會自動重送。');
+      const expected = current.pending || {
+        stage_token: current.stage_token,
+        stage_snapshot: current.stage_snapshot,
+        edits: found.plan.edits,
+      };
+      receiveOperation(parsePublishOperation(checked, expected, found.id));
+      refresh();
     } catch (caught) {
       if (mounted.current) setError(caught.message);
     } finally {
@@ -235,6 +261,7 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
       if (mounted.current) setBusy(false);
     }
   };
+  const progress = operation?.progress;
 
   return (
     <div className="section-gap draft-publish-page">
@@ -267,6 +294,27 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
           if (updateEdit(editingIndex, patch)) setEditingIndex(null);
         }}
       />
+      {pollError && (
+        <p role="status">
+          {pollError}{' '}
+          <Button variant="secondary" onClick={refresh}>
+            重新查詢進度
+          </Button>
+        </p>
+      )}
+      {progress && (
+        <section className="glass-panel card-padding" aria-label="發布進度" aria-live="polite">
+          <h2>發布進度</h2>
+          <p>
+            已處理 {progress.total - progress.counts.queued - progress.counts.running}／{progress.total} 支影片
+          </p>
+          <p>
+            等待 {progress.counts.queued} · 執行中 {progress.counts.running} · 成功 {progress.counts.succeeded} · 已符合{' '}
+            {progress.counts.unchanged} · 略過 {progress.counts.skipped} · 失敗 {progress.counts.failed} · 尚未執行{' '}
+            {progress.counts.not_attempted} · 待核對 {progress.counts.needs_reconciliation}
+          </p>
+        </section>
+      )}
       {error && (
         <p role="alert" className="error-banner">
           {error}
@@ -296,7 +344,7 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
                 資料來源、人物指定、影片清單或授權頻道已變更。請返回人物指定核對並重建暫存，現有手動內容仍保留。
               </p>
             )}
-            {draft.pending && <p role="alert">發布請求已送出，結果待核對。編輯與再次發布已暫停。</p>}
+            {draft.pending && <p role="alert">發布請求已送出，正在查詢逐片進度。編輯與再次發布已暫停。</p>}
             {(draft.pending || draft.result) && (
               <Button variant="secondary" disabled={busy || blocked} onClick={reconcile}>
                 唯讀核對發布結果
@@ -341,7 +389,11 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
                       <p>
                         {result ? (
                           <>
-                            <ResultStatus status={result.status} />{' '}
+                            {['queued', 'running', 'unchanged'].includes(result.status) ? (
+                              { queued: '等待處理', running: '執行中', unchanged: '已符合／無須更新' }[result.status]
+                            ) : (
+                              <ResultStatus status={result.status} />
+                            )}{' '}
                             <span>{succeeded ? '已寫入 YouTube' : result.reason}</span>
                           </>
                         ) : edit.skip || item.status === 'skipped' ? (
@@ -450,13 +502,13 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
                 invalid ||
                 !preview ||
                 Boolean(saveError) ||
-                !preview.plan.some((item) => item.parts.length)
+                !preview.plan.some((item) => item.status !== 'skipped')
               }
             >
               確認編輯並公開
             </Button>
           </div>
-          <p className="text-muted">本流程不會移出 To-Post 清單；需要清理時請使用既有「發布並清理」功能。</p>
+          {draft.result?.completed && <Link to={PATHS.youtubePublishCleanup}>前往清理 To-Post</Link>}
           <ConfirmDialog
             open={confirmOpen && !blocked}
             title={`確認編輯並公開 ${preview?.quota.write_calls || 0} 支影片？`}

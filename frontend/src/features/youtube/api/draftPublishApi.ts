@@ -71,7 +71,8 @@ export interface DraftResultItem {
   title: string;
   description: string;
   person: string;
-  status: 'succeeded' | 'skipped' | 'failed' | 'not_attempted' | 'needs_reconciliation';
+  status:
+    'queued' | 'running' | 'succeeded' | 'unchanged' | 'skipped' | 'failed' | 'not_attempted' | 'needs_reconciliation';
   reason?: string;
 }
 export interface DraftResult {
@@ -169,7 +170,9 @@ export const draftPublishApi = {
         (item, index) =>
           record(item) &&
           item.video_id === payload.edits[index].video_id &&
-          ['succeeded', 'skipped', 'failed', 'not_attempted', 'needs_reconciliation'].includes(String(item.status))
+          ['succeeded', 'unchanged', 'skipped', 'failed', 'not_attempted', 'needs_reconciliation'].includes(
+            String(item.status)
+          )
       )
     )
       invalid();
