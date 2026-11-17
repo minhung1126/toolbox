@@ -216,16 +216,14 @@ class DraftPublishWorkflow:
                         )
                     if same_stage and any(item["state"] == "completed" for item in attempts) and not matches:
                         raise self.ports.stale_preview_exception()
-                if (
-                    state["snippet"].get("title") != edit.title
-                    or state["snippet"].get("description", "") != edit.description
-                ):
+                if content_fingerprint(
+                    state["snippet"].get("title", ""), state["snippet"].get("description", "")
+                ) != content_fingerprint(edit.title, edit.description):
                     if not state["snippet"].get("categoryId"):
                         raise http_error(400, "youtube_category_required", "影片缺少類別，請重新讀取影片。")
-            text_changed = (
-                state["snippet"].get("title") != edit.title
-                or state["snippet"].get("description", "") != edit.description
-            )
+            text_changed = content_fingerprint(
+                state["snippet"].get("title", ""), state["snippet"].get("description", "")
+            ) != content_fingerprint(edit.title, edit.description)
             privacy_changed = state["status"].get("privacyStatus") != "public"
             parts = [] if skipped else (["snippet"] if text_changed else []) + (["status"] if privacy_changed else [])
             plan.append(

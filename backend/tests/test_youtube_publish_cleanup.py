@@ -451,3 +451,26 @@ def test_duplicate_items_recheck_privacy_after_each_delete(cleanup_environment):
     assert [row["status"] for row in response.json()["results"]] == ["succeeded", "skipped"]
     assert len(method_calls(env, "playlistItems.delete")) == 1
     assert [item["id"] for item in env.provider.items] == ["item-2"]
+
+
+def test_timeout_then_private_retry_stays_unknown_and_never_deletes_again(cleanup_environment):
+    env = cleanup_environment
+    env.provider.public.add("video-1")
+    env.provider.delete_outcomes = [TimeoutError()]
+    original = env.provider.delete
+
+    def delete(**kwargs):
+        request = original(**kwargs)
+
+        def execute():
+            env.provider.public.clear()
+            return request.execute()
+
+        return SimpleNamespace(execute=execute)
+
+    env.provider.delete = delete
+    response = publish(client_for(env))
+    assert response.status_code == 200, response.text
+    assert response.json()["needs_reconciliation_count"] == 1
+    assert len(method_calls(env, "playlistItems.delete")) == 1
+    assert len(env.provider.items) == 1

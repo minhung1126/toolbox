@@ -55,7 +55,11 @@ export function parsePublishProgress(value: unknown, payload: DraftPublishReques
         progressStatuses.includes(row.status) &&
         Array.isArray(row.attempted_parts) &&
         row.attempted_parts.every((part: unknown) => ['snippet', 'status'].includes(String(part))) &&
-        (row.confirmation === null || typeof row.confirmation === 'string')
+        (row.reason === undefined || typeof row.reason === 'string') &&
+        (row.confirmation === null || typeof row.confirmation === 'string') &&
+        (row.status !== 'succeeded' ||
+          ['provider_response', 'provider_read', 'legacy_evidence'].includes(row.confirmation)) &&
+        (row.status !== 'unchanged' || ['provider_read', 'legacy_evidence'].includes(row.confirmation))
     )
   )
     invalid();

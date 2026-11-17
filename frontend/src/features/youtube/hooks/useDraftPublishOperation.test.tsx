@@ -34,7 +34,14 @@ function operation(status = 'running', revision = 1): any {
       revision,
       total: 1,
       counts: Object.fromEntries(statuses.map((key) => [key, key === status ? 1 : 0])),
-      rows: [{ ...pending.edits[0], status, attempted_parts: [], confirmation: null }],
+      rows: [
+        {
+          ...pending.edits[0],
+          status,
+          attempted_parts: [],
+          confirmation: status === 'succeeded' ? 'provider_response' : null,
+        },
+      ],
     },
   };
 }
@@ -140,6 +147,9 @@ describe('publish operation polling', () => {
   });
   it('rejects cross-channel identities and inconsistent counts', () => {
     expect(() => parsePublishOperation({ ...operation(), channel_id: 'other' }, pending)).toThrow();
+    const unconfirmed = operation('succeeded');
+    unconfirmed.progress.rows[0].confirmation = null;
+    expect(() => parsePublishOperation(unconfirmed, pending)).toThrow();
     const broken = operation();
     broken.progress.counts.succeeded = 1;
     expect(() => parsePublishOperation(broken, pending)).toThrow();

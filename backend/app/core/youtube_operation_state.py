@@ -135,7 +135,11 @@ def project_operation(db, operation):
         )
         timestamp = attempt.get("confirmed_at") or attempt.get("created_at") or operation.get("created_at", 0)
         order = [timestamp, operation["id"], index]
-        source = "provider_read" if reconciliation.get("matches_intent") else "provider_response"
+        source = (
+            "provider_read"
+            if reconciliation.get("matches_intent") or evidence.get("provider_read")
+            else "provider_response"
+        )
         if phase == "cleanup":
             row = cleanup.get(remote)
             if not row:
@@ -177,16 +181,10 @@ def project_operation(db, operation):
         previous = _projection_get(db, "youtube_video_state", ("owner", "channel_id", "video_id"), keys)
         previous.setdefault("video_id", remote)
         target = planned.get(remote) or {}
-        parts = intended.get("parts")
+        parts = evidence.get("parts", intended.get("parts"))
         if parts is None:
             # Legacy combined operations require their signed per-video parts.
-            parts = (
-                target.get("parts")
-                if phase == "metadata_publish"
-                else ["snippet"]
-                if phase == "metadata"
-                else ["status"]
-            )
+            parts = target.get("parts") if phase == "metadata_publish" else ["status"] if phase == "publish" else []
         parts = parts or []
         person = intended.get("person_key") or prepared.get(remote, {}).get("person_key")
         if (

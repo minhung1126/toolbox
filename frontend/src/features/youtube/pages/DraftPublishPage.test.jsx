@@ -364,6 +364,21 @@ describe('editable publish staging', () => {
     expect(screen.getByRole('article', { name: '暫存影片 one' })).toHaveTextContent('A newer manual edit');
     expect(screen.queryByText('已寫入 YouTube', { exact: true })).not.toBeInTheDocument();
   });
+  it('does not submit when saving the pending request fails and can save the original draft again', async () => {
+    seed();
+    renderPage();
+    const setter = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('full');
+    });
+    await confirmPublish();
+    expect(api.submitYoutubePublishJob).not.toHaveBeenCalled();
+    expect(screen.getByText(/暫存尚未保存/)).toBeInTheDocument();
+    setter.mockRestore();
+    fireEvent.click(screen.getByRole('button', { name: '重試保存暫存' }));
+    expect(loadPublishDraft('owner', 'channel', 'Video').pending).toBeUndefined();
+    expect(screen.getAllByRole('button', { name: '編輯', exact: true })[0]).toBeEnabled();
+  });
+
   it('can reinclude default skipped rows without replacing manual content', () => {
     const draft = seed();
     draft.stage_snapshot.plan[0].default_skip = true;

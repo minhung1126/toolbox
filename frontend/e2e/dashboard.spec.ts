@@ -35,7 +35,7 @@ test('dashboard search and authorization summary stay usable at supported widths
 
     const favorites = page.getByRole('region', { name: '常用工具' });
     await expect(favorites.getByRole('link', { name: 'FFmpeg 命令行生成器' })).toBeVisible();
-    await expect(favorites.getByRole('link', { name: 'Video 草稿 尚缺授權' })).toHaveAttribute(
+    await expect(favorites.getByRole('link', { name: 'Video 快速套用 尚缺授權' })).toHaveAttribute(
       'href',
       PATHS.youtubeVideoDrafts
     );

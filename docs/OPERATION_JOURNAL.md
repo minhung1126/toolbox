@@ -1,39 +1,42 @@
-# 持久作業紀錄與對帳（TB-09）
+# 持久作業紀錄與唯讀核對
 
-保留原有同步批次更新、發布與歌單排序端點，成功回應新增 `operation_id`。`request_id` 為可選欄位；舊呼叫端以完整輸入與簽署預覽產生穩定識別。同一帳號、操作、請求 ID 與輸入版本在 SQLite 同一交易中確認受理，不會因重送、程序重啟或新增另一個請求 ID 重跑同一份已受理計畫。重新預覽的 token 包含隨機 nonce，以區分使用者重新核對後的新計畫。
+`data/operations.sqlite3` 是操作事實的唯一來源。SQLite schema v2 以交易從 v1 升級，保留 document v1 可讀性；新操作 document 為 v2。未知 schema／document 的備份拒絕還原。`youtube_video_state`、`youtube_cleanup_state` 為可從 journal 重建的索引投影，證據與投影在同一交易保存；provider 呼叫在交易外。
 
-新資料為 `data/operations.sqlite3`，schema 與 document version 均為 1。資料包含來源、頻道、計畫、輸入摘要、遠端 ID、各寫入階段與回應證據；不保存 OAuth token 或 preview token。舊 JSON、已退役憑證與外部影片沒有轉換或刪除。維持原本 `data` Volume 掛載即可保存新紀錄。
+## 受理與防重送
 
-每次 provider 寫入前先落盤 running 階段，收到回應後再保存證據。無法確認的寫入保留 `needs_reconciliation`，不能憑本機 request ID 宣稱外部 exactly-once。公開與清理分開記錄；清理期間配額例外可能發生在 delete 後，保守標成待核對。既有 provider 內部的存在性檢查與確認讀取仍保留。
+- 同 owner／kind／request ID 的輸入不同時回 `409 operation_input_changed`；相同輸入傳回原 operation。不同 request ID 仍不能重跑同一已簽署計畫。
+- `(owner, channel_id, video_id)` 原子保留寫入目標，涵蓋新背景發布、舊同步發布、batch update 與單片 metadata API。既有 active／unknown 操作亦納入保護。確認完成或確定未嘗試的目標可釋放；未知結果須先核對。
+- 不保存 OAuth 或 preview token。已受理背景計畫保存原預覽到期時間；排隊不延長簽章效期。stage token 僅用來核實原草稿，不能重授權 preview。
+- `GET /operations` 仍為最近 100 筆；`GET /operations/{id}` 本機讀取。request 索引查找與歷史投影不受這個限制。
 
-- `prepared`：受理紀錄已保存，尚未開始服務流程。
-- `running`：流程正在本程序執行。未在本程序活動集合中的 prepared/running 讀取時視為待核對，可能是中斷或另一程序執行中；不自動接手。
-- `completed`：同步流程已確認完成，或遠端讀取符合完整計畫。
-- `partial`：保留已知成功與未完成項目。
-- `needs_reconciliation`：有結果不明的階段；查詢與核對不重送任何寫入。
-- `failed_before_write`：在進入寫入前失敗。
+## 三階段 YouTube 工作流
 
-`GET /api/v1/operations` 回傳目前帳號最近 100 筆紀錄；`GET /api/v1/operations/{id}` 查單筆。帳號 B 不能查帳號 A 的 ID。前端 `/operations` 提供證據匯出與對帳入口。
+① 快速套用只讀 Sheet／YouTube 並建立本地草稿。② 編輯草稿並公開以最終手動內容預覽，確認後 `POST /youtube/drafts/publish-jobs` 回 202 `{version:1, operation_id, state, progress}`。③ 清理 To-Post 使用 cleanup v2 確認，只呼叫 `playlistItems.delete`，成功發布不自動清理。
 
-`POST /api/v1/operations/{id}/reconcile-youtube` 使用目前獨立 YouTube 授權讀回影片標題／說明或公開狀態與清單成員；頻道必須相符。未嘗試或缺少證據的項目不能當作完成。`reconcile-music` 以音樂連線讀回清單順序。新歌單沒有已知 ID 時維持待核對，請使用者在 YouTube Music 核對，不能再次建立。
+`GET /youtube/drafts/publish-jobs/by-request/{request_id}` 在登入 owner 與目前授權 channel 內精確恢復；舊 pending 沒有 request ID 時，`by-stage/{stage_id}` 只接受唯一匹配，歧義回 409。舊 `POST /youtube/drafts/publish` 維持同步回應並共用執行核心。
 
-對帳只證明目前遠端狀態是否符合計畫；即使吻合，也不改寫歷史上已知的回應證據。其他程序仍可能執行中時，不能將核對當成取消或接手。需要再次執行者必須重新讀取來源與預覽，原快照不會獲得新的寫入授權。
+progress v1 初始化全部影片，獨立於 provider attempt 列表；`revision` 單調遞增。queued、running、succeeded、unchanged、skipped、failed、not_attempted、needs_reconciliation 互斥，總和等於 total。unchanged 表示目前已符合，不表示曾成功寫入。前端每秒讀取 operation，一次一個查詢；失敗退避 2／5／10 秒並遵守 Retry-After。格式、身份或計數不符時保留 pending、已知成果與手動文字。
 
-`OperationStore.backup(path)` 使用 SQLite backup API 取得一致快照。還原僅限停止服務的離線維護：先備份目前檔案，再 `OperationStore(...).restore(backup)`；還原前檢查 SQLite integrity、schema 與 document version，未知版本拒絕。測試涵蓋並行受理、防重送、程序重新組裝、逐項成功／未知、帳號隔離、provider 唯讀對帳、備份還原與拒絕壞版本；也確認既有 notes JSON 不受新紀錄影響。這不替代正式部署回退演練。
+## runner 與狀態恢復
 
+runner 由 `create_app()`／lifespan 組裝，預設最多受理 4 個執行中／排隊作業、逐批依序執行。滿載或停止受理回 503／Retry-After，不能先建立永遠無法執行的 accepted job。入列失敗則持久標示未寫入。
 
-### 暫存編輯並公開
+工作僅攜帶 owner／channel／slot 與持久計畫 ID，從 app-owned credential repository 重新取得權限，明確注入設定、配額、client factory 與 recorder，不沿用 HTTP Request。worker 重新檢查授權、Sheet／清單、預覽效期及每片最新資料。
 
-`youtube.metadata_publish` 作業由 `/youtube/drafts/publish` 建立。`metadata_publish` 寫入項目保存最終標題、描述與 `privacyStatus=public`；同一影片最多一次合併更新，配額不足且確認未寫入時才允許同頻道槽位備援。重複提交相同已確認請求會傳回既有結果。
+Linux Docker 僅支援**單一 uvicorn process／單一副本**。OS file lock 排除共享同 store 的另一 runner；SQLite 記錄 executor 身份、狀態及 heartbeat。heartbeat 過期不授權接手或重送。重新啟動取得獨占鎖後，保留已知成果、running 列轉待核對、queued 列轉 not_attempted，永不自動續送。關機停止受理並清除尚未執行的 queue，有限等待目前工作；仍存活的 worker 繼續持有鎖與所有權。
 
-`/operations/{id}/reconcile-youtube` 對此作業只讀取影片，同時比對三項最終值。未確認的寫入會阻止新暫存對同一頻道／影片再次發布；新請求 ID 或重建暫存無法略過保護。部分成功的已完成影片在同一暫存內不可再次修改；明確拒絕或未嘗試的列可重新預覽。作業在建立寫入項目前明確失敗，經核對後可重新預覽；無法確認是否仍由其他工作程序執行的空作業維持阻擋。
+prepared／running 只有可信 active owner 才顯示執行中。completed 是已確認完成；partial 保留已知成果；needs_reconciliation 表示結果未知；failed_before_write 表示確定尚未寫入。未知不是失敗或成功，也不是重試許可。
 
-### 選片時的編輯套用狀態
+## 證據、投影與安全跳過
 
-`POST /api/v1/youtube/edit-status` 接受最多 500 個 `video_ids`，只讀取目前登入帳號與授權頻道的完整 metadata 作業歷史，不受最近 100 筆紀錄限制，不呼叫 YouTube 或扣除讀寫配額。前端對完整影片清單分批取得狀態後才套用篩選，搜尋與篩選共用同一份資料。
+人物成功須有實際 snippet parts、可信 person_key 與回應／唯讀核對證據。status-only、unchanged、無人物關聯或舊紀錄缺 parts 均不能建立人物套用成功。新失敗不抹除舊成功，pending 另外保留並阻擋寫入。事件依穩定順序投影，較舊核對不能覆蓋較新的成功內容。
 
-- `applied`：`metadata`／`metadata_publish` 寫入階段已完成，並有 provider 成功回應或唯讀核對吻合的證據。部分成功作業逐片判斷；稍後重編失敗不抹除先前成功。
-- `not_applied`：有明確未寫入的階段紀錄，且沒有已驗證成功或結果不明的階段；介面顯示「有未成功寫入紀錄」，不宣稱可回溯工具啟用前的所有編輯。
-- `unknown`：無紀錄、舊紀錄缺乏證據、暫存／略過／未嘗試或結果待核對。只有請求送出、整批完成、quota 扣除、影片已公開或文字吻合，都不足以單獨標為已套用。
+指紋為 version 1 canonical JSON（title、description）的 SHA-256，只把 CRLF／CR 轉 LF，保留空白與段落。prepare 只有在人物、目標指紋、可信歷史、最新遠端文字、public 全部一致且無 pending 時回可撤銷 default_skip；前端不可僅依 applied 排除影片。
 
-既有 SQLite schema 不變；暫存來源的瀏覽器索引改以帳號／頻道／Video 或 Shorts 隔離，已保存的暫存本體維持原鍵值，可直接恢復。
+cleanup 投影以 `(owner, channel_id, playlist_id, playlist_item_id)` 隔離。同影片重新加入產生的新 item，不沿用舊移除證據。
+
+## 唯讀核對與備份
+
+`POST /operations/{id}/reconcile-youtube` 只讀 provider。執行中回 409，頻道不同拒絕；新發布核對最終文字與 public，新 cleanup 只核對該 item 是否移除，不要求影片一直維持 public。保留舊 publish＋cleanup 兩階段的歷史解讀。`reconcile-music` 仍唯讀檢查順序；新歌單無已知 ID 時不得再次建立。
+
+`OperationStore.backup(path)` 使用 SQLite backup API 取得一致快照；`restore` 僅供停止服務後離線維護。恢復前驗證 integrity、schema、document，保留原 journal。**YouTube 已有寫入後，不能直接還原舊 DB 而丟失防重送證據**；須保留新 journal 並逐項核對外部狀態。回退優先停用新受理，保留 store／reconciler／cleanup-only 修正。

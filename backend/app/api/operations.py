@@ -243,7 +243,9 @@ def _reconcile_draft_publish(operation, context, store, service):
         result = op.get("result")
         if result:
             for item in result["results"]:
-                if matches.get(item["video_id"]):
+                if matches.get(item["video_id"]) and any(
+                    attempt["remote_id"] == item["video_id"] for attempt in op["items"]
+                ):
                     item.update(status="succeeded", reason="唯讀核對已確認文字與公開狀態。", reconciled=True)
             for status in ("succeeded", "skipped", "failed", "not_attempted", "needs_reconciliation"):
                 result[f"{status}_count"] = sum(item["status"] == status for item in result["results"])
@@ -263,7 +265,7 @@ def reconcile_music(
     token_store=Depends(get_playlist_credential_store),
     client_factory=Depends(get_playlist_client_factory),
 ):
-    operation = public_operation(store.get(context.owner_sub, operation_id))
+    operation = public_operation(store.get(context.owner_sub, operation_id), store)
     if operation["kind"] != "youtube.playlist_sort":
         raise http_error(400, "operation_kind_mismatch", "此作業需要使用影片核對。")
     _check_channel(operation, context)

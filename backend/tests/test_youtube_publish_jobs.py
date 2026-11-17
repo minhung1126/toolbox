@@ -149,7 +149,9 @@ def test_exclusive_runner_and_restart_recover_only_state_without_replay(job_harn
     with pytest.raises(RuntimeError, match="one process"):
         other.start()
     runner.shutdown()
-    payload, _ = h.preview(h.prepare(people=("Alice", "Alice")))
+    h.provider.videos_by_id["three"] = video("three")
+    h.provider.members.append("three")
+    payload, _ = h.preview(h.prepare(people=("Alice", "Alice", "Alice")))
     op, _ = h.store.claim(
         "owner-one",
         "youtube.metadata_publish",
@@ -164,7 +166,11 @@ def test_exclusive_runner_and_restart_recover_only_state_without_replay(job_harn
     other.start()
     try:
         recovered = h.store.get("owner-one", op["id"])
-        assert [row["status"] for row in recovered["progress"]["rows"]] == ["succeeded", "needs_reconciliation"]
+        assert [row["status"] for row in recovered["progress"]["rows"]] == [
+            "succeeded",
+            "needs_reconciliation",
+            "not_attempted",
+        ]
         assert h.provider.writes == []
         with pytest.raises(HTTPException):
             h.store.assert_targets_available("owner-one", "channel-one", ["two"])

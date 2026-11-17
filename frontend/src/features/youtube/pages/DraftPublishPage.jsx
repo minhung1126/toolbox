@@ -199,6 +199,8 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
         operation_ref: { version: 1, request_id: request.request_id, revision: 0 },
       })
     ) {
+      draftRef.current = draft;
+      setDraft(draft);
       requestLock.current = false;
       setBusy(false);
       return;
@@ -208,7 +210,12 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
       if (!mounted.current) return;
       persist({
         ...draftRef.current,
-        operation_ref: { version: 1, operation_id: accepted.operation_id, request_id: request.request_id, revision: 0 },
+        operation_ref: {
+          version: 1,
+          operation_id: accepted.operation_id,
+          request_id: request.request_id,
+          revision: Math.max(draftRef.current.operation_ref?.revision || 0, accepted.progress.revision),
+        },
       });
       setPreview(null);
     } catch (caught) {

@@ -190,6 +190,27 @@ class ToPostCleanupWorkflow:
                     context, response = self.ports.run_youtube_operation_with_quota_fallback(
                         context, remove, estimated_units=54, attempted_slots=attempted
                     )
+                    if recorder:
+
+                        def confirm_attempts(op):
+                            import time
+
+                            for attempt in op["items"]:
+                                if (
+                                    attempt["phase"] == "cleanup"
+                                    and attempt["remote_id"] == row["playlist_item_id"]
+                                    and attempt["state"] in {"running", "needs_reconciliation"}
+                                ):
+                                    attempt.update(
+                                        state="completed",
+                                        reconciliation={
+                                            "provider_read": True,
+                                            "matches_intent": True,
+                                            "checked_at": time.time(),
+                                        },
+                                    )
+
+                        recorder.store.update(recorder.owner, recorder.id, confirm_attempts)
                     result = {
                         **base,
                         "youtube_slot": context.slot,
@@ -199,7 +220,21 @@ class ToPostCleanupWorkflow:
                         "reconciled": bool(response.get("reconciled")),
                     }
                 except CleanupRetained as exc:
-                    result = {**base, "status": "skipped", "reason": str(exc), "observed_privacy": exc.privacy}
+                    uncertain = getattr(exc, "cleanup_write_attempted", False) or bool(
+                        recorder
+                        and any(
+                            attempt["phase"] == "cleanup"
+                            and attempt["remote_id"] == row["playlist_item_id"]
+                            and attempt["state"] == "needs_reconciliation"
+                            for attempt in recorder.store.get(recorder.owner, recorder.id)["items"]
+                        )
+                    )
+                    result = {
+                        **base,
+                        "status": "needs_reconciliation" if uncertain else "skipped",
+                        "reason": str(exc),
+                        "observed_privacy": exc.privacy,
+                    }
                 except YouTubeQuotaUnavailable as exc:
                     quota_error = exc
                     result = {**base, "status": "needs_reconciliation", "reason": exc.user_message}

@@ -120,7 +120,7 @@ def _get_preview_slot_hint(path: str, body: object) -> str | None:
     """Only pin a slot for a write request carrying a complete preview."""
     normalized_path = path.rstrip("/")
     if not isinstance(body, dict) or not (
-        normalized_path.endswith("/batch-update") or normalized_path.endswith("/publish-and-cleanup")
+        normalized_path.endswith(("/batch-update", "/publish-and-cleanup", "/drafts/publish", "/drafts/publish-jobs"))
     ):
         return None
     if not str(body.get("preview_token") or "").strip() or not isinstance(body.get("preview_snapshot"), dict):

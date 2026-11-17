@@ -122,6 +122,9 @@ def test_creator_workflow_requires_sheets_but_publish_does_not(tmp_path: Path, m
         def run_batch_metadata_update(self, *_args, **_kwargs):
             raise AssertionError("Batch update must not run without Sheets authorization")
 
+        def create_cleanup_preview(self, payload, *, creds):
+            return {"status": "cleanup-preview-fake"}
+
         def run_publish_and_cleanup(self, payload, *, creds):
             calls.append((payload, creds))
             return {"status": "provider-fake"}
@@ -148,6 +151,24 @@ def test_creator_workflow_requires_sheets_but_publish_does_not(tmp_path: Path, m
         batch = client.post(f"/api/v1/youtube/{route}", json=batch_payload)
         assert batch.status_code == 403
         assert batch.json()["detail"]["code"] == "google_sheets_scope_required"
+
+    for route in ("drafts/prepare", "drafts/preview", "drafts/publish", "drafts/publish-jobs"):
+        response = client.post(
+            f"/api/v1/youtube/{route}",
+            json={
+                "request_id": "scope-test",
+                "stage_token": "signed",
+                "stage_snapshot": {},
+                "edits": [{"video_id": "video-1", "title": "Title", "description": "", "skip": False}],
+                **batch_payload,
+            },
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"]["code"] == "google_sheets_scope_required"
+    assert (
+        client.post("/api/v1/youtube/cleanup-preview", json={"playlist_id": "playlist-1"}).json()["status"]
+        == "cleanup-preview-fake"
+    )
 
     publish = client.post("/api/v1/youtube/publish-and-cleanup", json={"playlist_id": "playlist-1"})
     assert publish.status_code == 200

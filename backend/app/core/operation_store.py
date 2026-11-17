@@ -222,7 +222,8 @@ class OperationStore:
         """Include all prior attempts, so older uncertain writes cannot be bypassed."""
         with self.transaction() as db:
             rows = db.execute(
-                "SELECT document FROM operations WHERE owner=? AND kind='youtube.metadata_publish'", (owner,)
+                "SELECT document FROM operations WHERE owner=? AND channel_id=? AND kind='youtube.metadata_publish'",
+                (owner, channel_id),
             ).fetchall()
         return [op for row in rows if (op := json.loads(row[0]))["channel_id"] == channel_id]
 
@@ -337,7 +338,7 @@ class OperationStore:
                         )
                 uncertain = any(
                     row["status"] == "needs_reconciliation" for row in (op.get("progress") or {}).get("rows", [])
-                )
+                ) or any(item["state"] in {"running", "needs_reconciliation"} for item in op.get("items", []))
                 op.update(
                     state="needs_reconciliation"
                     if uncertain

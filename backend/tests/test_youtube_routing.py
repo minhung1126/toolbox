@@ -123,3 +123,17 @@ def test_workflow_estimates_are_conservative():
         )
         == 111
     )
+
+
+def test_publish_job_slot_hint_requires_a_complete_preview():
+    from backend.app.core.dependencies import _get_preview_slot_hint
+
+    complete = {
+        "youtube_slot": "secondary",
+        "preview_token": "signed",
+        "preview_snapshot": {"youtube_slot": "secondary"},
+    }
+    for path in ("/api/v1/youtube/drafts/publish", "/api/v1/youtube/drafts/publish-jobs"):
+        assert _get_preview_slot_hint(path, complete) == "secondary"
+        assert _get_preview_slot_hint(path, {"youtube_slot": "secondary"}) is None
+    assert _get_preview_slot_hint("/api/v1/youtube/drafts/prepare", complete) is None

@@ -111,3 +111,50 @@ def test_cleanup_projection_is_per_item_and_new_membership_is_independent(tmp_pa
     assert len(states) == 1 and states[0]["playlist_item_id"] == "item-one" and states[0]["status"] == "removed"
     assert h.store.cleanup_states("other", "channel-one", "PLdrafts_test") == []
     assert h.store.cleanup_states("owner-one", "other", "PLdrafts_test") == []
+
+
+def test_old_metadata_without_actual_parts_stays_unknown_and_rebuild_is_conservative(tmp_path):
+    from types import SimpleNamespace
+
+    h = Harness(tmp_path)
+    op, _ = h.store.claim(
+        "owner-one",
+        "youtube.metadata_update",
+        SimpleNamespace(
+            model_dump=lambda mode: {
+                "request_id": "legacy",
+                "assignments": [{"video_id": "one", "person": "Alice"}],
+                "preview_snapshot": {"plan": [{"video_id": "one", "newTitle": "Final", "newDescription": "Text"}]},
+            }
+        ),
+        channel_id="channel-one",
+    )
+    h.store.update(
+        "owner-one",
+        op["id"],
+        lambda operation: operation.update(
+            state="completed",
+            items=[
+                {
+                    "phase": "metadata",
+                    "remote_id": "one",
+                    "state": "completed",
+                    "intended": {"title": "Final", "description": "Text"},
+                    "evidence": {"provider_returned": True},
+                }
+            ],
+        ),
+    )
+    h.store.rebuild_youtube_projections()
+    assert statuses(h)["one"]["edit_status"] == "unknown"
+
+
+def test_line_endings_alone_do_not_create_an_unnecessary_write(tmp_path):
+    h = Harness(tmp_path)
+    h.rows[0]["Description"] = "a\nb\n"
+    h.provider.videos_by_id["one"]["snippet"].update(title="Applied title", description="a\r\nb\r\n")
+    h.provider.videos_by_id["one"]["status"]["privacyStatus"] = "public"
+    payload, preview = h.preview(h.prepare())
+    assert preview["plan"][0]["parts"] == []
+    assert h.publish(payload).json()["unchanged_count"] == 1
+    assert h.provider.writes == []

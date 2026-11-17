@@ -347,7 +347,7 @@ test('publish cleaner feature styles align source controls for mobile and deskto
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/youtube/publish-cleanup');
-    await expect(page.getByRole('heading', { level: 1, name: '發布 YouTube 草稿' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: '清理 To-Post' })).toBeVisible();
 
     const sourceAlignment = await page
       .locator('.publish-source-panel')
@@ -367,7 +367,7 @@ test('YouTube batch feature styles load without viewport overflow', async ({ pag
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/youtube/drafts/videos');
-    await expect(page.getByRole('heading', { level: 1, name: 'YouTube Video 草稿' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Video 快速套用' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: /試算表隨機抽查/ })).toHaveCSS('display', 'flex');
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

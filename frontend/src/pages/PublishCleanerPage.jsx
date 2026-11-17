@@ -145,18 +145,20 @@ export default function PublishCleanerPage({ sysSettings = {}, authUser }) {
           請先至 <Link to={PATHS.youtubeConnections}>YouTube 設定連線頻道</Link>。
         </p>
       )}
-      <div className="glass-panel card-padding">
-        <label htmlFor="cleanup-playlist">共用 To-Post 播放清單</label>
-        <SourceLinkInput
-          id="cleanup-playlist"
-          value={playlistId}
-          sourceType="youtube-playlist"
-          placeholder="YouTube Playlist ID"
-          readOnly
-        />
-        <p className="section-desc">
-          於 <Link to={PATHS.youtubePlaylist}>YouTube 播放清單設定</Link> 管理來源。
-        </p>
+      <div className="glass-panel card-padding toolbar publish-source-panel">
+        <div className="form-group publish-source-field">
+          <label htmlFor="cleanup-playlist">共用 To-Post 播放清單</label>
+          <SourceLinkInput
+            id="cleanup-playlist"
+            value={playlistId}
+            sourceType="youtube-playlist"
+            placeholder="YouTube Playlist ID"
+            readOnly
+          />
+          <p className="section-desc">
+            於 <Link to={PATHS.youtubePlaylist}>YouTube 播放清單設定</Link> 管理來源。
+          </p>
+        </div>
         <Button onClick={load} disabled={busy || !playlistId || !auth.authenticated}>
           <RefreshCw size={16} aria-hidden="true" /> {busy ? '處理中…' : '讀取 To-Post 播放清單'}
         </Button>

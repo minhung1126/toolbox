@@ -35,7 +35,7 @@ def public_operation(operation, store=None):
         with store.active_lock:
             active = operation["id"] in store.active
         if operation.get("executor_id"):
-            active = store.executor_alive(operation["executor_id"])
+            active = active or store.executor_alive(operation["executor_id"])
     if operation["state"] in {"prepared", "running"} and not active:
         result = {**result, "state": "needs_reconciliation", "interrupted": True}
     return result
@@ -77,14 +77,23 @@ class Recorder:
         except BaseException as exc:
             state = (
                 "failed_before_write"
-                if type(exc).__name__ == "CleanupRetained"
+                if (type(exc).__name__ == "CleanupRetained" and not getattr(exc, "cleanup_write_attempted", False))
                 or (isinstance(exc, YouTubeQuotaUnavailable) and phase != "cleanup")
                 or (phase in {"metadata_publish", "cleanup"} and known_rejected_write(exc))
                 else "needs_reconciliation"
             )
             self.store.update(self.owner, self.id, lambda op: op["items"][item_id].update(state=state))
             raise
-        evidence = {"provider_returned": True}
+        unchanged = isinstance(result, dict) and (
+            result.get("unchanged") is True or phase == "cleanup" and result.get("already_removed") is True
+        )
+        evidence = {"provider_returned": True, "attempted_write": not unchanged}
+        if isinstance(result, dict) and result.get("reconciled"):
+            evidence["provider_read"] = True
+        if phase in {"metadata", "metadata_publish"}:
+            evidence["parts"] = (
+                [] if unchanged else (intended or {}).get("parts", ["snippet"] if phase == "metadata" else [])
+            )
         if isinstance(result, dict) and isinstance(result.get("id"), str):
             evidence["id"] = result["id"]
         elif isinstance(result, str):
@@ -189,8 +198,8 @@ def recording(recorder):
     with recorder.store.active_lock:
         recorder.store.active.add(recorder.id)
     token = _current.set(recorder)
-    recorder.update(state="running")
     try:
+        recorder.update(state="running")
         yield
     finally:
         _current.reset(token)
