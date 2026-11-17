@@ -208,6 +208,80 @@ describe('Toolbox Frontend Tool Catalog', () => {
     expect(reconcileToolCatalog({ tools: [metadata(creator, 'future')] })).toEqual([]);
   });
 
+  it('accepts staged draft pages without navigation links and preserves route capabilities', () => {
+    const creator = getToolById('creator-tools');
+    const issues = [];
+    const scopes = ['youtube', 'sheets_readonly'];
+    const routes = [
+      { path: PATHS.youtubeVideoStaging, required_scopes: scopes },
+      { path: PATHS.youtubeShortsStaging, required_scopes: scopes },
+      { path: PATHS.youtubeVideoDrafts },
+      { path: PATHS.youtubeShortsDrafts },
+      { path: PATHS.youtubePublishCleanup, required_scopes: ['youtube'] },
+    ];
+    const tools = reconcileToolCatalog(
+      {
+        tools: [
+          {
+            id: creator.id,
+            status: 'active',
+            runtime_status: 'ready',
+            version: '1.2.0',
+            entry_url: creator.entryUrl,
+            required_scopes: scopes,
+            routes,
+          },
+        ],
+      },
+      { onIssue: (issue) => issues.push(issue) }
+    );
+
+    expect(issues).toEqual([]);
+    expect(tools.map((tool) => tool.id)).toEqual([creator.id]);
+    expect(tools[0].routeScopes).toEqual({
+      [PATHS.youtubeVideoStaging]: scopes,
+      [PATHS.youtubeShortsStaging]: scopes,
+      [PATHS.youtubeVideoDrafts]: scopes,
+      [PATHS.youtubeShortsDrafts]: scopes,
+      [PATHS.youtubePublishCleanup]: ['youtube'],
+    });
+    expect(
+      getToolNavGroups(tools)
+        .flatMap((group) => group.items)
+        .map((item) => item.to)
+    ).not.toContain(PATHS.youtubeVideoStaging);
+  });
+
+  it('accepts declared nested routes without treating a wildcard as support for unknown pages', () => {
+    const integrations = getToolById('youtube-integrations');
+    const metadata = {
+      id: integrations.id,
+      status: 'active',
+      version: '1.0.0',
+      entry_url: integrations.entryUrl,
+      required_scopes: ['youtube'],
+      routes: [
+        { path: PATHS.youtubeSettings, required_scopes: [] },
+        { path: PATHS.youtubeConnections, required_scopes: [] },
+        { path: PATHS.youtubeRouting },
+        { path: PATHS.youtubeQuota },
+        { path: PATHS.youtubePlaylist },
+      ],
+    };
+    const issues = [];
+    const tools = reconcileToolCatalog({ tools: [metadata] }, { onIssue: (issue) => issues.push(issue) });
+    expect(issues).toEqual([]);
+    expect(tools.map((tool) => tool.id)).toEqual([integrations.id]);
+    expect(tools[0].routeScopes[PATHS.youtubeConnections]).toEqual([]);
+    expect(tools[0].routeScopes[PATHS.youtubePlaylist]).toEqual(['youtube']);
+
+    expect(
+      reconcileToolCatalog({
+        tools: [{ ...metadata, routes: [...metadata.routes, { path: '/youtube/settings/missing' }] }],
+      })
+    ).toEqual([]);
+  });
+
   it('isolates unknown, duplicate and incompatible tools while preserving valid tools', () => {
     const [creator, music] = getAllTools();
     const metadata = (tool) => ({
@@ -224,6 +298,10 @@ describe('Toolbox Frontend Tool Catalog', () => {
       { version: '2.0.0' },
       { required_scopes: ['future'] },
       { routes: [{ path: '/wrong' }] },
+      { routes: [{ path: PATHS.youtubeVideoStaging }, { path: PATHS.youtubeVideoStaging }] },
+      { routes: [{ path: PATHS.youtubeVideoStaging, required_scopes: ['future'] }] },
+      { routes: [{ path: `${PATHS.youtubeVideoStaging}/missing` }] },
+      { routes: [{ path: PATHS.ytmusicSettings }] },
     ]) {
       const issues = [];
       const tools = reconcileToolCatalog(

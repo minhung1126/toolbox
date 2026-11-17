@@ -105,6 +105,15 @@ export function validateFeatureManifests(manifests) {
   return manifests;
 }
 
+function getDeclaredRoutePaths(routes, parentPath = '') {
+  return (routes || []).flatMap((route) => {
+    if (!route.path || route.path === '*') return getDeclaredRoutePaths(route.children, parentPath);
+    const path = route.path.startsWith('/') ? route.path : `${parentPath}/${route.path}`.replace(/\/+/g, '/');
+    const fullPath = path.replace(/\/\*$/, '');
+    return [fullPath, ...getDeclaredRoutePaths(route.children, fullPath)];
+  });
+}
+
 /** Join server-owned availability and metadata to locally controlled views. */
 export function reconcileToolCatalog(payload, { onIssue = () => {} } = {}) {
   if (!Array.isArray(payload?.tools)) throw new Error('工具目錄回應格式不正確。');
@@ -137,6 +146,7 @@ export function reconcileToolCatalog(payload, { onIssue = () => {} } = {}) {
       }
       validateToolScopes(metadata.id, metadata.required_scopes);
       const knownRoutes = new Set([
+        ...getDeclaredRoutePaths(manifest.routes),
         ...(manifest.featureCards || []).map((card) => card.to),
         ...(manifest.navGroups || []).flatMap((group) => (group.items || []).map((item) => item.to)),
       ]);

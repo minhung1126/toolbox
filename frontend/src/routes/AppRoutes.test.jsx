@@ -26,6 +26,9 @@ vi.mock('../pages/ComponentShowcasePage', () => ({ default: () => <div>component
 vi.mock('../pages/PublishCleanerPage', () => ({ default: () => <div>publish route</div> }));
 vi.mock('../pages/SheetCopyPage', () => ({ default: () => <div>sheet route</div> }));
 vi.mock('../pages/BatchUpdatePage', () => ({ default: ({ videoType }) => <div>{videoType} batch route</div> }));
+vi.mock('../features/youtube/pages/DraftPublishPage', () => ({
+  default: ({ videoType }) => <div>{videoType} staged route</div>,
+}));
 vi.mock('../pages/YoutubeConnectionsPage', () => ({ default: () => <div>connections route</div> }));
 vi.mock('../pages/YoutubeRoutingPage', () => ({ default: () => <div>routing route</div> }));
 vi.mock('../pages/YoutubeQuotaPage', () => ({ default: () => <div>quota route</div> }));
@@ -87,7 +90,20 @@ describe('AppRoutes', () => {
         description: tool.description,
         category: tool.category,
         version: '1.0.0',
-        required_scopes: [],
+        required_scopes: tool.id === 'creator-tools' ? ['youtube', 'sheets_readonly'] : [],
+        routes:
+          tool.id === 'creator-tools'
+            ? [
+                PATHS.youtubeVideoStaging,
+                PATHS.youtubeShortsStaging,
+                PATHS.youtubeVideoDrafts,
+                PATHS.youtubeShortsDrafts,
+                PATHS.youtubePublishCleanup,
+              ].map((path) => ({
+                path,
+                required_scopes: path === PATHS.youtubePublishCleanup ? ['youtube'] : ['youtube', 'sheets_readonly'],
+              }))
+            : [],
       })),
     });
   });
@@ -156,6 +172,8 @@ describe('AppRoutes', () => {
     [PATHS.componentShowcase, 'component showcase route'],
     [PATHS.youtubeVideoDrafts, 'Video batch route'],
     [PATHS.youtubeShortsDrafts, 'Shorts batch route'],
+    [PATHS.youtubeVideoStaging, 'Video staged route'],
+    [PATHS.youtubeShortsStaging, 'Shorts staged route'],
     [PATHS.youtubePublishCleanup, 'publish route'],
     [PATHS.youtubeConnections, 'connections route'],
     [PATHS.youtubeRouting, 'routing route'],

@@ -1,4 +1,5 @@
 import { getAllTools } from '../src/tools/catalog';
+import { PATHS } from '../src/routes/paths';
 
 const toolScopes: Record<string, string[]> = {
   'creator-tools': ['youtube', 'sheets_readonly'],
@@ -24,10 +25,18 @@ export const toolCatalog = getAllTools().map((tool) => ({
   version: '1.0.0',
   entry_url: tool.entryUrl,
   required_scopes: toolScopes[tool.id] || [],
-  routes: (tool.featureCards || []).map((card) => ({
-    path: card.to,
-    required_scopes: routeScopes[tool.id]?.[card.to] ?? toolScopes[tool.id] ?? [],
-  })),
+  routes: [
+    ...(tool.featureCards || []).map((card) => ({
+      path: card.to,
+      required_scopes: routeScopes[tool.id]?.[card.to] ?? toolScopes[tool.id] ?? [],
+    })),
+    ...(tool.id === 'creator-tools'
+      ? [PATHS.youtubeVideoStaging, PATHS.youtubeShortsStaging].map((path) => ({
+          path,
+          required_scopes: toolScopes[tool.id],
+        }))
+      : []),
+  ],
 }));
 
 export async function mockAuthenticatedBackend(page, responseOverrides: Record<string, unknown> = {}) {
