@@ -6,6 +6,7 @@ export const RESULT_STATUS = {
   skipped: { label: '略過', tone: 'neutral' },
   failed: { label: '失敗', tone: 'error' },
   not_attempted: { label: '未執行', tone: 'neutral' },
+  needs_reconciliation: { label: '待核對', tone: 'warning' },
 };
 
 export function getResultStatus(status) {

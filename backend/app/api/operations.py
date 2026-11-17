@@ -41,11 +41,13 @@ def reconcile_youtube(
     service=Depends(get_youtube_workflow_service),
 ):
     operation = store.get(context.owner_sub, operation_id)
-    if operation["kind"] not in {"youtube.metadata_update", "youtube.publish_cleanup"}:
+    if operation["kind"] not in {"youtube.metadata_update", "youtube.publish_cleanup", "youtube.metadata_publish"}:
         raise http_error(400, "operation_kind_mismatch", "此作業需要使用音樂播放清單核對。")
     operation = public_operation(operation)
     _check_channel(operation, context)
     snapshot = operation["plan"].get("preview_snapshot") or {}
+    if operation["kind"] == "youtube.metadata_publish":
+        return _reconcile_draft_publish(operation, context, store, service)
     expected_video_ids = snapshot.get("video_ids") or []
     ids = list(
         {item["remote_id"] for item in operation["items"] if item["phase"] in {"metadata", "publish"}}
@@ -100,6 +102,55 @@ def reconcile_youtube(
         op["reconciliation"] = {"provider_read": True, "matches_intent": complete}
 
     return public_operation(store.update(context.owner_sub, operation_id, reconcile))
+
+
+def _reconcile_draft_publish(operation, context, store, service):
+    from backend.app.services.youtube_service import video_matches_public_draft
+
+    if not operation["items"] and operation.get("result") is None:
+        # An empty running plan may belong to another live worker. Only a
+        # durable preflight failure proves it cannot still start a write.
+        if store.get(context.owner_sub, operation["id"])["state"] != "failed_before_write":
+            raise http_error(
+                409, "operation_requires_reconciliation", "尚未確認原作業已結束，請稍後核對，不會重新送出。"
+            )
+        return public_operation(
+            store.update(
+                context.owner_sub,
+                operation["id"],
+                lambda op: op.update(
+                    state="failed_before_write", reconciliation={"provider_read": False, "no_writes_attempted": True}
+                ),
+            )
+        )
+
+    plan = (operation["plan"].get("preview_snapshot") or {}).get("plan") or []
+    active = {item["video_id"]: item for item in plan if item["status"] != "skipped"}
+    details = {item["id"]: item for item in service.ports.fetch_video_details(context, list(active))} if active else {}
+    matches = {
+        video_id: video_matches_public_draft(details.get(video_id, {}), item["title"], item["description"])
+        for video_id, item in active.items()
+    }
+
+    def reconcile(op):
+        for item in op["items"]:
+            matched = matches.get(item["remote_id"], False)
+            item["reconciliation"] = {"provider_read": True, "matches_intent": matched}
+            if matched:
+                item["state"] = "completed"
+        result = op.get("result")
+        if result:
+            for item in result["results"]:
+                if matches.get(item["video_id"]):
+                    item.update(status="succeeded", reason="唯讀核對已確認文字與公開狀態。", reconciled=True)
+            for status in ("succeeded", "skipped", "failed", "not_attempted", "needs_reconciliation"):
+                result[f"{status}_count"] = sum(item["status"] == status for item in result["results"])
+            result["completed"] = all(item["status"] in {"succeeded", "skipped"} for item in result["results"])
+        complete = bool(plan) and all(matches.values())
+        op["state"] = "completed" if complete else "partial" if any(matches.values()) else "needs_reconciliation"
+        op["reconciliation"] = {"provider_read": True, "matches_intent": complete, "videos": matches}
+
+    return public_operation(store.update(context.owner_sub, operation["id"], reconcile))
 
 
 @router.post("/{operation_id}/reconcile-music")

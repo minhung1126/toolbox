@@ -20,6 +20,8 @@ from backend.app.api.youtube_helpers import (
 )
 from backend.app.api.youtube_models import (
     BatchUpdateInput,
+    DraftPrepareInput,
+    DraftPublishInput,
     PlaylistItemsInput,
     PublishCleanupInput,
     QuotaEstimateInput,
@@ -381,6 +383,46 @@ def run_publish_and_cleanup(
         workflows,
         "youtube.publish_cleanup",
         lambda service: service.run_publish_and_cleanup(payload, creds=creds),
+    )
+
+
+@router.post("/drafts/prepare")
+def prepare_draft_publish(
+    payload: DraftPrepareInput,
+    creds: YouTubeRequestContext = Depends(require_youtube_context),
+    sheet_creds: Credentials = Depends(require_sheets_credentials),
+    workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
+):
+    return workflows.prepare_draft_publish(payload, creds=creds, sheet_creds=sheet_creds)
+
+
+@router.post("/drafts/preview")
+def preview_draft_publish(
+    payload: DraftPublishInput,
+    creds: YouTubeRequestContext = Depends(require_youtube_context),
+    sheet_creds: Credentials = Depends(require_sheets_credentials),
+    workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
+    operations: OperationStore = Depends(get_operation_store),
+):
+    return workflows.preview_draft_publish(payload, creds=creds, sheet_creds=sheet_creds, operations=operations)
+
+
+@router.post("/drafts/publish")
+def run_draft_publish(
+    payload: DraftPublishInput,
+    creds: YouTubeRequestContext = Depends(require_youtube_context),
+    sheet_creds: Credentials = Depends(require_sheets_credentials),
+    _rate_limit: None = Depends(enforce_workflow_rate_limit),
+    workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
+    operations: OperationStore = Depends(get_operation_store),
+):
+    return run_youtube_recorded(
+        operations,
+        payload,
+        creds,
+        workflows,
+        "youtube.metadata_publish",
+        lambda service: service.run_draft_publish(payload, creds=creds, sheet_creds=sheet_creds, operations=operations),
     )
 
 

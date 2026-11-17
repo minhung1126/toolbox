@@ -46,6 +46,7 @@ from backend.app.services.youtube_service import (
     fetch_video_details,
     remove_playlist_item,
     set_video_public,
+    update_and_publish_video,
     update_single_video_metadata,
 )
 from backend.app.services.youtube_workflow_ports import YoutubeWorkflowPorts
@@ -275,6 +276,7 @@ def _youtube_workflow_dependencies() -> dict[str, Any]:
         "set_video_public": set_video_public,
         "sheet_snapshot": sheet_snapshot,
         "update_single_video_metadata": update_single_video_metadata,
+        "update_and_publish_video": update_and_publish_video,
         "upload_time_sort_key": upload_time_sort_key,
         "verify_preview_token": verify_preview_token,
         "video_snapshot_digest": video_snapshot_digest,

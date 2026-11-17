@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PhotoCuratorPage from './PhotoCuratorPage';
 import { api } from '../services/api';
 import { copyToClipboard } from '../utils/clipboard';
 import { exportCuratedZip } from '../features/photo-curator/model/curatorZip';
-import { PhotoCuratorSessionProvider } from '../features/photo-curator/PhotoCuratorSession';
+import { PhotoCuratorSessionProvider, usePhotoCuratorSession } from '../features/photo-curator/PhotoCuratorSession';
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -465,6 +465,72 @@ describe('PhotoCuratorPage', () => {
       (node) => node.textContent
     );
   }
+
+  it('moves photo 80 to 5 and back by number, preserves every other photo, and exports the new order', async () => {
+    const names = Array.from({ length: 80 }, (_, i) => `${i + 1}.jpg`);
+    function SeedArrangement() {
+      const { setPhotos, setPosts } = usePhotoCuratorSession();
+      useEffect(() => {
+        const photos = names.map((name) => ({
+          id: name,
+          name,
+          file: new File(['image'], name, { type: 'image/jpeg' }),
+          previewUrl: `mock://${name}`,
+        }));
+        setPhotos(photos);
+        setPosts([
+          { id: 'post-1', title: 'Post 1', photoIds: names },
+          { id: 'post-2', title: 'Post 2', photoIds: [] },
+          { id: 'post-3', title: 'Post 3', photoIds: [] },
+        ]);
+      }, [setPhotos, setPosts]);
+      return <PhotoCuratorPage />;
+    }
+    const { container } = render(
+      <PhotoCuratorSessionProvider>
+        <SeedArrangement />
+      </PhotoCuratorSessionProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: '指定序號 80.jpg', exact: true }));
+    const input = screen.getByLabelText('目標序號（1–80）');
+    for (const value of ['', '0', '-1', '81', '1.5']) {
+      fireEvent.change(input, { target: { value } });
+      expect(screen.getByRole('button', { name: '確認移動' })).toBeDisabled();
+      expect(photoNames(container, 'post-1')).toEqual(names);
+    }
+    fireEvent.change(input, { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: '確認移動' }));
+    const moved = [...names.slice(0, 4), '80.jpg', ...names.slice(4, 79)];
+    expect(photoNames(container, 'post-1')).toEqual(moved);
+    expect(container.querySelectorAll('.post-item-card')).toHaveLength(80);
+    fireEvent.click(screen.getByRole('button', { name: /下載分組照片/ }));
+    await waitFor(() => expect(exportCuratedZip).toHaveBeenCalledOnce());
+    expect(exportCuratedZip.mock.calls[0][0].posts[0].photoIds).toEqual(moved);
+    fireEvent.click(screen.getByRole('button', { name: '指定序號 80.jpg', exact: true }));
+    fireEvent.change(screen.getByLabelText('目標序號（1–80）'), { target: { value: '80' } });
+    fireEvent.click(screen.getByRole('button', { name: '確認移動' }));
+    expect(photoNames(container, 'post-1')).toEqual(names);
+    fireEvent.click(screen.getByRole('button', { name: /復原上一步/ }));
+    expect(photoNames(container, 'post-1')).toEqual(moved);
+  }, 20000);
+
+  it('inserts an unassigned photo at a chosen post position and updates its cover', () => {
+    const { container } = render(<PhotoCuratorPage />);
+    importAndAssign(container, ['first.jpg', 'second.jpg']);
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: { files: [new File(['image'], 'pool.jpg', { type: 'image/jpeg' })] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '指定序號 pool.jpg', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: '確認移動' }));
+    expect(photoNames(container, 'post-1')).toEqual(['pool.jpg', 'first.jpg', 'second.jpg']);
+    expect(screen.getByAltText('Post 1 封面：pool.jpg')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '指定序號 first.jpg', exact: true }));
+    fireEvent.change(screen.getByLabelText('目標貼文'), { target: { value: 'post-2' } });
+    expect(screen.getByLabelText('目標序號（1–1）')).toHaveValue(1);
+    fireEvent.click(screen.getByRole('button', { name: '確認移動' }));
+    expect(photoNames(container, 'post-1')).toEqual(['pool.jpg', 'second.jpg']);
+    expect(photoNames(container, 'post-2')).toEqual(['first.jpg']);
+  });
 
   function dragPhoto(container, name, targetName, edge = 'before', postId = 'post-1') {
     const source = screen.getByText(name).closest('.post-item-card');

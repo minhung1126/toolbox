@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { downloadJson } from '../utils/download';
 const OPERATION_LABELS = {
   'youtube.metadata_update': '影片批次更新',
+  'youtube.metadata_publish': '暫存影片編輯並公開',
   'youtube.publish_cleanup': '公開並清理待發布清單',
   'youtube.playlist_sort': '音樂歌單排序',
 };

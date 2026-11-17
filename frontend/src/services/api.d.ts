@@ -71,6 +71,13 @@ import type {
 } from '../features/sheets/api/sheetsSettingsTypes';
 
 import type { AccountWorkStateResponse, WorkStateValue } from '../features/settings/api/workStateTypes';
+import type {
+  DraftSource,
+  DraftStage,
+  DraftPublishRequest,
+  DraftPreview,
+  DraftResult,
+} from '../features/youtube/api/draftPublishApi';
 
 export function normalizeYoutubePlaylistInput(value: unknown): string;
 
@@ -114,6 +121,9 @@ export const api: {
   deleteNote(noteId: string): Promise<StickyNoteDeleteResponse>;
   getPlaylistVideos(playlistId: string): Promise<PlaylistPreviewResponse>;
   getBatchPreview(request: YoutubeBatchPreviewRequest): Promise<YoutubeBatchPreviewResponse>;
+  prepareYoutubeDrafts(payload: DraftSource): Promise<DraftStage>;
+  previewYoutubeDrafts(payload: DraftPublishRequest): Promise<DraftPreview>;
+  publishYoutubeDrafts(payload: DraftPublishRequest): Promise<DraftResult>;
   batchUpdateMetadata(request: YoutubeBatchUpdateRequest): Promise<YoutubeBatchUpdateResponse>;
   estimateYoutubeQuota(request: YoutubeQuotaEstimateRequest): Promise<PublishCleanupQuotaEstimate>;
   getYoutubeQuotaUsage(slot: YoutubeSlot): Promise<YoutubeQuotaUsage>;

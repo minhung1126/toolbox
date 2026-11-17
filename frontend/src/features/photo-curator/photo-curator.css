@@ -969,3 +969,7 @@
 .project-files input {
   max-width: 100%;
 }
+
+.curator-move-dialog {
+  width: min(100% - 2rem, 30rem);
+}

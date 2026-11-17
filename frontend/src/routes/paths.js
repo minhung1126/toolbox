@@ -12,6 +12,8 @@ export const PATHS = Object.freeze({
 
   youtubeVideoDrafts: '/youtube/drafts/videos',
   youtubeShortsDrafts: '/youtube/drafts/shorts',
+  youtubeVideoStaging: '/youtube/drafts/videos/staged',
+  youtubeShortsStaging: '/youtube/drafts/shorts/staged',
   youtubePublishCleanup: '/youtube/publish-cleanup',
 
   youtubeSettings: '/youtube/settings',
@@ -50,6 +52,8 @@ const STATIC_RETURN_PATHS = new Set([
   PATHS.componentShowcase,
   PATHS.youtubeVideoDrafts,
   PATHS.youtubeShortsDrafts,
+  PATHS.youtubeVideoStaging,
+  PATHS.youtubeShortsStaging,
   PATHS.youtubePublishCleanup,
   PATHS.youtubeConnections,
   PATHS.youtubeRouting,

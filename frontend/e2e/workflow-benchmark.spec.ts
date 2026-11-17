@@ -1,9 +1,9 @@
 import { expect, test, type TestInfo } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import { mockAuthenticatedBackend } from './fixtures';
+import { mockAuthenticatedBackend, draftPublishResponses } from './fixtures';
 import { personKey } from '../src/features/sheets/model/personOptions';
 
-async function saveMetrics(info: TestInfo, data: {body: string; contentType: string}) {
+async function saveMetrics(info: TestInfo, data: { body: string; contentType: string }) {
   await writeFile(info.outputPath('workflow-metrics.json'), data.body);
   await info.attach('workflow-metrics.json', data);
 }
@@ -31,7 +31,10 @@ for (const scenario of ['copy-six-cells', 'repeat-video-update', 'recover-video-
         authenticated: true,
         user: { sub: 'benchmark', email: 'benchmark@example.test' },
         authorizations: { sheets: { connected: true } },
-        youtube: { active_slot: 'primary', slots: { primary: { authenticated: true, channel_title: 'Fixture' } } },
+        youtube: {
+          active_slot: 'primary',
+          slots: { primary: { authenticated: true, channel_title: 'Fixture', channel_id: 'channel-e2e' } },
+        },
       },
       '/api/v1/settings/shared': { default_spreadsheet_id: 'sheet', default_playlist_id: 'PLfixture' },
       '/api/v1/settings/youtube-drafts': {
@@ -77,36 +80,7 @@ for (const scenario of ['copy-six-cells', 'repeat-video-update', 'recover-video-
           json: { playlist_id: 'PLfixture', videos: [{ video_id: 'video-1', title: 'Old', description: '' }] },
         });
       },
-      '/api/v1/youtube/batch-preview': {
-        preview_token: 'signed',
-        preview_snapshot: { youtube_slot: 'primary' },
-        plan: [
-          {
-            videoId: 'video-1',
-            video_id: 'video-1',
-            person,
-            status: 'ready',
-            willUpdate: true,
-            currentTitle: 'Old',
-            currentDescription: '',
-            newTitle: 'New',
-            newDescription: '',
-          },
-        ],
-      },
-      '/api/v1/youtube/quota-estimate': { can_complete_today: true, projected_units: 50, max_items_today: 1 },
-      '/api/v1/youtube/batch-update': {
-        operation: 'youtube.metadata_update',
-        completed: true,
-        quota_blocked: false,
-        total_count: 1,
-        succeeded_count: 1,
-        warning_count: 0,
-        skipped_count: 0,
-        failed_count: 0,
-        not_attempted_count: 0,
-        results: [{ video_id: 'video-1', title: 'New', status: 'succeeded' }],
-      },
+      ...draftPublishResponses(),
     });
     let settingsNavigations = 0;
     page.on('framenavigated', (frame) => {
@@ -155,10 +129,11 @@ for (const scenario of ['copy-six-cells', 'repeat-video-update', 'recover-video-
       }
       await page.locator('.video-card-assignment select').selectOption(person);
       selectionActions++;
-      await page.getByRole('button', { name: /產生完整批次預覽/ }).click();
-      await page.getByRole('button', { name: /確認這份預覽並更新/ }).click();
-      await page.getByRole('dialog').getByRole('button', { name: '開始批次更新', exact: true }).click();
-      await expect(page.getByText('YouTube 批次更新已執行完成', { exact: true })).toBeVisible();
+      await page.getByRole('button', { name: '套用人物並產生暫存結果' }).click();
+      await page.getByRole('button', { name: '檢查變更與配額' }).click();
+      await page.getByRole('button', { name: '確認編輯並公開', exact: true }).click();
+      await page.getByRole('dialog').getByRole('button', { name: '確認編輯並公開', exact: true }).click();
+      await expect(page.getByRole('article').first()).toContainText('已寫入 YouTube');
       const data = await page.evaluate(() => (window as any).__benchmark);
       await saveMetrics(testInfo, {
         body: JSON.stringify({

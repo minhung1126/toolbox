@@ -135,10 +135,11 @@ def verify_preview_token(
     playlist: Mapping[str, Any] | None = None,
     sheet: Mapping[str, Any] | None = None,
     request_digest: str | None = None,
+    max_age: int = PREVIEW_TOKEN_MAX_AGE,
 ) -> bool:
     if not isinstance(token, str) or not token.strip():
         return False
-    payload = verify_timed_data(token, salt=PREVIEW_TOKEN_SALT, max_age=PREVIEW_TOKEN_MAX_AGE)
+    payload = verify_timed_data(token, salt=PREVIEW_TOKEN_SALT, max_age=max_age)
     if not isinstance(payload, Mapping) or payload.get("version") != 1:
         return False
     if payload.get("owner") != _owner_binding(owner_sub):

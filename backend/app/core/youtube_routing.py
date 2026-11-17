@@ -89,6 +89,25 @@ def estimate_youtube_request_units(
     if route.endswith("/video-metadata"):
         return 51  # videos.list + videos.update
 
+    if route.endswith(("/drafts/prepare", "/drafts/preview", "/drafts/publish")):
+        raw_stage = payload.get("stage_snapshot")
+        stage = raw_stage if isinstance(raw_stage, Mapping) else {}
+        raw_source = stage.get("source")
+        source = raw_source if isinstance(raw_source, Mapping) else payload
+        count = _bounded_count(payload.get("edits") or payload.get("assignments"))
+        playlist_reads = PLAYLIST_ITEMS_MAX_UNITS if source.get("playlist_id") or default_playlist_id else 0
+        if route.endswith("/drafts/publish"):
+            raw_preview = payload.get("preview_snapshot")
+            preview = raw_preview if isinstance(raw_preview, Mapping) else {}
+            plan = preview.get("plan")
+            writes = (
+                sum(bool(item.get("parts")) for item in plan[:500] if isinstance(item, Mapping))
+                if isinstance(plan, list)
+                else count
+            )
+            return max(playlist_reads + _pages(count) + writes * 51, 1)
+        return max(playlist_reads + _pages(count), 1)
+
     assignments = _bounded_count(payload.get("assignments"))
     pages = _pages(assignments)
     has_playlist = bool(str(payload.get("playlist_id") or "").strip() or str(default_playlist_id or "").strip())

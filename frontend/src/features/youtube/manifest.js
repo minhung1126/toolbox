@@ -8,7 +8,7 @@ const manifest = {
   purpose: '管理影片',
   name: 'Creator Tools',
   title: '影音創作工作流',
-  description: '批次預覽並更新 Video／Shorts 標題與說明；核對後立即公開並清理待發布清單。',
+  description: '套用人物到暫存，手動編輯 Video／Shorts 後確認並立即公開；另提供待發布清單清理。',
   category: '影音創作',
   icon: Youtube,
   badge: '創作核心',
@@ -63,6 +63,15 @@ const manifest = {
     },
   ],
   routes: [
+    ...[
+      [PATHS.youtubeVideoStaging, 'Video'],
+      [PATHS.youtubeShortsStaging, 'Shorts'],
+    ].map(([path, videoType]) => ({
+      path: path.slice(1),
+      componentKey: `${videoType}-staged`,
+      component: lazy(() => import('./pages/DraftPublishPage')),
+      getProps: ({ sysSettings, authUser }) => ({ sysSettings, authUser, videoType }),
+    })),
     {
       path: PATHS.youtubeVideoDrafts.slice(1),
       componentKey: 'video-drafts',

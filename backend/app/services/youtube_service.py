@@ -237,6 +237,85 @@ def get_video_status(
     return dict(items[0].get("status", {}))
 
 
+WRITABLE_SNIPPET_FIELDS = ("title", "description", "categoryId", "tags", "defaultLanguage", "defaultAudioLanguage")
+WRITABLE_STATUS_FIELDS = (
+    "privacyStatus",
+    "license",
+    "embeddable",
+    "publicStatsViewable",
+    "selfDeclaredMadeForKids",
+    "containsSyntheticMedia",
+)
+
+
+def video_publish_state(video: Dict[str, Any]) -> dict:
+    """Only mutable fields we preserve; provider read-only fields never enter writes."""
+    snippet, status = video.get("snippet") or {}, video.get("status") or {}
+    return {
+        "snippet": {key: snippet[key] for key in WRITABLE_SNIPPET_FIELDS if key in snippet},
+        "status": {key: status[key] for key in (*WRITABLE_STATUS_FIELDS, "publishAt") if key in status},
+        "channel_id": snippet.get("channelId"),
+    }
+
+
+def video_matches_public_draft(video: Dict[str, Any], title: str, description: str) -> bool:
+    snippet = video.get("snippet") or {}
+    return (
+        snippet.get("title") == title
+        and str(snippet.get("description") or "").replace("\r\n", "\n").replace("\r", "\n")
+        == description.replace("\r\n", "\n").replace("\r", "\n")
+        and (video.get("status") or {}).get("privacyStatus") == "public"
+    )
+
+
+def update_and_publish_video(
+    context: YouTubeRequestContext,
+    video_id: str,
+    title: str,
+    description: str,
+    *,
+    current_video: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Use exactly one update for the changed parts and only reads after an uncertain write."""
+    state = video_publish_state(current_video)
+    snippet, status = state["snippet"], state["status"]
+    body: dict[str, Any] = {"id": video_id}
+    parts = []
+    if snippet.get("title") != title or str(snippet.get("description") or "") != description:
+        if not snippet.get("categoryId"):
+            raise ValueError(f"無法取得影片 {video_id} 的類別 ID。")
+        body["snippet"] = {**snippet, "title": title, "description": description}
+        parts.append("snippet")
+    if status.get("privacyStatus") != "public":
+        # publishAt is writable only for private videos; omit it when publishing now.
+        body["status"] = {key: value for key, value in status.items() if key in WRITABLE_STATUS_FIELDS}
+        body["status"]["privacyStatus"] = "public"
+        parts.append("status")
+    if not parts:
+        return {"id": video_id, "unchanged": True}
+    service = get_youtube_service(context)
+    request = service.videos().update(part=",".join(parts), body=body)
+    try:
+        response = _execute_with_quota(request, "videos.update", context)
+        if not isinstance(response, dict) or response.get("id") != video_id:
+            raise RuntimeError("YouTube write response missing video ID")
+        if not all(isinstance(response.get(part), dict) for part in parts) or not video_matches_public_draft(
+            {"snippet": response.get("snippet", snippet), "status": response.get("status", status)}, title, description
+        ):
+            raise RuntimeError("YouTube write response does not confirm the requested draft")
+        return response
+    except YouTubeQuotaUnavailable:
+        raise
+    except Exception as update_error:
+        try:
+            details = fetch_video_details(context, [video_id])
+            if details and video_matches_public_draft(details[0], title, description):
+                return {"id": video_id, "reconciled": True}
+        except Exception:
+            pass
+        raise update_error from None
+
+
 def set_video_public(
     context: YouTubeRequestContext,
     video_id: str,
