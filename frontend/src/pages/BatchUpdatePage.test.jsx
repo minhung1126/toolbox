@@ -2,7 +2,7 @@ import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { personKey } from '../features/sheets/model/personOptions';
 const memberKey = personKey({ team: '團體 A', person: '人物甲', kind: 'person' });
-import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BatchUpdatePage, { buildBatchPreview } from './BatchUpdatePage';
 import BatchPreviewItem from '../components/batch/BatchPreviewItem';
@@ -38,6 +38,7 @@ const mocks = vi.hoisted(() => ({
     getBatchPreview: vi.fn(),
     estimateYoutubeQuota: vi.fn(),
     batchUpdateMetadata: vi.fn(),
+    prepareYoutubeDrafts: vi.fn(),
   },
   toast: {
     warning: vi.fn(),
@@ -105,7 +106,7 @@ const authUser = {
   youtube: {
     active_slot: 'primary',
     slots: {
-      primary: { authenticated: true },
+      primary: { authenticated: true, channel_id: 'channel-one' },
     },
   },
 };
@@ -163,6 +164,7 @@ async function reviewedWorkflow() {
 describe('BatchUpdatePage preview and confirmation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mocks.workState = {};
     mocks.api.getYoutubeDraftSettings.mockResolvedValue({});
     mocks.api.updateYoutubeDraftSettings.mockResolvedValue({});
@@ -243,78 +245,68 @@ describe('BatchUpdatePage preview and confirmation', () => {
     expect(preview[1]).toMatchObject({ status: 'skipped', reason: '未指定人物' });
   });
 
-  it('shows current and next content, skip reason, and a structured confirmation summary', async () => {
+  it('applies people to persistent staging without writing to YouTube', async () => {
+    mocks.api.prepareYoutubeDrafts.mockResolvedValueOnce({
+      stage_token: 'signed-stage',
+      stage_snapshot: {
+        version: 1,
+        stage_id: 'stage-one',
+        video_type: 'Video',
+        youtube_slot: 'primary',
+        youtube_channel_id: 'channel-one',
+        plan: [
+          {
+            video_id: 'video-1',
+            person: '人物甲',
+            currentTitle: '舊標題',
+            currentDescription: '',
+            newTitle: '新標題',
+            newDescription: '描述',
+            status: 'ready',
+          },
+          {
+            video_id: 'video-2',
+            person: '不編輯',
+            currentTitle: '保留標題',
+            currentDescription: '',
+            newTitle: '',
+            newDescription: '',
+            status: 'skipped',
+          },
+        ],
+      },
+    });
     const { container } = renderPage();
     await readDraftVideos();
     await screen.findByText('舊標題一');
-
-    const assignmentSelect = container.querySelector('.video-card-assignment select');
-    fireEvent.change(assignmentSelect, { target: { value: memberKey } });
-    fireEvent.click(screen.getByRole('button', { name: /產生完整批次預覽/ }));
-
-    expect(await screen.findByText('批次更新預覽')).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    const previewPanel = screen.getByRole('region', { name: '完整批次變更預覽' });
-    expect(within(previewPanel).getAllByText('目前內容')).toHaveLength(2);
-    expect(within(previewPanel).getAllByText('更新後內容')).toHaveLength(2);
-    expect(within(previewPanel).getAllByText('舊標題一').length).toBeGreaterThan(0);
-    expect(within(previewPanel).getByText('新標題一')).toBeInTheDocument();
-    expect(within(previewPanel).getByText('原因：未指定人物')).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole('button', { name: /確認這份預覽並更新/ }));
-    const dialog = await screen.findByRole('dialog', { name: '確認批次更新 1 支影片' });
-    expect(within(dialog).getByText('將更新')).toBeInTheDocument();
-    expect(within(dialog).getByText('略過')).toBeInTheDocument();
-    expect(within(dialog).getByText('100 單位')).toBeInTheDocument();
-    expect(within(dialog).getByText('200 單位')).toBeInTheDocument();
-
-    fireEvent.click(within(dialog).getByRole('button', { name: '開始批次更新' }));
-    await waitFor(() => expect(mocks.api.batchUpdateMetadata).toHaveBeenCalledTimes(1));
-    expect(mocks.api.batchUpdateMetadata).toHaveBeenCalledWith(
+    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
+    fireEvent.click(screen.getByRole('button', { name: '套用人物並產生暫存結果' }));
+    await waitFor(() => expect(mocks.api.prepareYoutubeDrafts).toHaveBeenCalledOnce());
+    expect(mocks.api.prepareYoutubeDrafts).toHaveBeenCalledWith(
       expect.objectContaining({
-        previewToken: 'preview-token',
+        video_type: 'Video',
         assignments: [
           { video_id: 'video-1', person: memberKey },
           { video_id: 'video-2', person: '不編輯' },
         ],
       })
     );
-  });
-
-  it('rejects a missing batch plan before opening the confirmation dialog', async () => {
-    mocks.api.getBatchPreview.mockResolvedValueOnce({
-      preview_token: 'preview-token',
-      preview_snapshot: {},
-      plan: null,
-    });
-    const { container } = renderPage();
-    await readDraftVideos();
-    await screen.findByText('舊標題一');
-    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
-    fireEvent.click(screen.getByRole('button', { name: /產生完整批次預覽/ }));
-
-    expect(await screen.findByText('建立完整批次預覽失敗：批次更新預覽回應格式不正確。')).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: /確認批次更新/ })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(localStorage.getItem('toolbox:youtube-publish-draft:v1:owner-1:channel-one:Video')).toContain('新標題')
+    );
     expect(mocks.api.batchUpdateMetadata).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ['invalid response', () => Promise.resolve({ completed: true })],
-    ['timeout', () => Promise.reject(Object.assign(new Error('連線逾時'), { code: 'timeout' }))],
-  ])('requires provider reconciliation after an ambiguous batch %s', async (_label, response) => {
-    mocks.api.batchUpdateMetadata.mockImplementationOnce(response);
+  it('keeps assignments available when staging fails', async () => {
+    mocks.api.prepareYoutubeDrafts.mockResolvedValueOnce({ stage_token: 'invalid', stage_snapshot: {} });
     const { container } = renderPage();
     await readDraftVideos();
     await screen.findByText('舊標題一');
     fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
-    fireEvent.click(screen.getByRole('button', { name: /產生完整批次預覽/ }));
-    fireEvent.click(await screen.findByRole('button', { name: /確認這份預覽並更新/ }));
-    const dialog = await screen.findByRole('dialog', { name: '確認批次更新 1 支影片' });
-    fireEvent.click(within(dialog).getByRole('button', { name: '開始批次更新' }));
-
-    expect(await screen.findByText(/無法確認批次更新是否已完成/)).toBeInTheDocument();
-    expect(mocks.toast.warning).toHaveBeenCalledWith('批次更新結果待核對，請先檢查 YouTube Studio');
-    expect(mocks.toast.success).not.toHaveBeenCalledWith(expect.stringContaining('批次更新完成'));
-    expect(screen.queryByRole('dialog', { name: /確認批次更新/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '套用人物並產生暫存結果' }));
+    expect(await screen.findByText(/建立暫存失敗/)).toBeInTheDocument();
+    expect(container.querySelector('.video-card-assignment select')).toHaveValue(memberKey);
+    expect(mocks.api.batchUpdateMetadata).not.toHaveBeenCalled();
   });
 
   it('allows editing the playlist ID and auto-saves draft settings', async () => {
@@ -337,58 +329,6 @@ describe('BatchUpdatePage preview and confirmation', () => {
         })
       )
     );
-  });
-
-  it('confirms the reviewed preview without fetching a new plan after cancellation', async () => {
-    const { container } = renderPage();
-    await readDraftVideos();
-    await screen.findByText('舊標題一');
-    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
-    fireEvent.click(screen.getByRole('button', { name: /產生完整批次預覽/ }));
-    await screen.findByText('新標題一');
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    fireEvent.click(await screen.findByRole('button', { name: /確認這份預覽並更新/ }));
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '取消' }));
-    fireEvent.click(screen.getByRole('button', { name: /確認這份預覽並更新/ }));
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '開始批次更新' }));
-    await waitFor(() => expect(mocks.api.batchUpdateMetadata).toHaveBeenCalledOnce());
-    expect(mocks.api.getBatchPreview).toHaveBeenCalledOnce();
-    expect(mocks.api.batchUpdateMetadata).toHaveBeenCalledWith(
-      expect.objectContaining({ previewToken: 'preview-token' })
-    );
-  });
-
-  it('locks reload and source controls during a write and displays its completed result', async () => {
-    let finish;
-    const response = await mocks.api.batchUpdateMetadata();
-    mocks.api.batchUpdateMetadata.mockClear();
-    mocks.api.batchUpdateMetadata.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finish = resolve;
-        })
-    );
-    const { container } = renderPage();
-    await readDraftVideos();
-    await screen.findByText('舊標題一');
-    fireEvent.change(container.querySelector('.video-card-assignment select'), { target: { value: memberKey } });
-    fireEvent.click(screen.getByRole('button', { name: /產生完整批次預覽/ }));
-    fireEvent.click(await screen.findByRole('button', { name: /確認這份預覽並更新/ }));
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '開始批次更新' }));
-    await waitFor(() => expect(mocks.api.batchUpdateMetadata).toHaveBeenCalledOnce());
-    const reload = screen.getByRole('button', { name: '讀取 Video 草稿影片' });
-    expect(reload).toBeDisabled();
-    expect(screen.getByRole('textbox', { name: '共用 To-Post 播放清單' })).toBeDisabled();
-    expect(screen.getByRole('combobox', { name: '標題套用欄位' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '刷新工作表與欄位' })).toBeDisabled();
-    expect(container.querySelector('.video-card-assignment select')).toBeDisabled();
-    fireEvent.click(reload);
-    expect(mocks.api.getPlaylistVideos).toHaveBeenCalledOnce();
-    await act(async () => {
-      finish(response);
-    });
-    expect(await screen.findByText('YouTube 批次更新已執行完成')).toBeInTheDocument();
-    expect(reload).toBeEnabled();
   });
 
   it('blocks confirmation and execution callbacks while source refresh is pending', async () => {

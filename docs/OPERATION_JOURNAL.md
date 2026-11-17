@@ -20,3 +20,10 @@
 對帳只證明目前遠端狀態是否符合計畫；即使吻合，也不改寫歷史上已知的回應證據。其他程序仍可能執行中時，不能將核對當成取消或接手。需要再次執行者必須重新讀取來源與預覽，原快照不會獲得新的寫入授權。
 
 `OperationStore.backup(path)` 使用 SQLite backup API 取得一致快照。還原僅限停止服務的離線維護：先備份目前檔案，再 `OperationStore(...).restore(backup)`；還原前檢查 SQLite integrity、schema 與 document version，未知版本拒絕。測試涵蓋並行受理、防重送、程序重新組裝、逐項成功／未知、帳號隔離、provider 唯讀對帳、備份還原與拒絕壞版本；也確認既有 notes JSON 不受新紀錄影響。這不替代正式部署回退演練。
+
+
+### 暫存編輯並公開
+
+`youtube.metadata_publish` 作業由 `/youtube/drafts/publish` 建立。`metadata_publish` 寫入項目保存最終標題、描述與 `privacyStatus=public`；同一影片最多一次合併更新，配額不足且確認未寫入時才允許同頻道槽位備援。重複提交相同已確認請求會傳回既有結果。
+
+`/operations/{id}/reconcile-youtube` 對此作業只讀取影片，同時比對三項最終值。未確認的寫入會阻止新暫存對同一頻道／影片再次發布；新請求 ID 或重建暫存無法略過保護。部分成功的已完成影片在同一暫存內不可再次修改；明確拒絕或未嘗試的列可重新預覽。作業在建立寫入項目前明確失敗，經核對後可重新預覽；無法確認是否仍由其他工作程序執行的空作業維持阻擋。

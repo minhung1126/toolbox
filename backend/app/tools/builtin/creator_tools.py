@@ -20,13 +20,25 @@ class CreatorToolsPlugin(ToolPlugin):
             id="creator-tools",
             name="Creator Tools",
             title="影音創作工作流",
-            description="批次預覽並更新 Video／Shorts 標題與說明；核對後立即公開並清理待發布清單。",
+            description="套用人物到暫存，手動編輯 Video／Shorts 後確認並立即公開；另提供待發布清單清理。",
             category="影音創作",
             icon="Youtube",
             version="1.2.0",
             status="active",
             entry_url="/dashboard",
             routes=[
+                ToolRoute(
+                    path="/youtube/drafts/videos/staged",
+                    label="Video 發布前暫存編輯",
+                    description="手動修改暫存標題與描述，最後確認編輯並公開",
+                    required_scopes=["youtube", "sheets_readonly"],
+                ),
+                ToolRoute(
+                    path="/youtube/drafts/shorts/staged",
+                    label="Shorts 發布前暫存編輯",
+                    description="手動修改暫存標題與描述，最後確認編輯並公開",
+                    required_scopes=["youtube", "sheets_readonly"],
+                ),
                 ToolRoute(
                     path="/youtube/drafts/videos",
                     label="Video 草稿管理",

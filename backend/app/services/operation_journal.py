@@ -12,6 +12,13 @@ from backend.app.core.error_contract import http_error
 from backend.app.core.operation_store import OperationStore
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
 
+
+def known_rejected_write(exc):
+    """An explicit provider 4xx rejection cannot have committed a video update."""
+    status = getattr(getattr(exc, "resp", None), "status", None)
+    return isinstance(status, int) and 400 <= status < 500 and status not in {408, 409, 429}
+
+
 _current = ContextVar("operation_recorder", default=None)
 _active = set()
 
@@ -56,7 +63,8 @@ class Recorder:
         except BaseException as exc:
             state = (
                 "failed_before_write"
-                if isinstance(exc, YouTubeQuotaUnavailable) and phase != "cleanup"
+                if (isinstance(exc, YouTubeQuotaUnavailable) and phase != "cleanup")
+                or (phase == "metadata_publish" and known_rejected_write(exc))
                 else "needs_reconciliation"
             )
             self.store.update(self.owner, self.id, lambda op: op["items"][item_id].update(state=state))
@@ -97,17 +105,27 @@ class Recorder:
             original = getattr(service.ports, name)
 
             def call(context, remote_id, *args, **kwargs):
-                intended = {"title": args[0], "description": args[1]} if name == "update_single_video_metadata" else {}
+                intended = (
+                    {"title": args[0], "description": args[1]}
+                    if name in {"update_single_video_metadata", "update_and_publish_video"}
+                    else {}
+                )
+                if name == "update_and_publish_video":
+                    intended["privacyStatus"] = "public"
                 return self.write(phase, remote_id, lambda: original(context, remote_id, *args, **kwargs), intended)
 
             return call
 
+        writers = {
+            "update_single_video_metadata": "metadata",
+            "set_video_public": "publish",
+            "remove_playlist_item": "cleanup",
+            "update_and_publish_video": "metadata_publish",
+        }
         return type(service)(
             replace(
                 service.ports,
-                update_single_video_metadata=wrap("update_single_video_metadata", "metadata"),
-                set_video_public=wrap("set_video_public", "publish"),
-                remove_playlist_item=wrap("remove_playlist_item", "cleanup"),
+                **{name: wrap(name, phase) for name, phase in writers.items() if hasattr(service.ports, name)},
             )
         )
 
@@ -138,6 +156,11 @@ def recording(recorder):
 def tracked_write(phase, remote_id, call, intended=None):
     recorder = _current.get()
     return recorder.write(phase, remote_id, call, intended) if recorder else call()
+
+
+def current_operation_id():
+    recorder = _current.get()
+    return recorder.id if recorder else None
 
 
 def run_youtube_recorded(store, payload, context, service, kind, execute):

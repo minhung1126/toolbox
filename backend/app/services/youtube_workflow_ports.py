@@ -59,6 +59,7 @@ class YoutubeWorkflowPorts:
     upload_time_sort_key: Callable[..., Any]
     verify_preview_token: Callable[..., bool]
     video_snapshot_digest: Callable[[dict[str, Any], list[str]], str]
+    update_and_publish_video: Callable[..., Any]
 
     @classmethod
     def from_legacy(cls, adapters: Mapping[str, Any]) -> "YoutubeWorkflowPorts":

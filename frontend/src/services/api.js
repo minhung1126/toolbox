@@ -329,6 +329,24 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ video_id: videoId, title, description }),
     }),
+  prepareYoutubeDrafts: (payload) =>
+    request('/youtube/drafts/prepare', {
+      method: 'POST',
+      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+      body: JSON.stringify(payload),
+    }),
+  previewYoutubeDrafts: (payload) =>
+    request('/youtube/drafts/preview', {
+      method: 'POST',
+      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+      body: JSON.stringify(payload),
+    }),
+  publishYoutubeDrafts: (payload) =>
+    request('/youtube/drafts/publish', {
+      method: 'POST',
+      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+      body: JSON.stringify(payload),
+    }),
   batchUpdateMetadata: ({
     spreadsheetUrlOrId,
     playlistId,

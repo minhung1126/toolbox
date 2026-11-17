@@ -74,3 +74,82 @@ export async function mockAuthenticatedBackend(page, responseOverrides: Record<s
     });
   });
 }
+
+/** Provider fakes for the staged workflow; no YouTube writes occur in the browser suite. */
+export function draftPublishResponses({
+  channelId = 'channel-e2e',
+  titleFor = (_assignment) => 'New',
+  descriptionFor = (_assignment) => '',
+} = {}) {
+  return {
+    '/api/v1/youtube/drafts/prepare': async (route) => {
+      const source = route.request().postDataJSON();
+      await route.fulfill({
+        json: {
+          stage_token: 'signed-stage',
+          stage_snapshot: {
+            version: 1,
+            stage_id: `stage-${source.video_type}`,
+            video_type: source.video_type,
+            youtube_slot: 'primary',
+            youtube_channel_id: channelId,
+            source,
+            plan: source.assignments.map((assignment) => ({
+              video_id: assignment.video_id,
+              person_key: assignment.person,
+              person: assignment.person,
+              currentTitle: `Original ${assignment.video_id}`,
+              currentDescription: 'Original description',
+              currentPrivacy: 'private',
+              newTitle: assignment.person === '不編輯' ? '' : titleFor(assignment),
+              newDescription: assignment.person === '不編輯' ? '' : descriptionFor(assignment),
+              status: assignment.person === '不編輯' ? 'skipped' : 'ready',
+              reason: assignment.person === '不編輯' ? '未指定人物' : '',
+              thumbnailUrl: '',
+            })),
+          },
+        },
+      });
+    },
+    '/api/v1/youtube/drafts/preview': async (route) => {
+      const payload = route.request().postDataJSON();
+      const plan = payload.edits.map((edit) => ({
+        ...edit,
+        person: '指定人物',
+        status: edit.skip ? 'skipped' : 'ready',
+        reason: edit.skip ? '略過' : '',
+        parts: edit.skip ? [] : ['snippet', 'status'],
+        write_units: edit.skip ? 0 : 50,
+      }));
+      const count = plan.filter((item) => item.parts.length).length;
+      await route.fulfill({
+        json: {
+          preview_token: 'signed-final',
+          preview_snapshot: { youtube_slot: 'primary', plan },
+          plan,
+          quota: {
+            write_calls: count,
+            write_units: count * 50,
+            read_units: 2 + count,
+            projected_units: count * 51 + 2,
+          },
+        },
+      });
+    },
+    '/api/v1/youtube/drafts/publish': async (route) => {
+      const payload = route.request().postDataJSON();
+      await route.fulfill({
+        json: {
+          operation: 'youtube.metadata_publish',
+          operation_id: 'operation-e2e',
+          completed: true,
+          results: payload.edits.map((edit) => ({
+            ...edit,
+            person: '指定人物',
+            status: edit.skip ? 'skipped' : 'succeeded',
+          })),
+        },
+      });
+    },
+  };
+}

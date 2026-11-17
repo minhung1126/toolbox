@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { mockAuthenticatedBackend } from './fixtures';
+import { mockAuthenticatedBackend, draftPublishResponses } from './fixtures';
 import { personKey, personName } from '../src/features/sheets/model/personOptions';
 
 const people = [
@@ -21,7 +21,7 @@ async function setup(page) {
       authenticated: true,
       user: { sub: 'people-test', email: 'people@example.test' },
       authorizations: { sheets: { connected: true } },
-      youtube: { slots: { primary: { authenticated: true } }, active_slot: 'primary' },
+      youtube: { slots: { primary: { authenticated: true, channel_id: 'channel-e2e' } }, active_slot: 'primary' },
     },
     '/api/v1/settings/shared': { default_spreadsheet_id: 'sheet-a', default_playlist_id: 'PLtest' },
     '/api/v1/settings/team-person-filter': async (route) => {
@@ -59,25 +59,9 @@ async function setup(page) {
         { video_id: 'video-2', title: '影片二' },
       ],
     },
-    '/api/v1/youtube/batch-preview': async (route) => {
-      const payload = route.request().postDataJSON();
-      await route.fulfill({
-        json: {
-          preview_token: 'signed',
-          preview_snapshot: { youtube_slot: 'primary' },
-          plan: payload.assignments.map((assignment) => ({
-            videoId: assignment.video_id,
-            person: assignment.person,
-            status: 'ready',
-            willUpdate: true,
-            currentTitle: 'Old',
-            currentDescription: '',
-            newDescription: '',
-            newTitle: assignment.person === personKey(people[0]) ? 'A title' : 'B title',
-          })),
-        },
-      });
-    },
+    ...draftPublishResponses({
+      titleFor: (assignment) => (assignment.person === personKey(people[0]) ? 'A title' : 'B title'),
+    }),
     '/api/v1/youtube/quota-estimate': { can_complete_today: true },
   });
   return () => filter;
@@ -158,17 +142,19 @@ for (const videoType of ['Video', 'Shorts']) {
     await expect(assignments.nth(0)).toHaveValue(personKey(people[0]));
     await expect(assignments.nth(1)).toHaveValue(personKey(people[1]));
     await expect(assignments.nth(0).locator('option')).toHaveCount(people.length + 1);
-    const previewRequest = page.waitForRequest('**/youtube/batch-preview');
-    await page.getByRole('button', { name: /產生完整.*預覽/ }).click();
+    const previewRequest = page.waitForRequest('**/youtube/drafts/prepare');
+    await page.getByRole('button', { name: '套用人物並產生暫存結果' }).click();
     const payload = (await previewRequest).postDataJSON();
     expect(payload.team).toBe('');
     expect(payload.assignments).toEqual([
       { video_id: 'video-1', person: personKey(people[0]) },
       { video_id: 'video-2', person: personKey(people[1]) },
     ]);
-    await expect(page.getByRole('region', { name: '完整批次變更預覽' })).toContainText('A title');
-    await expect(page.getByRole('region', { name: '完整批次變更預覽' })).toContainText('B title');
+    await expect(page.getByRole('heading', { name: `${videoType} 發布前暫存編輯` })).toBeVisible();
+    await expect(page.getByLabel('最終標題（7 / 100）').first()).toHaveValue('A title');
+    await expect(page.getByLabel('最終標題（7 / 100）').nth(1)).toHaveValue('B title');
     await savedAssignments;
+    await page.getByRole('link', { name: '返回人物指定／重建暫存' }).click();
     await page.reload();
     await expect(panel.getByRole('checkbox', { name: '甲 Team A' })).toBeEnabled();
     await page.getByRole('button', { name: `讀取 ${videoType} 草稿影片` }).click();

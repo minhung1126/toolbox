@@ -4,7 +4,7 @@ Toolbox 是以 Docker 容器化運行的多功能工具箱平台，採用 **Fast
 GitHub Actions 會先執行後端與前端檢查及容器建置，再將 `linux/amd64` 映像發布至 **GitHub Container Registry (`ghcr.io`)**。
 
 平台首要且完整內建的核心模組為 **Creator Tools**（YouTube 與 Google 創作者自動化工作流控制台），後續可透過模組化架構零耦合擴充其他功能工具。
-所有帳號工作狀態、加密憑證、工作流日誌與 YouTube 配額估算皆保存於伺服器端 `data/` 目錄，透過 Docker Volume `./data:/app/data` 在容器更新時保留資料。
+帳號設定、加密憑證、工作流日誌與 YouTube 配額估算皆保存於伺服器端 `data/` 目錄，透過 Docker Volume `./data:/app/data` 在容器更新時保留資料。
 
 ## 核心功能模組
 
@@ -13,7 +13,7 @@ GitHub Actions 會先執行後端與前端檢查及容器建置，再將 `linux/
 - **Google Sheets 唯讀來源**：讀取欄位與人物，複製文字到剪貼簿或套用至影片草稿，不寫回 Sheet。
 - **YouTube 雙授權槽位 (Primary / Secondary)**：同一頻道的獨立授權備援，頻道不一致禁止寫入。
 - **YouTube 智慧自動分流 (Auto Routing)**：Primary 配額充足時優先使用，不足時可選用同頻道 Secondary 備援；不會對結果不明的寫入自動重送。
-- **Video／Shorts 草稿管理**：各自指定工作表、標題與描述欄位，批次預覽與防髒寫入保護。
+- **Video／Shorts 草稿管理**：套用人物到可恢復的暫存頁，逐片手動修改後，最後確認才以最少 API 更新文字並公開；保留簽署預覽與防髒寫入保護。
 - **發布草稿與播放清單清理**：自動發布為公開影片並移出 To-Post 清單。
 - **YouTube 配額安全記帳**：依各連線設定的每日上限、緩衝與本機估算帳本保護；預設上限為 10,000 點，並非官方即時餘額。
 
@@ -86,7 +86,8 @@ npm run dev
 - `/system/health`、`/system/info`、`/system/design-system`：API 健康度、部署資訊與共用元件展示
 - `/settings/system`：系統安全、Google OAuth 憑證與登入白名單管理
 - `/ffmpeg-generator`、`/photo-curator`、`/notes`：媒體工具與便利貼
-- `/youtube/drafts/videos`、`/youtube/drafts/shorts`：Video／Shorts 草稿
+- `/youtube/drafts/videos`、`/youtube/drafts/shorts`：Video／Shorts 人物指定
+- `/youtube/drafts/videos/staged`、`/youtube/drafts/shorts/staged`：發布前暫存編輯與最後確認公開
 - `/youtube/publish-cleanup`：發布並清理清單
 - `/youtube/settings/connections`、`/youtube/settings/routing`、`/youtube/settings/quota`、`/youtube/settings/playlist`：YouTube 子設定
 - `/sheets/copy`：Sheet 內容複製
@@ -158,3 +159,13 @@ Compose 預設把容器的 8000 port 綁到主機 `127.0.0.1:${HOST_PORT}`，並
 
 本機實作範圍與驗收結果見 [TB-00–TB-10 實作紀錄](docs/TOOLBOX_WORKFLOW_PROGRESS.md)。
 影片更新、發布與歌單套用保留同步 API，新增可重新整理查詢的 [作業紀錄與唯讀對帳](docs/OPERATION_JOURNAL.md)；介面入口為 `/operations`。新紀錄保存在同一持久資料目錄的 `operations.sqlite3`，不轉換或刪除既有 JSON。
+
+## 發布前暫存與照片序號移動
+
+Video／Shorts 先指定人物，再按「套用人物並產生暫存結果」進入獨立編輯頁。逐片修改最終標題／描述，可還原成套用人物後內容或略過；按「檢查變更與配額」檢查逐片摘要，最後經二次確認才編輯並公開。未指定人物及略過影片不會被公開。
+
+暫存與最後手動修改保存在目前瀏覽器，依登入帳號、授權頻道及 Video／Shorts 隔離，切換頁面與重新整理可恢復；不包含 OAuth 憑證。來源、人物指定或影片清單變動後，需返回核對或明確重建，重建會取代舊暫存。請勿清除網站儲存資料；儲存失敗時介面會提示並阻止發布。暫存簽章有效 30 天，最終預覽有效 30 分鐘；過期或遠端資料變更時回傳 `409 stale_preview`，保留手動內容供核對。
+
+需要同時更新文字及公開時，每片使用一次 `videos.update(part="snippet,status")`，寫入成本 50 units；僅文字或僅公開也各需一次，已符合則不寫入。來源與發布前的讀取另計。結果不明時保留原請求及作業紀錄，唯讀核對標題、描述及公開狀態，避免重送；部分成功時鎖定成功列，只重試已確認失敗或未執行的影片。To-Post 清理仍由原本獨立流程處理。
+
+Instagram 排版每張照片都有「移至序號」，可選目標貼文及有效序號，以插入方式移動其餘照片；保留拖曳、封面、復原及匯出功能。重新整理前仍須匯出排版專案；重新匯入後順序會保留，原始照片需重新選檔。

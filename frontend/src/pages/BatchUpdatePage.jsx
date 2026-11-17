@@ -1,26 +1,24 @@
-import { ResultExport } from '../shared/ui/ResultExport';
 import { Button } from '../shared/ui';
 import '../features/youtube/youtube-shared.css';
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { PATHS } from '../routes/paths';
-import { normalizeYoutubePlaylistInput } from '../features/youtube/api/youtubeBatchApi';
 import '../features/youtube/batch-update.css';
 import '../features/youtube/bulk-edit.css';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
-import ResultStatus from '../components/ResultStatus';
 import ThumbnailDialog from '../components/ThumbnailDialog';
 import VideoThumbnail from '../components/VideoThumbnail';
 import SheetDataSourcePanel from '../components/SheetDataSourcePanel';
 import SourceLinkInput from '../components/SourceLinkInput';
 import { personLabel } from '../features/sheets/model/personOptions';
 import TeamPersonFilterPanel from '../components/TeamPersonFilterPanel';
-import { YOUTUBE_COPY, formatResultCounts, formatVideoCount, formatVideoId } from '../utils/youtubeCopy';
+import { YOUTUBE_COPY, formatVideoCount, formatVideoId } from '../utils/youtubeCopy';
 import { youtubeRoutingReasonLabel } from '../features/youtube/model/routing';
 import {
   AlertCircle,
   CheckCircle2,
+  XCircle,
   Info,
   PlaySquare,
   RefreshCw,
@@ -28,7 +26,6 @@ import {
   Send,
   Shuffle,
   Video as VideoIcon,
-  XCircle,
 } from 'lucide-react';
 
 import {
@@ -40,9 +37,15 @@ import {
   resolveDraftConfig,
 } from '../utils/batchPreview';
 import PreviewField from '../components/batch/PreviewField';
-import BatchPreviewItem from '../components/batch/BatchPreviewItem';
-import BatchUpdateConfirmationContent from '../components/batch/BatchUpdateConfirmationContent';
 import { useBatchUpdateWorkflow } from '../features/youtube/hooks/useBatchUpdateWorkflow';
+import { draftPublishApi } from '../features/youtube/api/draftPublishApi';
+import {
+  createSavedDraft,
+  loadPublishDraft,
+  rememberDraftContext,
+  savePublishDraft,
+} from '../features/youtube/model/draftPublishStorage';
+import { getYoutubeAuthContext } from '../features/youtube/model/routing';
 
 export {
   buildBatchPreview,
@@ -55,7 +58,11 @@ export {
 
 export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Video' }) {
   const toast = useToast();
-  const [previewFilter, setPreviewFilter] = useState('all');
+  const navigate = useNavigate();
+  const [preparing, setPreparing] = useState(false);
+  const [rebuildOpen, setRebuildOpen] = useState(false);
+  const [stagingError, setStagingError] = useState('');
+  const preparingRef = useRef(false);
   const {
     youtubeConnected,
     workStateError,
@@ -74,7 +81,6 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     randomPreviewLoading,
     loadingPreview,
     previewError,
-    batchPreview,
     videos,
     assignments,
     setAssignments,
@@ -86,15 +92,11 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     loadingSheet,
     loadingVideos,
     executing,
-    result,
     errorMsg,
     configSaveError,
     sourceError,
-    confirmOpen,
-    setConfirmOpen,
     previewImage,
     setPreviewImage,
-    quotaEstimate,
     estimateLoading,
     hydrated,
     draftAutosaveStatus,
@@ -127,34 +129,78 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     handleVideoCardKeyDown,
     setAllVideosSelected,
     applyBulkAssignment,
-    doExecute,
-    requestPreview,
-    requestExecute,
     sourceLabel,
-    previewCounts,
   } = useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast });
-  const workflowBusy = executing || loadingSheet || loadingVideos || loadingPreview || estimateLoading;
+  const workflowBusy = preparing || executing || loadingSheet || loadingVideos || loadingPreview || estimateLoading;
+  const account = authUser?.sub || authUser?.email || '';
+  const channel = getYoutubeAuthContext(authUser).channelId;
+  const stagedPath = videoType === 'Shorts' ? PATHS.youtubeShortsStaging : PATHS.youtubeVideoStaging;
+  const source = useMemo(
+    () => ({
+      spreadsheet_url_or_id: spreadsheetId.trim(),
+      playlist_id: playlistId,
+      video_type: videoType,
+      worksheet_name: worksheetName,
+      title_column: titleColumn,
+      description_column: descriptionColumn,
+      team: '',
+      assignments: videos.map((video) => ({
+        video_id: video.video_id,
+        person: assignments[video.video_id] || '不編輯',
+      })),
+    }),
+    [spreadsheetId, playlistId, videoType, worksheetName, titleColumn, descriptionColumn, videos, assignments]
+  );
+  useEffect(() => {
+    if (!hydrated || !sourceReady || !account) return;
+    try {
+      rememberDraftContext(account, source);
+    } catch {
+      setStagingError('瀏覽器無法保存暫存資料，請確認儲存空間與網站儲存權限。');
+    }
+  }, [account, hydrated, source, sourceReady]);
+  const prepareDrafts = async (rebuild = false) => {
+    if (preparingRef.current || workflowBusy || !sourceReady || sourceStale) return;
+    if (!source.assignments.some((item) => item.person !== '不編輯' && item.person))
+      return toast.warning('請先為影片指定人物。');
+    preparingRef.current = true;
+    try {
+      if (!rebuild && channel && loadPublishDraft(account, channel, videoType)) {
+        setRebuildOpen(true);
+        return;
+      }
+      setPreparing(true);
+      setStagingError('');
+      const stage = await draftPublishApi.prepare(source);
+      const draft = createSavedDraft(stage, account, source);
+      savePublishDraft(draft);
+      rememberDraftContext(account, source);
+      navigate(stagedPath);
+    } catch (error) {
+      setStagingError(`建立暫存失敗：${error.message}`);
+    } finally {
+      preparingRef.current = false;
+      setPreparing(false);
+      setRebuildOpen(false);
+    }
+  };
   return (
     <div className="section-gap batch-update-page">
       <ConfirmDialog
-        open={confirmOpen}
-        title={`確認${YOUTUBE_COPY.batchUpdate} ${formatVideoCount(previewCounts.willUpdate)}`}
-        content={
-          batchPreview ? (
-            <BatchUpdateConfirmationContent
-              batchPreview={batchPreview}
-              previewCounts={previewCounts}
-              quotaEstimate={quotaEstimate}
-            />
-          ) : null
-        }
-        confirmText={estimateLoading ? YOUTUBE_COPY.readLoading : `開始${YOUTUBE_COPY.batchUpdate}`}
-        cancelText="取消"
-        variant="destructive"
-        busy={executing || estimateLoading}
-        onConfirm={doExecute}
-        onCancel={() => setConfirmOpen(false)}
+        open={rebuildOpen}
+        title="重建發布前暫存？"
+        message="重建會取代此頻道目前的暫存與手動修改。尚未確認的 YouTube 寫入仍須先到作業紀錄核對。"
+        confirmText="重建暫存"
+        onConfirm={() => prepareDrafts(true)}
+        onCancel={() => setRebuildOpen(false)}
+        busy={preparing}
       />
+      <Link to={stagedPath}>繼續發布前暫存編輯</Link>
+      {stagingError && (
+        <div role="alert" className="error-banner">
+          {stagingError}
+        </div>
+      )}
       <Link to={PATHS.operations}>查看作業紀錄／核對先前結果</Link>
       <header className="page-header">
         <div className="section-header">
@@ -178,14 +224,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
       </header>
 
       <p role="status">
-        {executing
-          ? '4. 更新中'
-          : batchPreview
-            ? '3. 檢查逐片差異'
-            : videos.length
-              ? '2. 配對人物'
-              : '1. 讀取來源與影片'}{' '}
-        · {videos.length} 支影片 · 目標頻道：
+        {videos.length ? '2. 配對人物並產生暫存' : '1. 讀取來源與影片'} · {videos.length} 支影片 · 目標頻道：
         {authUser?.youtube?.slots?.[authUser?.youtube?.active_slot || 'primary']?.channel_title || '待連線核對'}
       </p>
       <SheetDataSourcePanel
@@ -505,147 +544,22 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
               </div>
             ))}
           </div>
-          {batchPreview && (
-            <section className="glass-panel card-padding batch-preview-panel" aria-label="完整批次變更預覽">
-              <div className="page-header">
-                <h3>{YOUTUBE_COPY.batchUpdate}預覽</h3>
-                <p className="section-desc">
-                  逐片核對目前內容、更新後內容、人物與處理狀態，再按下方「確認這份預覽並更新」。修改設定或人物後需重新產生預覽。
-                </p>
-              </div>
-              <div className="batch-preview-summary" aria-label="批次預覽狀態摘要">
-                <span className="batch-preview-summary-item batch-preview-summary-success">
-                  將更新 <strong>{formatVideoCount(previewCounts.willUpdate)}</strong>
-                </span>
-                <span className="batch-preview-summary-item">
-                  沒有變更 <strong>{formatVideoCount(previewCounts.unchanged)}</strong>
-                </span>
-                <span className="batch-preview-summary-item">
-                  略過 <strong>{formatVideoCount(previewCounts.skipped)}</strong>
-                </span>
-                <span className="batch-preview-summary-item batch-preview-summary-error">
-                  失敗 <strong>{formatVideoCount(previewCounts.failed)}</strong>
-                </span>
-              </div>
-              <label>
-                預覽顯示{' '}
-                <select
-                  aria-label="預覽顯示"
-                  value={previewFilter}
-                  onChange={(event) => setPreviewFilter(event.target.value)}
-                >
-                  <option value="all">完整清單</option>
-                  <option value="willUpdate">有變更</option>
-                  <option value="failed">需處理</option>
-                </select>
-              </label>
-              <div className="batch-preview-list">
-                {batchPreview
-                  .filter((item) => previewFilter === 'all' || getBatchPreviewStatus(item).key === previewFilter)
-                  .map((item, index) => (
-                    <BatchPreviewItem item={item} index={index} key={item.videoId || item.video_id} />
-                  ))}
-              </div>
-            </section>
-          )}
           <div className="glass-panel execution-bar">
             <div>
-              <strong>將處理目前清單中的 {formatVideoCount(videos.length)}</strong>
-              <p>
-                {batchPreview
-                  ? '確認時會使用上方這份預覽；人物為「不編輯」的影片會略過。'
-                  : '先產生完整預覽，檢查逐片變更後再確認送出。'}
-              </p>
+              <strong>下一步：發布前暫存編輯</strong>
+              <p>先套用人物，再到獨立頁面逐片修改標題與描述。最後確認編輯並公開前，不會寫入 YouTube。</p>
             </div>
-            <div className="page-actions">
-              {batchPreview && (
-                <Button
-                  variant="secondary"
-                  className="btn btn-secondary"
-                  onClick={requestPreview}
-                  disabled={workflowBusy}
-                >
-                  <RefreshCw size={16} /> 重新產生預覽
-                </Button>
-              )}
-              <Button
-                variant="success"
-                className="btn btn-success"
-                onClick={batchPreview ? requestExecute : requestPreview}
-                disabled={workflowBusy || (Boolean(batchPreview) && !previewCounts.willUpdate)}
-              >
-                <Send size={18} />{' '}
-                {executing
-                  ? YOUTUBE_COPY.updateLoading
-                  : loadingPreview
-                    ? '建立預覽中…'
-                    : estimateLoading
-                      ? '估算配額中…'
-                      : batchPreview
-                        ? `確認這份預覽並更新 ${previewCounts.willUpdate} 支影片`
-                        : `產生完整批次預覽（${videos.length} 支影片）`}
-              </Button>
-            </div>
+            <Button
+              variant="primary"
+              onClick={() => prepareDrafts()}
+              disabled={workflowBusy || sourceStale || !sourceReady}
+            >
+              <Send size={18} /> {preparing ? '產生暫存中…' : '套用人物並產生暫存結果'}
+            </Button>
           </div>
         </div>
       )}
 
-      {result && (
-        <div className="glass-panel card-padding result-panel card-stack">
-          <ResultExport
-            filename="BatchUpdatePage"
-            rows={result.results.map((item) => ({
-              id: item.video_id,
-              title: item.title || '',
-              status: item.status,
-              reason: item.reason || '',
-              url: `https://youtu.be/${item.video_id}`,
-            }))}
-          />
-          <Link
-            className="btn btn-secondary"
-            to={`${PATHS.youtubePublishCleanup}${normalizeYoutubePlaylistInput(playlistId) ? `?playlist=${encodeURIComponent(normalizeYoutubePlaylistInput(playlistId))}` : ''}`}
-          >
-            前往發布檢查（重新讀取清單）
-          </Link>
-          <h3
-            className={
-              result.completed ? 'result-heading result-heading-success' : 'result-heading result-heading-warning'
-            }
-          >
-            <CheckCircle2 size={22} />{' '}
-            {result.completed
-              ? `YouTube ${YOUTUBE_COPY.batchUpdate}已執行完成`
-              : `YouTube ${YOUTUBE_COPY.batchUpdate}部分完成`}
-          </h3>
-          <p className="section-desc">
-            共 {formatVideoCount(result.total_count || 0)}：{formatResultCounts(result)}。
-          </p>
-          {result.quota_blocked && (
-            <div className="info-banner">
-              <Info size={15} />
-              <span>已達 YouTube 配額上限；未執行項目請於官方重設後重新讀取草稿影片並送出。</span>
-            </div>
-          )}
-          {(result.results || []).map((item) => (
-            <div key={item.video_id} className="result-item result-row">
-              <div>
-                <strong>{item.title || item.video_id}</strong>
-                <div className="result-meta">
-                  {formatVideoId(item.video_id)}
-                  {item.person ? ` · ${item.person}` : ''}
-                </div>
-                {item.reason && (
-                  <div className={item.status === 'failed' ? 'result-reason result-reason-failed' : 'result-reason'}>
-                    {item.reason}
-                  </div>
-                )}
-              </div>
-              <ResultStatus status={item.status} />
-            </div>
-          ))}
-        </div>
-      )}
       <ThumbnailDialog image={previewImage} onClose={() => setPreviewImage(null)} />
     </div>
   );

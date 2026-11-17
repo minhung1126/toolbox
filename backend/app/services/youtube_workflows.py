@@ -153,6 +153,44 @@ class YoutubeWorkflowService:
                 exc, method="videos.list", youtube_slot=youtube_context.slot
             ).to_http_exception() from exc
 
+    def prepare_draft_publish(self, payload, *, creds, sheet_creds):
+        from backend.app.services.youtube_draft_publish import DraftPublishWorkflow
+
+        return self._draft_publish_call(
+            lambda: DraftPublishWorkflow(self.ports).prepare(payload, creds, sheet_creds), creds, "videos.list"
+        )
+
+    def preview_draft_publish(self, payload, *, creds, sheet_creds, operations):
+        from backend.app.services.youtube_draft_publish import DraftPublishWorkflow
+
+        return self._draft_publish_call(
+            lambda: DraftPublishWorkflow(self.ports).preview(payload, creds, sheet_creds, operations),
+            creds,
+            "videos.list",
+        )
+
+    def run_draft_publish(self, payload, *, creds, sheet_creds, operations):
+        from backend.app.services.youtube_draft_publish import DraftPublishWorkflow
+
+        return self._draft_publish_call(
+            lambda: DraftPublishWorkflow(self.ports).execute(payload, creds, sheet_creds, operations),
+            creds,
+            "videos.update",
+        )
+
+    def _draft_publish_call(self, call, context, method):
+        try:
+            return call()
+        except YouTubeQuotaUnavailable as exc:
+            raise self.ports.quota_http_exception(exc) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            self.ports.logger.error("Draft publish workflow failed: %s", type(exc).__name__)
+            raise self.ports.map_youtube_error(
+                exc, method=method, youtube_slot=context.slot
+            ).to_http_exception() from exc
+
     def run_batch_metadata_update(
         self, payload: BatchUpdateInput, *, creds: YouTubeRequestContext, sheet_creds: Credentials
     ):

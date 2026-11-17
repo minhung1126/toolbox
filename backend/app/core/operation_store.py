@@ -124,6 +124,14 @@ class OperationStore:
             self._save(db, operation)
             return operation
 
+    def draft_publish_attempts(self, owner, channel_id):
+        """Include all prior attempts, so older uncertain writes cannot be bypassed."""
+        with self.transaction() as db:
+            rows = db.execute(
+                "SELECT document FROM operations WHERE owner=? AND kind='youtube.metadata_publish'", (owner,)
+            ).fetchall()
+        return [op for row in rows if (op := json.loads(row[0]))["channel_id"] == channel_id]
+
     def backup(self, destination: Path):
         # sqlite backup takes a consistent snapshot, including concurrent committed writes.
         with self.transaction():

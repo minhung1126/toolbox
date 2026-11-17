@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 import JSZip from 'jszip';
 import { readFile } from 'node:fs/promises';
 
-import { mockAuthenticatedBackend } from './fixtures';
+import { mockAuthenticatedBackend, draftPublishResponses } from './fixtures';
 
 test('component showcase stays readable without horizontal overflow on supported widths', async ({
   page,
@@ -375,15 +375,6 @@ test('YouTube batch feature styles load without viewport overflow', async ({ pag
   }
 });
 
-
-
-
-
-
-
-
-
-
 test('Google Sheets OAuth uses the backend URL and redirects to the provider', async ({ page }) => {
   await mockAuthenticatedBackend(page, {
     '/api/v1/auth/sheets/url': {
@@ -433,7 +424,7 @@ test('Playlist Sort previews and confirms creation of a sorted playlist', async 
         ytmusic: { connected: true, user: { email: 'music@example.test' } },
       },
       google_scopes: {},
-      youtube: { slots: { primary: { authenticated: true, channel_title: 'Primary' } } },
+      youtube: { slots: { primary: { authenticated: true, channel_title: 'Primary', channel_id: 'channel-e2e' } } },
     },
     '/api/v1/playlist-sort/playlists': {
       playlists: [{ id: 'playlist-1', title: '我的最愛音樂', item_count: 3, privacy_status: 'private' }],
@@ -522,7 +513,7 @@ test('Playlist Sort previews and confirms creation of a sorted playlist', async 
   await expect(page.getByRole('link', { name: /前往 YouTube Music 查看新歌單/ })).toBeVisible();
 });
 
-test('YouTube Batch Update checks a full preview before executing the update', async ({ page }) => {
+test('YouTube drafts preserve manual edits through reload and publish after final confirmation', async ({ page }) => {
   await mockAuthenticatedBackend(page, {
     '/api/v1/auth/user': {
       authenticated: true,
@@ -532,7 +523,10 @@ test('YouTube Batch Update checks a full preview before executing the update', a
         ytmusic: { connected: false },
       },
       google_scopes: {},
-      youtube: { active_slot: 'primary', slots: { primary: { authenticated: true, channel_title: 'Primary' } } },
+      youtube: {
+        active_slot: 'primary',
+        slots: { primary: { authenticated: true, channel_title: 'Primary', channel_id: 'channel-e2e' } },
+      },
     },
     '/api/v1/settings/system': { default_spreadsheet_id: 'sheet-a', default_playlist_id: 'playlist-a' },
     '/api/v1/settings/youtube-drafts': async (route) => {
@@ -568,53 +562,7 @@ test('YouTube Batch Update checks a full preview before executing the update', a
       ],
       source: 'youtube-api',
     },
-    '/api/v1/youtube/batch-preview': {
-      preview_token: 'batch-preview-token',
-      preview_snapshot: { youtube_slot: 'primary' },
-      plan: [
-        {
-          videoId: 'video-1',
-          currentTitle: '舊標題一',
-          currentDescription: '舊描述一\n第二行',
-          newTitle: '新標題一',
-          newDescription: '新描述一\n第二行',
-          person: '人物甲',
-          status: 'ready',
-          willUpdate: true,
-        },
-        {
-          videoId: 'video-2',
-          currentTitle: '保留標題',
-          currentDescription: '保留描述',
-          newTitle: '',
-          newDescription: '',
-          person: '不編輯',
-          status: 'skipped',
-          reason: '未指定人物',
-          willUpdate: false,
-        },
-      ],
-    },
-    '/api/v1/youtube/quota-estimate': {
-      projected_units: 100,
-      effective_available_units: 200,
-      can_complete_today: true,
-    },
-    '/api/v1/youtube/batch-update': {
-      operation: 'youtube.metadata_update',
-      completed: true,
-      total_count: 2,
-      succeeded_count: 1,
-      warning_count: 0,
-      skipped_count: 1,
-      failed_count: 0,
-      not_attempted_count: 0,
-      quota_blocked: false,
-      results: [
-        { video_id: 'video-1', status: 'succeeded' },
-        { video_id: 'video-2', status: 'skipped' },
-      ],
-    },
+    ...draftPublishResponses({ titleFor: () => '新標題一', descriptionFor: () => '新描述一\n第二行' }),
   });
 
   await page.goto('/youtube/drafts/videos');
@@ -660,31 +608,37 @@ test('YouTube Batch Update checks a full preview before executing the update', a
     .locator('.video-card-assignment select')
     .first()
     .selectOption(personKey({ team: '團體 A', person: '人物甲', kind: 'person' }));
-  await page.getByRole('button', { name: /產生完整批次預覽/ }).click();
-  await expect(page.getByRole('region', { name: '完整批次變更預覽' })).toContainText('新標題一');
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('button', { name: /確認這份預覽並更新/ }).click();
-
-  const dialog = page.getByRole('dialog', { name: '確認批次更新 1 支影片' });
-  await expect(dialog).toBeVisible();
-  await expect(page.getByRole('region', { name: '完整批次變更預覽' })).toContainText('新標題一');
-  await expect(dialog).toContainText('100 單位');
-  await expect(dialog).toContainText('200 單位');
-
-  const updateRequestPromise = page.waitForRequest(
-    (request) => request.method() === 'POST' && request.url().endsWith('/api/v1/youtube/batch-update')
-  );
-  await dialog.getByRole('button', { name: '開始批次更新' }).click();
-  const updateRequest = await updateRequestPromise;
-  expect(updateRequest.postDataJSON()).toMatchObject({
-    preview_token: 'batch-preview-token',
-    assignments: [
-      { video_id: 'video-1', person: personKey({ team: '團體 A', person: '人物甲', kind: 'person' }) },
-      { video_id: 'video-2', person: '不編輯' },
+  const writes = [];
+  page.on('request', (request) => {
+    if (request.url().endsWith('/youtube/drafts/publish')) writes.push(request);
+  });
+  await page.getByRole('button', { name: '套用人物並產生暫存結果' }).click();
+  await expect(page.getByRole('heading', { name: 'Video 發布前暫存編輯' })).toBeVisible();
+  await page.getByLabel('最終標題（4 / 100）').fill('最後人工修改');
+  await page.getByLabel('最終描述（8 / 5,000）').fill('最後完整描述\n第二行');
+  await page.reload();
+  await expect(page.getByLabel('最終標題（6 / 100）')).toHaveValue('最後人工修改');
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+  }
+  expect(writes).toHaveLength(0);
+  await page.getByRole('button', { name: '檢查變更與配額' }).click();
+  await expect(page.getByRole('region', { name: '最終變更摘要' })).toContainText('50 units');
+  expect(writes).toHaveLength(0);
+  await page.getByRole('button', { name: '確認編輯並公開', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('50 units');
+  await dialog.getByRole('button', { name: '確認編輯並公開', exact: true }).click();
+  await expect(page.getByRole('article').first()).toContainText('已寫入 YouTube');
+  expect(writes).toHaveLength(1);
+  expect(writes[0].postDataJSON()).toMatchObject({
+    preview_token: 'signed-final',
+    edits: [
+      { video_id: 'video-1', title: '最後人工修改', description: '最後完整描述\n第二行', skip: false },
+      { video_id: 'video-2', skip: true },
     ],
   });
-  await expect(page.locator('.result-panel')).toContainText('已執行完成');
-  await expect(page.locator('.result-panel')).toContainText('成功 1 支影片');
 });
 
 test('Publish Cleaner confirms the loaded snapshot and completes the publish workflow', async ({ page }) => {
