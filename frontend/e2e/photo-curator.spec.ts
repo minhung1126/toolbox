@@ -292,3 +292,54 @@ for (const width of [390, 1440]) {
     await page.screenshot({ path: test.info().outputPath(`curator-${width}.png`), fullPage: true });
   });
 }
+
+for (const width of [390, 1440]) {
+  test(`numbered photo insertion preserves project and ZIP order at ${width}px`, async ({ page }, testInfo) => {
+    await mockAuthenticatedBackend(page);
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/photo-curator');
+    await page.locator('.photo-dropzone input[type=file]').setInputFiles(
+      ['a', 'b', 'c'].map((name) => ({
+        name: `${name}.svg`,
+        mimeType: 'image/svg+xml',
+        buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"/>'),
+      }))
+    );
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: '+ P1', exact: true }).first().click();
+    await page.getByRole('button', { name: '指定序號 c.svg', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '移動到指定序號' });
+    await expect(dialog).toContainText('目前第 3 / 3 張');
+    const target = dialog.getByRole('spinbutton');
+    for (const value of ['0', '-1', '4', '1.5']) {
+      await target.fill(value);
+      await expect(dialog.getByRole('button', { name: '確認移動' })).toBeDisabled();
+    }
+    await target.fill('1');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await dialog.screenshot({ path: testInfo.outputPath(`move-to-position-${width}.png`) });
+    await target.press('Enter');
+    await expect(page.locator('[data-post-id=post-1] .photo-card-name')).toHaveText(['c.svg', 'a.svg', 'b.svg']);
+    await expect(page.getByAltText('Post 1 封面：c.svg')).toBeVisible();
+    const projectDownload = page.waitForEvent('download');
+    await page.getByRole('button', { name: '匯出排版專案', exact: true }).click();
+    const project = await projectDownload;
+    const path = (await project.path())!;
+    const data = JSON.parse(await readFile(path, 'utf8'));
+    const names = new Map(data.photos.map((photo) => [photo.id, photo.name]));
+    expect(data.posts[0].photoIds.map((id) => names.get(id))).toEqual(['c.svg', 'a.svg', 'b.svg']);
+    const zipDownload = page.waitForEvent('download');
+    await page.getByRole('button', { name: /下載分組照片/ }).click();
+    const zip = await JSZip.loadAsync(await readFile((await (await zipDownload).path())!));
+    expect(Object.keys(zip.files).filter((name) => /\.(svg)$/.test(name))).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/01.*c\.svg$/),
+        expect.stringMatching(/02.*a\.svg$/),
+        expect.stringMatching(/03.*b\.svg$/),
+      ])
+    );
+    await page.reload();
+    await page.getByLabel('匯入專案 JSON').setInputFiles(path);
+    await page.getByRole('button', { name: '載入專案', exact: true }).click();
+    await expect(page.locator('[data-post-id=post-1] .photo-card-name')).toHaveText(['c.svg', 'a.svg', 'b.svg']);
+  });
+}

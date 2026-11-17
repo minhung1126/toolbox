@@ -171,6 +171,17 @@ export function usePhotoCuratorWorkflow({ toast }) {
     [photoMap, unassignedIds, rememberArrangement, restoreUnassignedPhotos, setPosts]
   );
 
+  const movePhotoToPosition = (photoId, postId, position) => {
+    const post = posts.find((item) => item.id === postId);
+    if (!post || !photoMap.has(photoId)) return false;
+    const remaining = post.photoIds.filter((id) => id !== photoId);
+    if (!Number.isInteger(position) || position < 1 || position > remaining.length + 1) return false;
+    if (post.photoIds.indexOf(photoId) === position - 1) return true;
+    assignPhotoToPost(photoId, postId, remaining[position - 1] || null);
+    toast.success(`已移至 ${post.title} 第 ${position} 張。`);
+    return true;
+  };
+
   // Delete photo completely from workbench
   const deletePhoto = useCallback(
     (photoId) => {
@@ -401,6 +412,7 @@ export function usePhotoCuratorWorkflow({ toast }) {
     handleFilesSelected,
     handleDropzoneDrop,
     assignPhotoToPost,
+    movePhotoToPosition,
     returnPhotoToUnassigned,
     deletePhoto,
     setAsCover,

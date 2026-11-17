@@ -1,4 +1,5 @@
 import ProjectFiles from '../features/photo-curator/components/ProjectFiles';
+import MovePhotoDialog from '../features/photo-curator/components/MovePhotoDialog';
 import { Button } from '../shared/ui';
 import React, { useRef, useState } from 'react';
 import {
@@ -56,6 +57,7 @@ function PhotoCuratorWorkbench() {
   const toast = useToast();
   const workbenchRef = useRef(null);
   const [thumbnailSizeIndex, setThumbnailSizeIndex] = useState(1);
+  const [movingPhoto, setMovingPhoto] = useState(null);
   const thumbnailSize = THUMBNAIL_SIZES[thumbnailSizeIndex];
   const {
     fileInputRef,
@@ -82,6 +84,7 @@ function PhotoCuratorWorkbench() {
     handleFilesSelected,
     handleDropzoneDrop,
     assignPhotoToPost,
+    movePhotoToPosition,
     returnPhotoToUnassigned,
     deletePhoto,
     setAsCover,
@@ -106,7 +109,7 @@ function PhotoCuratorWorkbench() {
       <CuratorHoverPreview
         containerRef={workbenchRef}
         photoMap={photoMap}
-        disabled={Boolean(draggedPhotoId || previewPhoto || autoConfirmOpen || resetConfirmOpen)}
+        disabled={Boolean(draggedPhotoId || previewPhoto || autoConfirmOpen || resetConfirmOpen || movingPhoto)}
       />
       {/* Header */}
       <header className="glass-panel page-header card-padding">
@@ -326,7 +329,7 @@ function PhotoCuratorWorkbench() {
 
       <p className="curator-arrangement-status" role="status">
         已分配 {assignedCount} / {photos.length}{' '}
-        張。拖曳照片到卡片上半部或下半部，可插入指定位置；也可使用前後移動按鈕。
+        張。拖曳照片到卡片上半部或下半部，可插入指定位置；也可使用前後移動按鈕或直接指定序號。
         {unassignedIds.length > 0 && ' 尚未分配的照片不會包含在 ZIP 中。'}
       </p>
 
@@ -393,6 +396,14 @@ function PhotoCuratorWorkbench() {
                         {photo.name}
                       </div>
                       <div className="photo-card-quick-actions">
+                        <button
+                          type="button"
+                          className="btn-order-action"
+                          onClick={() => setMovingPhoto(photo)}
+                          aria-label={`指定序號 ${photo.name}`}
+                        >
+                          移至序號
+                        </button>
                         {posts.map((post, index) => (
                           <button
                             key={post.id}
@@ -506,6 +517,14 @@ function PhotoCuratorWorkbench() {
                               </div>
                             </div>
                             <div className="photo-card-controls">
+                              <button
+                                type="button"
+                                className="btn-order-action"
+                                onClick={() => setMovingPhoto(photo)}
+                                aria-label={`指定序號 ${photo.name}`}
+                              >
+                                移至序號
+                              </button>
                               {!isCover && (
                                 <button
                                   type="button"
@@ -582,6 +601,14 @@ function PhotoCuratorWorkbench() {
       </div>
 
       {/* Instagram Cover Grid Live Preview */}
+      {movingPhoto && (
+        <MovePhotoDialog
+          photo={movingPhoto}
+          posts={posts}
+          onMove={movePhotoToPosition}
+          onClose={() => setMovingPhoto(null)}
+        />
+      )}
       <section className="glass-panel ig-preview-section" aria-label="Instagram 主頁首圖排版預覽">
         <div className="ig-preview-header">
           <div className="ig-preview-title">
