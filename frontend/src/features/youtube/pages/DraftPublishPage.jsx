@@ -453,7 +453,7 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
                       {edit.description || '（描述空白）'}
                     </p>
                   </div>
-                  <details>
+                  <details className="draft-publish-details">
                     <summary>原標題／描述與套用人物後內容</summary>
                     <div className="draft-publish-original">
                       <h3>原標題</h3>
