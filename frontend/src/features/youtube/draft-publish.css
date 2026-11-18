@@ -81,7 +81,12 @@
 
 .draft-publish-original pre {
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-family: inherit;
+}
+
+.draft-publish-card > details {
+  min-width: 0;
 }
 
 .draft-publish-field-label {
