@@ -86,11 +86,17 @@ for (const videoType of ['Video', 'Shorts']) {
     await expect(card.getByLabel('預計套用的描述')).toHaveText(longDescription);
     for (const width of [390, 768, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
+      await page.evaluate(() => document.fonts.ready);
       await expect(card.getByLabel('預計套用的描述')).toHaveCSS('white-space', 'pre-wrap');
       const text = card.getByLabel('預計套用的描述');
       expect(await text.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
-      await page.screenshot({ path: `/workspace/work/visual-review/staged-${videoType}-${width}.png`, animations: 'disabled' });
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth))
+        .toBeLessThanOrEqual(1);
+      await page.screenshot({
+        path: testInfo.outputPath(`staged-${videoType}-${width}.png`),
+        animations: 'disabled',
+      });
       const edit = card.getByRole('button', { name: '編輯', exact: true });
       await edit.click();
       await expect(page.getByLabel('標題', { exact: true })).toBeFocused();
