@@ -67,9 +67,11 @@ async def lifespan(app: FastAPI):
     ):
         _initialize_app_config(app)
         await app.state.tool_registry.run_startup(app)
+        app.state.youtube_publish_runner.start()
         try:
             yield
         finally:
+            app.state.youtube_publish_runner.shutdown()
             await app.state.tool_registry.run_shutdown(app)
 
 
@@ -211,6 +213,9 @@ def create_app(
     app_settings=None,
     notes_store=None,
     operation_store=None,
+    youtube_publish_runner=None,
+    youtube_publish_credential_loader=None,
+    youtube_publish_capacity=4,
     account_state_store=None,
     session_store=None,
     credential_store=None,
@@ -271,6 +276,33 @@ def create_app(
     application.state.credential_store = credential_store
     application.add_middleware(CredentialStoreMiddleware, store=credential_store)
     application.state.youtube_workflow_adapters = dict(youtube_workflow_adapters or {})
+    from functools import partial
+
+    from backend.app.api.youtube_workflow_dependencies import create_youtube_workflow_service
+    from backend.app.core.account_state import get_account_setting
+    from backend.app.core.credential_store import get_credential_store
+    from backend.app.services.youtube_publish_jobs import PublishJobRuntime, YouTubePublishRunner
+
+    job_adapters = dict(application.state.youtube_workflow_adapters)
+    job_adapters.setdefault(
+        "get_account_setting", partial(get_account_setting, store=application.state.account_state_store)
+    )
+    runtime = PublishJobRuntime(
+        config=config,
+        credentials=credential_store if credential_store is not None else get_credential_store(),
+        accounts=application.state.account_state_store,
+        trackers=youtube_quota_trackers,
+        client_factory=google_client_factory,
+        service=None,
+        credential_loader=youtube_publish_credential_loader,
+    )
+    job_adapters.setdefault("_switch_youtube_context", runtime.fallback)
+    runtime.service = create_youtube_workflow_service(job_adapters)
+    application.state.youtube_publish_runner = (
+        youtube_publish_runner
+        if youtube_publish_runner is not None
+        else YouTubePublishRunner(application.state.operation_store, runtime, capacity=youtube_publish_capacity)
+    )
     application.dependency_overrides.update(dependency_overrides or {})
     application.add_exception_handler(RequestValidationError, request_validation_error_handler)
     application.add_exception_handler(StarletteHTTPException, http_exception_handler)

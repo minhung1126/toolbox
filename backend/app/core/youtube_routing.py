@@ -89,14 +89,14 @@ def estimate_youtube_request_units(
     if route.endswith("/video-metadata"):
         return 51  # videos.list + videos.update
 
-    if route.endswith(("/drafts/prepare", "/drafts/preview", "/drafts/publish")):
+    if route.endswith(("/drafts/prepare", "/drafts/preview", "/drafts/publish", "/drafts/publish-jobs")):
         raw_stage = payload.get("stage_snapshot")
         stage = raw_stage if isinstance(raw_stage, Mapping) else {}
         raw_source = stage.get("source")
         source = raw_source if isinstance(raw_source, Mapping) else payload
         count = _bounded_count(payload.get("edits") or payload.get("assignments"))
         playlist_reads = PLAYLIST_ITEMS_MAX_UNITS if source.get("playlist_id") or default_playlist_id else 0
-        if route.endswith("/drafts/publish"):
+        if route.endswith(("/drafts/publish", "/drafts/publish-jobs")):
             raw_preview = payload.get("preview_snapshot")
             preview = raw_preview if isinstance(raw_preview, Mapping) else {}
             plan = preview.get("plan")
@@ -121,19 +121,16 @@ def estimate_youtube_request_units(
         video_reads = pages if has_playlist else 2 * pages
         return max(playlist_reads + video_reads + assignments * 50, 1)
 
+    if route.endswith("/cleanup-preview"):
+        return PLAYLIST_ITEMS_MAX_UNITS * 2
+
     if route.endswith("/publish-and-cleanup"):
-        snapshot = payload.get("preview_snapshot")
-        video_ids = snapshot.get("video_ids") if isinstance(snapshot, Mapping) else None
-        count = _bounded_count(video_ids, MAX_PLAYLIST_ITEMS)
-        if not count:
-            count = MAX_PLAYLIST_ITEMS
-        item_count = (
-            max(count, _bounded_count(snapshot.get("playlist_item_count"), MAX_PLAYLIST_ITEMS))
-            if isinstance(snapshot, Mapping)
-            else count
-        )
-        playlist_pages = _pages(item_count)
-        return max((2 * playlist_pages) + _pages(count) + count * 50 + item_count * 52, 1)
+        snapshot = payload.get("preview_snapshot") or {}
+        items = snapshot.get("items")
+        count = _bounded_count(items, MAX_PLAYLIST_ITEMS) if isinstance(items, list) else MAX_PLAYLIST_ITEMS
+        candidates = sum(item.get("candidate") is True for item in items) if isinstance(items, list) else count
+        pages = _pages(count)
+        return max(pages * (2 + candidates) + _pages(count) + candidates * 53, 1)
 
     return 1
 

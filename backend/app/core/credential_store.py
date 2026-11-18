@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
@@ -521,3 +522,13 @@ class CredentialStoreMiddleware:
             await self.app(scope, receive, send)
         finally:
             _request_store.reset(token)
+
+
+@contextmanager
+def credential_store_context(value):
+    """Explicit scope for app-owned background work."""
+    token = _request_store.set(value)
+    try:
+        yield
+    finally:
+        _request_store.reset(token)

@@ -30,9 +30,9 @@ describe('Navbar', () => {
     'highlights the shared staging entry at %s',
     (path) => {
       render(<NavbarHarness initialEntry={path} />);
-      expect(screen.getByRole('link', { name: '發布前暫存編輯' })).toHaveAttribute('aria-current', 'page');
-      expect(screen.getByRole('link', { name: 'Video 草稿', exact: true })).not.toHaveClass('active');
-      expect(screen.getByRole('link', { name: 'Shorts 草稿', exact: true })).not.toHaveClass('active');
+      expect(screen.getByRole('link', { name: '編輯草稿並公開' })).toHaveAttribute('aria-current', 'page');
+      expect(screen.getByRole('link', { name: 'Video 快速套用', exact: true })).not.toHaveClass('active');
+      expect(screen.getByRole('link', { name: 'Shorts 快速套用', exact: true })).not.toHaveClass('active');
     }
   );
   it('renders an additional manifest without changing Navbar and expands its active route', () => {
@@ -118,7 +118,7 @@ describe('Navbar', () => {
       within(submenu)
         .getAllByRole('link')
         .map((link) => link.textContent.trim())
-    ).toEqual(['Video 草稿', 'Shorts 草稿', '發布前暫存編輯', '發布草稿', 'YouTube 設定']);
+    ).toEqual(['Video 快速套用', 'Shorts 快速套用', '編輯草稿並公開', '清理 To-Post', 'YouTube 設定']);
   });
 
   it('lists Sheet workflow pages and settings', () => {

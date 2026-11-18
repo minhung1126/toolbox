@@ -35,7 +35,7 @@ test('dashboard search and authorization summary stay usable at supported widths
 
     const favorites = page.getByRole('region', { name: '常用工具' });
     await expect(favorites.getByRole('link', { name: 'FFmpeg 命令行生成器' })).toBeVisible();
-    await expect(favorites.getByRole('link', { name: 'Video 草稿 尚缺授權' })).toHaveAttribute(
+    await expect(favorites.getByRole('link', { name: 'Video 快速套用 尚缺授權' })).toHaveAttribute(
       'href',
       PATHS.youtubeVideoDrafts
     );
@@ -52,7 +52,7 @@ test('dashboard search and authorization summary stay usable at supported widths
     await expect(page.getByText('找不到符合的工具')).toBeVisible();
     await page.getByRole('button', { name: '顯示全部工具' }).click();
     await expect(search).toHaveValue('');
-    await expect(page.getByRole('link', { name: '進入 Video 草稿' })).toBeVisible();
+    await expect(page.getByRole('link', { name: '前往 Video 快速套用' })).toBeVisible();
   }
 });
 

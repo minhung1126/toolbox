@@ -74,7 +74,11 @@ class PlaylistProvider:
                     "items": [
                         {
                             "id": video_id,
-                            "snippet": {"title": video_id, "publishedAt": "2026-01-01T00:00:00Z"},
+                            "snippet": {
+                                "channelId": "channel",
+                                "title": video_id,
+                                "publishedAt": "2026-01-01T00:00:00Z",
+                            },
                             "status": {"privacyStatus": "public" if video_id in self.public else "private"},
                         }
                         for video_id in kwargs["id"].split(",")
@@ -102,7 +106,7 @@ def cleanup_environment(tmp_path, monkeypatch):
     provider = PlaylistProvider()
     limiter = YouTubeQuotaLimiter(tmp_path / "quota.json", configured_limit=10000, safety_buffer_units=0)
     context = YouTubeRequestContext(
-        slot="primary", credentials=object(), quota_limiter=limiter, owner_sub="cleanup-user"
+        slot="primary", credentials=object(), quota_limiter=limiter, owner_sub="cleanup-user", channel_id="channel"
     )
     delays = []
     monkeypatch.setattr("backend.app.services.youtube_service.sleep", delays.append)
@@ -129,7 +133,7 @@ def client_for(env, **adapters):
 
 
 def publish(client):
-    preview = client.post("/api/v1/youtube/playlist-items", json={"playlist_id": "playlist-1"})
+    preview = client.post("/api/v1/youtube/cleanup-preview", json={"playlist_id": "playlist-1"})
     assert preview.status_code == 200, preview.text
     preview = preview.json()
     return client.post(
@@ -260,65 +264,67 @@ def test_signed_preview_cleans_all_nonconsecutive_duplicate_entries(cleanup_envi
         env.provider.item("item-2", "video-2"),
         env.provider.item("item-3", "video-1"),
     ]
+    env.provider.public.update({"video-1", "video-2"})
     client = client_for(env)
     response = publish(client)
     assert response.status_code == 200, response.text
     assert response.json()["completed"] is True
-    assert response.json()["succeeded_count"] == 2
+    assert response.json()["succeeded_count"] == 3
     assert env.provider.items == []
-    assert [call["id"] for call in method_calls(env, "playlistItems.delete")] == ["item-1", "item-3", "item-2"]
-    assert len(method_calls(env, "videos.update")) == 2
+    assert [call["id"] for call in method_calls(env, "playlistItems.delete")] == ["item-1", "item-2", "item-3"]
+    assert len(method_calls(env, "videos.update")) == 0
 
 
-def test_cleanup_warning_is_partial_and_rerun_only_finishes_cleanup(cleanup_environment):
+def test_cleanup_unknown_preserves_item_and_reconcile_does_not_require_public(cleanup_environment):
     env = cleanup_environment
+    env.provider.public.add("video-1")
     env.provider.retain_deleted_items = True
     client = client_for(env)
     response = publish(client)
     assert response.status_code == 200, response.text
     result = response.json()
     assert result["completed"] is False
-    assert result["warning_count"] == 1
-    assert result["results"][0]["pending_playlist_item_ids"] == ["item-1"]
-    assert env.provider.public == {"video-1"}
-    env.provider.retain_deleted_items = False
-    response = publish(client)
-    assert response.status_code == 200, response.text
-    assert response.json()["completed"] is True
-    assert env.provider.items == []
-    assert len(method_calls(env, "videos.update")) == 1
+    assert result["needs_reconciliation_count"] == 1
+    assert result["results"][0]["playlist_item_id"] == "item-1"
+    env.provider.items = []
+    env.provider.public.clear()
+    reconciled = client.post(f"/api/v1/operations/{result['operation_id']}/reconcile-youtube")
+    assert reconciled.status_code == 200, reconciled.text
+    assert reconciled.json()["state"] == "completed"
+    assert method_calls(env, "videos.update") == []
 
 
 def test_a_failed_duplicate_does_not_prevent_cleaning_other_entries(cleanup_environment):
     env = cleanup_environment
+    env.provider.public.add("video-1")
     env.provider.items.append(env.provider.item("item-2", "video-1"))
     env.provider.delete_outcomes = [provider_error(403, "forbidden")]
     response = publish(client_for(env))
     assert response.status_code == 200, response.text
     assert response.json()["completed"] is False
-    assert response.json()["results"][0]["pending_playlist_item_ids"] == ["item-1"]
+    assert response.json()["failed_count"] == 1
+    assert response.json()["succeeded_count"] == 1
     assert [item["id"] for item in env.provider.items] == ["item-1"]
-    assert len(method_calls(env, "videos.update")) == 1
+    assert method_calls(env, "videos.update") == []
 
 
-def test_publish_failure_never_removes_the_playlist_item(cleanup_environment):
+def test_private_video_is_retained_without_any_video_update(cleanup_environment):
     env = cleanup_environment
-    env.provider.update_error = provider_error(403, "forbidden")
     response = publish(client_for(env))
     assert response.status_code == 200, response.text
-    assert response.json()["completed"] is False
-    assert response.json()["failed_count"] == 1
+    assert response.json()["skipped_count"] == 1
     assert method_calls(env, "playlistItems.delete") == []
+    assert method_calls(env, "videos.update") == []
 
 
 def test_quota_fallback_after_delete_only_checks_membership_on_the_second_slot(cleanup_environment, tmp_path):
     env = cleanup_environment
     env.provider.public.add("video-1")
-    # Preview (2) + preflight (3) + existence check (1) + deletion (50)
+    # Preview (2) + preflight (1) + existence (1) + guard (2) + deletion (50)
     # leave no quota for the final confirmation on the first slot.
     primary = YouTubeQuotaLimiter(tmp_path / "primary.json", configured_limit=56, safety_buffer_units=0)
     env.context = YouTubeRequestContext(
-        slot="primary", credentials=object(), quota_limiter=primary, owner_sub="cleanup-user"
+        slot="primary", credentials=object(), quota_limiter=primary, owner_sub="cleanup-user", channel_id="channel"
     )
     secondary = YouTubeRequestContext(
         slot="secondary",
@@ -327,6 +333,7 @@ def test_quota_fallback_after_delete_only_checks_membership_on_the_second_slot(c
             tmp_path / "secondary.json", slot="secondary", configured_limit=1000, safety_buffer_units=0
         ),
         owner_sub="cleanup-user",
+        channel_id="channel",
     )
     client = client_for(env, _switch_youtube_context=lambda *_args, **_kwargs: secondary)
     response = publish(client)
@@ -341,9 +348,8 @@ def test_changing_only_a_duplicate_item_invalidates_the_signed_preview(cleanup_e
     env = cleanup_environment
     env.provider.items.append(env.provider.item("item-2", "video-1"))
     client = client_for(env)
-    preview = client.post("/api/v1/youtube/playlist-items", json={"playlist_id": "playlist-1"}).json()
-    assert preview["preview_snapshot"]["video_ids"] == ["video-1"]
-    assert preview["preview_snapshot"]["playlist_item_count"] == 2
+    preview = client.post("/api/v1/youtube/cleanup-preview", json={"playlist_id": "playlist-1"}).json()
+    assert len(preview["preview_snapshot"]["items"]) == 2
     env.provider.items[-1] = env.provider.item("replacement-item", "video-1")
     response = client.post(
         "/api/v1/youtube/publish-and-cleanup",
@@ -362,7 +368,109 @@ def test_changing_only_a_duplicate_item_invalidates_the_signed_preview(cleanup_e
 def test_missing_playlist_item_id_stops_before_publishing(cleanup_environment):
     env = cleanup_environment
     env.provider.items[0]["id"] = ""
-    response = publish(client_for(env))
+    response = client_for(env).post("/api/v1/youtube/cleanup-preview", json={"playlist_id": "playlist-1"})
     assert response.status_code == 400, response.text
     assert method_calls(env, "videos.update") == []
     assert method_calls(env, "playlistItems.delete") == []
+
+
+def test_old_playlist_preview_token_is_rejected_without_writes(cleanup_environment):
+    env = cleanup_environment
+    client = client_for(env)
+    old = client.post("/api/v1/youtube/playlist-items", json={"playlist_id": "playlist-1"}).json()
+    response = client.post(
+        "/api/v1/youtube/publish-and-cleanup",
+        json={
+            "playlist_id": "playlist-1",
+            "preview_token": old["preview_token"],
+            "preview_snapshot": old["preview_snapshot"],
+        },
+    )
+    assert response.status_code == 409
+    assert method_calls(env, "playlistItems.delete") == []
+    assert method_calls(env, "videos.update") == []
+
+
+def test_public_to_private_between_preview_and_delete_is_retained(cleanup_environment):
+    env = cleanup_environment
+    env.provider.public.add("video-1")
+    client = client_for(env)
+    preview = client.post("/api/v1/youtube/cleanup-preview", json={"playlist_id": "playlist-1"}).json()
+    env.provider.public.clear()
+    result = client.post(
+        "/api/v1/youtube/publish-and-cleanup",
+        json={
+            "playlist_id": "playlist-1",
+            "preview_token": preview["preview_token"],
+            "preview_snapshot": preview["preview_snapshot"],
+        },
+    )
+    assert result.status_code == 200, result.text
+    assert result.json()["skipped_count"] == 1
+    assert method_calls(env, "playlistItems.delete") == []
+
+
+def test_every_internal_delete_retry_runs_fresh_public_guard(cleanup_environment):
+    from backend.app.services.youtube_cleanup import CleanupRetained
+
+    env = cleanup_environment
+    env.provider.delete_outcomes = [TimeoutError()]
+    guards = []
+
+    def guard():
+        guards.append(True)
+        if len(guards) > 1:
+            raise CleanupRetained("now private", "private")
+
+    with google_client_context(lambda *_a, **_kw: env.provider), pytest.raises(CleanupRetained):
+        remove_playlist_item(env.context, "item-1", pre_delete_guard=guard)
+    assert len(guards) == 2
+    assert len(method_calls(env, "playlistItems.delete")) == 1
+    assert len(env.provider.items) == 1
+
+
+def test_duplicate_items_recheck_privacy_after_each_delete(cleanup_environment):
+    env = cleanup_environment
+    env.provider.public.add("video-1")
+    env.provider.items.append(env.provider.item("item-2", "video-1"))
+    original = env.provider.delete
+
+    def delete(**kwargs):
+        request = original(**kwargs)
+
+        def execute():
+            response = request.execute()
+            env.provider.public.clear()
+            return response
+
+        return SimpleNamespace(execute=execute)
+
+    env.provider.delete = delete
+    response = publish(client_for(env))
+    assert response.status_code == 200, response.text
+    assert [row["status"] for row in response.json()["results"]] == ["succeeded", "skipped"]
+    assert len(method_calls(env, "playlistItems.delete")) == 1
+    assert [item["id"] for item in env.provider.items] == ["item-2"]
+
+
+def test_timeout_then_private_retry_stays_unknown_and_never_deletes_again(cleanup_environment):
+    env = cleanup_environment
+    env.provider.public.add("video-1")
+    env.provider.delete_outcomes = [TimeoutError()]
+    original = env.provider.delete
+
+    def delete(**kwargs):
+        request = original(**kwargs)
+
+        def execute():
+            env.provider.public.clear()
+            return request.execute()
+
+        return SimpleNamespace(execute=execute)
+
+    env.provider.delete = delete
+    response = publish(client_for(env))
+    assert response.status_code == 200, response.text
+    assert response.json()["needs_reconciliation_count"] == 1
+    assert len(method_calls(env, "playlistItems.delete")) == 1
+    assert len(env.provider.items) == 1

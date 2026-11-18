@@ -107,14 +107,33 @@ def test_workflow_estimates_are_conservative():
     assert (
         youtube_routing.estimate_youtube_request_units(
             "/api/v1/youtube/publish-and-cleanup",
-            {"preview_snapshot": {"video_ids": ["video-1", "video-2"]}},
+            {"preview_snapshot": {"version": 2, "items": [{"candidate": True}, {"candidate": True}]}},
         )
-        == 207
+        == 111
     )
     assert (
         youtube_routing.estimate_youtube_request_units(
             "/api/v1/youtube/publish-and-cleanup",
-            {"preview_snapshot": {"video_ids": ["video-1"], "playlist_item_count": 3}},
+            {
+                "preview_snapshot": {
+                    "version": 2,
+                    "items": [{"candidate": True}, {"candidate": True}, {"candidate": False}],
+                }
+            },
         )
-        == 209
+        == 111
     )
+
+
+def test_publish_job_slot_hint_requires_a_complete_preview():
+    from backend.app.core.dependencies import _get_preview_slot_hint
+
+    complete = {
+        "youtube_slot": "secondary",
+        "preview_token": "signed",
+        "preview_snapshot": {"youtube_slot": "secondary"},
+    }
+    for path in ("/api/v1/youtube/drafts/publish", "/api/v1/youtube/drafts/publish-jobs"):
+        assert _get_preview_slot_hint(path, complete) == "secondary"
+        assert _get_preview_slot_hint(path, {"youtube_slot": "secondary"}) is None
+    assert _get_preview_slot_hint("/api/v1/youtube/drafts/prepare", complete) is None

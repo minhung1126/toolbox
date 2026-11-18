@@ -7,6 +7,7 @@ from google.auth.exceptions import TransportError
 from httplib2 import HttpLib2Error
 
 from backend.app.core.youtube_context import YouTubeRequestContext
+from backend.app.core.youtube_operation_state import content_fingerprint
 from backend.app.services.google_clients import build_google_client
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable, parse_youtube_error
 
@@ -281,7 +282,9 @@ def update_and_publish_video(
     snippet, status = state["snippet"], state["status"]
     body: dict[str, Any] = {"id": video_id}
     parts = []
-    if snippet.get("title") != title or str(snippet.get("description") or "") != description:
+    if content_fingerprint(snippet.get("title", ""), snippet.get("description", "")) != content_fingerprint(
+        title, description
+    ):
         if not snippet.get("categoryId"):
             raise ValueError(f"無法取得影片 {video_id} 的類別 ID。")
         body["snippet"] = {**snippet, "title": title, "description": description}
@@ -374,7 +377,9 @@ def _playlist_item_exists(context: YouTubeRequestContext, service, playlist_item
     return bool(response["items"])
 
 
-def remove_playlist_item(context: YouTubeRequestContext, playlist_item_id: Optional[str]) -> Dict[str, Any]:
+def remove_playlist_item(
+    context: YouTubeRequestContext, playlist_item_id: Optional[str], *, pre_delete_guard=None
+) -> Dict[str, Any]:
     """Delete and confirm removal, reconciling before spending quota on another delete."""
 
     if not playlist_item_id:
@@ -384,6 +389,7 @@ def remove_playlist_item(context: YouTubeRequestContext, playlist_item_id: Optio
     delete_required = True
     delete_acknowledged = False
     reconciled = False
+    delete_attempted = False
     for attempt in range(len(PLAYLIST_CLEANUP_RETRY_DELAYS) + 1):
         try:
             if not confirmed_present:
@@ -394,7 +400,15 @@ def remove_playlist_item(context: YouTubeRequestContext, playlist_item_id: Optio
                 confirmed_present = True
             if delete_required:
                 try:
+                    if pre_delete_guard is not None:
+                        try:
+                            pre_delete_guard()
+                        except Exception as exc:
+                            if type(exc).__name__ == "CleanupRetained":
+                                exc.cleanup_write_attempted = delete_attempted
+                            raise
                     request = service.playlistItems().delete(id=playlist_item_id)
+                    delete_attempted = True
                     _execute_with_quota(request, "playlistItems.delete", context)
                     delete_acknowledged = True
                 except YouTubeQuotaUnavailable:

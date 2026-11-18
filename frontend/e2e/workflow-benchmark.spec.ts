@@ -129,7 +129,7 @@ for (const scenario of ['copy-six-cells', 'repeat-video-update', 'recover-video-
       }
       await page.locator('.video-card-assignment select').selectOption(person);
       selectionActions++;
-      await page.getByRole('button', { name: '套用人物並產生暫存結果' }).click();
+      await page.getByRole('button', { name: '套用人物並建立草稿' }).click();
       await page.getByRole('button', { name: '檢查變更與配額' }).click();
       await page.getByRole('button', { name: '確認編輯並公開', exact: true }).click();
       await page.getByRole('dialog').getByRole('button', { name: '確認編輯並公開', exact: true }).click();

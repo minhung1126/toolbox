@@ -40,6 +40,8 @@ class BatchUpdateInput(BaseModel):
 
 
 class PublishCleanupInput(BaseModel):
+    version: Literal[2] = 2
+    mode: Literal["cleanup_only"] = "cleanup_only"
     request_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
     playlist_id: Optional[str] = Field(default="", max_length=256)
     youtube_slot: Optional[Literal["primary", "secondary"]] = None
@@ -91,6 +93,10 @@ class DraftPublishInput(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("影片不得重複。")
         return self
+
+
+class DraftPublishJobInput(DraftPublishInput):
+    request_id: str = Field(min_length=1, max_length=128)
 
 
 class QuotaEstimateInput(BaseModel):

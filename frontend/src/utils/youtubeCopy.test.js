@@ -12,7 +12,7 @@ import {
 describe('youtubeCopy', () => {
   it('keeps the shared action vocabulary in one place', () => {
     expect(YOUTUBE_COPY).toMatchObject({
-      featureName: '發布草稿',
+      featureName: '清理 To-Post',
       setPublic: '設為公開',
       removeFromToPost: '移出 To-Post 播放清單',
       updateMetadata: '更新標題與描述',

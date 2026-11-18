@@ -16,7 +16,9 @@
 }
 
 .draft-publish-copy h2 {
-  font-size: var(--font-size-section-title);
+  font-size: var(--font-size-page-title);
+  font-weight: 700;
+  line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -24,7 +26,9 @@
 .draft-publish-description {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: var(--text-muted);
+  color: var(--text-main);
+  font-size: 1rem;
+  line-height: 1.75;
 }
 
 .draft-publish-heading {
@@ -78,4 +82,14 @@
 .draft-publish-original pre {
   white-space: pre-wrap;
   font-family: inherit;
+}
+
+.draft-publish-field-label {
+  color: var(--text-muted);
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+}
+
+.draft-publish-final-description {
+  min-width: 0;
 }

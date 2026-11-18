@@ -14,8 +14,10 @@ import {
 vi.mock('../../../services/api', () => ({
   api: {
     previewYoutubeDrafts: vi.fn(),
-    publishYoutubeDrafts: vi.fn(),
-    getOperations: vi.fn(),
+    submitYoutubePublishJob: vi.fn(),
+    getOperation: vi.fn(),
+    findYoutubePublishJob: vi.fn(),
+    findYoutubePublishStage: vi.fn(),
     reconcileOperation: vi.fn(),
   },
 }));
@@ -108,6 +110,49 @@ function resultResponse(payload) {
     results: payload.edits.map((edit) => ({ ...edit, person: 'Alice', status: edit.skip ? 'skipped' : 'succeeded' })),
   };
 }
+function operationResponse(payload, result = resultResponse(payload)) {
+  const rows = result.results.map((row) => ({
+    ...row,
+    attempted_parts: row.status === 'skipped' ? [] : ['snippet', 'status'],
+    confirmation: row.status === 'succeeded' ? 'provider_response' : null,
+  }));
+  const statuses = [
+    'queued',
+    'running',
+    'succeeded',
+    'unchanged',
+    'skipped',
+    'failed',
+    'not_attempted',
+    'needs_reconciliation',
+  ];
+  return {
+    version: 2,
+    id: 'operation-one',
+    kind: 'youtube.metadata_publish',
+    channel_id: 'channel',
+    state: result.completed
+      ? 'completed'
+      : rows.some((row) => row.status === 'needs_reconciliation')
+        ? 'needs_reconciliation'
+        : 'partial',
+    plan: { stage_snapshot: payload.stage_snapshot, edits: payload.edits },
+    progress: {
+      version: 1,
+      revision: 2,
+      total: rows.length,
+      rows,
+      counts: Object.fromEntries(
+        statuses.map((status) => [status, rows.filter((row) => row.status === status).length])
+      ),
+    },
+    result,
+  };
+}
+function acceptanceResponse(payload) {
+  const operation = operationResponse(payload);
+  return { version: 1, operation_id: operation.id, state: operation.state, progress: operation.progress };
+}
 async function confirmPublish() {
   fireEvent.click(screen.getByRole('button', { name: '檢查變更與配額' }));
   await screen.findByRole('region', { name: '最終變更摘要' });
@@ -121,7 +166,11 @@ describe('editable publish staging', () => {
     localStorage.clear();
     vi.resetAllMocks();
     api.previewYoutubeDrafts.mockImplementation(async (payload) => previewResponse(payload));
-    api.publishYoutubeDrafts.mockImplementation(async (payload) => resultResponse(payload));
+    api.submitYoutubePublishJob.mockImplementation(async (payload) => acceptanceResponse(payload));
+    api.findYoutubePublishJob.mockRejectedValue({ status: 404, message: 'not accepted yet' });
+    api.getOperation.mockImplementation(async () =>
+      operationResponse(api.submitYoutubePublishJob.mock.calls.at(-1)[0])
+    );
   });
 
   it.each(['Video', 'Shorts'])(
@@ -135,7 +184,7 @@ describe('editable publish staging', () => {
       fireEvent.change(title, { target: { value: 'My final title' } });
       fireEvent.change(description, { target: { value: 'Full long description\n'.repeat(200) } });
       fireEvent.click(screen.getByRole('button', { name: '儲存暫存' }));
-      expect(api.publishYoutubeDrafts).not.toHaveBeenCalled();
+      expect(api.submitYoutubePublishJob).not.toHaveBeenCalled();
       view.unmount();
       renderPage({ videoType });
       expect(screen.getByRole('article', { name: '暫存影片 one' })).toHaveTextContent('My final title');
@@ -143,16 +192,16 @@ describe('editable publish staging', () => {
       fireEvent.click(screen.getByRole('button', { name: '檢查變更與配額' }));
       await screen.findByRole('region', { name: '最終變更摘要' });
       expect(api.previewYoutubeDrafts.mock.calls[0][0].edits[0].title).toBe('My final title');
-      expect(api.publishYoutubeDrafts).not.toHaveBeenCalled();
+      expect(api.submitYoutubePublishJob).not.toHaveBeenCalled();
       fireEvent.click(screen.getByRole('button', { name: '確認編輯並公開', exact: true }));
-      expect(api.publishYoutubeDrafts).not.toHaveBeenCalled();
+      expect(api.submitYoutubePublishJob).not.toHaveBeenCalled();
       fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '取消' }));
       fireEvent.click(screen.getByRole('button', { name: '確認編輯並公開', exact: true }));
       const submit = within(screen.getByRole('dialog')).getByRole('button', { name: '確認編輯並公開', exact: true });
       fireEvent.click(submit);
       fireEvent.click(submit);
-      await waitFor(() => expect(api.publishYoutubeDrafts).toHaveBeenCalledOnce());
-      expect(api.publishYoutubeDrafts.mock.calls[0][0].edits).toEqual([
+      await waitFor(() => expect(api.submitYoutubePublishJob).toHaveBeenCalledOnce());
+      expect(api.submitYoutubePublishJob.mock.calls[0][0].edits).toEqual([
         expect.objectContaining({
           video_id: 'one',
           title: 'My final title',
@@ -195,7 +244,7 @@ describe('editable publish staging', () => {
     fireEvent.click(screen.getByRole('button', { name: '檢查變更與配額' }));
     await screen.findByRole('region', { name: '最終變更摘要' });
     expect(api.previewYoutubeDrafts.mock.calls.at(-1)[0].edits.every((edit) => edit.skip)).toBe(true);
-    expect(api.publishYoutubeDrafts).not.toHaveBeenCalled();
+    expect(api.submitYoutubePublishJob).not.toHaveBeenCalled();
   });
 
   it('isolates account, channel and video type and blocks changed sources without discarding edits', () => {
@@ -226,7 +275,7 @@ describe('editable publish staging', () => {
 
   it('keeps unknown submissions locked after reload and recovers through read-only reconciliation', async () => {
     seed();
-    api.publishYoutubeDrafts.mockRejectedValueOnce(new Error('timeout'));
+    api.submitYoutubePublishJob.mockRejectedValueOnce(new Error('timeout'));
     const view = renderPage();
     await confirmPublish();
     await screen.findByText(/timeout/);
@@ -236,26 +285,19 @@ describe('editable publish staging', () => {
     expect(screen.getAllByRole('button', { name: '編輯', exact: true })[0]).toBeDisabled();
     expect(screen.getByRole('button', { name: '確認編輯並公開', exact: true })).toBeDisabled();
     const saved = loadPublishDraft('owner', 'channel', 'Video');
-    api.getOperations.mockResolvedValue({
-      operations: [
-        { id: 'operation-one', kind: 'youtube.metadata_publish', plan: { stage_snapshot: { stage_id: 'stage-one' } } },
-      ],
-    });
-    api.reconcileOperation.mockResolvedValue({
-      state: 'completed',
-      items: [{ state: 'completed' }],
-      result: resultResponse(saved.pending),
-    });
+    const recovered = operationResponse(saved.pending);
+    api.findYoutubePublishJob.mockResolvedValue(recovered);
+    api.reconcileOperation.mockResolvedValue(recovered);
     fireEvent.click(screen.getByRole('button', { name: '唯讀核對發布結果' }));
     await waitFor(() => expect(loadPublishDraft('owner', 'channel', 'Video').pending).toBeUndefined());
-    expect(api.publishYoutubeDrafts).toHaveBeenCalledOnce();
+    expect(api.submitYoutubePublishJob).toHaveBeenCalledOnce();
     expect(screen.getByText('已寫入 YouTube')).toBeInTheDocument();
   });
 
   it('locks every field during submission and retries only failed rows after partial success', async () => {
     seed({ twoActive: true });
     let finish;
-    api.publishYoutubeDrafts.mockImplementationOnce(
+    api.submitYoutubePublishJob.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           finish = resolve;
@@ -263,14 +305,16 @@ describe('editable publish staging', () => {
     );
     renderPage();
     await confirmPublish();
-    await waitFor(() => expect(api.publishYoutubeDrafts).toHaveBeenCalledOnce());
+    await waitFor(() => expect(api.submitYoutubePublishJob).toHaveBeenCalledOnce());
     screen.getAllByRole('button', { name: '編輯', exact: true }).forEach((input) => expect(input).toBeDisabled());
     await act(async () => {
-      const response = resultResponse(api.publishYoutubeDrafts.mock.calls[0][0]);
+      const response = resultResponse(api.submitYoutubePublishJob.mock.calls[0][0]);
       response.completed = false;
       response.results[1].status = 'failed';
-      finish(response);
+      api.getOperation.mockResolvedValue(operationResponse(api.submitYoutubePublishJob.mock.calls[0][0], response));
+      finish(acceptanceResponse(api.submitYoutubePublishJob.mock.calls[0][0]));
     });
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '編輯', exact: true })[1]).toBeEnabled());
     expect(screen.getAllByRole('button', { name: '編輯', exact: true })[0]).toBeDisabled();
     expect(screen.getAllByRole('button', { name: '編輯', exact: true })[1]).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: '檢查變更與配額' }));
@@ -280,11 +324,12 @@ describe('editable publish staging', () => {
 
   it('locks an explicit unknown result until reconciliation confirms the submitted version', async () => {
     seed();
-    api.publishYoutubeDrafts.mockImplementationOnce(async (payload) => {
+    api.getOperation.mockImplementationOnce(async () => {
+      const payload = api.submitYoutubePublishJob.mock.calls[0][0];
       const result = resultResponse(payload);
       result.completed = false;
       result.results[0].status = 'needs_reconciliation';
-      return result;
+      return operationResponse(payload, result);
     });
     renderPage();
     await confirmPublish();
@@ -301,22 +346,54 @@ describe('editable publish staging', () => {
     draft.result.results[0].status = 'failed';
     draft.edits[0].title = 'A newer manual edit';
     savePublishDraft(draft);
-    api.getOperations.mockResolvedValue({
-      operations: [
-        { id: 'operation-one', kind: 'youtube.metadata_publish', plan: { stage_snapshot: { stage_id: 'stage-one' } } },
-      ],
-    });
-    api.reconcileOperation.mockResolvedValue({
-      state: 'completed',
-      items: [{ state: 'completed' }],
-      result: resultResponse({ edits: draft.result.results }),
-    });
+    const oldPayload = {
+      ...draft,
+      edits: draft.result.results.map(({ video_id, title, description, skip }) => ({
+        video_id,
+        title,
+        description,
+        skip,
+      })),
+    };
+    const oldOperation = operationResponse(oldPayload);
+    api.getOperation.mockResolvedValue(oldOperation);
+    api.reconcileOperation.mockResolvedValue(oldOperation);
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: '唯讀核對發布結果' }));
     await screen.findByText(/先前版本已寫入/);
     expect(screen.getByRole('article', { name: '暫存影片 one' })).toHaveTextContent('A newer manual edit');
     expect(screen.queryByText('已寫入 YouTube', { exact: true })).not.toBeInTheDocument();
   });
+  it('does not submit when saving the pending request fails and can save the original draft again', async () => {
+    seed();
+    renderPage();
+    const setter = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('full');
+    });
+    await confirmPublish();
+    expect(api.submitYoutubePublishJob).not.toHaveBeenCalled();
+    expect(screen.getByText(/暫存尚未保存/)).toBeInTheDocument();
+    setter.mockRestore();
+    fireEvent.click(screen.getByRole('button', { name: '重試保存暫存' }));
+    expect(loadPublishDraft('owner', 'channel', 'Video').pending).toBeUndefined();
+    expect(screen.getAllByRole('button', { name: '編輯', exact: true })[0]).toBeEnabled();
+  });
+
+  it('can reinclude default skipped rows without replacing manual content', () => {
+    const draft = seed();
+    draft.stage_snapshot.plan[0].default_skip = true;
+    draft.stage_snapshot.plan[0].skip_reason = '可信人物與遠端內容相同';
+    draft.edits[0].skip = true;
+    draft.edits[0].title = 'Keep my saved manual title';
+    savePublishDraft(draft);
+    renderPage();
+    expect(screen.getAllByLabelText('略過此片')[0]).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: '將預設略過影片全部重新納入' }));
+    expect(screen.getAllByLabelText('略過此片')[0]).not.toBeChecked();
+    expect(loadPublishDraft('owner', 'channel', 'Video').edits[0].title).toBe('Keep my saved manual title');
+    expect(api.submitYoutubePublishJob).not.toHaveBeenCalled();
+  });
+
   it('keeps complete multiline descriptions visible and protects unsaved modal changes', () => {
     const draft = seed();
     const full = '第一行\n' + 'https://example.com/' + 'x'.repeat(300) + '\n最後一行';
@@ -341,6 +418,6 @@ describe('editable publish staging', () => {
     expect(loadPublishDraft('owner', 'channel', 'Video').edits[0].description).toBe(full);
     expect(edit).toHaveFocus();
     expect(api.previewYoutubeDrafts).not.toHaveBeenCalled();
-    expect(api.publishYoutubeDrafts).not.toHaveBeenCalled();
+    expect(api.submitYoutubePublishJob).not.toHaveBeenCalled();
   });
 });

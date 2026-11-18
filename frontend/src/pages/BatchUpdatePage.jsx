@@ -274,7 +274,7 @@ function BatchUpdateEditor({ sysSettings, authUser, videoType = 'Video' }) {
         onCancel={() => setRebuildOpen(false)}
         busy={preparing}
       />
-      <Link to={stagedPath}>繼續發布前暫存編輯</Link>
+      <Link to={stagedPath}>繼續編輯草稿並公開</Link>
       {stagingError && (
         <div role="alert" className="error-banner">
           {stagingError}
@@ -284,8 +284,9 @@ function BatchUpdateEditor({ sysSettings, authUser, videoType = 'Video' }) {
       <header className="page-header">
         <div className="section-header">
           <VideoIcon size={24} color="var(--primary)" />
-          <h1>YouTube {videoType} 草稿</h1>
+          <h1>{videoType} 快速套用</h1>
         </div>
+        <p className="section-desc">① 快速套用人物並建立草稿；下一步為② 編輯草稿並公開。</p>
         <p className="section-desc">
           此頁只處理 {videoType}。先確認資料來源、工作表與欄位，再勾選要出現在人物下拉選單中的人物。
         </p>
@@ -679,7 +680,7 @@ function BatchUpdateEditor({ sysSettings, authUser, videoType = 'Video' }) {
           )}
           <div className="glass-panel execution-bar">
             <div>
-              <strong>下一步：發布前暫存編輯</strong>
+              <strong>下一步：編輯草稿並公開</strong>
               <p>先套用人物，再到獨立頁面逐片修改標題與描述。最後確認編輯並公開前，不會寫入 YouTube。</p>
               <p>將處理全部 {assignedCount} 支已指定人物的影片（含篩選外影片）。</p>
               {availability.reason && (
@@ -696,7 +697,7 @@ function BatchUpdateEditor({ sysSettings, authUser, videoType = 'Video' }) {
               aria-describedby={availability.reason ? 'prepare-draft-reason' : undefined}
               aria-busy={preparing || undefined}
             >
-              <Send size={18} /> {preparing ? '產生暫存中…' : '套用人物並產生暫存結果'}
+              <Send size={18} /> {preparing ? '產生暫存中…' : '套用人物並建立草稿'}
             </Button>
             {preparing && (
               <Button variant="secondary" onClick={() => prepareController.current?.abort()}>

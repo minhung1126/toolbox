@@ -1,5 +1,7 @@
 import type { DraftStage, DraftSource, FinalEdit, DraftResult, DraftPublishRequest } from '../api/draftPublishApi';
 
+import type { OperationReference } from '../hooks/useDraftPublishOperation';
+
 export interface SavedPublishDraft extends DraftStage {
   account: string;
   source: DraftSource;
@@ -7,6 +9,7 @@ export interface SavedPublishDraft extends DraftStage {
   edits: FinalEdit[];
   result?: DraftResult;
   pending?: DraftPublishRequest;
+  operation_ref?: OperationReference;
 }
 function key(account: string, channel: string, type: string) {
   return `toolbox:youtube-publish-draft:v1:${encodeURIComponent(account)}:${encodeURIComponent(channel)}:${type}`;
@@ -50,7 +53,7 @@ export function createSavedDraft(stage: DraftStage, account: string, source: Dra
       video_id: item.video_id,
       title: item.newTitle,
       description: item.newDescription,
-      skip: item.status === 'skipped',
+      skip: item.status === 'skipped' || item.default_skip === true,
     })),
   };
 }

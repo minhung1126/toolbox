@@ -31,7 +31,7 @@ export const toolCatalog = getAllTools().map((tool) => ({
       required_scopes: routeScopes[tool.id]?.[card.to] ?? toolScopes[tool.id] ?? [],
     })),
     ...(tool.id === 'creator-tools'
-      ? [PATHS.youtubeVideoStaging, PATHS.youtubeShortsStaging].map((path) => ({
+      ? [PATHS.youtubeVideoStaging, PATHS.youtubeShortsStaging].filter(path => !tool.featureCards.some(card => card.to === path)).map((path) => ({
           path,
           required_scopes: toolScopes[tool.id],
         }))
@@ -70,7 +70,7 @@ export async function mockAuthenticatedBackend(page, responseOverrides: Record<s
       ...responseOverrides,
     };
 
-    const response = responses[path] ?? {};
+    const response = responses[path] ?? Object.entries(responses).find(([key]) => key.endsWith("/*") && path.startsWith(key.slice(0, -1)))?.[1] ?? {};
     if (typeof response === 'function') {
       await response(route);
       return;
@@ -90,6 +90,9 @@ export function draftPublishResponses({
   titleFor = (_assignment) => 'New',
   descriptionFor = (_assignment) => '',
 } = {}) {
+  let job: any = null;
+  const statuses = ['queued', 'running', 'succeeded', 'unchanged', 'skipped', 'failed', 'not_attempted', 'needs_reconciliation'];
+  const progress = (rows, revision = 1) => ({ version: 1, revision, total: rows.length, rows, counts: Object.fromEntries(statuses.map(status => [status, rows.filter(row => row.status === status).length])) });
   return {
     '/api/v1/youtube/drafts/prepare': async (route) => {
       const source = route.request().postDataJSON();
@@ -106,7 +109,7 @@ export function draftPublishResponses({
             plan: source.assignments.map((assignment) => ({
               video_id: assignment.video_id,
               person_key: assignment.person,
-              person: assignment.person,
+              person: assignment.person.startsWith("person:") ? JSON.parse(assignment.person.slice(7))[2] : assignment.person,
               currentTitle: `Original ${assignment.video_id}`,
               currentDescription: 'Original description',
               currentPrivacy: 'private',
@@ -114,7 +117,7 @@ export function draftPublishResponses({
               newDescription: assignment.person === '不編輯' ? '' : descriptionFor(assignment),
               status: assignment.person === '不編輯' ? 'skipped' : 'ready',
               reason: assignment.person === '不編輯' ? '未指定人物' : '',
-              thumbnailUrl: '',
+              thumbnailUrl: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%2268%22%3E%3Crect width=%22120%22 height=%2268%22 fill=%22%233b3655%22/%3E%3C/svg%3E',
             })),
           },
         },
@@ -145,20 +148,17 @@ export function draftPublishResponses({
         },
       });
     },
-    '/api/v1/youtube/drafts/publish': async (route) => {
+    '/api/v1/youtube/drafts/publish-jobs': async (route) => {
       const payload = route.request().postDataJSON();
-      await route.fulfill({
-        json: {
-          operation: 'youtube.metadata_publish',
-          operation_id: 'operation-e2e',
-          completed: true,
-          results: payload.edits.map((edit) => ({
-            ...edit,
-            person: '指定人物',
-            status: edit.skip ? 'skipped' : 'succeeded',
-          })),
-        },
-      });
+      const rows = payload.edits.map(edit => ({ ...edit, person: '指定人物', status: edit.skip ? 'skipped' : 'succeeded', attempted_parts: edit.skip ? [] : ['snippet', 'status'], confirmation: edit.skip ? null : 'provider_response' }));
+      job = { version: 2, id: 'operation-e2e', kind: 'youtube.metadata_publish', channel_id: channelId, state: 'completed', plan: { stage_snapshot: payload.stage_snapshot, edits: payload.edits }, progress: progress(rows, 2) };
+      await route.fulfill({ status: 202, json: { version: 1, operation_id: job.id, state: 'prepared', progress: progress(rows.map(row => ({ ...row, status: row.status === 'skipped' ? 'skipped' : 'queued', attempted_parts: [], confirmation: null }))) } });
+    },
+    '/api/v1/operations/operation-e2e': async route => {
+      await route.fulfill(job ? { json: job } : { status: 404, json: { detail: { code: 'operation_not_found', message: '尚未受理' } } });
+    },
+    '/api/v1/youtube/drafts/publish-jobs/by-request/*': async route => {
+      await route.fulfill(job ? { json: job } : { status: 404, json: { detail: { code: 'operation_not_found', message: '尚未受理' } } });
     },
   };
 }

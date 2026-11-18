@@ -13,3 +13,13 @@
 | 批次預覽、執行、發布清理、YT Music 排序、Weverse 上傳、便利貼 | 沿用已有快照、計數、工作 ID 及結果驗證；未重複實作。 |
 
 Timeout／網路錯誤由底層 request 傳遞；UI 不會在例外路徑顯示成功。單元測試包括有效、缺欄與錯誤值；CI 執行 Vitest、typecheck、build 和假 provider E2E。
+
+
+## YouTube 整合工作流 v2
+
+- cleanup-preview 與 publish-and-cleanup 結果要求 `version:2, mode:cleanup_only`，簽章包含 owner/channel/playlist 與精確 item/video 快照。前端驗證 identity、順序、候選 privacy、列數與每個互斥計數；needs_reconciliation 不當作成功。舊 preview 回 stale_preview。
+- publish-jobs 必填 request_id，受理回 202。progress v1 的 revision、所有列、parts、確認與 queued/running/succeeded/unchanged/skipped/failed/not_attempted/needs_reconciliation 分類皆驗證。後續 operation ID、channel、stage、最終文字與全部 video IDs 必須匹配。
+- pending 先保存 payload 與 request ID，再送出；operation reference 向後相容舊 storage key。無 ID 以 request／唯一 stage 索引查找，禁止掃最近 100 筆猜測。低 revision 或切換帳號後的晚到回應忽略；契約錯誤保留鎖定與手動草稿。
+- prepare 的可撤銷 default_skip 與既有不可編輯 skipped 分開；缺省欄位仍可讀舊草稿。強制納入不能繞過 pending、權限或 stale-preview。
+
+驗證：test_youtube_operation_state、test_youtube_publish_jobs、test_youtube_processing_state、test_youtube_default_skip、publishCleanupApi.test、useDraftPublishOperation.test、DraftPublishPage.test 及 provider fake E2E。

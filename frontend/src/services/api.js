@@ -209,7 +209,7 @@ async function request(endpoint, options = {}) {
 
 export const api = {
   getOperations: () => request('/operations'),
-  getOperation: (id) => request(`/operations/${encodeURIComponent(id)}`),
+  getOperation: (id, options = {}) => request(`/operations/${encodeURIComponent(id)}`, options),
   reconcileOperation: (id, kind) =>
     request(
       `/operations/${encodeURIComponent(id)}/reconcile-${kind === 'youtube.playlist_sort' ? 'music' : 'youtube'}`,
@@ -347,6 +347,12 @@ export const api = {
       timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
       body: JSON.stringify(payload),
     }),
+  submitYoutubePublishJob: (payload) =>
+    request('/youtube/drafts/publish-jobs', { method: 'POST', body: JSON.stringify(payload) }),
+  findYoutubePublishJob: (requestId, options = {}) =>
+    request(`/youtube/drafts/publish-jobs/by-request/${encodeURIComponent(requestId)}`, options),
+  findYoutubePublishStage: (stageId, options = {}) =>
+    request(`/youtube/drafts/publish-jobs/by-stage/${encodeURIComponent(stageId)}`, options),
   publishYoutubeDrafts: (payload) =>
     request('/youtube/drafts/publish', {
       method: 'POST',
@@ -383,11 +389,18 @@ export const api = {
         ...(previewSnapshot ? { preview_snapshot: previewSnapshot } : {}),
       }),
     }),
-  publishAndCleanup: (playlistId, { youtubeSlot, previewToken, previewSnapshot } = {}) =>
+  previewYoutubeCleanup: (playlistId) =>
+    request('/youtube/cleanup-preview', {
+      method: 'POST',
+      body: JSON.stringify({ playlist_id: normalizedYoutubePlaylistOrOriginal(playlistId) }),
+    }),
+  cleanupPublicItems: (playlistId, { youtubeSlot, previewToken, previewSnapshot } = {}) =>
     request('/youtube/publish-and-cleanup', {
       method: 'POST',
       timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
       body: JSON.stringify({
+        version: 2,
+        mode: 'cleanup_only',
         playlist_id: normalizedYoutubePlaylistOrOriginal(playlistId),
         ...(youtubeSlot ? { youtube_slot: youtubeSlot } : {}),
         ...(previewToken ? { preview_token: previewToken } : {}),

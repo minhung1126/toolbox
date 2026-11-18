@@ -84,7 +84,7 @@ export function normalizeYoutubePlaylistInput(value: unknown): string;
 export const api: {
   getHealth(): Promise<Record<string, unknown>>;
   getOperations(): Promise<{ version: number; operations: Array<Record<string, unknown>> }>;
-  getOperation(id: string): Promise<Record<string, unknown>>;
+  getOperation(id: string, options?: { signal?: AbortSignal }): Promise<Record<string, unknown>>;
   reconcileOperation(id: string, kind: string): Promise<Record<string, unknown>>;
   getWorkState(): Promise<AccountWorkStateResponse>;
   updateWorkState(key: string, value: WorkStateValue): Promise<AccountWorkStateResponse>;
@@ -124,11 +124,15 @@ export const api: {
   getYoutubeEditStatuses(videoIds: string[]): Promise<unknown>;
   prepareYoutubeDrafts(payload: DraftSource, options?: { signal?: AbortSignal }): Promise<DraftStage>;
   previewYoutubeDrafts(payload: DraftPublishRequest): Promise<DraftPreview>;
+  submitYoutubePublishJob(payload: DraftPublishRequest): Promise<unknown>;
+  findYoutubePublishJob(requestId: string, options?: { signal?: AbortSignal }): Promise<unknown>;
+  findYoutubePublishStage(stageId: string, options?: { signal?: AbortSignal }): Promise<unknown>;
   publishYoutubeDrafts(payload: DraftPublishRequest): Promise<DraftResult>;
   batchUpdateMetadata(request: YoutubeBatchUpdateRequest): Promise<YoutubeBatchUpdateResponse>;
   estimateYoutubeQuota(request: YoutubeQuotaEstimateRequest): Promise<PublishCleanupQuotaEstimate>;
   getYoutubeQuotaUsage(slot: YoutubeSlot): Promise<YoutubeQuotaUsage>;
-  publishAndCleanup(playlistId: string, options?: PublishCleanupOptions): Promise<PublishCleanupResult>;
+  previewYoutubeCleanup(playlistId: string): Promise<unknown>;
+  cleanupPublicItems(playlistId: string, options?: PublishCleanupOptions): Promise<PublishCleanupResult>;
   updateYoutubeVideoMetadata(request: PublishCleanupMetadataUpdate): Promise<unknown>;
   updateYoutubePlaylist(request: { playlistId: string }): Promise<unknown>;
   updateYoutubeSlotConfig(slot: YoutubeSlot, patch: YoutubeSlotConfigPatch): Promise<unknown>;

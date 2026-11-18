@@ -23,6 +23,10 @@ export interface StagedVideo {
   status: 'ready' | 'skipped';
   reason: string;
   thumbnailUrl: string;
+  default_skip?: boolean;
+  skip_reason?: string;
+  can_reinclude?: boolean;
+  pending_operations?: string[];
 }
 export interface DraftStage {
   stage_token: string;
@@ -71,7 +75,8 @@ export interface DraftResultItem {
   title: string;
   description: string;
   person: string;
-  status: 'succeeded' | 'skipped' | 'failed' | 'not_attempted' | 'needs_reconciliation';
+  status:
+    'queued' | 'running' | 'succeeded' | 'unchanged' | 'skipped' | 'failed' | 'not_attempted' | 'needs_reconciliation';
   reason?: string;
 }
 export interface DraftResult {
@@ -112,7 +117,11 @@ export const draftPublishApi = {
           ['currentTitle', 'currentDescription', 'newTitle', 'newDescription', 'person'].every(
             (key) => typeof item[key] === 'string'
           ) &&
-          ['ready', 'skipped'].includes(String(item.status))
+          ['ready', 'skipped'].includes(String(item.status)) &&
+          (item.default_skip === undefined || typeof item.default_skip === 'boolean') &&
+          (item.skip_reason === undefined || typeof item.skip_reason === 'string') &&
+          (item.pending_operations === undefined ||
+            (Array.isArray(item.pending_operations) && item.pending_operations.every((id) => typeof id === 'string')))
       )
     )
       invalid();
@@ -169,7 +178,9 @@ export const draftPublishApi = {
         (item, index) =>
           record(item) &&
           item.video_id === payload.edits[index].video_id &&
-          ['succeeded', 'skipped', 'failed', 'not_attempted', 'needs_reconciliation'].includes(String(item.status))
+          ['succeeded', 'unchanged', 'skipped', 'failed', 'not_attempted', 'needs_reconciliation'].includes(
+            String(item.status)
+          )
       )
     )
       invalid();

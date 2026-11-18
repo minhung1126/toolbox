@@ -13,8 +13,8 @@ GitHub Actions 會先執行後端與前端檢查及容器建置，再將 `linux/
 - **Google Sheets 唯讀來源**：讀取欄位與人物，複製文字到剪貼簿或套用至影片草稿，不寫回 Sheet。
 - **YouTube 雙授權槽位 (Primary / Secondary)**：同一頻道的獨立授權備援，頻道不一致禁止寫入。
 - **YouTube 智慧自動分流 (Auto Routing)**：Primary 配額充足時優先使用，不足時可選用同頻道 Secondary 備援；不會對結果不明的寫入自動重送。
-- **Video／Shorts 草稿管理**：套用人物到可恢復的暫存頁，逐片手動修改後，最後確認才以最少 API 更新文字並公開；保留簽署預覽與防髒寫入保護。
-- **發布草稿與播放清單清理**：自動發布為公開影片並移出 To-Post 清單。
+- **Video／Shorts 快速套用與編輯公開**：套用人物到可恢復的暫存頁，逐片手動修改後，最後確認才以最少 API 更新文字並公開；保留簽署預覽與防髒寫入保護。
+- **清理 To-Post**：獨立核實已公開影片，只移除確切清單成員；私人、不公開與未知項目保留。
 - **YouTube 配額安全記帳**：依各連線設定的每日上限、緩衝與本機估算帳本保護；預設上限為 10,000 點，並非官方即時餘額。
 
 ### 2. 系統診斷與工具箱目錄模組 (Toolbox Catalog & System Utility)
@@ -87,8 +87,8 @@ npm run dev
 - `/settings/system`：系統安全、Google OAuth 憑證與登入白名單管理
 - `/ffmpeg-generator`、`/photo-curator`、`/notes`：媒體工具與便利貼
 - `/youtube/drafts/videos`、`/youtube/drafts/shorts`：Video／Shorts 人物指定
-- `/youtube/drafts/videos/staged`、`/youtube/drafts/shorts/staged`：發布前暫存編輯與最後確認公開
-- `/youtube/publish-cleanup`：發布並清理清單
+- `/youtube/drafts/videos/staged`、`/youtube/drafts/shorts/staged`：編輯草稿並公開，202 受理後逐片顯示進度
+- `/youtube/publish-cleanup`：清理 To-Post
 - `/youtube/settings/connections`、`/youtube/settings/routing`、`/youtube/settings/quota`、`/youtube/settings/playlist`：YouTube 子設定
 - `/sheets/copy`：Sheet 內容複製
 - `/settings/google`、`/settings/sheets`：Google 帳號與預設 Sheet
@@ -162,7 +162,7 @@ Compose 預設把容器的 8000 port 綁到主機 `127.0.0.1:${HOST_PORT}`，並
 
 ## 發布前暫存與照片序號移動
 
-Video／Shorts 先指定人物，再按「套用人物並產生暫存結果」進入獨立編輯頁。逐片修改最終標題／描述，可還原成套用人物後內容或略過；按「檢查變更與配額」檢查逐片摘要，最後經二次確認才編輯並公開。未指定人物及略過影片不會被公開。
+Video／Shorts 先指定人物，再按「套用人物並建立草稿」進入獨立編輯頁。逐片修改最終標題／描述，可還原成套用人物後內容或略過；按「檢查變更與配額」檢查逐片摘要，最後經二次確認才編輯並公開。未指定人物及略過影片不會被公開。
 
 側邊欄的「發布前暫存編輯」可直接開啟既有暫存，頁內切換 Video／Shorts。列表直接完整呈現最終標題、描述與換行；按「編輯」才開啟視窗，儲存只更新暫存，未存修改關閉前會提示。人物指定頁的產生按鈕會顯示具體阻擋原因，進行中的唯讀準備可以取消或失敗後重試；重建既有暫存前必須確認。
 
@@ -170,6 +170,9 @@ Video／Shorts 先指定人物，再按「套用人物並產生暫存結果」�
 
 暫存與最後手動修改保存在目前瀏覽器，依登入帳號、授權頻道及 Video／Shorts 隔離，切換頁面與重新整理可恢復；不包含 OAuth 憑證。來源、人物指定或影片清單變動後，需返回核對或明確重建，重建會取代舊暫存。請勿清除網站儲存資料；儲存失敗時介面會提示並阻止發布。暫存簽章有效 30 天，最終預覽有效 30 分鐘；過期或遠端資料變更時回傳 `409 stale_preview`，保留手動內容供核對。
 
-需要同時更新文字及公開時，每片使用一次 `videos.update(part="snippet,status")`，寫入成本 50 units；僅文字或僅公開也各需一次，已符合則不寫入。來源與發布前的讀取另計。結果不明時保留原請求及作業紀錄，唯讀核對標題、描述及公開狀態，避免重送；部分成功時鎖定成功列，只重試已確認失敗或未執行的影片。To-Post 清理仍由原本獨立流程處理。
+需要同時更新文字及公開時，每片使用一次 `videos.update(part="snippet,status")`，寫入成本 50 units；僅文字或僅公開也各需一次，已符合則不寫入。來源與發布前的讀取另計。結果不明時保留原請求及作業紀錄，唯讀核對標題、描述及公開狀態，避免重送；部分成功時鎖定成功列，只重試已確認失敗或未執行的影片。成功後可選擇「前往清理 To-Post」，不自動清理；清理頁亦可獨立開啟。
 
 Instagram 排版每張照片都有「移至序號」，可選目標貼文及有效序號，以插入方式移動其餘照片；保留拖曳、封面、復原及匯出功能。重新整理前仍須匯出排版專案；重新匯入後順序會保留，原始照片需重新選檔。
+
+
+背景發布以 operations.sqlite3 schema v2 保存逐片進度與確認證據。刷新或受理回應遺失時按原 request ID／operation ID 恢復；未知寫入先唯讀核對，不盲重送。可信人物套用紀錄與最新遠端文字/public 完全一致且無 pending 才預設略過，可逐片或整批重新納入。部署限定單一 uvicorn process／單副本；遷移、備份與回退界線見 [作業紀錄](docs/OPERATION_JOURNAL.md) 與 [部署說明](docs/DEPLOYMENT.md)。

@@ -2,12 +2,10 @@ import { expect, test } from '@playwright/test';
 import { draftPublishResponses, mockAuthenticatedBackend } from './fixtures';
 import { personKey } from '../src/features/sheets/model/personOptions';
 
-const longDescription =
-  '完整描述第一行\n' +
-  '保留每一行的舞台紀錄\n'.repeat(70) +
-  'https://example.test/' +
-  'x'.repeat(240) +
-  '\n完整描述最後一行';
+test.use({ locale: 'zh-TW', timezoneId: 'Asia/Taipei', reducedMotion: 'reduce' });
+
+const suffix = '\n完整描述最後一行';
+const longDescription = ('完整描述第一行\n' + '保留每一行的舞台紀錄\n'.repeat(400) + 'https://example.test/' + 'x'.repeat(700)).padEnd(5000 - suffix.length, '字').slice(0, 5000 - suffix.length) + suffix;
 const person = personKey({ team: 'Team', person: 'Alice', kind: 'person' });
 
 for (const videoType of ['Video', 'Shorts']) {
@@ -17,7 +15,7 @@ for (const videoType of ['Video', 'Shorts']) {
     let prepareCalls = 0;
     let writes = 0;
     let failPrepare = false;
-    const fakes = draftPublishResponses({ titleFor: () => '套用人物標題', descriptionFor: () => longDescription });
+    const fakes = draftPublishResponses({ titleFor: () => '標'.repeat(100), descriptionFor: () => longDescription });
     await mockAuthenticatedBackend(page, {
       '/api/v1/auth/user': {
         authenticated: true,
@@ -58,15 +56,16 @@ for (const videoType of ['Video', 'Shorts']) {
         }
         await fakes['/api/v1/youtube/drafts/prepare'](route);
       },
-      '/api/v1/youtube/drafts/publish': async (route) => {
+      '/api/v1/youtube/drafts/publish-jobs': async (route) => {
         writes += 1;
-        await fakes['/api/v1/youtube/drafts/publish'](route);
+        await fakes['/api/v1/youtube/drafts/publish-jobs'](route);
       },
     });
     const selectionPath = `/youtube/drafts/${videoType === 'Video' ? 'videos' : 'shorts'}`;
     await page.goto(selectionPath);
+    await page.addStyleTag({ content: ":root { --font-sans: 'Noto Sans CJK TC', sans-serif; }" });
     await page.getByRole('button', { name: `讀取 ${videoType} 草稿影片` }).click();
-    const prepare = page.getByRole('button', { name: '套用人物並產生暫存結果' });
+    const prepare = page.getByRole('button', { name: '套用人物並建立草稿' });
     await expect(prepare).toBeDisabled();
     await expect(page.getByText('請先為至少一支影片指定人物。')).toBeVisible();
     await page.getByLabel('編輯套用狀態').selectOption('not_applied');
@@ -81,7 +80,7 @@ for (const videoType of ['Video', 'Shorts']) {
     await expect(page.getByText(/建立暫存失敗：測試連線逾時/)).toBeVisible();
     await expect(prepare).toBeEnabled();
     await prepare.click();
-    await expect(page.getByRole('heading', { name: `${videoType} 發布前暫存編輯` })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `${videoType} 編輯草稿並公開` })).toBeVisible();
     expect(prepareCalls).toBe(2);
     const card = page.getByRole('article', { name: '暫存影片 new' });
     await expect(card.getByLabel('預計套用的描述')).toHaveText(longDescription);
@@ -91,6 +90,7 @@ for (const videoType of ['Video', 'Shorts']) {
       const text = card.getByLabel('預計套用的描述');
       expect(await text.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
       expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+      await page.screenshot({ path: `/workspace/work/visual-review/staged-${videoType}-${width}.png`, animations: 'disabled' });
       const edit = card.getByRole('button', { name: '編輯', exact: true });
       await edit.click();
       await expect(page.getByLabel('標題', { exact: true })).toBeFocused();
@@ -120,11 +120,11 @@ for (const videoType of ['Video', 'Shorts']) {
         .filter({ has: page.locator(`option[value='${person}']`) })
         .first()
     ).toBeVisible();
-    await page.getByRole('button', { name: '套用人物並產生暫存結果' }).click();
+    await page.getByRole('button', { name: '套用人物並建立草稿' }).click();
     await expect(page.getByRole('dialog', { name: '重建發布前暫存？' })).toBeVisible();
     await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click();
     expect(prepareCalls).toBe(2);
-    await page.getByRole('link', { name: '繼續發布前暫存編輯' }).click();
+    await page.getByRole('link', { name: '繼續編輯草稿並公開' }).click();
     await expect(card).toContainText('保存的手動標題');
     expect(writes).toBe(0);
   });

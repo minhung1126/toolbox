@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import replace
@@ -10,6 +11,7 @@ from fastapi import HTTPException, Request
 
 from backend.app.core.error_contract import http_error
 from backend.app.core.operation_store import OperationStore
+from backend.app.core.youtube_operation_state import initial_progress
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
 
 
@@ -20,16 +22,21 @@ def known_rejected_write(exc):
 
 
 _current = ContextVar("operation_recorder", default=None)
-_active = set()
 
 
 def get_operation_store(request: Request) -> OperationStore:
     return request.app.state.operation_store
 
 
-def public_operation(operation):
+def public_operation(operation, store=None):
     result = {key: value for key, value in operation.items() if key not in {"owner", "request_id"}}
-    if operation["state"] in {"prepared", "running"} and operation["id"] not in _active:
+    active = False
+    if store is not None:
+        with store.active_lock:
+            active = operation["id"] in store.active
+        if operation.get("executor_id"):
+            active = active or store.executor_alive(operation["executor_id"])
+    if operation["state"] in {"prepared", "running"} and not active:
         result = {**result, "state": "needs_reconciliation", "interrupted": True}
     return result
 
@@ -41,10 +48,17 @@ class Recorder:
     def update(self, **changes):
         return self.store.update(self.owner, self.id, lambda op: op.update(changes))
 
+    def initialize_progress(self, plan):
+        return self.store.update(self.owner, self.id, lambda op: op.setdefault("progress", initial_progress(plan)))
+
+    def progress(self, video_id, **changes):
+        return self.store.progress_row(self.owner, self.id, video_id, **changes)
+
     def write(self, phase, remote_id, call, intended=None):
         item_id = len(self.store.get(self.owner, self.id)["items"])
         item = {
             "index": item_id,
+            "created_at": time.time(),
             "phase": phase,
             "remote_id": remote_id,
             "state": "running",
@@ -63,23 +77,56 @@ class Recorder:
         except BaseException as exc:
             state = (
                 "failed_before_write"
-                if (isinstance(exc, YouTubeQuotaUnavailable) and phase != "cleanup")
-                or (phase == "metadata_publish" and known_rejected_write(exc))
+                if (type(exc).__name__ == "CleanupRetained" and not getattr(exc, "cleanup_write_attempted", False))
+                or (isinstance(exc, YouTubeQuotaUnavailable) and phase != "cleanup")
+                or (phase in {"metadata_publish", "cleanup"} and known_rejected_write(exc))
                 else "needs_reconciliation"
             )
             self.store.update(self.owner, self.id, lambda op: op["items"][item_id].update(state=state))
             raise
-        evidence = {"provider_returned": True}
+        unchanged = isinstance(result, dict) and (
+            result.get("unchanged") is True or phase == "cleanup" and result.get("already_removed") is True
+        )
+        evidence = {"provider_returned": True, "attempted_write": not unchanged}
+        if isinstance(result, dict) and result.get("reconciled"):
+            evidence["provider_read"] = True
+        if phase in {"metadata", "metadata_publish"}:
+            evidence["parts"] = (
+                [] if unchanged else (intended or {}).get("parts", ["snippet"] if phase == "metadata" else [])
+            )
         if isinstance(result, dict) and isinstance(result.get("id"), str):
             evidence["id"] = result["id"]
         elif isinstance(result, str):
             evidence["id"] = result
         self.store.update(
-            self.owner, self.id, lambda op: op["items"][item_id].update(state="completed", evidence=evidence)
+            self.owner,
+            self.id,
+            lambda op: op["items"][item_id].update(state="completed", evidence=evidence, confirmed_at=time.time()),
         )
         return result
 
     def finish(self, result=None, *, failed=False):
+        if failed:
+
+            def stop_progress(op):
+                from backend.app.core.youtube_operation_state import change_progress
+
+                for row in (op.get("progress") or {}).get("rows", []):
+                    if row["status"] in {"queued", "running"}:
+                        attempted = any(
+                            item["remote_id"] == row["video_id"]
+                            and item["state"] in {"running", "needs_reconciliation"}
+                            for item in op["items"]
+                        )
+                        change_progress(
+                            op,
+                            row["video_id"],
+                            playlist_item_id=row.get("playlist_item_id"),
+                            status="needs_reconciliation" if attempted else "not_attempted",
+                            reason="作業未完成，請核對結果或重新預覽。",
+                        )
+
+            self.store.update(self.owner, self.id, stop_progress)
         operation = self.store.get(self.owner, self.id)
         items = operation["items"]
         uncertain = operation.get("outcome_unknown", False) or any(
@@ -105,6 +152,7 @@ class Recorder:
             original = getattr(service.ports, name)
 
             def call(context, remote_id, *args, **kwargs):
+                journal_evidence = kwargs.pop("_journal_evidence", None)
                 intended = (
                     {"title": args[0], "description": args[1]}
                     if name in {"update_single_video_metadata", "update_and_publish_video"}
@@ -112,6 +160,8 @@ class Recorder:
                 )
                 if name == "update_and_publish_video":
                     intended["privacyStatus"] = "public"
+                if journal_evidence:
+                    intended.update(journal_evidence)
                 return self.write(phase, remote_id, lambda: original(context, remote_id, *args, **kwargs), intended)
 
             return call
@@ -131,7 +181,9 @@ class Recorder:
 
 
 def start_operation(store, owner, kind, payload, *, channel_id=None):
-    operation, claimed = store.claim(owner, kind, payload, channel_id=channel_id)
+    operation, claimed = store.claim(
+        owner, kind, payload, channel_id=channel_id, executor_id=getattr(store, "executor_id", None)
+    )
     if not claimed:
         if operation["state"] == "completed" and operation["result"] is not None:
             return operation, None
@@ -143,14 +195,16 @@ def start_operation(store, owner, kind, payload, *, channel_id=None):
 
 @contextmanager
 def recording(recorder):
-    _active.add(recorder.id)
+    with recorder.store.active_lock:
+        recorder.store.active.add(recorder.id)
     token = _current.set(recorder)
-    recorder.update(state="running")
     try:
+        recorder.update(state="running")
         yield
     finally:
         _current.reset(token)
-        _active.discard(recorder.id)
+        with recorder.store.active_lock:
+            recorder.store.active.discard(recorder.id)
 
 
 def tracked_write(phase, remote_id, call, intended=None):
@@ -177,3 +231,7 @@ def run_youtube_recorded(store, payload, context, service, kind, execute):
         if isinstance(exc, HTTPException):
             exc.headers = {**(exc.headers or {}), "X-Operation-Id": recorder.id}
         raise
+
+
+def current_recorder():
+    return _current.get()
