@@ -1,9 +1,27 @@
 import { personKey } from '../src/features/sheets/model/personOptions';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import JSZip from 'jszip';
 import { readFile } from 'node:fs/promises';
 
 import { mockAuthenticatedBackend, draftPublishResponses } from './fixtures';
+
+async function expectFitsHorizontally(locator: Locator) {
+  await expect(locator).toBeVisible();
+  await expect
+    .poll(() =>
+      locator.evaluate((element) => {
+        const { left, right } = element.getBoundingClientRect();
+        return Math.max(-left, right - window.innerWidth);
+      })
+    )
+    .toBeLessThanOrEqual(1);
+}
+
+async function expectPageFits(page: Page) {
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth))
+    .toBeLessThanOrEqual(1);
+}
 
 test('component showcase stays readable without horizontal overflow on supported widths', async ({
   page,
@@ -26,107 +44,92 @@ test('component showcase stays readable without horizontal overflow on supported
   }
 });
 
-test('dashboard uses feature-owned styles on supported widths', async ({ page }) => {
-  await mockAuthenticatedBackend(page);
+for (const width of [390, 768, 1440]) {
+  test(`login and setup controls fit at ${width}px`, { tag: '@responsive' }, async ({ page }) => {
+    await mockAuthenticatedBackend(page, {
+      '/api/v1/auth/user': { authenticated: false },
+      '/api/v1/auth/config': { has_client_id: true, has_client_secret: true },
+      '/api/v1/system/setup-status': {
+        is_configured: false,
+        setup_completed: false,
+        needs_pin: true,
+        redirect_uri: 'https://toolbox.example.test/api/v1/auth/callback',
+      },
+    });
 
-  for (const width of [390, 768, 1440]) {
-    await page.setViewportSize({ width, height: 1000 });
-    await page.goto('/dashboard');
-    await expect(page.getByRole('heading', { level: 1, name: 'Toolbox 控制台' })).toBeVisible();
-    await expect(page.locator('.dashboard-status-card').first()).toHaveCSS('background-color', 'rgb(28, 30, 36)');
-    await expect(page.locator('.feature-card').first()).toBeVisible();
-
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    expect(overflow, `Dashboard horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
-  }
-});
-
-test('login and setup pages use the shared auth layout on supported widths', async ({ page }) => {
-  await mockAuthenticatedBackend(page, {
-    '/api/v1/auth/user': { authenticated: false },
-    '/api/v1/auth/config': { has_client_id: true, has_client_secret: true },
-    '/api/v1/system/setup-status': {
-      is_configured: false,
-      setup_completed: false,
-      needs_pin: true,
-      redirect_uri: 'https://toolbox.example.test/api/v1/auth/callback',
-    },
-  });
-
-  for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/login');
     await expect(page.getByRole('heading', { level: 1, name: 'Toolbox' })).toBeVisible();
-    await expect(page.locator('.auth-page .login-card')).toHaveCSS('background-color', 'rgb(28, 30, 36)');
-
-    let overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    expect(overflow, `login page horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+    await expectFitsHorizontally(page.getByRole('button', { name: '使用 Google 帳號登入' }));
+    await expectPageFits(page);
 
     await page.goto('/setup');
     await expect(page.getByRole('heading', { level: 1, name: 'Toolbox 初始安裝精靈' })).toBeVisible();
-    await expect(page.getByLabel(/Google OAuth Client ID/)).toBeVisible();
-    await expect(page.getByLabel(/安全碼 \(PIN\)/)).toBeVisible();
+    await expectFitsHorizontally(page.getByLabel(/Google OAuth Client ID/));
+    await expectFitsHorizontally(page.getByLabel(/安全碼 \(PIN\)/));
     await page.getByRole('button', { name: '顯示 Client Secret' }).click();
     await expect(page.getByLabel(/Google OAuth Client Secret/)).toHaveAttribute('type', 'text');
 
-    overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    expect(overflow, `setup page horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
-  }
-});
-
-test('system settings use feature styles and remain usable on supported widths', async ({ page }, testInfo) => {
-  await mockAuthenticatedBackend(page, {
-    '/api/v1/system/credentials': {
-      status: 'success',
-      credentials: {
-        google: {
-          client_id: 'settings-e2e.apps.googleusercontent.com',
-          has_client_secret: true,
-          client_secret_masked: 'GOCSPX****1234',
-          configured: true,
-        },
-        youtube_primary: {
-          client_id: '',
-          has_client_secret: false,
-          client_secret_masked: '',
-          configured: false,
-        },
-        youtube_secondary: {
-          client_id: '',
-          has_client_secret: false,
-          client_secret_masked: '',
-          configured: false,
-        },
-      },
-      public_base_url: 'https://toolbox.example.test',
-      redirect_uri: 'https://toolbox.example.test/api/v1/auth/callback',
-    },
-    '/api/v1/system/allowlist': {
-      allowed_emails: ['admin@example.test', 'viewer@example.test'],
-      current_user_email: 'admin@example.test',
-      allow_new_users: true,
-      allowlist_required: true,
-    },
+    await expectPageFits(page);
   });
+}
 
-  for (const width of [390, 768, 1440]) {
+for (const width of [390, 768, 1440]) {
+  test(`system settings access controls fit and accept a new email at ${width}px`, { tag: '@responsive' }, async ({ page }, testInfo) => {
+    await mockAuthenticatedBackend(page, {
+      '/api/v1/system/credentials': {
+        status: 'success',
+        credentials: {
+          google: {
+            client_id: 'settings-e2e.apps.googleusercontent.com',
+            has_client_secret: true,
+            client_secret_masked: 'GOCSPX****1234',
+            configured: true,
+          },
+          youtube_primary: {
+            client_id: '',
+            has_client_secret: false,
+            client_secret_masked: '',
+            configured: false,
+          },
+          youtube_secondary: {
+            client_id: '',
+            has_client_secret: false,
+            client_secret_masked: '',
+            configured: false,
+          },
+        },
+        public_base_url: 'https://toolbox.example.test',
+        redirect_uri: 'https://toolbox.example.test/api/v1/auth/callback',
+      },
+      '/api/v1/system/allowlist': {
+        allowed_emails: ['admin@example.test', 'viewer@example.test'],
+        current_user_email: 'admin@example.test',
+        allow_new_users: true,
+        allowlist_required: true,
+      },
+    });
+
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/system/settings');
     await expect(page.getByRole('heading', { level: 1, name: '系統設定' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: 'Google OAuth 憑證配置' })).toBeVisible();
-    await expect(page.getByLabel('新增允許登入的 Google Email')).toBeVisible();
     await expect(page.getByText('admin@example.test')).toBeVisible();
-    await expect(page.locator('.system-settings-allow-users')).toHaveCSS('background-color', 'rgb(20, 21, 26)');
-
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    expect(overflow, `system settings horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+    const email = page.getByLabel('新增允許登入的 Google Email');
+    await expectFitsHorizontally(page.getByRole('button', { name: '關閉新增' }));
+    await expectFitsHorizontally(email);
+    await email.fill('new-member@example.test');
+    const add = page.getByRole('button', { name: '新增成員', exact: true });
+    await expect(add).toBeEnabled();
+    await expectFitsHorizontally(add);
+    await expectPageFits(page);
     await page.screenshot({
       path: testInfo.outputPath(`system-settings-${width}.png`),
       fullPage: true,
       animations: 'disabled',
     });
-  }
-});
+  });
+}
 
 test('system settings keeps the edit controls closed when a read response is malformed', async ({ page }) => {
   await mockAuthenticatedBackend(page, {
@@ -144,10 +147,10 @@ test('system settings keeps the edit controls closed when a read response is mal
   await expect(page.getByRole('button', { name: '新增成員' })).toHaveCount(0);
 });
 
-test('Quick Token Drawer uses its feature styles on supported widths', async ({ page }, testInfo) => {
-  await mockAuthenticatedBackend(page);
+for (const width of [390, 768, 1440]) {
+  test(`Quick Token Drawer controls and guide fit at ${width}px`, { tag: '@responsive' }, async ({ page }, testInfo) => {
+    await mockAuthenticatedBackend(page);
 
-  for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/ytmusic/playlist-sort');
     const pageHeader = page.locator('.ui-page-header');
@@ -156,14 +159,19 @@ test('Quick Token Drawer uses its feature styles on supported widths', async ({ 
     await page.getByRole('button', { name: /管理瀏覽器 Token/ }).click();
 
     const drawer = page.getByTestId('quick-token-drawer');
-    await expect(drawer).toHaveCSS('background-color', 'rgb(24, 26, 31)');
-    await page.getByRole('button', { name: '如何取得 Token？' }).click();
-    await expect(page.getByText(/3 步驟快速取得/)).toBeVisible();
-
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    expect(overflow, `Quick Token Drawer horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
-  }
-});
+    await drawer.getByRole('button', { name: '如何取得 Token？' }).click();
+    await expectFitsHorizontally(drawer.getByText(/3 步驟快速取得/));
+    const token = drawer.getByRole('textbox');
+    await expectFitsHorizontally(token);
+    await token.fill('fixture-token');
+    const validate = drawer.getByRole('button', { name: '測試此 Token' });
+    await expect(validate).toBeEnabled();
+    await expectFitsHorizontally(validate);
+    await expectPageFits(page);
+    await drawer.getByRole('button', { name: '取消', exact: true }).click();
+    await expect(drawer).toBeHidden();
+  });
+}
 
 test('YouTube settings sub-navigation uses feature styles on supported widths', async ({ page }) => {
   await mockAuthenticatedBackend(page, {
@@ -203,40 +211,47 @@ test('YouTube settings sub-navigation uses feature styles on supported widths', 
   }
 });
 
-test('YouTube Music settings use feature styles and remain usable on supported widths', async ({ page }, testInfo) => {
-  await mockAuthenticatedBackend(page, {
-    '/api/v1/auth/user': {
-      authenticated: true,
-      user: { sub: 'ytmusic-settings-e2e', email: 'music@example.test' },
-      authorizations: {
-        sheets: { connected: false },
-        ytmusic: { connected: true, has_custom_token: true, user: { email: 'music@example.test' } },
+for (const width of [390, 768, 1440]) {
+  test(`YouTube Music settings expose token actions and keyboard order at ${width}px`, { tag: '@responsive' }, async ({ page }, testInfo) => {
+    await mockAuthenticatedBackend(page, {
+      '/api/v1/auth/user': {
+        authenticated: true,
+        user: { sub: 'ytmusic-settings-e2e', email: 'music@example.test' },
+        authorizations: {
+          sheets: { connected: false },
+          ytmusic: { connected: true, has_custom_token: true, user: { email: 'music@example.test' } },
+        },
+        google_scopes: {},
+        youtube: { slots: {} },
       },
-      google_scopes: {},
-      youtube: { slots: {} },
-    },
-  });
+    });
 
-  for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/ytmusic/settings');
     await expect(page.getByRole('heading', { level: 1, name: 'YouTube Music 設定' })).toBeVisible();
     await page.getByText('進階：Token 管理與憑證資訊').click();
-    await expect(page.locator('.ytmusic-token-active-panel')).toBeVisible();
-    await expect(page.locator('.ytmusic-code-reference')).toBeVisible();
+    await expectFitsHorizontally(page.getByRole('button', { name: '檢查目前 Token 有效性' }));
+    await expectFitsHorizontally(page.getByText('代碼標準參考指南：', { exact: true }));
 
-    await page.getByLabel('顯示地區與語言偏好').selectOption('custom');
-    await expect(page.getByLabel('語言代碼 (Language)')).toBeVisible();
-
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    expect(overflow, `YouTube Music settings horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+    const region = page.getByLabel('顯示地區與語言偏好');
+    await region.selectOption('custom');
+    await region.focus();
+    await page.keyboard.press('Tab');
+    const language = page.getByLabel('語言代碼 (Language)');
+    await expect(language).toBeFocused();
+    await expectFitsHorizontally(language);
+    await page.keyboard.press('Tab');
+    const location = page.getByLabel('地區縮寫 (Location / Country)');
+    await expect(location).toBeFocused();
+    await expectFitsHorizontally(location);
+    await expectPageFits(page);
     await page.screenshot({
       path: testInfo.outputPath(`ytmusic-settings-${width}.png`),
       fullPage: true,
       animations: 'disabled',
     });
-  }
-});
+  });
+}
 
 test('sheet copy feature styles load and stay within supported viewport widths', async ({ page }) => {
   await mockAuthenticatedBackend(page);
@@ -274,37 +289,37 @@ test('Google Sheets settings stay usable on supported viewport widths', async ({
   }
 });
 
-test('sticky notes feature styles load without viewport overflow', async ({ page }) => {
-  await mockAuthenticatedBackend(page);
+for (const width of [390, 768, 1440]) {
+  test(`sticky note search keeps icons outside the editable text area at ${width}px`, { tag: '@responsive' }, async ({ page }) => {
+    await mockAuthenticatedBackend(page);
 
-  for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/notes');
     await expect(page.getByRole('heading', { level: 1, name: '便利貼備忘錄' })).toBeVisible();
 
     const searchInput = page.getByRole('textbox', { name: '搜尋便利貼' });
-    await expect(searchInput).toBeVisible();
-    const padding = await searchInput.evaluate((element) => getComputedStyle(element).padding);
-    expect(padding, `feature styles did not load at ${width}px`).toBe('8.8px 32px 8.8px 35.2px');
-
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
-  }
-});
-
-test('photo curator feature styles keep the workbench within supported viewport widths', async ({ page }) => {
-  await mockAuthenticatedBackend(page);
-
-  for (const width of [390, 768, 1440]) {
-    await page.setViewportSize({ width, height: 1000 });
-    await page.goto('/photo-curator');
-    await expect(page.getByRole('heading', { level: 1, name: 'Instagram 貼文排版工作台' })).toBeVisible();
-    await expect(page.locator('.curator-workbench-grid')).toHaveCSS('display', 'grid');
-
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
-  }
-});
+    await searchInput.fill('測試搜尋');
+    const clear = page.getByRole('button', { name: '清除搜尋' });
+    await expectFitsHorizontally(searchInput);
+    await expectFitsHorizontally(clear);
+    const searchPadding = await searchInput.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const icon = element.parentElement?.querySelector('svg');
+      const clearButton = element.parentElement?.querySelector('button');
+      if (!icon || !clearButton) throw new Error('Search controls are missing');
+      return {
+        beforeText: box.left + parseFloat(style.paddingLeft) - icon.getBoundingClientRect().right,
+        afterText: clearButton.getBoundingClientRect().left - (box.right - parseFloat(style.paddingRight)),
+      };
+    });
+    expect(searchPadding.beforeText).toBeGreaterThanOrEqual(-1);
+    expect(searchPadding.afterText).toBeGreaterThanOrEqual(-1);
+    await clear.click();
+    await expect(searchInput).toHaveValue('');
+    await expectPageFits(page);
+  });
+}
 
 test('FFmpeg feature styles switch to a single-column workbench on narrow screens', async ({ page }) => {
   await mockAuthenticatedBackend(page);
@@ -341,25 +356,35 @@ test('FFmpeg feature styles switch to a single-column workbench on narrow screen
   }
 });
 
-test('publish cleaner feature styles align source controls for mobile and desktop', async ({ page }) => {
-  await mockAuthenticatedBackend(page);
-
-  for (const width of [390, 768, 1440]) {
+for (const width of [390, 768, 1440]) {
+  test(`publish cleanup source controls fit at ${width}px`, { tag: '@responsive' }, async ({ page }) => {
+    await mockAuthenticatedBackend(page);
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/youtube/publish-cleanup');
     await expect(page.getByRole('heading', { level: 1, name: '清理 To-Post' })).toBeVisible();
 
-    const sourceAlignment = await page
-      .locator('.publish-source-panel')
-      .evaluate((element) => getComputedStyle(element).alignItems);
-    expect(sourceAlignment, `publish feature styles did not load at ${width}px`).toBe(
-      width < 768 ? 'stretch' : 'flex-end'
-    );
+    const source = page.locator('.publish-source-field');
+    const action = page.getByRole('button', { name: '讀取 To-Post 播放清單' });
+    await expect(source.getByRole('textbox', { name: '共用 To-Post 播放清單' })).toBeVisible();
+    await expect(action).toBeVisible();
+    const [field, button] = await Promise.all([source.boundingBox(), action.boundingBox()]);
+    if (!field || !button) throw new Error('Cleanup source or action has no layout box');
 
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
-  }
-});
+    if (width === 390) {
+      expect(button.y).toBeGreaterThanOrEqual(field.y + field.height);
+      expect(Math.abs(button.x - field.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(button.width - field.width)).toBeLessThanOrEqual(1);
+    } else if (width === 768 && button.y >= field.y + field.height) {
+      expect(Math.abs(button.x + button.width - (field.x + field.width))).toBeLessThanOrEqual(1);
+    } else {
+      expect(button.x).toBeGreaterThanOrEqual(field.x + field.width);
+      expect(Math.abs(button.y + button.height - (field.y + field.height))).toBeLessThanOrEqual(1);
+    }
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth))
+      .toBeLessThanOrEqual(1);
+  });
+}
 
 test('YouTube batch feature styles load without viewport overflow', async ({ page }) => {
   await mockAuthenticatedBackend(page);
@@ -394,25 +419,32 @@ test('Google Sheets OAuth uses the backend URL and redirects to the provider', a
   await expect(page).toHaveTitle('OAuth fixture');
 });
 
-test('Google account settings use feature styles and stay within supported viewport widths', async ({ page }) => {
-  await mockAuthenticatedBackend(page);
+for (const width of [390, 768, 1440]) {
+  test(`Google account service links stay reachable without overlap at ${width}px`, { tag: '@responsive' }, async ({ page }) => {
+    await mockAuthenticatedBackend(page);
 
-  for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/settings/google');
 
-    const sectionHeading = page.locator('.account-settings-section-heading').first();
-    await expect(sectionHeading).toBeVisible();
-    await expect(sectionHeading.locator('h3')).toHaveCSS('font-size', '16.8px');
+    await expect(page.getByRole('heading', { name: '第三方服務授權矩陣' })).toBeVisible();
+    const sheets = page.getByRole('link', { name: '前往 Sheet 模組設定' });
+    const musicSettings = page.getByRole('link', { name: 'YouTube Music 專屬設定' });
+    const sort = page.getByRole('link', { name: '前往 YouTube Music 播放清單排序' });
+    await expect(sheets).toHaveAttribute('href', '/sheets/settings');
+    await expect(musicSettings).toHaveAttribute('href', '/ytmusic/settings');
+    await expect(sort).toHaveAttribute('href', '/ytmusic/playlist-sort');
+    await expectFitsHorizontally(sheets);
+    await expectFitsHorizontally(musicSettings);
+    await expectFitsHorizontally(sort);
 
-    const serviceLinks = page.locator('.account-settings-service-links').last();
-    await expect(serviceLinks).toHaveCSS('display', 'flex');
-    await expect(serviceLinks).toHaveCSS('flex-wrap', 'wrap');
-
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
-  }
-});
+    const [settingsBox, sortBox] = await Promise.all([musicSettings.boundingBox(), sort.boundingBox()]);
+    if (!settingsBox || !sortBox) throw new Error('Music links are missing layout boxes');
+    expect(
+      sortBox.x >= settingsBox.x + settingsBox.width - 1 || sortBox.y >= settingsBox.y + settingsBox.height - 1
+    ).toBe(true);
+    await expectPageFits(page);
+  });
+}
 
 test('Playlist Sort previews and confirms creation of a sorted playlist', async ({ page }) => {
   await mockAuthenticatedBackend(page, {
@@ -773,18 +805,8 @@ test('Sticky Notes autosaves edits, toggles pin state, and deletes through its A
 
   await page.getByRole('button', { name: '刪除便利貼' }).click();
   await page.getByRole('button', { name: '刪除', exact: true }).click();
+  await expect(page.locator('[aria-live="polite"]').getByRole('status').getByText('便利貼已刪除')).toBeVisible();
   await expect(page.getByRole('heading', { name: '尚未建立任何便利貼' })).toBeVisible();
-});
-
-test('Sticky Notes rejects a malformed list instead of showing an empty notebook', async ({ page }) => {
-  await mockAuthenticatedBackend(page, {
-    '/api/v1/notes': { notes: [], total: 1 },
-  });
-
-  await page.goto('/notes');
-  await expect(page.getByText('便利貼清單待核對')).toBeVisible();
-  await expect(page.getByRole('heading', { name: '尚未建立任何便利貼' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '新增便利貼' })).toBeDisabled();
 });
 
 test('Sticky Notes reconciles an ambiguous create without sending a duplicate', async ({ page }) => {

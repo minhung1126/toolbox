@@ -126,15 +126,21 @@ class YouTubePublishRunner:
         self.thread = self.heartbeat_thread = self.file_lock = None
 
     def start(self):
-        import fcntl
-
         with self.lock:
             if self.accepting:
                 return
             self.store.path.parent.mkdir(parents=True, exist_ok=True)
-            handle = open(self.store.path.with_suffix(".runner.lock"), "a+")
+            handle = open(self.store.path.with_suffix(".runner.lock"), "a+b")
             try:
-                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                if os.name == "nt":
+                    import msvcrt
+
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except OSError:
                 handle.close()
                 raise RuntimeError("YouTube publish runner requires one process per operation store") from None

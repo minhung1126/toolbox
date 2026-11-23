@@ -1,22 +1,34 @@
+import json
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from backend.app.api.ffmpeg_generator import (
+    BuildCommandRequest,
+    build_command,
     parse_time_string,
     safe_quote_filename,
     seconds_to_hhmmss,
 )
-from backend.app.main import app
-from backend.app.tools.builtin.ffmpeg_generator import FfmpegGeneratorPlugin
-from backend.app.tools.registry import tool_registry
+from backend.app.main import create_app
+
+CASES = json.loads(
+    (Path(__file__).parents[1] / "app/resources/ffmpeg-command-cases.v1.json").read_text(encoding="utf-8")
+)
+BASH_EXECUTABLE = os.environ.get("TOOLBOX_TEST_BASH") or (None if os.name == "nt" else "bash")
+CMD_UNSUPPORTED_CHARACTERS = ("%", "!", '"')
 
 
-def test_ffmpeg_generator_plugin_metadata():
-    plugin = FfmpegGeneratorPlugin()
-    assert plugin.metadata.id == "ffmpeg-generator"
-    assert plugin.metadata.name == "FFmpeg Generator"
-    assert plugin.metadata.status == "active"
-    assert plugin.metadata.entry_url == "/ffmpeg-generator"
-    assert tool_registry.get("ffmpeg-generator") is not None
+@pytest.fixture
+def client():
+    return TestClient(create_app())
 
 
 def test_seconds_to_hhmmss_and_parse():
@@ -31,28 +43,111 @@ def test_seconds_to_hhmmss_and_parse():
 
 
 def test_safe_quote_filename():
-    import shlex
-
     for name in ["video.mp4", "my video.mp4", '"video.mp4"', "path\\to\\file.mp4", "中文 $((2+3)) `test` % (x).mp4"]:
         assert shlex.split(safe_quote_filename(name)) == [name]
 
 
-def test_ffmpeg_presets_api():
-    client = TestClient(app)
+@pytest.mark.parametrize("value", CASES["invalid_times"])
+def test_invalid_times_are_not_coerced_to_zero(value):
+    assert parse_time_string(value) is None
+    with pytest.raises(HTTPException) as error:
+        build_command(BuildCommandRequest(start_time=value))
+    assert error.value.status_code == 400
+    assert error.value.detail["code"] == "invalid_command"
+    assert set(error.value.detail["field_errors"]) == {"start_time"}
+
+
+@pytest.mark.parametrize(
+    "patch, field",
+    [
+        pytest.param({"input_file": "output.mp4"}, "output_file", id="same-file"),
+        pytest.param({"start_time": "10", "end_time": "5"}, "end_time", id="reversed-window"),
+        pytest.param({"end_time": "21", "source_duration": 20}, "end_time", id="past-duration"),
+        pytest.param({"input_file": "bad\nfile"}, "input_file", id="control-character"),
+        pytest.param({"input_file": "50%.mp4", "shell": "cmd"}, "input_file", id="cmd-percent"),
+        pytest.param({"input_file": "clip!.mp4", "shell": "cmd"}, "input_file", id="cmd-exclamation"),
+        pytest.param({"input_file": 'clip".mp4', "shell": "cmd"}, "input_file", id="cmd-quote"),
+    ],
+)
+def test_invalid_commands_return_field_errors(patch, field):
+    with pytest.raises(HTTPException) as error:
+        build_command(BuildCommandRequest(**patch))
+    assert error.value.status_code == 400
+    assert error.value.detail["code"] == "invalid_command"
+    assert set(error.value.detail["field_errors"]) == {field}
+
+
+@pytest.mark.skipif(BASH_EXECUTABLE is None, reason="Set TOOLBOX_TEST_BASH to run native Bash checks on Windows")
+@pytest.mark.parametrize("name", CASES["filenames"])
+@pytest.mark.parametrize("layout", ["single", "multiline"])
+def test_bash_receives_exact_argv(name, layout, tmp_path):
+    command = build_command(
+        BuildCommandRequest(
+            input_file=name,
+            output_file="out.mp4",
+            shell_dialect="bash",
+            line_layout=layout,
+            video_codec="copy",
+            audio_codec="copy",
+        )
+    )
+    result = subprocess.run(
+        [
+            BASH_EXECUTABLE,
+            "--noprofile",
+            "--norc",
+            "-c",
+            "ffmpeg() { printf '%s\\0' \"$@\"; }\n" + command.command_active,
+        ],
+        cwd=tmp_path,
+        env={**os.environ, "BASH_ENV": ""},
+        capture_output=True,
+        timeout=5,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    assert result.stdout.decode("utf-8").split("\0") == ["-i", name, "-c:v", "copy", "-c:a", "copy", "out.mp4", ""]
+
+
+@pytest.mark.parametrize(("shell", "binary"), [("powershell", "pwsh"), ("cmd", "cmd.exe")])
+def test_native_shell_round_trip_when_available(shell, binary, tmp_path):
+    if shell == "cmd" and os.name != "nt":
+        pytest.skip("CMD argv verification runs on Windows")
+    executable = shutil.which(binary)
+    if executable is None:
+        pytest.skip(f"{binary} unavailable: native argv verification requires the shell")
+
+    names = CASES["filenames"]
+    if shell == "cmd":
+        names = [name for name in names if not any(char in name for char in CMD_UNSUPPORTED_CHARACTERS)]
+
+    (tmp_path / "argv.py").write_text("import json, sys\nprint(json.dumps(sys.argv[1:]))\n", encoding="ascii")
+    command = " ".join(safe_quote_filename(value, shell) for value in [sys.executable, "argv.py", *names])
+    if shell == "powershell":
+        script = "$PSNativeCommandArgumentPassing = 'Standard'\n& " + command + "\nexit $LASTEXITCODE\n"
+        (tmp_path / "capture.ps1").write_text(script, encoding="utf-8")
+        args = [executable, "-NoProfile", "-NonInteractive", "-File", "capture.ps1"]
+    else:
+        # CMD's /s removes this outer quote pair. Build the raw command line for
+        # CMD rather than letting subprocess apply C-runtime escaping to it.
+        args = f'{subprocess.list2cmdline([executable])} /d /v:off /s /c "{command}"'
+
+    result = subprocess.run(args, executable=executable, cwd=tmp_path, capture_output=True, timeout=10, check=False)
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    assert json.loads(result.stdout) == names
+
+
+def test_ffmpeg_presets_api(client):
     resp = client.get("/api/v1/ffmpeg-generator/presets", headers={"Origin": "http://localhost:3000"})
     assert resp.status_code == 200
-    presets = resp.json()
-    assert isinstance(presets, list)
+    presets = {preset["id"]: preset for preset in resp.json()}
     assert len(presets) >= 5
-
-    lossless = next((p for p in presets if p["id"] == "lossless-trim"), None)
-    assert lossless is not None
-    assert lossless["mode"] == "copy"
-    assert lossless["video_codec"] == "copy"
+    lossless = presets["lossless-trim"]
+    assert (lossless["mode"], lossless["video_codec"]) == ("copy", "copy")
+    assert "關鍵影格" in lossless["description"]
 
 
-def test_ffmpeg_parse_time_api():
-    client = TestClient(app)
+def test_ffmpeg_parse_time_api(client):
     # Valid string
     resp = client.post(
         "/api/v1/ffmpeg-generator/parse-time",
@@ -84,8 +179,7 @@ def test_ffmpeg_parse_time_api():
     assert resp.status_code == 400
 
 
-def test_ffmpeg_build_command_stream_copy():
-    client = TestClient(app)
+def test_ffmpeg_build_command_stream_copy(client):
     payload = {
         "input_file": "my test video.mp4",
         "output_file": "output.mp4",
@@ -111,8 +205,7 @@ def test_ffmpeg_build_command_stream_copy():
     assert len(res["breakdown"]) >= 5
 
 
-def test_ffmpeg_build_command_reencode():
-    client = TestClient(app)
+def test_ffmpeg_build_command_reencode(client):
     payload = {
         "input_file": "clip.mp4",
         "output_file": "encoded.mp4",

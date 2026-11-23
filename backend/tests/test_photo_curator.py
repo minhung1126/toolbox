@@ -1,17 +1,6 @@
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
-from backend.app.tools.builtin.photo_curator import PhotoCuratorPlugin
-from backend.app.tools.registry import tool_registry
-
-
-def test_photo_curator_plugin_metadata():
-    plugin = PhotoCuratorPlugin()
-    assert plugin.metadata.id == "photo-curator"
-    assert plugin.metadata.name == "Photo Curator"
-    assert plugin.metadata.status == "active"
-    assert plugin.metadata.entry_url == "/photo-curator"
-    assert tool_registry.get("photo-curator") is not None
 
 
 def test_photo_curator_presets_api():

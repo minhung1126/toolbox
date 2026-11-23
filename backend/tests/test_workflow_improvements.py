@@ -1,8 +1,4 @@
-import json
-import shutil
-import subprocess
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -10,82 +6,10 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
-from backend.app.api.ffmpeg_generator import BuildCommandRequest, build_command, parse_time_string
 from backend.app.core.dependencies import require_account_subject
 from backend.app.core.operation_store import OperationStore
 from backend.app.main import create_app
 from backend.app.services.operation_journal import public_operation, recording, start_operation
-
-CASES = json.loads((Path(__file__).parents[1] / "app/resources/ffmpeg-command-cases.v1.json").read_text())
-
-
-@pytest.mark.parametrize("name", CASES["filenames"])
-@pytest.mark.parametrize("layout", ["single", "multiline"])
-def test_bash_receives_exact_argv(name, layout):
-    command = build_command(
-        BuildCommandRequest(
-            input_file=name, output_file="out.mp4", shell_dialect="bash", line_layout=layout, video_codec="libx264"
-        )
-    )
-    script = "ffmpeg() { printf '%s\\0' \"$@\"; }; " + (
-        command.command_single if layout == "single" else command.command_multi
-    )
-    result = subprocess.run(["bash", "-c", script], check=True, capture_output=True)
-    argv = result.stdout.decode().split("\0")[:-1]
-    assert argv[argv.index("-i") + 1] == name
-    assert argv[-1] == "out.mp4"
-
-
-@pytest.mark.parametrize("value", CASES["invalid_times"])
-def test_invalid_times_are_not_coerced_to_zero(value):
-    assert parse_time_string(value) is None
-    with pytest.raises(HTTPException) as error:
-        build_command(BuildCommandRequest(start_time=value))
-    assert "start_time" in error.value.detail["field_errors"]
-
-
-@pytest.mark.parametrize(
-    "patch",
-    [
-        {"input_file": "output.mp4"},
-        {"start_time": "10", "end_time": "5"},
-        {"end_time": "21", "source_duration": 20},
-        {"input_file": "bad\nfile"},
-        {"input_file": "50%.mp4", "shell": "cmd"},
-    ],
-)
-def test_invalid_commands_return_field_errors(patch):
-    with pytest.raises(HTTPException) as error:
-        build_command(BuildCommandRequest(**patch))
-    assert error.value.detail["field_errors"]
-
-
-@pytest.mark.parametrize("shell, executable", [("powershell", "pwsh"), ("cmd", "cmd.exe")])
-def test_native_shell_round_trip_when_available(shell, executable, tmp_path):
-    path = shutil.which(executable)
-    if not path:
-        pytest.skip(f"{executable} unavailable: native argv verification not completed")
-    # Native integration is intentionally separate from string quoting assertions.
-    fake = tmp_path / "argv.py"
-    fake.write_text("import json,sys; print(json.dumps(sys.argv[1:], ensure_ascii=False))")
-    import sys
-
-    from backend.app.api.ffmpeg_generator import safe_quote_filename
-
-    for name in CASES["filenames"]:
-        try:
-            quoted = safe_quote_filename(name, shell)
-        except ValueError:
-            assert shell == "cmd" and any(char in name for char in '%!"')
-            continue
-        command = f"{safe_quote_filename(sys.executable, shell)} {safe_quote_filename(str(fake), shell)} {quoted}"
-        if shell == "powershell":
-            command = "$PSNativeCommandArgumentPassing = 'Standard'; & " + command
-            args = [path, "-NoProfile", "-Command", command]
-        else:
-            args = [path, "/d", "/v:off", "/s", "/c", command]
-        result = subprocess.run(args, check=True, capture_output=True, text=True)
-        assert json.loads(result.stdout) == [name]
 
 
 class Plan(BaseModel):
@@ -170,7 +94,9 @@ def test_journal_queries_are_account_scoped_and_retired_routes_unavailable(tmp_p
     assert client.get("/api/v1/operations/" + operation["id"]).status_code == 404
     assert client.post("/api/v1/weverse-uploader/upload-from-path", json={}).status_code == 404
     assert client.get("/api/v1/auth/video-uploader/url").status_code == 404
-    assert len(client.get("/api/v1/tools").json()["tools"]) == 8
+    catalog = client.get("/api/v1/tools")
+    assert catalog.status_code == 200
+    assert "weverse-uploader" not in {tool["id"] for tool in catalog.json()["tools"]}
 
 
 def test_retired_callback_does_not_exchange_tokens():

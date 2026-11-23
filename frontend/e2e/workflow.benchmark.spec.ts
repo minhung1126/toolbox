@@ -8,8 +8,7 @@ async function saveMetrics(info: TestInfo, data: { body: string; contentType: st
   await info.attach('workflow-metrics.json', data);
 }
 
-// Fixed provider fakes, anonymous counts and durations only. This is an automation
-// benchmark, not a claim about human completion times or production traffic.
+// Run with test:benchmark. Provider fakes measure automated interaction counts and durations.
 for (const scenario of ['copy-six-cells', 'repeat-video-update', 'recover-video-read']) {
   test(`workflow benchmark ${scenario}`, async ({ page }, testInfo) => {
     let reads = 0;

@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   server: {
     port: 3000,
@@ -14,6 +14,8 @@ export default defineConfig({
       },
     },
   },
+  // Playwright fixtures fulfill API requests. Preview must never forward a miss to localhost:8000.
+  preview: mode === 'playwright' ? { proxy: {} } : undefined,
   build: {
     rollupOptions: {
       output: {
@@ -33,4 +35,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

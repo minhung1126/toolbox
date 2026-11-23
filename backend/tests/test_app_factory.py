@@ -1,21 +1,23 @@
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from backend.app.main import create_app
 
 
 def test_importing_default_app_does_not_initialize_persistent_state(tmp_path):
     data_dir = tmp_path / "import-only"
-    env = {**os.environ, "TOOLBOX_DATA_DIR": str(data_dir)}
-    subprocess.run(
-        [sys.executable, "-c", "import backend.app.main"],
-        check=True,
+    env = {**os.environ, "TOOLBOX_DATA_DIR": str(data_dir), "LC_ALL": "C", "PYTHONCOERCECLOCALE": "0"}
+    result = subprocess.run(
+        [sys.executable, "-X", "utf8=0", "-c", "import backend.app.main"],
         env=env,
-        cwd=os.getcwd(),
+        cwd=Path(__file__).resolve().parents[2],
         capture_output=True,
-        text=True,
+        timeout=15,
+        check=False,
     )
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
     assert not data_dir.exists() or not any(data_dir.iterdir())
 
 
