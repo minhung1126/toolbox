@@ -708,7 +708,7 @@ test('Photo Curator exports the assigned image and checklist in a ZIP download',
 
   await expect(page.locator('.dropzone-stats')).toContainText('已匯入：1 張');
   await page.getByRole('button', { name: '+ P1' }).click();
-  await expect(page.getByText('#01 封面')).toBeVisible();
+  await expect(page.getByRole('combobox', { name: '指定序號 concert-photo.jpg' })).toHaveValue('1');
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: '下載分組照片 (ZIP)' }).click();
