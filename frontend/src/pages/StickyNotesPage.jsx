@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw, Search, StickyNote } from 'lucide-react';
 import { isAmbiguousNoteMutation, notesApi } from '../features/notes/api/notesApi';
+import { NoteDraftsProvider, useNoteDrafts } from '../features/notes/NoteDrafts';
+import { downloadJson } from '../utils/download';
 import StickyNoteCard from '../components/StickyNoteCard';
 import { useToast } from '../components/Toast';
 import { StatusMessage } from '../components/StatusMessage';
@@ -8,6 +10,17 @@ import { Badge, Button, EmptyState, LoadingState, PageHeader } from '../shared/u
 import '../features/notes/notes.css';
 
 export default function StickyNotesPage() {
+  const session = useNoteDrafts();
+  return session ? (
+    <StickyNotesContent />
+  ) : (
+    <NoteDraftsProvider>
+      <StickyNotesContent />
+    </NoteDraftsProvider>
+  );
+}
+function StickyNotesContent() {
+  const drafts = useNoteDrafts();
   const toast = useToast();
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -88,6 +101,23 @@ export default function StickyNotesPage() {
         description="記錄文字或建立變數模板，支援建立副本、複製文字與自動儲存。"
       />
 
+      <p>
+        未儲存草稿會在本次登入工作階段保留；重新整理、關閉分頁或切換帳號前，請先複製或匯出。備份含文字內容，請自行妥善保存。
+      </p>
+      <button
+        className="btn btn-secondary"
+        disabled={!notes.length && !drafts.current.size}
+        onClick={() =>
+          downloadJson('toolbox-notes.json', {
+            format: 'toolbox-notes',
+            version: 1,
+            notes: [...new Map([...notes.map((note) => [note.id, note]), ...drafts.current]).values()],
+            draftIds: [...drafts.current.keys()],
+          })
+        }
+      >
+        匯出全部（含未儲存草稿）
+      </button>
       <div className="sticky-notes-toolbar">
         <div className="sticky-notes-toolbar-left">
           <Button

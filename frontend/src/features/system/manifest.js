@@ -5,6 +5,7 @@ import { PATHS } from '../../routes/paths';
 
 const manifest = {
   id: 'system-utility',
+  purpose: '管理系統',
   name: 'System Utility',
   title: '系統維運與安全控制',
   description: '即時監控 Toolbox API 健康狀態、OAuth 憑證遮罩維護、登入白名單與 Commit 部署版本。',
@@ -26,6 +27,7 @@ const manifest = {
           icon: Shield,
           activePrefix: PATHS.systemSettings,
         },
+        { id: 'operations', to: PATHS.operations, label: '作業紀錄與對帳', icon: Activity },
         { id: 'system_info', to: PATHS.systemInfo, label: '系統／部署資訊', icon: Info },
         { id: 'api_health', to: PATHS.systemHealth, label: 'API 健康度', icon: Activity },
       ],
@@ -64,7 +66,7 @@ const manifest = {
     {
       id: 'api_health_card',
       title: 'API 健康度',
-      description: '即時監控後端 API 就緒狀態、憑證驗證與服務運作指標。',
+      description: '查看後端可達、部署配置與工具健康；使用者授權與配額另列。',
       to: PATHS.systemHealth,
       actionLabel: '檢查 API 健康度',
       icon: Activity,
@@ -72,6 +74,7 @@ const manifest = {
     },
   ],
   routes: [
+    { path: PATHS.operations.slice(1), component: lazy(() => import('../../pages/OperationsPage')) },
     {
       path: PATHS.systemHealth.slice(1),
       component: lazy(() => import('../../pages/ApiHealthPage')),

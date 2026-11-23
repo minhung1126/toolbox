@@ -33,6 +33,7 @@ export default function IgSlotImage({ cover, onZoom, idx }) {
         src={cover.previewUrl}
         alt={`Post ${idx + 1} 封面：${cover.name}`}
         className="ig-slot-img"
+        data-curator-preview={cover.id}
         draggable={false}
         referrerPolicy="no-referrer"
         onError={() => setLoadError(true)}

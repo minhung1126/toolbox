@@ -28,7 +28,7 @@ export default function FfmpegGeneratorPage() {
             <h1>FFmpeg 命令行生成器</h1>
             <p className="section-desc">
               本地即時影片預覽，視覺化定位 Cut 起訖點與微調影格，提供極速無損複製（<code>-c copy</code>
-              ）與進階編碼選項，一鍵複製跨平台 FFmpeg 指令。
+              ）與進階編碼選項，產生指令後需自行在電腦執行。
             </p>
           </div>
           <Button
@@ -54,16 +54,15 @@ export default function FfmpegGeneratorPage() {
             <ul className="ffmpeg-help-list">
               <li>
                 <strong>無損流複製 (-c copy)</strong>
-                ：剪輯時最推薦的模式！不經過重編碼，以硬碟讀寫極速瞬間產生影片，保留 100% 原始解析度與音質。
+                ：不重編碼，裁切受關鍵影格限制；需要逐幀精準時請選擇重新編碼。
               </li>
               <li>
                 <strong>Cut 前快速 vs 精確</strong>：置於 <code>-i</code>{' '}
                 前利用關鍵影格（Keyframe）快速尋找，剪輯大檔秒級跳轉；置於 <code>-i</code> 後逐幀解碼，定位最精確。
               </li>
               <li>
-                <strong>自動雙引號防護</strong>：生成的所有檔名與路徑一律自動套用雙引號（<code>&quot;...&quot;</code>
-                ），完美防範檔名空白、括號 <code>()</code>、括弧 <code>[]</code> 與特殊符號（如 <code>&amp;</code>
-                ），確保跨平台 Shell 執行零出錯。
+                <strong>依環境引用參數</strong>：請選擇實際使用的 Shell。CMD
+                無法可靠處理的字元會阻止複製，請改用其他環境。
               </li>
               <li>
                 <strong>隱私安全</strong>：本地播放器直接透過瀏覽器解碼，影片<strong>絕對不會</strong>

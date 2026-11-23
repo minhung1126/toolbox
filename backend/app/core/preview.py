@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import secrets
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -49,17 +50,24 @@ def playlist_snapshot(raw_items: Iterable[Mapping[str, Any]] | None) -> dict[str
 
 
 def playlist_snapshot_from_preview(videos: Iterable[Mapping[str, Any]] | None) -> dict[str, Any]:
-    """Build the same public snapshot shape from parsed preview rows."""
+    """Rebuild raw playlist order, including repeated videos, from preview rows."""
 
-    entries = [
-        {
-            "id": str(video.get("playlist_item_id") or ""),
-            "contentDetails": {"videoId": str(video.get("video_id") or "")},
-        }
-        for video in videos or []
-        if isinstance(video, Mapping)
-    ]
-    return playlist_snapshot(entries)
+    entries = []
+    for position, video in enumerate(videos or []):
+        if not isinstance(video, Mapping) or not video.get("video_id"):
+            continue
+        members = video.get("playlist_items") or [
+            {"playlist_item_id": video.get("playlist_item_id"), "position": position}
+        ]
+        for member in members:
+            entries.append(
+                {
+                    "id": str(member.get("playlist_item_id") or ""),
+                    "contentDetails": {"videoId": str(video.get("video_id") or "")},
+                    "position": member.get("position", position),
+                }
+            )
+    return playlist_snapshot(sorted(entries, key=lambda entry: entry["position"]))
 
 
 def sheet_snapshot(
@@ -104,6 +112,7 @@ def build_preview_token(
 ) -> str:
     payload: dict[str, Any] = {
         "version": 1,
+        "nonce": secrets.token_urlsafe(16),
         "owner": _owner_binding(owner_sub),
         "youtube_slot": str(youtube_slot or ""),
         "operation": str(operation or ""),
@@ -126,10 +135,11 @@ def verify_preview_token(
     playlist: Mapping[str, Any] | None = None,
     sheet: Mapping[str, Any] | None = None,
     request_digest: str | None = None,
+    max_age: int = PREVIEW_TOKEN_MAX_AGE,
 ) -> bool:
     if not isinstance(token, str) or not token.strip():
         return False
-    payload = verify_timed_data(token, salt=PREVIEW_TOKEN_SALT, max_age=PREVIEW_TOKEN_MAX_AGE)
+    payload = verify_timed_data(token, salt=PREVIEW_TOKEN_SALT, max_age=max_age)
     if not isinstance(payload, Mapping) or payload.get("version") != 1:
         return False
     if payload.get("owner") != _owner_binding(owner_sub):

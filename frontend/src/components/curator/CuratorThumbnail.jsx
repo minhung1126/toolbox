@@ -9,7 +9,7 @@ export default function CuratorThumbnail({ photo, onZoom }) {
   }, [photo?.previewUrl]);
 
   return (
-    <div className="photo-card-thumb-wrap">
+    <div className="photo-card-thumb-wrap" data-curator-preview={loadError ? undefined : photo.id}>
       {loadError ? (
         <div className="photo-card-thumb-fallback" title="無法載入縮圖">
           <ImageIcon size={18} className="text-dim" aria-hidden="true" />

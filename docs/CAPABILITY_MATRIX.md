@@ -6,7 +6,10 @@
 | --- | --- | --- | --- | --- |
 | Creator 草稿讀取 | `POST /youtube/playlist-items` | YouTube 頻道 | 403 | 僅讀 YouTube；不需 Sheets。 |
 | Creator 批次預覽與更新 | `POST /youtube/batch-preview`, `/youtube/batch-update` | YouTube 頻道 + Sheets 唯讀 | 403 | 更新前須讀 Sheet；兩種授權分開檢查。 |
-| Creator 發布與清理 | `POST /youtube/publish-and-cleanup` | YouTube 頻道 | 403 | 不讀 Sheet，因此工具路由覆寫為單一能力。 |
+| Creator 建立／預覽／確認公開 | `POST /youtube/drafts/prepare`, `/drafts/preview`, `/drafts/publish-jobs`, `/drafts/publish` | YouTube 頻道 + Sheets 唯讀 | 403 | 缺權限在 runner 受理及 provider 前拒絕；worker 重取授權。 |
+| Creator 清理 To-Post | `POST /youtube/cleanup-preview`, `/publish-and-cleanup` | YouTube 頻道 | 403 | 只核實 public 並移除清單成員，不讀 Sheet。 |
+| 處理狀態／精確恢復 | `POST /youtube/video-processing-status`, `/edit-status`; `GET /youtube/drafts/publish-jobs/by-request/{id}` | YouTube 頻道 | 403 | owner/channel 由授權解析；本機索引查詢。 |
+| 作業 polling | `GET /operations/{id}` | 登入 owner | 401／404 | 本機 journal，不呼叫 YouTube；帳號隔離。 |
 | 單片資訊更新 | `POST /youtube/video-metadata` | YouTube 頻道 | 403 | 頻道衝突時在 provider 前回 409。 |
 | Sheets 資料操作 | `POST /sheets/metadata`, `/parse-options`, `/people`, `/random-member-preview`, `/copy-table` | Sheets 唯讀 | 403 | 以獨立 Sheets OAuth 授權。 |
 | YouTube Music 清單、預覽、套用 | `GET /playlist-sort/playlists`, `POST /playlist-sort/preview`, `/apply` | YT Music 專用授權或可用 YouTube 頻道 | 403 | 專用授權優先，頻道為相容 fallback。設定頁可在未授權時開啟。 |

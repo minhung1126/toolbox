@@ -37,7 +37,6 @@ export default function FfmpegEncodingControls({ workflow }) {
     videoRef,
     setIsPlaying,
     setIsPlayingTrimmed,
-    setTranscodeMode,
     setVideoCodec,
     setAudioCodec,
     setCrf,
@@ -47,6 +46,17 @@ export default function FfmpegEncodingControls({ workflow }) {
   } = workflow;
   return (
     <section className="glass-panel card-padding ffmpeg-controls-panel" aria-label="剪輯起訖與編碼設定">
+      <div className="page-actions" role="group" aria-label="工作用途">
+        <button className="btn btn-secondary" onClick={() => applyPreset(PRESET_LIST[0])}>
+          剪片：快速不重編碼
+        </button>
+        <button className="btn btn-secondary" onClick={() => applyPreset(PRESET_LIST[1])}>
+          轉格式／精確剪輯
+        </button>
+        <button className="btn btn-secondary" onClick={() => applyPreset(PRESET_LIST[4])}>
+          取音訊
+        </button>
+      </div>
       {/* Presets Bar */}
       <div className="section-block">
         <label className="ui-field-label">常用預設範本</label>
@@ -264,148 +274,143 @@ export default function FfmpegEncodingControls({ workflow }) {
         )}
       </div>
 
-      {/* Codec & Stream Copy Options */}
-      <div className="section-block">
-        <div className="mode-tab-row">
-          <button
-            type="button"
-            className={`mode-tab ${transcodeMode === 'copy' ? 'active' : ''}`}
-            onClick={() => {
-              setTranscodeMode('copy');
-              setVideoCodec('copy');
-              setAudioCodec('copy');
-            }}
-          >
-            <Zap size={14} /> 快速無損流複製 (-c copy)
-          </button>
-          <button
-            type="button"
-            className={`mode-tab ${transcodeMode === 'reencode' ? 'active' : ''}`}
-            onClick={() => {
-              setTranscodeMode('reencode');
-              setVideoCodec('libx264');
-              setAudioCodec('aac');
-            }}
-          >
-            <Sliders size={14} /> 重新編碼／自訂格式
-          </button>
+      <details>
+        <summary>進階：編碼器、畫質與轉檔模式</summary>
+        {/* Codec & Stream Copy Options */}
+        <div className="section-block">
+          <div className="mode-tab-row">
+            <button
+              type="button"
+              className={`mode-tab ${transcodeMode === 'copy' ? 'active' : ''}`}
+              onClick={() => applyPreset(PRESET_LIST[0])}
+            >
+              <Zap size={14} /> 快速無損流複製 (-c copy)
+            </button>
+            <button
+              type="button"
+              className={`mode-tab ${transcodeMode === 'reencode' ? 'active' : ''}`}
+              onClick={() => applyPreset(PRESET_LIST[1])}
+            >
+              <Sliders size={14} /> 重新編碼／自訂格式
+            </button>
+          </div>
+
+          {transcodeMode === 'copy' ? (
+            <div className="info-banner glass-panel">
+              <p className="text-muted text-sm">
+                ⚡ <strong>無損複製模式已啟用</strong>
+                ：直接複製視訊與音訊；切點受關鍵影格限制，不保證逐幀精準。精確剪輯請選重新編碼。
+              </p>
+            </div>
+          ) : (
+            /* Re-encode detailed options */
+            <div className="reencode-options-grid glass-panel card-padding">
+              <div className="ui-field">
+                <label className="ui-field-label" htmlFor="ffmpeg-video-codec">
+                  視訊編碼器 (-c:v)
+                </label>
+                <select
+                  id="ffmpeg-video-codec"
+                  className="ui-text-field"
+                  value={videoCodec}
+                  onChange={(e) => setVideoCodec(e.target.value)}
+                >
+                  <option value="libx264">H.264 (libx264 - 最相容推薦)</option>
+                  <option value="libx265">H.265 / HEVC (libx265 - 高壓縮率)</option>
+                  <option value="libvpx-vp9">VP9 (libvpx-vp9 - WebM 推薦)</option>
+                  <option value="libsvtav1">AV1 (libsvtav1 - 新世代高效)</option>
+                  <option value="copy">Stream Copy (保留視訊流複製)</option>
+                  <option value="none">無 (移除視訊 / 僅音訊)</option>
+                </select>
+              </div>
+
+              <div className="ui-field">
+                <label className="ui-field-label" htmlFor="ffmpeg-crf">
+                  畫質係數 CRF (目前: {crf})
+                  <span className="text-dim text-xs ml-2">
+                    {crf <= 19 ? '超高畫質' : crf <= 24 ? '畫質平衡' : '高壓縮小檔'}
+                  </span>
+                </label>
+                <input
+                  id="ffmpeg-crf"
+                  type="range"
+                  min={16}
+                  max={32}
+                  value={crf}
+                  onChange={(e) => setCrf(parseInt(e.target.value, 10))}
+                  className="range-field"
+                />
+              </div>
+
+              <div className="ui-field">
+                <label className="ui-field-label" htmlFor="ffmpeg-resolution">
+                  解析度縮放
+                </label>
+                <select
+                  id="ffmpeg-resolution"
+                  className="ui-text-field"
+                  value={resolution}
+                  onChange={(e) => setResolution(e.target.value)}
+                >
+                  <option value="original">維持原始解析度</option>
+                  <option value="1080p">1080p FHD (1920x1080)</option>
+                  <option value="720p">720p HD (1280x720)</option>
+                  <option value="4k">4K UHD (3840x2160)</option>
+                  <option value="shorts_9_16">直式 9:16 Shorts/Reels (1080x1920 居中補黑邊)</option>
+                </select>
+              </div>
+
+              <div className="ui-field">
+                <label className="ui-field-label" htmlFor="ffmpeg-fps">
+                  影格率 (FPS)
+                </label>
+                <select id="ffmpeg-fps" className="ui-text-field" value={fps} onChange={(e) => setFps(e.target.value)}>
+                  <option value="original">維持原始幀率</option>
+                  <option value="24">24 fps (電影感)</option>
+                  <option value="30">30 fps (標準影片)</option>
+                  <option value="60">60 fps (流暢遊戲/動作)</option>
+                </select>
+              </div>
+
+              <div className="ui-field">
+                <label className="ui-field-label" htmlFor="ffmpeg-audio-codec">
+                  音訊編碼器 (-c:a)
+                </label>
+                <select
+                  id="ffmpeg-audio-codec"
+                  className="ui-text-field"
+                  value={audioCodec}
+                  onChange={(e) => setAudioCodec(e.target.value)}
+                >
+                  <option value="aac">AAC (最通用推薦)</option>
+                  <option value="libmp3lame">MP3 (libmp3lame)</option>
+                  <option value="libopus">Opus (libopus - 高品質壓縮)</option>
+                  <option value="copy">Stream Copy (保留音訊原樣)</option>
+                  <option value="none">無 (完全靜音 / 移除音軌)</option>
+                </select>
+              </div>
+
+              <div className="ui-field">
+                <label className="ui-field-label" htmlFor="ffmpeg-audio-bitrate">
+                  音訊碼率 (-b:a)
+                </label>
+                <select
+                  id="ffmpeg-audio-bitrate"
+                  className="ui-text-field"
+                  value={audioBitrate}
+                  onChange={(e) => setAudioBitrate(e.target.value)}
+                  disabled={audioCodec === 'none' || audioCodec === 'copy'}
+                >
+                  <option value="128k">128 kbps (標準)</option>
+                  <option value="192k">192 kbps (高品質推薦)</option>
+                  <option value="256k">256 kbps (發燒音質)</option>
+                  <option value="320k">320 kbps (無損感知)</option>
+                </select>
+              </div>
+            </div>
+          )}
         </div>
-
-        {transcodeMode === 'copy' ? (
-          <div className="info-banner glass-panel">
-            <p className="text-muted text-sm">
-              ⚡ <strong>無損複製模式已啟用</strong>：跳過耗時的 CPU/GPU 轉檔，直接將封裝流剪輯輸出，100%
-              維持原始畫質與聲音，耗時極短（通常數秒內完成）。
-            </p>
-          </div>
-        ) : (
-          /* Re-encode detailed options */
-          <div className="reencode-options-grid glass-panel card-padding">
-            <div className="ui-field">
-              <label className="ui-field-label" htmlFor="ffmpeg-video-codec">
-                視訊編碼器 (-c:v)
-              </label>
-              <select
-                id="ffmpeg-video-codec"
-                className="ui-text-field"
-                value={videoCodec}
-                onChange={(e) => setVideoCodec(e.target.value)}
-              >
-                <option value="libx264">H.264 (libx264 - 最相容推薦)</option>
-                <option value="libx265">H.265 / HEVC (libx265 - 高壓縮率)</option>
-                <option value="libvpx-vp9">VP9 (libvpx-vp9 - WebM 推薦)</option>
-                <option value="libsvtav1">AV1 (libsvtav1 - 新世代高效)</option>
-                <option value="copy">Stream Copy (保留視訊流複製)</option>
-                <option value="none">無 (移除視訊 / 僅音訊)</option>
-              </select>
-            </div>
-
-            <div className="ui-field">
-              <label className="ui-field-label" htmlFor="ffmpeg-crf">
-                畫質係數 CRF (目前: {crf})
-                <span className="text-dim text-xs ml-2">
-                  {crf <= 19 ? '超高畫質' : crf <= 24 ? '畫質平衡' : '高壓縮小檔'}
-                </span>
-              </label>
-              <input
-                id="ffmpeg-crf"
-                type="range"
-                min={16}
-                max={32}
-                value={crf}
-                onChange={(e) => setCrf(parseInt(e.target.value, 10))}
-                className="range-field"
-              />
-            </div>
-
-            <div className="ui-field">
-              <label className="ui-field-label" htmlFor="ffmpeg-resolution">
-                解析度縮放
-              </label>
-              <select
-                id="ffmpeg-resolution"
-                className="ui-text-field"
-                value={resolution}
-                onChange={(e) => setResolution(e.target.value)}
-              >
-                <option value="original">維持原始解析度</option>
-                <option value="1080p">1080p FHD (1920x1080)</option>
-                <option value="720p">720p HD (1280x720)</option>
-                <option value="4k">4K UHD (3840x2160)</option>
-                <option value="shorts_9_16">直式 9:16 Shorts/Reels (1080x1920 居中補黑邊)</option>
-              </select>
-            </div>
-
-            <div className="ui-field">
-              <label className="ui-field-label" htmlFor="ffmpeg-fps">
-                影格率 (FPS)
-              </label>
-              <select id="ffmpeg-fps" className="ui-text-field" value={fps} onChange={(e) => setFps(e.target.value)}>
-                <option value="original">維持原始幀率</option>
-                <option value="24">24 fps (電影感)</option>
-                <option value="30">30 fps (標準影片)</option>
-                <option value="60">60 fps (流暢遊戲/動作)</option>
-              </select>
-            </div>
-
-            <div className="ui-field">
-              <label className="ui-field-label" htmlFor="ffmpeg-audio-codec">
-                音訊編碼器 (-c:a)
-              </label>
-              <select
-                id="ffmpeg-audio-codec"
-                className="ui-text-field"
-                value={audioCodec}
-                onChange={(e) => setAudioCodec(e.target.value)}
-              >
-                <option value="aac">AAC (最通用推薦)</option>
-                <option value="libmp3lame">MP3 (libmp3lame)</option>
-                <option value="libopus">Opus (libopus - 高品質壓縮)</option>
-                <option value="copy">Stream Copy (保留音訊原樣)</option>
-                <option value="none">無 (完全靜音 / 移除音軌)</option>
-              </select>
-            </div>
-
-            <div className="ui-field">
-              <label className="ui-field-label" htmlFor="ffmpeg-audio-bitrate">
-                音訊碼率 (-b:a)
-              </label>
-              <select
-                id="ffmpeg-audio-bitrate"
-                className="ui-text-field"
-                value={audioBitrate}
-                onChange={(e) => setAudioBitrate(e.target.value)}
-                disabled={audioCodec === 'none' || audioCodec === 'copy'}
-              >
-                <option value="128k">128 kbps (標準)</option>
-                <option value="192k">192 kbps (高品質推薦)</option>
-                <option value="256k">256 kbps (發燒音質)</option>
-                <option value="320k">320 kbps (無損感知)</option>
-              </select>
-            </div>
-          </div>
-        )}
-      </div>
+      </details>
     </section>
   );
 }

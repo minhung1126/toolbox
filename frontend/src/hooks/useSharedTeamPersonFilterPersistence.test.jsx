@@ -1,3 +1,4 @@
+import { legacyPersonKey } from '../features/sheets/model/personOptions';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../services/api';
@@ -34,7 +35,12 @@ describe('useSharedTeamPersonFilterPersistence', () => {
     await waitFor(() => expect(result.current.saved).toBe(true), { timeout: 2000 });
 
     expect(api.updateTeamPersonFilter).toHaveBeenCalledTimes(1);
-    expect(api.updateTeamPersonFilter).toHaveBeenCalledWith({ team: '團體', selectedPeople: ['甲'] });
+    expect(api.updateTeamPersonFilter).toHaveBeenCalledWith({
+      team: '團體',
+      teams: ['團體'],
+      query: '',
+      selectedPeople: [legacyPersonKey('甲', '團體')],
+    });
     expect(result.current.saved).toBe(true);
     expect(result.current.error).toBe('');
   });
@@ -57,7 +63,12 @@ describe('useSharedTeamPersonFilterPersistence', () => {
     });
 
     expect(api.updateTeamPersonFilter).toHaveBeenCalledTimes(2);
-    expect(api.updateTeamPersonFilter).toHaveBeenLastCalledWith({ team: '團體', selectedPeople: ['甲'] });
+    expect(api.updateTeamPersonFilter).toHaveBeenLastCalledWith({
+      team: '團體',
+      teams: ['團體'],
+      query: '',
+      selectedPeople: [legacyPersonKey('甲', '團體')],
+    });
     expect(result.current.saved).toBe(true);
     expect(result.current.error).toBe('');
     expect(onError).toHaveBeenLastCalledWith('');

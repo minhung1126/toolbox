@@ -239,6 +239,6 @@ def test_cost_estimates_match_direct_metadata_and_publish_formulas(monkeypatch):
     metadata = _quota_estimate("youtube.metadata_update", 51)
     publish = _quota_estimate("youtube.publish_cleanup", 20)
     assert metadata["projected_units"] == 2 + 51 * 50
-    assert publish["projected_units"] == 3 * 1 + 100 * 20
-    assert publish["breakdown"][0] == {"method": "playlistItems.list", "calls": 2, "units": 2}
-    assert publish["max_items_today"] == 14
+    assert publish["projected_units"] == (3 + 20) * 1 + 53 * 20
+    assert publish["breakdown"][0] == {"method": "playlistItems.list", "calls": 62, "units": 62}
+    assert publish["max_items_today"] == 20

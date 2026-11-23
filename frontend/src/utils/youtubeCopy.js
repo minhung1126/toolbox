@@ -1,9 +1,9 @@
 export const YOUTUBE_COPY = Object.freeze({
-  featureName: '發布草稿',
-  pageTitle: '發布 YouTube 草稿',
+  featureName: '清理 To-Post',
+  pageTitle: '清理 To-Post',
   setPublic: '設為公開',
   removeFromToPost: '移出 To-Post 播放清單',
-  publishConfirmAction: '設為公開並移出清單',
+  publishConfirmAction: '清理已公開影片',
   updateMetadata: '更新標題與描述',
   batchUpdate: '批次更新',
   readLoading: '讀取中…',

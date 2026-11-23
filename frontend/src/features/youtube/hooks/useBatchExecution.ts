@@ -282,7 +282,6 @@ export function useBatchExecution({
     if (!worksheetName) return toast.warning('請先選擇工作表');
     if (!titleColumn || !descriptionColumn) return toast.warning('請先選擇標題與描述欄位');
     if (titleColumn === descriptionColumn) return toast.warning('標題與描述不能使用同一欄位');
-    if (!selectedTeam) return toast.warning('請先選擇所屬團體');
     if (!videos.length) return toast.warning('請先讀取草稿影片');
     if (awaitingReconciliation) return toast.warning('請先核對 YouTube Studio，再重新讀取草稿影片');
     if (!sourceReady || sourceStale) return toast.warning('請先刷新資料來源，讓目前來源設定套用完成');

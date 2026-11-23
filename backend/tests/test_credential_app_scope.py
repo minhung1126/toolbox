@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from backend.app.core.config import settings
 from backend.app.core.credential_store import CredentialStore, CredentialStoreMiddleware, get_credential_store
+from backend.app.core.operation_store import OperationStore
 from backend.app.core.session_store import SessionStore
 from backend.app.main import create_app
 from backend.app.services import google_auth
@@ -76,10 +77,11 @@ def test_playlist_preview_uses_each_apps_credential_repository(tmp_path, monkeyp
         TestClient(
             create_app(
                 credential_store=store,
+                operation_store=OperationStore(tmp_path / f"operations-{index}.sqlite3"),
                 dependency_overrides={require_ytmusic_context: lambda: context},
             )
         )
-        for store in stores
+        for index, store in enumerate(stores)
     ]
     responses = [
         client.post(

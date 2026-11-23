@@ -159,3 +159,12 @@ Weverse 停機停止接單並等待最多 20 秒。逾時工作標記 `interrupt
 3. 將 `.env` 的 `IMAGE_NAME` 設為前一版 SHA，執行 `docker compose pull` 及 `docker compose up -d`，確認資料可讀、深層網址可直接載入、登入與靜態資源正常。
 4. 比對新版本寫入的 JSON 與前一版 reader；若 reader 不相容，先停機並使用演練前備份，不能只回退 image。
 5. 將實際使用的 SHA、資料相容結果與中斷工作核對結果記入交付紀錄。此處提供操作規程，不代表已完成真實部署演練。
+
+
+## YouTube 背景發布的部署界線
+
+目前只支援 Linux Docker 的單一 uvicorn process／單副本，不可加 `--workers` 或多容器共享 queue。runner 由 lifespan 啟停，使用 `operations.sqlite3` 與同目錄 `.runner.lock` 保留執行擁有權；重複 runner 啟動會拒絕。維持現有 data volume 與 Compose 45 秒 graceful stop 設定。
+
+前後端須一起更新，讓 cleanup v2 與 202/polling 契約匹配。上線前以 SQLite backup API 留存一致備份並驗證遷移；不刪 data 或重建空庫。舊清理 token 失效後要求重新預覽。瀏覽器草稿 key 不變，舊 pending 可按 request ID 或唯一 stage 恢復。
+
+重啟只復原進度與核對能力，不續送未知寫入。回退時先停新受理、等待或核對現有作業，保留新 journal／reconciler／cleanup-only 安全修正，再回退 UI 或 runner；舊 binary 不保證讀 schema v2，舊清理程式亦會恢復公開副作用。外部已寫入後不得用舊 DB 覆蓋新證據。本次實作未自動部署或以真實帳號演練。

@@ -10,23 +10,11 @@ export function secondsToHms(sec: number): string {
 }
 
 export function parseHmsToSeconds(str: unknown): number {
-  if (!str || typeof str !== 'string') return 0;
-  const s = str.trim();
-  if (!s) return 0;
-  if (!isNaN(Number(s))) return Math.max(0, parseFloat(s));
-  const parts = s.split(':');
-  if (parts.length === 3) {
-    const h = parseFloat(parts[0]) || 0;
-    const m = parseFloat(parts[1]) || 0;
-    const sec = parseFloat(parts[2]) || 0;
-    return Math.max(0, h * 3600 + m * 60 + sec);
-  }
-  if (parts.length === 2) {
-    const m = parseFloat(parts[0]) || 0;
-    const sec = parseFloat(parts[1]) || 0;
-    return Math.max(0, m * 60 + sec);
-  }
-  return 0;
+  if (typeof str !== 'string' || !/^(?:\d+:)?(?:[0-5]?\d:)?\d+(?:\.\d+)?$/.test(str)) return NaN;
+  const parts = str.split(':').map(Number);
+  if (parts.length > 1 && parts.at(-1)! >= 60) return NaN;
+  if (parts.length === 3 && parts[1] >= 60) return NaN;
+  return parts.reduce((total, part) => total * 60 + part, 0);
 }
 
 export function formatFileSize(bytes: number): string {
@@ -60,19 +48,66 @@ export function buildTrimSummary({
     endSec,
     clipDurationSec: clipDur,
     formattedDuration: secondsToHms(clipDur),
-    isInvalid: enableStartCut && enableEndCut && startSec >= endSec,
+    isInvalid:
+      !Number.isFinite(startSec) ||
+      !Number.isFinite(endSec) ||
+      (enableEndCut && startSec >= endSec) ||
+      (duration > 0 && (startSec >= duration || endSec > duration + 0.001)),
   };
 }
 
-export function quoteFilename(name: unknown): string {
-  if (!name || typeof name !== 'string') return '""';
-  let trimmed = name.trim();
-  if (!trimmed) return '""';
-  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
-    trimmed = trimmed.slice(1, -1);
+export function quoteFilename(name: unknown, shell: 'bash' | 'powershell' | 'cmd' = 'bash'): string {
+  const value = typeof name === 'string' ? name : '';
+  if (/[\x00-\x1f\x7f]/.test(value)) throw new Error('不可包含換行或控制字元。');
+  if (shell === 'cmd') {
+    if (/[%!"]/.test(value)) throw new Error('CMD 無法可靠保留 %、! 或雙引號；請改用 Bash 或 PowerShell。');
+    return '"' + value.replace(/(\\+)$/, '$1$1') + '"';
   }
-  const escaped = trimmed.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  return `"${escaped}"`;
+  if (shell === 'powershell') return "'" + value.replace(/'/g, "''") + "'";
+  return "'" + value.replace(/'/g, "'\"'\"'") + "'";
+}
+
+export function validateCommand(options: CommandOptions): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const shell = options.shellDialect ?? (options.shellFormat === 'single' ? 'bash' : options.shellFormat) ?? 'bash';
+  for (const [field, value] of Object.entries(options)) {
+    if (typeof value === 'string' && !(field === 'audioVolume' && value === '100%')) {
+      try {
+        quoteFilename(value, shell);
+      } catch (err) {
+        errors[field] = (err as Error).message;
+      }
+    }
+  }
+  for (const field of ['inputName', 'outputName'] as const) {
+    if (!options[field].trim() || options[field].startsWith('-')) errors[field] = '請填寫檔名；開頭不可為 -。';
+  }
+  const normalize = (name: string) => {
+    const windows = /^[a-z]:|\\/i.test(name);
+    const parts: string[] = [];
+    for (const part of name.replace(/\\/g, '/').split('/')) {
+      if (part === '.') continue;
+      if (part === '..' && parts.length && parts.at(-1) !== '..') parts.pop();
+      else parts.push(part);
+    }
+    return windows ? parts.join('/').toLowerCase() : parts.join('/');
+  };
+  if (normalize(options.inputName) === normalize(options.outputName)) errors.outputName = '輸入與輸出不可為同一路徑。';
+  const start = options.enableStartCut ? parseHmsToSeconds(options.startTime) : 0;
+  if (!Number.isFinite(start)) errors.startTime = '請輸入有效的非負時間。';
+  const end = options.enableEndCut
+    ? options.cutMode === 'to'
+      ? parseHmsToSeconds(options.endTime)
+      : start + parseHmsToSeconds(options.durationCut)
+    : options.sourceDuration;
+  if (options.enableEndCut && (!Number.isFinite(end) || end! <= start))
+    errors[options.cutMode === 'to' ? 'endTime' : 'durationCut'] = '終點須晚於起點，長度須大於零。';
+  if (
+    options.sourceDuration &&
+    (start >= options.sourceDuration || (end !== undefined && end > options.sourceDuration + 0.001))
+  )
+    errors.endTime = '裁切範圍超過已知影片長度。';
+  return errors;
 }
 
 export function buildFfmpegCommand({
@@ -94,14 +129,42 @@ export function buildFfmpegCommand({
   fps,
   customFilters = '',
   audioBitrate,
-  audioVolume,
+  audioVolume = '100%',
   shellFormat = 'bash',
+  shellDialect,
+  lineLayout,
+  sourceDuration,
 }: CommandOptions): GeneratedCommand {
+  const shell = shellDialect ?? (shellFormat === 'single' ? 'bash' : shellFormat);
+  const errors = validateCommand({
+    inputName,
+    outputName,
+    enableStartCut,
+    startTime,
+    enableEndCut,
+    cutMode,
+    endTime,
+    durationCut,
+    seekMode,
+    transcodeMode,
+    videoCodec,
+    audioCodec,
+    crf,
+    encoderPreset,
+    resolution,
+    fps,
+    customFilters,
+    audioBitrate,
+    audioVolume,
+    shellDialect: shell,
+    sourceDuration,
+  });
+  if (Object.keys(errors).length) return { errors, singleLine: '', multiLine: '', activeCommand: '', breakdown: [] };
   const args = ['ffmpeg'];
   const breakdown = [{ flag: 'ffmpeg', label: '呼叫 FFmpeg 核心引擎' }];
 
-  const safeIn = quoteFilename(inputName);
-  const safeOut = quoteFilename(outputName);
+  const safeIn = inputName;
+  const safeOut = outputName;
 
   const startSec = enableStartCut ? parseHmsToSeconds(startTime) : 0;
   const hasStart = enableStartCut && startSec > 0;
@@ -149,7 +212,7 @@ export function buildFfmpegCommand({
   // Mode handling
   if (transcodeMode === 'gif') {
     const gifVf = 'fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse';
-    args.push('-vf', `"${gifVf}"`);
+    args.push('-vf', gifVf);
     breakdown.push({ flag: '-vf "..."', label: '兩階段調色盤優化濾鏡，產生極致流暢清晰 GIF' });
   } else if (transcodeMode === 'audio' || videoCodec === 'none') {
     args.push('-vn');
@@ -165,7 +228,7 @@ export function buildFfmpegCommand({
     }
   } else if (transcodeMode === 'copy') {
     args.push('-c', 'copy');
-    breakdown.push({ flag: '-c copy', label: '無損直接複製視訊與音訊流（不耗費 CPU/GPU 轉檔，瞬間完成）' });
+    breakdown.push({ flag: '-c copy', label: '直接複製視訊與音訊流；裁切受關鍵影格限制，不保證逐幀精準' });
   } else {
     // Re-encode
     if (videoCodec === 'copy') {
@@ -198,12 +261,12 @@ export function buildFfmpegCommand({
       vFilters.push(`fps=${fps}`);
     }
     if (customFilters.trim()) {
-      vFilters.push(customFilters.trim().replace(/"/g, '\\"'));
+      vFilters.push(customFilters.trim());
     }
 
     if (vFilters.length > 0) {
       const joinedVf = vFilters.join(',');
-      args.push('-vf', `"${joinedVf}"`);
+      args.push('-vf', joinedVf);
       breakdown.push({ flag: `-vf "${joinedVf}"`, label: '視訊縮放／畫面填色／影格率濾鏡' });
     }
 
@@ -225,7 +288,7 @@ export function buildFfmpegCommand({
 
     if (audioVolume !== '100%') {
       const safeVolume = String(audioVolume).replace(/["']/g, '');
-      args.push('-af', `"volume=${safeVolume}"`);
+      args.push('-af', `volume=${safeVolume}`);
       breakdown.push({ flag: `-af "volume=${safeVolume}"`, label: `音量調整為 ${safeVolume}` });
     }
   }
@@ -235,16 +298,21 @@ export function buildFfmpegCommand({
   breakdown.push({ flag: safeOut, label: `目標輸出檔案：${safeOut}` });
 
   // Format for shell
-  const singleLine = args.join(' ');
-  const lineJoiner = shellFormat === 'powershell' ? ' `\n  ' : shellFormat === 'cmd' ? ' ^\n  ' : ' \\\n  ';
+  const rendered = args.map((arg, index) =>
+    index === 0 || (/^[a-zA-Z0-9_.:/-]+$/.test(arg) && arg !== safeIn && index !== args.length - 1)
+      ? arg
+      : quoteFilename(arg, shell)
+  );
+  const singleLine = rendered.join(' ');
+  const lineJoiner = shell === 'powershell' ? ' `\n  ' : shell === 'cmd' ? ' ^\n  ' : ' \\\n  ';
 
   // Grouping for neat multi-line
   const groups = ['ffmpeg'];
   let idx = 1;
   while (idx < args.length) {
-    const curr = args[idx];
+    const curr = rendered[idx];
     if (curr.startsWith('-') && idx + 1 < args.length && !args[idx + 1].startsWith('-')) {
-      groups.push(`${curr} ${args[idx + 1]}`);
+      groups.push(`${curr} ${rendered[idx + 1]}`);
       idx += 2;
     } else {
       groups.push(curr);
@@ -254,9 +322,11 @@ export function buildFfmpegCommand({
   const multiLine = groups.join(lineJoiner);
 
   return {
+    errors,
     singleLine,
     multiLine,
-    activeCommand: shellFormat === 'single' ? singleLine : multiLine,
+    activeCommand:
+      (lineLayout ?? (shellFormat === 'single' ? 'single' : 'multiline')) === 'single' ? singleLine : multiLine,
     breakdown,
   };
 }

@@ -20,6 +20,19 @@ function parseTeamOptions(value: unknown): SheetTeamOptions {
   if (!isRecord(value) || !isStringList(value.teams)) {
     throw new Error('工作表團體選項回應格式不正確。');
   }
+  if (
+    !Array.isArray(value.people) ||
+    !value.people.every(
+      (person) =>
+        isRecord(person) &&
+        typeof person.team === 'string' &&
+        typeof person.person === 'string' &&
+        ['person', 'team'].includes(String(person.kind)) &&
+        (person.aliases === undefined || isStringList(person.aliases)) &&
+        (person.team_aliases === undefined || isStringList(person.team_aliases))
+    )
+  )
+    throw new Error('工作表人物選項回應格式不正確。');
   return value as unknown as SheetTeamOptions;
 }
 
@@ -36,6 +49,12 @@ function parseSharedFilter(value: unknown): SharedTeamPersonFilterResponse {
     typeof value.configured !== 'boolean' ||
     typeof value.team !== 'string' ||
     !isStringList(value.selected_people)
+  ) {
+    throw new Error('帳號隊伍／人物篩選回應格式不正確。');
+  }
+  if (
+    (value.teams !== undefined && !isStringList(value.teams)) ||
+    (value.query !== undefined && typeof value.query !== 'string')
   ) {
     throw new Error('帳號隊伍／人物篩選回應格式不正確。');
   }

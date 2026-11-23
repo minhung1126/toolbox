@@ -10,7 +10,7 @@ Google 官方目前說明：YouTube Data API 專案對搜尋、影片上傳等�
 
 | API 方法 | 每次請求單位 | 用途 |
 | --- | ---: | --- |
-| `playlistItems.list` | 1 | 讀取 To-Post 播放清單 |
+| `playlistItems.list` | 1 | 讀取 To-Post、確認項目是否已移除 |
 | `videos.list` | 1 | 讀取影片資訊 |
 | `videos.update` | 50 | 更新影片資訊或公開狀態 |
 | `playlistItems.delete` | 50 | 從播放清單移除影片 |
@@ -44,10 +44,14 @@ Drive 上傳另有獨立的 `video_uploads` bucket：`videos.insert` 每部預�
 - YouTube 設定也支援手動模式；手動模式只使用目前作用中的 slot，不會自動 fallback。
 - 配額日界線依 `America/Los_Angeles` 的午夜計算；前端同時顯示 Pacific Time 與瀏覽器本地時間。
 
-## 與寫入流程的關係
+## 與三階段工作流的關係
 
-批次覆寫與「公開並清理 To-Post」都先建立完整預覽。預覽由後端以帳號、實際選定的 YouTube slot、播放清單／試算表快照與影片目前 metadata 簽署；執行時優先沿用預覽所選 slot，若 Auto 模式在寫入邊界遇到 quota 不足，會驗證同頻道的另一 slot 後重試目前操作。執行前若任一項變更，API 回傳 `409 stale_preview`，不會寫入任何影片或播放清單項目。兩個 slot 都不足時才保留已完成項目的結果，未執行項目標示為「未執行」。
+快速套用、Modal 儲存、切換篩選及預覽不寫入 YouTube。確認編輯並公開後，每片只有必要 parts：文字＋公開合併為一次 `videos.update(part="snippet,status")`、50 units；僅文字或僅公開一次；已符合為 unchanged、0 write。來源、逐片即時重驗與未知結果的唯讀核對另計。202 受理與本機 operation polling 不消耗 YouTube 配額。
 
-YouTube 設定頁的預設播放清單與 quota 是兩個獨立儲存動作：播放清單使用 `/settings/youtube/playlist`，quota 使用 `/settings/youtube/quota`。舊的合併寫入端點會拒絕請求，避免未儲存草稿互相覆蓋。
+清理 To-Post 完全不使用 `videos.update`／`videos.delete`，只移除預覽授權且刪除前仍為 public 的確切清單成員。重複影片的每個 item 獨立計數、各需 50 units。每次實際 delete（含內部 retry／slot fallback）均重新讀取成員對應與 public，並保留刪除前後存在性確認。private、unlisted、未公開排程、查不到或讀取失敗均保留。
 
-請持續保存整個 `data/` volume，否則會遺失配額 ledger、session、帳號工作狀態與加密憑證。
+以 `n` 筆清單項目、`p=ceil(n/50)` 估算全部可清理的保守成本：`playlistItems.list = p*(2+n)+2*n`，`videos.list = p+n`，`playlistItems.delete = 50*n`，合計 `p*(3+n)+53*n`。0 筆為 0。這包含預覽／執行清單讀取、每次 guard 的完整成員分頁、逐片 privacy 與前後存在性確認；非候選項目不實際 delete。quota estimate、cost_for 與 max_items_today 使用同一公式。額外 retry、確認讀取、reconcile 成本另計，均逐筆經過 ledger。
+
+刪除回應遺失先唯讀確認，已確認不存在不重刪；確認無法取得則維持待核對。已收到 delete 成功但尚未反映時只重試確認讀取。內部最多三輪、間隔 0.5／1 秒；每次真正重刪仍須新的 public guard。備援 slot 必須仍為同頻道。歷史曾公開不構成清理授權。
+
+YouTube 設定的預設播放清單與 quota 仍為獨立儲存動作。請持續保存完整 `data/` volume，包括 ledger、journal、session、帳號狀態與加密憑證。

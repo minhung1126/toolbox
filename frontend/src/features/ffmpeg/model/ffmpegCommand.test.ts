@@ -25,7 +25,7 @@ const options: CommandOptions = {
 describe('FFmpeg feature command model', () => {
   it('places accurate seek after input and uses duration cuts', () => {
     expect(buildFfmpegCommand(options).singleLine).toBe(
-      'ffmpeg -i "clip.mp4" -ss 00:00:05.000 -t 00:00:15.000 -c copy "output.mp4"'
+      `ffmpeg -i 'clip.mp4' -ss 00:00:05.000 -t 00:00:15.000 -c copy 'output.mp4'`
     );
     expect(buildTrimSummary({ ...options, duration: 100 }).endSec).toBe(20);
   });
@@ -42,7 +42,7 @@ describe('FFmpeg feature command model', () => {
     const command = buildFfmpegCommand(endCutOptions);
 
     expect(summary.clipDurationSec).toBe(2);
-    expect(command.singleLine).toBe('ffmpeg -ss 00:00:02.000 -i "clip.mp4" -t 00:00:02.000 -c copy "output.mp4"');
+    expect(command.singleLine).toBe(`ffmpeg -ss 00:00:02.000 -i 'clip.mp4' -t 00:00:02.000 -c copy 'output.mp4'`);
     expect(command.breakdown).toContainEqual({
       flag: '-t 00:00:02.000',
       label: '從起點裁切 00:00:02.000，至原影片時間點 00:00:04.000',
@@ -52,10 +52,10 @@ describe('FFmpeg feature command model', () => {
   it('uses the original end timestamp for accurate seeking and for disabled start cuts', () => {
     const endCutOptions = { ...options, cutMode: 'to' as const };
     expect(buildFfmpegCommand(endCutOptions).singleLine).toBe(
-      'ffmpeg -i "clip.mp4" -ss 00:00:05.000 -to 00:00:20.000 -c copy "output.mp4"'
+      `ffmpeg -i 'clip.mp4' -ss 00:00:05.000 -to 00:00:20.000 -c copy 'output.mp4'`
     );
     expect(buildFfmpegCommand({ ...endCutOptions, seekMode: 'fast', enableStartCut: false }).singleLine).toBe(
-      'ffmpeg -i "clip.mp4" -to 00:00:20.000 -c copy "output.mp4"'
+      `ffmpeg -i 'clip.mp4' -to 00:00:20.000 -c copy 'output.mp4'`
     );
   });
 
@@ -92,7 +92,7 @@ describe('FFmpeg feature command model', () => {
       audioBitrate: '192k',
       outputName: 'output.mp3',
     });
-    expect(command.singleLine).toContain('-vn -c:a libmp3lame -b:a 192k "output.mp3"');
+    expect(command.singleLine).toContain(`-vn -c:a libmp3lame -b:a 192k 'output.mp3'`);
     expect(command.singleLine).not.toContain('-c:v');
   });
 

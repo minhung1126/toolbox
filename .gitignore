@@ -8,6 +8,7 @@ data/*
 
 # Python
 venv/
+.venv/
 ENV/
 __pycache__/
 *.py[cod]

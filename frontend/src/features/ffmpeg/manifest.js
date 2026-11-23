@@ -5,9 +5,10 @@ import { PATHS } from '../../routes/paths';
 
 const manifest = {
   id: 'ffmpeg-generator',
+  purpose: '處理素材',
   name: 'FFmpeg Generator',
   title: 'FFmpeg 命令行生成器',
-  description: '視覺化影片時間軸預覽與剪輯，支援毫秒級 Cut 前後定位、無損流複製、編碼參數調校與一鍵複製指令。',
+  description: '本機影片預覽與片段設定，產生需在電腦執行的 FFmpeg 指令；不會上傳影片。',
   category: '影音創作',
   icon: Video,
   badge: '剪輯工具',

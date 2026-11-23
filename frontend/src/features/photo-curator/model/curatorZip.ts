@@ -32,7 +32,8 @@ export function generateChecklistText({
   unassignedIds = [],
 }: ChecklistInput) {
   const lines = [
-    '# Instagram 貼文三部曲發布對照表',
+    '# Instagram 貼文排版發布對照表',
+    `排版格數：${posts.length} 格`,
     `匯出時間：${new Date().toLocaleString()}`,
     `總照片數：${photos.length} 張`,
     '',
@@ -101,7 +102,7 @@ export async function exportCuratedZip({ posts, photoMap, checklistContent }: Cu
     .toLocaleString('sv-SE', { timeZone: 'Asia/Taipei', hourCycle: 'h23' })
     .replace(' ', '_')
     .replace(/:/g, '-');
-  anchor.download = `Instagram_三部曲貼文_${timestamp}.zip`;
+  anchor.download = `Instagram_${posts.length}格貼文_${timestamp}.zip`;
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);

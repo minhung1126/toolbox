@@ -1,77 +1,67 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../../../services/api';
-import { publishCleanupApi } from './publishCleanupApi';
+import { describe, expect, it } from 'vitest';
+import { parseCleanupPreview, parseCleanupResult } from './publishCleanupApi';
 
-vi.mock('../../../services/api', () => ({
-  api: {
-    getPlaylistVideos: vi.fn(),
-    estimateYoutubeQuota: vi.fn(),
-    publishAndCleanup: vi.fn(),
-    updateYoutubeVideoMetadata: vi.fn(),
-  },
-}));
-
-const preview = {
-  playlist_id: 'playlist-1',
-  videos: [{ video_id: 'video-1', title: 'First' }],
-  preview_token: 'signed-token',
-  preview_snapshot: { video_ids: ['video-1'], youtube_slot: 'primary' },
+const item = {
+  playlist_id: 'playlist',
+  playlist_item_id: 'item',
+  video_id: 'video',
+  title: 'Title',
+  description: '',
+  observed_privacy: 'public',
+  candidate: true,
+  reason: 'public',
 };
-
-const result = {
-  operation: 'youtube.publish_cleanup',
-  completed: true,
+const snapshot = {
+  version: 2,
+  mode: 'cleanup_only',
+  playlist_id: 'playlist',
+  youtube_channel_id: 'channel',
+  youtube_slot: 'primary',
+  items: [item],
+};
+const preview = {
+  ...snapshot,
   total_count: 1,
-  succeeded_count: 1,
-  warning_count: 0,
+  candidate_count: 1,
+  counts: { public: 1, private: 0, unlisted: 0, unknown: 0 },
+  preview_token: 'signed',
+  preview_snapshot: snapshot,
+};
+const result = {
+  version: 2,
+  mode: 'cleanup_only',
+  operation: 'youtube.publish_cleanup',
+  completed: false,
+  total_count: 1,
+  succeeded_count: 0,
   skipped_count: 0,
   failed_count: 0,
   not_attempted_count: 0,
+  needs_reconciliation_count: 1,
   quota_blocked: false,
-  results: [{ video_id: 'video-1', status: 'succeeded' }],
+  results: [{ ...item, status: 'needs_reconciliation' }],
 };
 
-describe('publishCleanupApi', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('keeps a valid playlist preview and rejects a missing or mismatched video list', async () => {
-    vi.mocked(api.getPlaylistVideos).mockResolvedValueOnce(preview);
-    await expect(publishCleanupApi.getPlaylistVideos('playlist-1')).resolves.toEqual(preview);
-
-    vi.mocked(api.getPlaylistVideos).mockResolvedValueOnce({ ...preview, videos: undefined });
-    await expect(publishCleanupApi.getPlaylistVideos('playlist-1')).rejects.toThrow('播放清單預覽回應格式不正確。');
-
-    vi.mocked(api.getPlaylistVideos).mockResolvedValueOnce({
-      ...preview,
-      preview_snapshot: { video_ids: ['different-video'] },
-    });
-    await expect(publishCleanupApi.getPlaylistVideos('playlist-1')).rejects.toThrow(
-      '播放清單預覽快照與影片清單不一致。'
-    );
+describe('cleanup v2 contracts', () => {
+  it('accepts exact item snapshots and preserves unknown results', () => {
+    expect(parseCleanupPreview(preview, 'playlist')).toEqual(preview);
+    expect(parseCleanupResult(result, [item] as any)).toEqual(result);
   });
-
-  it('rejects incomplete publish results instead of reporting a false success', async () => {
-    const options = { previewToken: 'signed-token', previewSnapshot: preview.preview_snapshot };
-    vi.mocked(api.publishAndCleanup).mockResolvedValueOnce(result);
-    await expect(publishCleanupApi.publishAndCleanup('playlist-1', options)).resolves.toEqual(result);
-
-    vi.mocked(api.publishAndCleanup).mockResolvedValueOnce({ ...result, results: undefined });
-    await expect(publishCleanupApi.publishAndCleanup('playlist-1', options)).rejects.toThrow(
-      '發布草稿結果回應格式不正確。'
-    );
-
-    vi.mocked(api.publishAndCleanup).mockResolvedValueOnce({ ...result, succeeded_count: 0 });
-    await expect(publishCleanupApi.publishAndCleanup('playlist-1', options)).rejects.toThrow(
-      '發布草稿結果計數不一致。'
-    );
+  it.each([
+    { ...preview, total_count: 2 },
+    { ...preview, counts: { ...preview.counts, public: 2 } },
+    { ...preview, preview_snapshot: { ...snapshot, items: [] } },
+    { ...preview, items: [{ ...item, observed_privacy: 'private' }] },
+    { ...preview, version: 1 },
+  ])('rejects invalid preview counts, privacy, version or identity', (value) => {
+    expect(() => parseCleanupPreview(value, 'playlist')).toThrow();
   });
-
-  it('requires a matching single-video update confirmation', async () => {
-    const request = { videoId: 'video-1', title: 'New', description: 'Updated description' };
-    const result = { video_id: 'video-1', title: 'New', description: 'Updated description', status: 'succeeded' };
-    vi.mocked(api.updateYoutubeVideoMetadata).mockResolvedValueOnce(result);
-    await expect(publishCleanupApi.updateVideoMetadata(request)).resolves.toEqual(result);
-    vi.mocked(api.updateYoutubeVideoMetadata).mockResolvedValueOnce({ ...result, title: 'Other' });
-    await expect(publishCleanupApi.updateVideoMetadata(request)).rejects.toThrow('結果無法確認');
+  it.each([
+    { ...result, completed: true },
+    { ...result, needs_reconciliation_count: 0 },
+    { ...result, results: [{ ...item, playlist_item_id: 'other', status: 'succeeded' }] },
+    { ...result, results: [] },
+  ])('never accepts malformed or mismatched cleanup results', (value) => {
+    expect(() => parseCleanupResult(value, [item] as any)).toThrow();
   });
 });

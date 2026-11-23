@@ -6,6 +6,7 @@ from typing import Any, Protocol
 
 from ytmusicapi.auth.types import AuthType
 
+from backend.app.services.operation_journal import tracked_write
 from backend.app.services.playlist_write_outcome import PlaylistWriteNotStarted, PlaylistWriteOutcomeUnknown
 
 logger = logging.getLogger(__name__)
@@ -55,9 +56,14 @@ class YtmusicPlaylistWriter:
                 successor_id = current_ids[i]
                 moved_count += 1
                 try:
-                    response = client.edit_playlist(
-                        playlistId=playlist_id,
-                        moveItem=(target_id, successor_id),
+                    response = tracked_write(
+                        "ytmusic_move",
+                        target_id,
+                        lambda: client.edit_playlist(
+                            playlistId=playlist_id,
+                            moveItem=(target_id, successor_id),
+                        ),
+                        {"playlist_id": playlist_id, "successor_id": successor_id},
                     )
                     status = response.get("status") if isinstance(response, dict) else response
                     if status != "STATUS_SUCCEEDED":
@@ -114,11 +120,16 @@ class YtmusicPlaylistWriter:
         safe_title = re.sub(r"[<>]", "", title).strip() or "已排序播放清單"
 
         try:
-            new_playlist_id = client.create_playlist(
-                title=safe_title,
-                description=description or "透過 Toolbox YouTube Music 智慧排序建立",
-                privacy_status=privacy_status.upper(),
-                video_ids=video_ids,
+            new_playlist_id = tracked_write(
+                "ytmusic_create",
+                "",
+                lambda: client.create_playlist(
+                    title=safe_title,
+                    description=description or "透過 Toolbox YouTube Music 智慧排序建立",
+                    privacy_status=privacy_status.upper(),
+                    video_ids=video_ids,
+                ),
+                {"video_ids": video_ids},
             )
         except Exception as exc:
             logger.error("Failed to create new sorted playlist: %s", type(exc).__name__)

@@ -17,6 +17,12 @@ on:
       - .github/workflows/validate-container.yml
       - .github/workflows/publish-container.yml
   workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: Skip tests for this manual release
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -31,12 +37,15 @@ env:
 jobs:
   validate:
     name: Test the release commit
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && !(github.event_name == 'workflow_dispatch' && inputs.skip_tests)
     uses: ./.github/workflows/validate-container.yml
 
   publish:
     name: Build and push image
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      ${{ !cancelled() && github.ref == 'refs/heads/main' &&
+      (needs.validate.result == 'success' ||
+      (github.event_name == 'workflow_dispatch' && inputs.skip_tests && needs.validate.result == 'skipped')) }}
     needs: validate
     runs-on: ubuntu-latest
     permissions:

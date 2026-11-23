@@ -1,8 +1,9 @@
+import { personKey } from '../src/features/sheets/model/personOptions';
 import { expect, test } from '@playwright/test';
 import JSZip from 'jszip';
 import { readFile } from 'node:fs/promises';
 
-import { mockAuthenticatedBackend } from './fixtures';
+import { mockAuthenticatedBackend, draftPublishResponses } from './fixtures';
 
 test('component showcase stays readable without horizontal overflow on supported widths', async ({
   page,
@@ -152,7 +153,7 @@ test('Quick Token Drawer uses its feature styles on supported widths', async ({ 
     const pageHeader = page.locator('.ui-page-header');
     await expect(pageHeader.getByRole('heading', { level: 1, name: 'YouTube Music 播放清單排序' })).toBeVisible();
     await pageHeader.screenshot({ path: testInfo.outputPath(`playlist-sort-header-${width}.png`) });
-    await page.getByRole('button', { name: /貼上 Token 啟用 0 配額/ }).click();
+    await page.getByRole('button', { name: /管理瀏覽器 Token/ }).click();
 
     const drawer = page.getByTestId('quick-token-drawer');
     await expect(drawer).toHaveCSS('background-color', 'rgb(24, 26, 31)');
@@ -210,7 +211,6 @@ test('YouTube Music settings use feature styles and remain usable on supported w
       authorizations: {
         sheets: { connected: false },
         ytmusic: { connected: true, has_custom_token: true, user: { email: 'music@example.test' } },
-        video_uploader: { connected: false },
       },
       google_scopes: {},
       youtube: { slots: {} },
@@ -221,6 +221,7 @@ test('YouTube Music settings use feature styles and remain usable on supported w
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/ytmusic/settings');
     await expect(page.getByRole('heading', { level: 1, name: 'YouTube Music 設定' })).toBeVisible();
+    await page.getByText('進階：Token 管理與憑證資訊').click();
     await expect(page.locator('.ytmusic-token-active-panel')).toBeVisible();
     await expect(page.locator('.ytmusic-code-reference')).toBeVisible();
 
@@ -243,7 +244,7 @@ test('sheet copy feature styles load and stay within supported viewport widths',
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/sheets/copy');
-    await expect(page.getByRole('heading', { level: 1, name: 'Sheet 內容複製' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: '試算表內容複製' })).toBeVisible();
 
     const optionsPadding = await page
       .locator('.sheet-copy-page-options')
@@ -297,7 +298,7 @@ test('photo curator feature styles keep the workbench within supported viewport 
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/photo-curator');
-    await expect(page.getByRole('heading', { level: 1, name: '貼文三部曲排版工作台' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Instagram 貼文排版工作台' })).toBeVisible();
     await expect(page.locator('.curator-workbench-grid')).toHaveCSS('display', 'grid');
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -346,7 +347,7 @@ test('publish cleaner feature styles align source controls for mobile and deskto
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/youtube/publish-cleanup');
-    await expect(page.getByRole('heading', { level: 1, name: '發布 YouTube 草稿' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: '清理 To-Post' })).toBeVisible();
 
     const sourceAlignment = await page
       .locator('.publish-source-panel')
@@ -366,332 +367,12 @@ test('YouTube batch feature styles load without viewport overflow', async ({ pag
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/youtube/drafts/videos');
-    await expect(page.getByRole('heading', { level: 1, name: 'YouTube Video 草稿' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Video 快速套用' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: /試算表隨機抽查/ })).toHaveCSS('display', 'flex');
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
   }
-});
-
-test('Weverse folder picker styles stay usable across viewport widths', async ({ page }, testInfo) => {
-  await mockAuthenticatedBackend(page);
-
-  for (const width of [390, 768, 1440]) {
-    await page.setViewportSize({ width, height: 1000 });
-    await page.goto('/weverse-uploader');
-    await expect(page.getByRole('heading', { level: 1, name: /Weverse 影片與字幕上傳/ })).toBeVisible();
-    await page.screenshot({
-      path: testInfo.outputPath(`weverse-header-${width}.png`),
-      fullPage: true,
-      animations: 'disabled',
-    });
-
-    const dropzonePadding = await page
-      .locator('.weverse-dropzone')
-      .evaluate((element) => getComputedStyle(element).padding);
-    expect(dropzonePadding, `Weverse styles did not load at ${width}px`).toBe(width <= 640 ? '32px 16px' : '48px 32px');
-
-    const dropzone = page.locator('.weverse-dropzone');
-    await dropzone.dispatchEvent('dragover');
-    await expect(dropzone).toHaveClass(/is-dragging/);
-    await expect(dropzone).toHaveCSS('border-color', 'rgb(99, 102, 182)');
-    await dropzone.dispatchEvent('dragleave');
-
-    await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
-    const pathDirection = await page
-      .locator('.weverse-manual-path-row')
-      .evaluate((element) => getComputedStyle(element).flexDirection);
-    expect(pathDirection, `manual path controls did not adapt at ${width}px`).toBe(width <= 640 ? 'column' : 'row');
-
-    await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
-    await page.getByRole('button', { name: '掃描並辨識' }).click();
-    await expect(page.getByRole('heading', { level: 3, name: /步驟二：辨識結果複查與編輯/ })).toBeVisible();
-    await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Sample Live');
-    await expect(page.getByLabel(/影片標題 \(Title\)/)).toHaveValue('Sample Live');
-    await expect(page.locator('.weverse-metadata-grid')).toHaveCSS('display', 'grid');
-    await expect(page.locator('.weverse-quota-card')).toHaveCSS('background-color', 'rgba(135, 139, 215, 0.1)');
-
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
-  }
-});
-
-test('Weverse scan rejects an inconsistent package count before review', async ({ page }) => {
-  await mockAuthenticatedBackend(page, {
-    '/api/v1/weverse-uploader/scan': {
-      status: 'success',
-      scanned_path: 'C:\\weverse\\sample',
-      packages_count: 1,
-      packages: [],
-    },
-  });
-
-  await page.goto('/weverse-uploader');
-  await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
-  await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
-  await page.getByRole('button', { name: '掃描並辨識' }).click();
-
-  await expect(page.getByText(/掃描失敗：Weverse 檔案辨識回應格式不正確/)).toBeVisible();
-  await expect(page.getByRole('heading', { name: /步驟二：辨識結果複查與編輯/ })).toHaveCount(0);
-});
-
-test('Weverse upload posts the reviewed package and reaches completed state with a provider fake', async ({ page }) => {
-  await mockAuthenticatedBackend(page, {
-    '/api/v1/auth/user': {
-      authenticated: true,
-      user: { sub: 'weverse-upload-e2e', email: 'weverse-upload@example.test' },
-      authorizations: {
-        sheets: { connected: false },
-        ytmusic: { connected: false },
-        video_uploader: {
-          connected: true,
-          account_name: 'uploader@example.test',
-          channel_title: 'Uploader Channel',
-        },
-      },
-      google_scopes: {},
-      youtube: { slots: {} },
-    },
-    '/api/v1/weverse-uploader/upload-from-path': { status: 'queued', task_id: 'e2e-task-1' },
-    '/api/v1/weverse-uploader/tasks/e2e-task-1': {
-      status: 'success',
-      task: {
-        task_id: 'e2e-task-1',
-        title: 'Sample Live',
-        status: 'completed',
-        progress_percent: 100,
-        current_step: '上傳完成',
-        video_id: 'e2e-video',
-        video_url: 'https://youtube.example/watch?v=e2e-video',
-        studio_url: 'https://studio.youtube.example/video/e2e-video',
-      },
-    },
-  });
-
-  await page.setViewportSize({ width: 390, height: 1000 });
-  await page.goto('/weverse-uploader');
-  await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
-  await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
-  await page.getByRole('button', { name: '掃描並辨識' }).click();
-  await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Sample Live');
-
-  const uploadRequestPromise = page.waitForRequest((request) =>
-    request.url().includes('/api/v1/weverse-uploader/upload-from-path')
-  );
-  await page.getByRole('button', { name: '確認並開始上傳至 YouTube' }).click();
-  await page.getByRole('button', { name: '立即上傳' }).click();
-
-  const uploadRequest = await uploadRequestPromise;
-  const payload = uploadRequest.postDataJSON();
-  expect(payload.video_path).toBe('C:\\weverse\\sample-live.mp4');
-  expect(payload.title).toBe('Sample Live');
-  expect(payload.subtitles).toHaveLength(1);
-  await expect(page.getByRole('heading', { level: 2, name: '上傳成功！' })).toBeVisible({ timeout: 8000 });
-
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  expect(overflow).toBeLessThanOrEqual(1);
-});
-
-test('Weverse browser file parsing reaches review and queues the selected video', async ({ page }) => {
-  await mockAuthenticatedBackend(page, {
-    '/api/v1/auth/user': {
-      authenticated: true,
-      user: { sub: 'weverse-upload-e2e', email: 'weverse-upload@example.test' },
-      authorizations: {
-        sheets: { connected: false },
-        ytmusic: { connected: false },
-        video_uploader: { connected: true, channel_title: 'Uploader Channel' },
-      },
-      google_scopes: {},
-      youtube: { slots: {} },
-    },
-    '/api/v1/weverse-uploader/parse-files': {
-      status: 'success',
-      packages_count: 1,
-      packages: [
-        {
-          package_id: 'weverse-folder',
-          folder_name: 'weverse-folder',
-          video: {
-            filename: 'browser-live.mp4',
-            relative_path: 'weverse-folder/browser-live.mp4',
-            size_bytes: 11,
-            size_formatted: '11 B',
-            extension: '.mp4',
-          },
-          other_videos: [],
-          subtitles: [],
-          suggested_title: 'Browser Live',
-          suggested_description: '',
-        },
-      ],
-    },
-    '/api/v1/weverse-uploader/upload-files': { status: 'queued', task_id: 'browser-task' },
-    '/api/v1/weverse-uploader/tasks/browser-task': {
-      status: 'success',
-      task: {
-        task_id: 'browser-task',
-        title: 'Browser Live',
-        status: 'completed',
-        progress_percent: 100,
-        current_step: '上傳完成',
-        video_id: 'browser-video',
-        video_url: 'https://youtu.be/browser-video',
-      },
-    },
-  });
-
-  await page.goto('/weverse-uploader');
-  await page.locator('input[type="file"]').setInputFiles('e2e/fixtures/weverse-folder');
-  await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Browser Live');
-  const uploadRequestPromise = page.waitForRequest((request) =>
-    request.url().includes('/api/v1/weverse-uploader/upload-files')
-  );
-  await page.getByRole('button', { name: '確認並開始上傳至 YouTube' }).click();
-  await page.getByRole('button', { name: '立即上傳' }).click();
-
-  const uploadRequest = await uploadRequestPromise;
-  expect(uploadRequest.method()).toBe('POST');
-  expect(uploadRequest.postData()).toContain('browser-live.mp4');
-  await expect(page.getByRole('heading', { name: '上傳成功！' })).toBeVisible();
-});
-
-test('Weverse browser file parsing rejects an inconsistent package count', async ({ page }) => {
-  await mockAuthenticatedBackend(page, {
-    '/api/v1/weverse-uploader/parse-files': { status: 'success', packages_count: 1, packages: [] },
-  });
-
-  await page.goto('/weverse-uploader');
-  await page.locator('input[type="file"]').setInputFiles('e2e/fixtures/weverse-folder');
-
-  await expect(page.getByText(/辨識失敗：Weverse 檔案辨識回應格式不正確/)).toBeVisible();
-  await expect(page.getByRole('heading', { name: /步驟二：辨識結果複查與編輯/ })).toHaveCount(0);
-});
-
-test('Weverse upload waits for reconciliation when the queued result is malformed', async ({ page }) => {
-  await mockAuthenticatedBackend(page, {
-    '/api/v1/auth/user': {
-      authenticated: true,
-      user: { sub: 'weverse-upload-e2e', email: 'weverse-upload@example.test' },
-      authorizations: {
-        sheets: { connected: false },
-        ytmusic: { connected: false },
-        video_uploader: { connected: true, channel_title: 'Uploader Channel' },
-      },
-      google_scopes: {},
-      youtube: { slots: {} },
-    },
-    '/api/v1/weverse-uploader/upload-from-path': { task_id: 'unconfirmed-task' },
-  });
-
-  await page.setViewportSize({ width: 390, height: 1000 });
-  await page.goto('/weverse-uploader');
-  await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
-  await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
-  await page.getByRole('button', { name: '掃描並辨識' }).click();
-  await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Sample Live');
-  await page.getByRole('button', { name: '確認並開始上傳至 YouTube' }).click();
-  await page.getByRole('button', { name: '立即上傳' }).click();
-
-  await expect(page.getByRole('alert').filter({ hasText: '上傳結果待核對' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '確認並開始上傳至 YouTube' })).toBeDisabled();
-  await expect(page.getByText(/請先檢查下方上傳歷史及 YouTube Studio/)).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
-});
-
-test('Weverse upload does not report success for a task without a video ID', async ({ page }) => {
-  await mockAuthenticatedBackend(page, {
-    '/api/v1/auth/user': {
-      authenticated: true,
-      user: { sub: 'weverse-upload-e2e', email: 'weverse-upload@example.test' },
-      authorizations: {
-        sheets: { connected: false },
-        ytmusic: { connected: false },
-        video_uploader: { connected: true, channel_title: 'Uploader Channel' },
-      },
-      google_scopes: {},
-      youtube: { slots: {} },
-    },
-    '/api/v1/weverse-uploader/upload-from-path': { status: 'queued', task_id: 'task-without-video' },
-    '/api/v1/weverse-uploader/tasks/task-without-video': {
-      status: 'success',
-      task: {
-        task_id: 'task-without-video',
-        title: 'Sample Live',
-        status: 'completed',
-        progress_percent: 100,
-        current_step: '上傳完成',
-      },
-    },
-  });
-
-  await page.setViewportSize({ width: 390, height: 1000 });
-  await page.goto('/weverse-uploader');
-  await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
-  await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
-  await page.getByRole('button', { name: '掃描並辨識' }).click();
-  await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Sample Live');
-  await page.getByRole('button', { name: '確認並開始上傳至 YouTube' }).click();
-  await page.getByRole('button', { name: '立即上傳' }).click();
-
-  await expect(page.getByRole('alert').filter({ hasText: '上傳狀態待核對' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '上傳成功！' })).toHaveCount(0);
-  await expect(page.getByRole('progressbar', { name: '上傳進度' })).toHaveCount(0);
-});
-
-test('Weverse history reports malformed records instead of showing an empty list', async ({ page }) => {
-  await mockAuthenticatedBackend(page, {
-    '/api/v1/weverse-uploader/history': {
-      status: 'success',
-      tasks: [{ task_id: 'incomplete-task', title: 'Sample Live', status: 'completed' }],
-    },
-  });
-
-  await page.setViewportSize({ width: 390, height: 1000 });
-  await page.goto('/weverse-uploader');
-  await expect(page.getByRole('alert').filter({ hasText: '無法讀取上傳歷史' })).toBeVisible();
-  await expect(page.getByText('尚未有任何上傳紀錄。')).toHaveCount(0);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
-});
-
-test('Weverse upload stops showing progress when a task is interrupted', async ({ page }) => {
-  await mockAuthenticatedBackend(page, {
-    '/api/v1/auth/user': {
-      authenticated: true,
-      user: { sub: 'weverse-upload-e2e', email: 'weverse-upload@example.test' },
-      authorizations: {
-        sheets: { connected: false },
-        ytmusic: { connected: false },
-        video_uploader: { connected: true, channel_title: 'Uploader Channel' },
-      },
-      google_scopes: {},
-      youtube: { slots: {} },
-    },
-    '/api/v1/weverse-uploader/upload-from-path': { status: 'queued', task_id: 'interrupted-task' },
-    '/api/v1/weverse-uploader/tasks/interrupted-task': {
-      status: 'success',
-      task: {
-        task_id: 'interrupted-task',
-        title: 'Sample Live',
-        status: 'interrupted',
-        progress_percent: 80,
-        current_step: '服務停止，請檢查 YouTube Studio',
-      },
-    },
-  });
-
-  await page.goto('/weverse-uploader');
-  await page.getByRole('button', { name: '直接輸入本機路徑' }).click();
-  await page.getByPlaceholder(/例如：D:\\Weverse/).fill('C:\\weverse\\sample');
-  await page.getByRole('button', { name: '掃描並辨識' }).click();
-  await expect(page.getByPlaceholder('輸入 YouTube 影片標題')).toHaveValue('Sample Live');
-  await page.getByRole('button', { name: '確認並開始上傳至 YouTube' }).click();
-  await page.getByRole('button', { name: '立即上傳' }).click();
-
-  await expect(page.getByRole('alert').filter({ hasText: '上傳狀態待核對' })).toBeVisible();
-  await expect(page.getByRole('progressbar', { name: '上傳進度' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: '上傳成功！' })).toHaveCount(0);
 });
 
 test('Google Sheets OAuth uses the backend URL and redirects to the provider', async ({ page }) => {
@@ -741,10 +422,9 @@ test('Playlist Sort previews and confirms creation of a sorted playlist', async 
       authorizations: {
         sheets: { connected: false },
         ytmusic: { connected: true, user: { email: 'music@example.test' } },
-        video_uploader: { connected: false },
       },
       google_scopes: {},
-      youtube: { slots: { primary: { authenticated: true, channel_title: 'Primary' } } },
+      youtube: { slots: { primary: { authenticated: true, channel_title: 'Primary', channel_id: 'channel-e2e' } } },
     },
     '/api/v1/playlist-sort/playlists': {
       playlists: [{ id: 'playlist-1', title: '我的最愛音樂', item_count: 3, privacy_status: 'private' }],
@@ -833,7 +513,7 @@ test('Playlist Sort previews and confirms creation of a sorted playlist', async 
   await expect(page.getByRole('link', { name: /前往 YouTube Music 查看新歌單/ })).toBeVisible();
 });
 
-test('YouTube Batch Update checks a full preview before executing the update', async ({ page }) => {
+test('YouTube drafts preserve manual edits through reload and publish after final confirmation', async ({ page }) => {
   await mockAuthenticatedBackend(page, {
     '/api/v1/auth/user': {
       authenticated: true,
@@ -841,10 +521,12 @@ test('YouTube Batch Update checks a full preview before executing the update', a
       authorizations: {
         sheets: { connected: true },
         ytmusic: { connected: false },
-        video_uploader: { connected: true },
       },
       google_scopes: {},
-      youtube: { active_slot: 'primary', slots: { primary: { authenticated: true, channel_title: 'Primary' } } },
+      youtube: {
+        active_slot: 'primary',
+        slots: { primary: { authenticated: true, channel_title: 'Primary', channel_id: 'channel-e2e' } },
+      },
     },
     '/api/v1/settings/system': { default_spreadsheet_id: 'sheet-a', default_playlist_id: 'playlist-a' },
     '/api/v1/settings/youtube-drafts': async (route) => {
@@ -866,7 +548,10 @@ test('YouTube Batch Update checks a full preview before executing the update', a
       spreadsheet_title: 'Creator Data',
       worksheets: [{ title: 'Youtube Video', columns: ['Youtube Title', 'Youtube Description'] }],
     },
-    '/api/v1/sheets/parse-options': { teams: ['團體 A'] },
+    '/api/v1/sheets/parse-options': {
+      teams: ['團體 A'],
+      people: [{ team: '團體 A', person: '人物甲', kind: 'person' }],
+    },
     '/api/v1/sheets/people': { people: ['人物甲'] },
     '/api/v1/sheets/random-member-preview': { person: '人物甲', values: {} },
     '/api/v1/youtube/playlist-items': {
@@ -877,53 +562,7 @@ test('YouTube Batch Update checks a full preview before executing the update', a
       ],
       source: 'youtube-api',
     },
-    '/api/v1/youtube/batch-preview': {
-      preview_token: 'batch-preview-token',
-      preview_snapshot: { youtube_slot: 'primary' },
-      plan: [
-        {
-          videoId: 'video-1',
-          currentTitle: '舊標題一',
-          currentDescription: '舊描述一\n第二行',
-          newTitle: '新標題一',
-          newDescription: '新描述一\n第二行',
-          person: '人物甲',
-          status: 'ready',
-          willUpdate: true,
-        },
-        {
-          videoId: 'video-2',
-          currentTitle: '保留標題',
-          currentDescription: '保留描述',
-          newTitle: '',
-          newDescription: '',
-          person: '不編輯',
-          status: 'skipped',
-          reason: '未指定人物',
-          willUpdate: false,
-        },
-      ],
-    },
-    '/api/v1/youtube/quota-estimate': {
-      projected_units: 100,
-      effective_available_units: 200,
-      can_complete_today: true,
-    },
-    '/api/v1/youtube/batch-update': {
-      operation: 'youtube.metadata_update',
-      completed: true,
-      total_count: 2,
-      succeeded_count: 1,
-      warning_count: 0,
-      skipped_count: 1,
-      failed_count: 0,
-      not_attempted_count: 0,
-      quota_blocked: false,
-      results: [
-        { video_id: 'video-1', status: 'succeeded' },
-        { video_id: 'video-2', status: 'skipped' },
-      ],
-    },
+    ...draftPublishResponses({ titleFor: () => '新標題一', descriptionFor: () => '新描述一\n第二行' }),
   });
 
   await page.goto('/youtube/drafts/videos');
@@ -953,7 +592,8 @@ test('YouTube Batch Update checks a full preview before executing the update', a
       );
     }
   }
-  await expect(page.getByRole('combobox', { name: '所屬團體' })).toBeEnabled();
+  await expect(page.getByRole('checkbox', { name: '人物甲 團體 A' })).toBeEnabled();
+  await page.getByText(/修改來源設定/).click();
   await page.getByRole('textbox', { name: '主要試算表 ID / URL' }).fill('sheet-b');
   const metadataResponsePromise = page.waitForResponse((response) =>
     response.url().endsWith('/api/v1/sheets/metadata')
@@ -961,150 +601,94 @@ test('YouTube Batch Update checks a full preview before executing the update', a
   await page.getByRole('button', { name: '刷新工作表與欄位' }).click();
   await metadataResponsePromise;
   await expect(page.getByRole('combobox', { name: '使用的工作表' })).toBeEnabled();
-  await expect(page.getByRole('combobox', { name: '所屬團體' })).toBeEnabled();
+  await expect(page.getByRole('checkbox', { name: '人物甲 團體 A' })).toBeEnabled();
   await page.getByRole('button', { name: '讀取 Video 草稿影片' }).click();
   await expect(page.getByText('舊標題一')).toBeVisible();
-  await page.locator('.video-card-assignment select').first().selectOption('人物甲');
-  await page.getByRole('button', { name: '產生完整批次預覽' }).click();
-  await expect(page.getByRole('region', { name: '完整批次變更預覽' })).toContainText('新標題一');
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('button', { name: '確認這份預覽並更新' }).click();
-
-  const dialog = page.getByRole('dialog', { name: '確認批次更新 1 支影片' });
-  await expect(dialog).toBeVisible();
-  await expect(page.getByRole('region', { name: '完整批次變更預覽' })).toContainText('新標題一');
-  await expect(dialog).toContainText('100 單位');
-  await expect(dialog).toContainText('200 單位');
-
-  const updateRequestPromise = page.waitForRequest(
-    (request) => request.method() === 'POST' && request.url().endsWith('/api/v1/youtube/batch-update')
-  );
-  await dialog.getByRole('button', { name: '開始批次更新' }).click();
-  const updateRequest = await updateRequestPromise;
-  expect(updateRequest.postDataJSON()).toMatchObject({
-    preview_token: 'batch-preview-token',
-    assignments: [
-      { video_id: 'video-1', person: '人物甲' },
-      { video_id: 'video-2', person: '不編輯' },
+  await page
+    .locator('.video-card-assignment select')
+    .first()
+    .selectOption(personKey({ team: '團體 A', person: '人物甲', kind: 'person' }));
+  const writes = [];
+  page.on('request', (request) => {
+    if (request.url().endsWith('/youtube/drafts/publish-jobs')) writes.push(request);
+  });
+  await page.getByRole('button', { name: '套用人物並建立草稿' }).click();
+  await expect(page.getByRole('heading', { name: 'Video 編輯草稿並公開' })).toBeVisible();
+  await page.getByRole('article').first().getByRole('button', { name: '編輯', exact: true }).click();
+  await page.getByLabel('標題', { exact: true }).fill('最後人工修改');
+  await page.getByLabel('描述', { exact: true }).fill('最後完整描述\n第二行');
+  await page.getByRole('button', { name: '儲存暫存', exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole('article').first()).toContainText('最後人工修改');
+  for (const width of [390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth))
+      .toBeLessThanOrEqual(1);
+    const layout = await page.evaluate(() => ({
+      overflow: document.documentElement.scrollWidth - innerWidth,
+      body: document.body.getAttribute('style'),
+      overflowing: [...document.querySelectorAll('*')]
+        .filter((el) => el.getBoundingClientRect().right > innerWidth + 1 && el.getBoundingClientRect().width > 0)
+        .map((el) => ({
+          tag: el.tagName,
+          className: el.className,
+          right: el.getBoundingClientRect().right,
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        }))
+        .slice(0, 20),
+    }));
+    expect(layout.overflow, JSON.stringify(layout)).toBeLessThanOrEqual(1);
+  }
+  expect(writes).toHaveLength(0);
+  await page.getByRole('button', { name: '檢查變更與配額' }).click();
+  await expect(page.getByRole('region', { name: '最終變更摘要' })).toContainText('50 units');
+  expect(writes).toHaveLength(0);
+  await page.getByRole('button', { name: '確認編輯並公開', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('50 units');
+  await dialog.getByRole('button', { name: '確認編輯並公開', exact: true }).click();
+  await expect(page.getByRole('article').first()).toContainText('已寫入 YouTube');
+  expect(writes).toHaveLength(1);
+  expect(writes[0].postDataJSON()).toMatchObject({
+    preview_token: 'signed-final',
+    edits: [
+      { video_id: 'video-1', title: '最後人工修改', description: '最後完整描述\n第二行', skip: false },
+      { video_id: 'video-2', skip: true },
     ],
   });
-  await expect(page.locator('.result-panel')).toContainText('已執行完成');
-  await expect(page.locator('.result-panel')).toContainText('成功 1 支影片');
 });
 
-test('Publish Cleaner confirms the loaded snapshot and completes the publish workflow', async ({ page }) => {
+test('cleanup previews exact public items and only removes members after confirmation', async ({ page }) => {
+  const items = [
+    { playlist_id: 'playlist-cleanup', playlist_item_id: 'item-1', video_id: 'video-1', title: '已公開影片', description: '', observed_privacy: 'public', candidate: true, reason: '已公開，可清理' },
+    { playlist_id: 'playlist-cleanup', playlist_item_id: 'item-2', video_id: 'video-1', title: '同片另一成員', description: '', observed_privacy: 'public', candidate: true, reason: '已公開，可清理' },
+    { playlist_id: 'playlist-cleanup', playlist_item_id: 'item-3', video_id: 'private', title: '私人影片', description: '', observed_privacy: 'private', candidate: false, reason: '尚未公開，保留' },
+  ];
+  const snapshot = { version: 2, mode: 'cleanup_only', playlist_id: 'playlist-cleanup', youtube_channel_id: 'channel-e2e', youtube_slot: 'primary', items };
+  let writes = 0;
   await mockAuthenticatedBackend(page, {
-    '/api/v1/auth/user': {
-      authenticated: true,
-      user: { sub: 'publish-cleaner-e2e', email: 'publisher@example.test' },
-      authorizations: {
-        sheets: { connected: false },
-        ytmusic: { connected: false },
-        video_uploader: { connected: true },
-      },
-      google_scopes: {},
-      youtube: {
-        active_slot: 'primary',
-        routing_mode: 'manual',
-        slots: {
-          primary: {
-            authenticated: true,
-            channel_id: 'channel-e2e',
-            channel_title: '發布測試頻道',
-            token_status: 'active',
-            user: { email: 'publisher@example.test' },
-          },
-        },
-      },
-    },
-    '/api/v1/settings/system': { default_playlist_id: 'playlist-publish' },
-    '/api/v1/youtube/playlist-items': {
-      playlist_id: 'playlist-publish',
-      videos: [
-        { video_id: 'video-newer', title: '較新的影片', description: '描述二', published_at: '2026-02-02T00:00:00Z' },
-        { video_id: 'video-older', title: '較早的影片', description: '描述一', published_at: '2026-02-01T00:00:00Z' },
-      ],
-      source: 'youtube-api',
-      youtube_slot: 'primary',
-      preview_token: 'publish-preview-token',
-      preview_snapshot: {
-        playlist_id: 'playlist-publish',
-        youtube_slot: 'primary',
-        data_version: 'publish-version-1',
-        video_ids: ['video-newer', 'video-older'],
-      },
-      data_version: 'publish-version-1',
-    },
-    '/api/v1/youtube/quota-estimate': {
-      operation: 'youtube.publish_cleanup',
-      projected_units: 100,
-      max_items_today: 2,
-      can_complete_today: true,
-    },
-    '/api/v1/youtube/publish-and-cleanup': {
-      operation: 'youtube.publish_cleanup',
-      completed: true,
-      total_count: 2,
-      succeeded_count: 2,
-      warning_count: 0,
-      skipped_count: 0,
-      failed_count: 0,
-      not_attempted_count: 0,
-      quota_blocked: false,
-      results: [
-        { video_id: 'video-older', title: '較早的影片', status: 'succeeded' },
-        { video_id: 'video-newer', title: '較新的影片', status: 'succeeded' },
-      ],
+    '/api/v1/auth/user': { authenticated: true, user: { sub: 'cleanup-user' }, youtube: { active_slot: 'primary', slots: { primary: { authenticated: true, channel_id: 'channel-e2e' } } } },
+    '/api/v1/settings/system': { default_playlist_id: 'playlist-cleanup' },
+    '/api/v1/youtube/cleanup-preview': { ...snapshot, total_count: 3, candidate_count: 2, counts: { public: 2, private: 1, unlisted: 0, unknown: 0 }, preview_token: 'cleanup-token', preview_snapshot: snapshot },
+    '/api/v1/youtube/quota-estimate': { projected_units: 165 },
+    '/api/v1/youtube/publish-and-cleanup': async route => {
+      writes += 1;
+      expect(route.request().postDataJSON()).toMatchObject({ version: 2, mode: 'cleanup_only', preview_token: 'cleanup-token', preview_snapshot: snapshot });
+      await route.fulfill({ json: { version: 2, mode: 'cleanup_only', operation: 'youtube.publish_cleanup', operation_id: 'cleanup-operation', completed: true, total_count: 3, succeeded_count: 2, skipped_count: 1, failed_count: 0, not_attempted_count: 0, needs_reconciliation_count: 0, quota_blocked: false, results: items.map(row => ({ ...row, status: row.candidate ? 'succeeded' : 'skipped' })) } });
     },
   });
-
   await page.goto('/youtube/publish-cleanup');
-  const playlistRequestPromise = page.waitForRequest(
-    (request) => request.method() === 'POST' && request.url().endsWith('/api/v1/youtube/playlist-items')
-  );
   await page.getByRole('button', { name: '讀取 To-Post 播放清單' }).click();
-  await playlistRequestPromise;
-
-  const videos = page.getByRole('list', { name: '待處理影片清單' }).getByRole('listitem');
-  await expect(videos).toHaveCount(2);
-  await expect(videos.nth(0)).toContainText('較早的影片');
-  await expect(videos.nth(1)).toContainText('較新的影片');
-
-  const quotaRequestPromise = page.waitForRequest(
-    (request) => request.method() === 'POST' && request.url().endsWith('/api/v1/youtube/quota-estimate')
-  );
-  await page.getByRole('button', { name: '設為公開並移出清單' }).click();
-  expect((await quotaRequestPromise).postDataJSON()).toMatchObject({
-    operation: 'youtube.publish_cleanup',
-    item_count: 2,
-    slot: 'primary',
-  });
-
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('播放清單：playlist-publish');
-  await expect(dialog).toContainText('授權組合：primary／頻道 發布測試頻道／帳號 publisher@example.test');
-  await expect(dialog).toContainText('#1 較早的影片');
-  await expect(dialog).toContainText('#2 較新的影片');
-  await expect(dialog).toContainText('100 單位');
-
-  const publishRequestPromise = page.waitForRequest(
-    (request) => request.method() === 'POST' && request.url().endsWith('/api/v1/youtube/publish-and-cleanup')
-  );
-  await dialog.getByRole('button', { name: '設為公開並移出清單' }).click();
-  const publishRequest = await publishRequestPromise;
-  expect(publishRequest.postDataJSON()).toMatchObject({
-    playlist_id: 'playlist-publish',
-    youtube_slot: 'primary',
-    preview_token: 'publish-preview-token',
-    preview_snapshot: {
-      playlist_id: 'playlist-publish',
-      youtube_slot: 'primary',
-      video_ids: ['video-newer', 'video-older'],
-    },
-  });
-  await expect(page.getByRole('heading', { name: '發布草稿已執行完成' })).toBeVisible();
-  await expect(page.locator('.publish-result-panel')).toContainText('成功 2 支影片');
+  await expect(page.locator('.cleanup-item')).toHaveCount(3);
+  expect(writes).toBe(0);
+  await expect(page.getByRole('button', { name: '編輯', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '清理已公開影片' }).click();
+  await expect(page.getByRole('dialog')).toContainText('只移除預覽中的 2 筆清單成員');
+  await page.getByRole('button', { name: '確認清理', exact: true }).click();
+  await expect(page.getByText(/已移除 2 · 保留 1/)).toBeVisible();
+  expect(writes).toBe(1);
 });
 
 test('Photo Curator exports the assigned image and checklist in a ZIP download', async ({ page }) => {
@@ -1124,12 +708,12 @@ test('Photo Curator exports the assigned image and checklist in a ZIP download',
 
   await expect(page.locator('.dropzone-stats')).toContainText('已匯入：1 張');
   await page.getByRole('button', { name: '+ P1' }).click();
-  await expect(page.getByText('#01 封面')).toBeVisible();
+  await expect(page.getByRole('combobox', { name: '指定序號 concert-photo.jpg' })).toHaveValue('1');
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: '下載分組照片 (ZIP)' }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/^Instagram_三部曲貼文_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.zip$/);
+  expect(download.suggestedFilename()).toMatch(/^Instagram_3格貼文_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.zip$/);
 
   const archive = await JSZip.loadAsync(await readFile(await download.path()));
   expect(archive.file('Post_1_Post 1/01_COVER_concert-photo.jpg')).not.toBeNull();

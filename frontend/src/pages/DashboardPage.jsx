@@ -18,7 +18,7 @@ function ShortcutList({ entries, authUser, onOpen, onUnpin }) {
     <ul className="dashboard-shortcut-list">
       {entries.map(({ tool, card }) => {
         const Icon = card.icon;
-        const missingCapabilities = getMissingToolCapabilities(tool, authUser, card.to);
+        const missingCapabilities = getMissingToolCapabilities(card.ownerTool || tool, authUser, card.to);
         return (
           <li key={card.id} className="dashboard-shortcut-item">
             <Link className="dashboard-shortcut-link" to={card.to} onClick={() => onOpen(card.id)}>
@@ -68,6 +68,22 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
       return searchWords.every((word) => searchable.includes(word));
     });
     return cards.length ? [{ ...tool, featureCards: cards }] : [];
+  });
+  const purposeOrder = ['管理影片', '整理音樂', '處理素材', '文案與資料', '我的連線', '管理系統'];
+  const purposeGroups = purposeOrder.flatMap((purpose) => {
+    const featureCards = visibleTools.flatMap((tool) =>
+      tool.featureCards
+        .filter((card) => {
+          const category = card.to.includes('/settings')
+            ? tool.id === 'system-utility'
+              ? '管理系統'
+              : '我的連線'
+            : tool.purpose;
+          return category === purpose;
+        })
+        .map((card) => ({ ...card, ownerTool: tool }))
+    );
+    return featureCards.length ? [{ id: purpose, title: purpose, purpose, category: purpose, featureCards }] : [];
   });
   const visibleCardCount = visibleTools.reduce((count, tool) => count + tool.featureCards.length, 0);
   const sheetsConnected = Boolean(
@@ -138,7 +154,9 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
             {recentCards.length > 0 && (
               <section aria-labelledby="dashboard-recent-title">
                 <h2 id="dashboard-recent-title">最近使用</h2>
-                <p className="section-desc">從控制台開啟的最近 4 個工具。</p>
+                <p className="section-desc">
+                  從首頁、側欄或直接網址進入的最近 4 個工具。僅記錄入口，不代表作業已恢復。
+                </p>
                 <ShortcutList entries={recentCards} authUser={authUser} onOpen={rememberTool} />
               </section>
             )}
@@ -206,7 +224,7 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
               )}
             </div>
             <h3>{activeYoutube.user?.email || '請在設定中連結品牌帳號'}</h3>
-            <p>支援主要與次要 Slot 配額防護</p>
+            <p>{activeYoutube.channel_title || '連線後可核對目標頻道與配額估算'}</p>
           </Card>
 
           <Card as="div" padding="sm" className="dashboard-status-card">
@@ -262,22 +280,28 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
           action={searchWords.length ? <Button onClick={() => setQuery('')}>顯示全部工具</Button> : null}
         />
       )}
-      {visibleTools.map((tool) => {
+      {purposeGroups.map((tool) => {
         const cards = tool.featureCards || [];
         if (!cards.length) return null;
         return (
           <section key={tool.id} className="dashboard-module-group">
             <div className="dashboard-module-heading">
               <div className="dashboard-module-title">
-                <h2 className="section-title">{tool.title || tool.name}</h2>
+                <h2 className="section-title">{tool.purpose || tool.title || tool.name}</h2>
                 <Badge tone="info">{tool.category}</Badge>
               </div>
-              <p className="section-desc dashboard-module-description">{tool.description}</p>
+              <p className="section-desc dashboard-module-description">
+                {tool.purpose === '管理系統'
+                  ? '部署、安全與診斷設定。'
+                  : tool.purpose === '我的連線'
+                    ? '需要時調整個人授權與來源偏好。'
+                    : '選擇工作，使用已保存的來源與偏好。'}
+              </p>
             </div>
             <div className="feature-grid">
               {cards.map((card) => {
                 const Icon = card.icon;
-                const missingCapabilities = getMissingToolCapabilities(tool, authUser, card.to);
+                const missingCapabilities = getMissingToolCapabilities(card.ownerTool || tool, authUser, card.to);
                 return (
                   <Card as="div" key={card.id} className="feature-card">
                     <div className="dashboard-feature-head">

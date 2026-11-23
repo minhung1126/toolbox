@@ -71,7 +71,6 @@ def test_login_only_session_keeps_connection_pages_available_but_rejects_provide
     assert user.json()["authenticated"] is True
     assert user.json()["authorizations"]["sheets"]["connected"] is False
     assert user.json()["authorizations"]["ytmusic"]["connected"] is False
-    assert user.json()["authorizations"]["video_uploader"]["connected"] is False
 
     sheet_input = {"spreadsheet_url_or_id": "sheet-id", "worksheet_name": "Videos", "team": "Team", "columns": []}
     requests = [
@@ -90,21 +89,6 @@ def test_login_only_session_keeps_connection_pages_available_but_rejects_provide
                 client.post(
                     "/api/v1/playlist-sort/apply",
                     json={"playlist_id": "playlist-1", "sort_keys": [], "preview_token": "invalid"},
-                ),
-            ),
-            (
-                "video_uploader_scope_required",
-                client.post(
-                    "/api/v1/weverse-uploader/upload-from-path",
-                    json={"video_path": "missing.mp4", "title": "Test"},
-                ),
-            ),
-            (
-                "video_uploader_scope_required",
-                client.post(
-                    "/api/v1/weverse-uploader/upload-files",
-                    data={"metadata": '{"title":"Test"}'},
-                    files={"video": ("sample.mp4", b"test", "video/mp4")},
                 ),
             ),
         ]
@@ -138,6 +122,9 @@ def test_creator_workflow_requires_sheets_but_publish_does_not(tmp_path: Path, m
         def run_batch_metadata_update(self, *_args, **_kwargs):
             raise AssertionError("Batch update must not run without Sheets authorization")
 
+        def create_cleanup_preview(self, payload, *, creds):
+            return {"status": "cleanup-preview-fake"}
+
         def run_publish_and_cleanup(self, payload, *, creds):
             calls.append((payload, creds))
             return {"status": "provider-fake"}
@@ -165,9 +152,28 @@ def test_creator_workflow_requires_sheets_but_publish_does_not(tmp_path: Path, m
         assert batch.status_code == 403
         assert batch.json()["detail"]["code"] == "google_sheets_scope_required"
 
+    for route in ("drafts/prepare", "drafts/preview", "drafts/publish", "drafts/publish-jobs"):
+        response = client.post(
+            f"/api/v1/youtube/{route}",
+            json={
+                "request_id": "scope-test",
+                "stage_token": "signed",
+                "stage_snapshot": {},
+                "edits": [{"video_id": "video-1", "title": "Title", "description": "", "skip": False}],
+                **batch_payload,
+            },
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"]["code"] == "google_sheets_scope_required"
+    assert (
+        client.post("/api/v1/youtube/cleanup-preview", json={"playlist_id": "playlist-1"}).json()["status"]
+        == "cleanup-preview-fake"
+    )
+
     publish = client.post("/api/v1/youtube/publish-and-cleanup", json={"playlist_id": "playlist-1"})
     assert publish.status_code == 200
-    assert publish.json() == {"status": "provider-fake"}
+    assert publish.json()["status"] == "provider-fake"
+    assert publish.json()["operation_id"]
     assert len(calls) == 1
     assert calls[0][1] is youtube_context
 

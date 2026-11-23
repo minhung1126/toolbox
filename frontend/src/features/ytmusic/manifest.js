@@ -5,9 +5,10 @@ import { PATHS } from '../../routes/paths';
 
 const manifest = {
   id: 'youtube-music',
+  purpose: '整理音樂',
   name: 'YouTube Music',
   title: 'YouTube Music',
-  description: 'YouTube Music 專屬音樂工具箱，提供智慧播放清單排序、多欄位自訂規則與即時模擬比對。',
+  description: '讀取歌單並預覽排序；確認後改原歌單或建立新歌單，結果不明時先核對。',
   category: 'YouTube Music',
   icon: Disc3,
   badge: '音樂工具',

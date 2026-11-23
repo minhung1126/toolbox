@@ -1,144 +1,123 @@
 import { api } from '../../../services/api';
-import type {
-  PlaylistPreviewResponse,
-  PublishCleanupApi,
-  PublishCleanupMetadataUpdate,
-  PublishCleanupMetadataUpdateResponse,
-  PublishCleanupResult,
-} from './publishCleanupTypes';
-
+import type { CleanupItem, CleanupPreview, PublishCleanupApi, PublishCleanupResult } from './publishCleanupTypes';
 export type * from './publishCleanupTypes';
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+const statuses = ['succeeded', 'skipped', 'failed', 'not_attempted', 'needs_reconciliation'] as const;
+const privacies = ['public', 'private', 'unlisted', 'unknown'] as const;
+const record = (value: unknown): value is Record<string, any> =>
+  Boolean(value && typeof value === 'object' && !Array.isArray(value));
+const count = (value: unknown): value is number => Number.isInteger(value) && Number(value) >= 0;
+const text = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
+
+function item(value: unknown): value is CleanupItem {
+  return (
+    record(value) &&
+    text(value.video_id) &&
+    text(value.playlist_id) &&
+    text(value.playlist_item_id) &&
+    typeof value.title === 'string' &&
+    typeof value.description === 'string' &&
+    typeof value.reason === 'string' &&
+    privacies.includes(value.observed_privacy) &&
+    typeof value.candidate === 'boolean'
+  );
+}
+function identity(value: CleanupItem) {
+  return JSON.stringify([value.playlist_id, value.playlist_item_id, value.video_id]);
+}
+function unique(items: CleanupItem[]) {
+  return new Set(items.map((row) => row.playlist_item_id)).size === items.length;
+}
+function fail(): never {
+  const error = new Error('清理結果或預覽格式無法確認，請保留紀錄並核對。') as Error & { code: string };
+  error.code = 'cleanup_contract_invalid';
+  throw error;
 }
 
-function isCount(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
-}
-
-function isOptionalText(value: unknown): boolean {
-  return value == null || typeof value === 'string';
-}
-
-function previewSnapshot(response: Record<string, unknown>): unknown {
-  const nested = isRecord(response.preview) ? response.preview.snapshot : null;
-  return response.preview_snapshot ?? response.previewSnapshot ?? nested ?? response.snapshot;
-}
-
-function previewToken(response: Record<string, unknown>): unknown {
-  const nested = isRecord(response.preview) ? response.preview.token : null;
-  return response.preview_token ?? response.previewToken ?? response.snapshot_token ?? response.snapshotToken ?? nested;
-}
-
-function parsePlaylistPreview(value: unknown): PlaylistPreviewResponse {
+export function parseCleanupPreview(value: unknown, playlistId: string): CleanupPreview {
   if (
-    !isRecord(value) ||
-    typeof value.playlist_id !== 'string' ||
-    value.playlist_id.length === 0 ||
-    !Array.isArray(value.videos) ||
-    !value.videos.every(
-      (video) =>
-        isRecord(video) &&
-        typeof video.video_id === 'string' &&
-        video.video_id.length > 0 &&
-        isOptionalText(video.title) &&
-        isOptionalText(video.description) &&
-        isOptionalText(video.published_at)
+    !record(value) ||
+    value.version !== 2 ||
+    value.mode !== 'cleanup_only' ||
+    value.playlist_id !== playlistId ||
+    !text(value.youtube_channel_id) ||
+    !text(value.youtube_slot) ||
+    !text(value.preview_token) ||
+    !Array.isArray(value.items) ||
+    !value.items.every(item) ||
+    !unique(value.items) ||
+    value.total_count !== value.items.length ||
+    value.candidate_count !== value.items.filter((row: CleanupItem) => row.candidate).length ||
+    !record(value.counts)
+  )
+    fail();
+  if (
+    !privacies.every(
+      (privacy) =>
+        count(value.counts[privacy]) &&
+        value.counts[privacy] === value.items.filter((row: CleanupItem) => row.observed_privacy === privacy).length
     ) ||
-    (value.total != null && (!isCount(value.total) || value.total !== value.videos.length))
-  ) {
-    throw new Error('播放清單預覽回應格式不正確。');
-  }
-
-  const snapshot = previewSnapshot(value);
-  const token = previewToken(value);
-  if (!isRecord(snapshot) || typeof token !== 'string' || token.length === 0) {
-    throw new Error('播放清單預覽缺少可驗證的快照。');
-  }
-  const videoIds = value.videos.map((video) => video.video_id);
+    !value.items.every(
+      (row: CleanupItem) => row.playlist_id === playlistId && (!row.candidate || row.observed_privacy === 'public')
+    )
+  )
+    fail();
+  const snapshot = value.preview_snapshot;
   if (
-    (snapshot.playlist_id != null && snapshot.playlist_id !== value.playlist_id) ||
-    (snapshot.video_ids != null &&
-      (!Array.isArray(snapshot.video_ids) ||
-        snapshot.video_ids.length !== videoIds.length ||
-        snapshot.video_ids.some((videoId, index) => videoId !== videoIds[index])))
-  ) {
-    throw new Error('播放清單預覽快照與影片清單不一致。');
-  }
-  return value as unknown as PlaylistPreviewResponse;
+    !record(snapshot) ||
+    snapshot.version !== 2 ||
+    snapshot.mode !== 'cleanup_only' ||
+    snapshot.playlist_id !== playlistId ||
+    snapshot.youtube_channel_id !== value.youtube_channel_id ||
+    snapshot.youtube_slot !== value.youtube_slot ||
+    JSON.stringify(snapshot.items) !== JSON.stringify(value.items)
+  )
+    fail();
+  return value as CleanupPreview;
 }
 
-const RESULT_STATUSES = new Set(['succeeded', 'succeeded_with_warnings', 'skipped', 'failed', 'not_attempted']);
-
-class PublishResultContractError extends Error {
-  code = 'publish_result_invalid';
-}
-
-function parsePublishResult(value: unknown): PublishCleanupResult {
+export function parseCleanupResult(value: unknown, expected: CleanupItem[]): PublishCleanupResult {
   if (
-    !isRecord(value) ||
+    !record(value) ||
+    value.version !== 2 ||
+    value.mode !== 'cleanup_only' ||
     value.operation !== 'youtube.publish_cleanup' ||
     typeof value.completed !== 'boolean' ||
     typeof value.quota_blocked !== 'boolean' ||
-    !isCount(value.total_count) ||
-    !isCount(value.succeeded_count) ||
-    !isCount(value.warning_count) ||
-    !isCount(value.skipped_count) ||
-    !isCount(value.failed_count) ||
-    !isCount(value.not_attempted_count) ||
     !Array.isArray(value.results) ||
-    value.results.length !== value.total_count ||
+    value.total_count !== expected.length ||
+    value.results.length !== expected.length ||
+    !unique(value.results) ||
     !value.results.every(
-      (item) =>
-        isRecord(item) &&
-        typeof item.video_id === 'string' &&
-        item.video_id.length > 0 &&
-        RESULT_STATUSES.has(item.status as string) &&
-        isOptionalText(item.title) &&
-        isOptionalText(item.description) &&
-        isOptionalText(item.reason)
+      (row: unknown, index: number) =>
+        item(row) && identity(row) === identity(expected[index]) && statuses.includes((row as any).status)
     )
-  ) {
-    throw new PublishResultContractError('發布草稿結果回應格式不正確。');
-  }
-  const countTotal =
-    value.succeeded_count + value.warning_count + value.skipped_count + value.failed_count + value.not_attempted_count;
-  if (countTotal !== value.total_count) {
-    throw new PublishResultContractError('發布草稿結果計數不一致。');
-  }
-  return value as unknown as PublishCleanupResult;
-}
-
-function parseMetadataUpdate(
-  value: unknown,
-  request: PublishCleanupMetadataUpdate
-): PublishCleanupMetadataUpdateResponse {
+  )
+    fail();
   if (
-    !isRecord(value) ||
-    value.status !== 'succeeded' ||
-    value.video_id !== request.videoId ||
-    value.title !== request.title ||
-    value.description !== request.description
-  ) {
-    const error = new Error('影片資訊更新結果無法確認，請重新讀取影片後核對。') as Error & { code: string };
-    error.code = 'video_metadata_result_invalid';
-    throw error;
-  }
-  return value as unknown as PublishCleanupMetadataUpdateResponse;
+    !statuses.every(
+      (status) =>
+        count(value[`${status}_count`]) &&
+        value[`${status}_count`] === value.results.filter((row: any) => row.status === status).length
+    )
+  )
+    fail();
+  if (
+    value.completed !==
+    !value.results.some((row: any) => ['failed', 'not_attempted', 'needs_reconciliation'].includes(row.status))
+  )
+    fail();
+  return value as PublishCleanupResult;
 }
 
 export const publishCleanupApi: PublishCleanupApi = {
-  async getPlaylistVideos(playlistId) {
-    const response: unknown = await api.getPlaylistVideos(playlistId);
-    return parsePlaylistPreview(response);
+  async previewCleanup(playlistId) {
+    return parseCleanupPreview(await api.previewYoutubeCleanup(playlistId), playlistId);
   },
   estimateQuota: (request) => api.estimateYoutubeQuota(request),
-  async publishAndCleanup(playlistId, options) {
-    const response: unknown = await api.publishAndCleanup(playlistId, options);
-    return parsePublishResult(response);
-  },
-  async updateVideoMetadata(request) {
-    return parseMetadataUpdate(await api.updateYoutubeVideoMetadata(request), request);
+  async cleanupPublicItems(playlistId, options) {
+    const snapshot = options.previewSnapshot;
+    if (!record(snapshot) || snapshot.version !== 2 || !Array.isArray(snapshot.items)) fail();
+    return parseCleanupResult(await api.cleanupPublicItems(playlistId, options), snapshot.items);
   },
 };

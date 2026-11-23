@@ -346,3 +346,10 @@
   border-radius: var(--radius-sm);
   background: var(--surface-inset);
 }
+
+.sticky-note-card pre {
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

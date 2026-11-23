@@ -166,3 +166,55 @@ def test_batch_stale_sheet_has_zero_writes(monkeypatch):
     assert caught.value.status_code == 409
     assert caught.value.detail["code"] == "stale_preview"
     assert writes == []
+
+
+def test_cross_team_signed_preview_updates_correct_rows_and_rejects_changed_identity(monkeypatch):
+    import json
+
+    def key(team, kind, person):
+        return "person:" + json.dumps([team, kind, person], ensure_ascii=False, separators=(",", ":"))
+
+    rows = [
+        {"所屬團體": "A", "人": "同名", "標題": "A title", "描述": "A description"},
+        {"所屬團體": "B", "人": "同名", "標題": "B title", "描述": "B description"},
+        {"所屬團體": "B", "人": "", "標題": "Whole B", "描述": "Whole team"},
+    ]
+    writes = []
+    monkeypatch.setattr(youtube_api, "get_sheet_headers", lambda *_: ["所屬團體", "人", "標題", "描述"])
+    monkeypatch.setattr(youtube_api, "get_all_rows_for_sheet", lambda *_: rows)
+    monkeypatch.setattr(youtube_api, "fetch_video_details", lambda _context, ids: [video_detail(vid) for vid in ids])
+    monkeypatch.setattr(
+        youtube_api,
+        "update_single_video_metadata",
+        lambda _context, vid, title, description, **_: writes.append((vid, title, description)),
+    )
+    payload = BatchUpdateInput(
+        spreadsheet_url_or_id="sheet",
+        worksheet_name="Videos",
+        title_column="標題",
+        description_column="描述",
+        assignments=[
+            VideoAssignment(video_id="video-1", person=key("A", "person", "同名")),
+            VideoAssignment(video_id="video-2", person=key("B", "person", "同名")),
+            VideoAssignment(video_id="video-3", person=key("B", "team", "")),
+        ],
+    )
+    preview = youtube_api.create_batch_metadata_preview(payload, creds=youtube_context(), sheet_creds=object())
+    assert [item["newTitle"] for item in preview["plan"]] == ["A title", "B title", "Whole B"]
+    assert [item["person"] for item in preview["plan"]] == ["同名 · A", "同名 · B", "B（全隊） · B"]
+    payload.preview_token = preview["preview_token"]
+    payload.preview_snapshot = preview["preview_snapshot"]
+    original = payload.assignments[0].person
+    payload.assignments[0].person = key("B", "person", "同名")
+    with pytest.raises(HTTPException) as caught:
+        youtube_api.run_batch_metadata_update(payload, creds=youtube_context(), sheet_creds=object())
+    assert caught.value.status_code == 409
+    assert writes == []
+    payload.assignments[0].person = original
+    result = youtube_api.run_batch_metadata_update(payload, creds=youtube_context(), sheet_creds=object())
+    assert result["succeeded_count"] == 3
+    assert writes == [
+        ("video-1", "A title", "A description"),
+        ("video-2", "B title", "B description"),
+        ("video-3", "Whole B", "Whole team"),
+    ]

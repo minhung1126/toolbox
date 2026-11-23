@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from backend.app.api.auth import router as auth_router
+from backend.app.api.operations import router as operations_router
 from backend.app.api.settings import router as settings_router
 from backend.app.api.system import router as system_router
 from backend.app.core.request_protection import enforce_api_rate_limit, require_same_origin
@@ -15,6 +16,7 @@ def create_api_router(registry):
         dependencies=[Depends(enforce_api_rate_limit), Depends(require_same_origin)],
     )
     router.include_router(auth_router)
+    router.include_router(operations_router)
     router.include_router(system_router)
     router.include_router(settings_router)
     router.include_router(catalog_router)

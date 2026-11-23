@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { PRESET_LIST } from '../model/presets';
 import { copyToClipboard } from '../../../utils/clipboard';
 import { useFfmpegVideo } from '../../../hooks/useFfmpegVideo';
 import { buildFfmpegCommand, buildTrimSummary, parseHmsToSeconds, secondsToHms } from '../model/ffmpegCommand';
@@ -29,6 +30,8 @@ export function useFfmpegGeneratorWorkflow({ toast }) {
   // Filenames & Shell format
   const [inputName, setInputName] = useState('input.mp4');
   const [outputName, setOutputName] = useState('output_cut.mp4');
+  const [shellDialect, setShellDialect] = useState('bash');
+  const [lineLayout, setLineLayout] = useState('single');
   const [shellFormat, setShellFormat] = useState('single'); // 'single' | 'bash' | 'powershell' | 'cmd'
   const [copied, setCopied] = useState(false);
 
@@ -36,13 +39,16 @@ export function useFfmpegGeneratorWorkflow({ toast }) {
   const [showHelp, setShowHelp] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const handleFileSelected = useCallback((file) => {
-    setInputName(file.name);
-    const dotIndex = file.name.lastIndexOf('.');
-    const base = dotIndex > 0 ? file.name.substring(0, dotIndex) : file.name;
-    const extension = dotIndex > 0 ? file.name.substring(dotIndex) : '.mp4';
-    setOutputName(`${base}_cut${extension}`);
-  }, []);
+  const handleFileSelected = useCallback(
+    (file) => {
+      setInputName(file.name);
+      const dotIndex = file.name.lastIndexOf('.');
+      const base = dotIndex > 0 ? file.name.substring(0, dotIndex) : file.name;
+      const extension = `.${PRESET_LIST.find((preset) => preset.id === activePreset)?.outputExt || 'mp4'}`;
+      setOutputName(`${base}_cut${extension}`);
+    },
+    [activePreset]
+  );
 
   const handleVideoMetadataLoaded = useCallback((nextDuration) => {
     setStartTime('00:00:00.000');
@@ -115,11 +121,12 @@ export function useFfmpegGeneratorWorkflow({ toast }) {
   const applyPreset = (preset) => {
     setActivePreset(preset.id);
     setTranscodeMode(preset.mode);
-    if (preset.videoCodec) setVideoCodec(preset.videoCodec);
-    if (preset.audioCodec) setAudioCodec(preset.audioCodec);
+    setVideoCodec(preset.videoCodec || 'copy');
+    setAudioCodec(preset.audioCodec || 'copy');
     if (preset.crf !== undefined) setCrf(preset.crf);
     if (preset.preset) setEncoderPreset(preset.preset);
-    if (preset.resolution) setResolution(preset.resolution);
+    setResolution(preset.resolution || 'original');
+    setFps('original');
     if (preset.audioBitrate) setAudioBitrate(preset.audioBitrate);
 
     // Adjust output extension if needed
@@ -189,6 +196,9 @@ export function useFfmpegGeneratorWorkflow({ toast }) {
       audioBitrate,
       audioVolume,
       shellFormat,
+      shellDialect,
+      lineLayout,
+      sourceDuration: duration,
     });
   }, [
     inputName,
@@ -211,9 +221,13 @@ export function useFfmpegGeneratorWorkflow({ toast }) {
     audioBitrate,
     audioVolume,
     shellFormat,
+    shellDialect,
+    lineLayout,
+    duration,
   ]);
 
   const handleCopyCommand = async () => {
+    if (Object.keys(generatedCommand.errors).length) return;
     try {
       await copyToClipboard(generatedCommand.activeCommand);
       setCopied(true);
@@ -260,6 +274,10 @@ export function useFfmpegGeneratorWorkflow({ toast }) {
     setOutputName,
     shellFormat,
     setShellFormat,
+    shellDialect,
+    setShellDialect,
+    lineLayout,
+    setLineLayout,
     copied,
     showHelp,
     setShowHelp,

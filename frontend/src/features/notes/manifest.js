@@ -5,9 +5,10 @@ import { PATHS } from '../../routes/paths';
 
 const manifest = {
   id: 'sticky-notes',
+  purpose: '文案與資料',
   name: 'Sticky Notes',
   title: '日常生產力工具',
-  description: '極簡文字便利貼，支援多便籤編輯、備註標記、一鍵複製與最後修改時間追蹤。',
+  description: '保存文字與變數模板，自動儲存、複製及匯出備份；未確認的儲存保留草稿並提供核對。',
   category: '日常生產力',
   icon: StickyNote,
   badge: '生產力模組',

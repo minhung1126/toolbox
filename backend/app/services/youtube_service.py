@@ -1,13 +1,20 @@
 import logging
+from http.client import HTTPException as HTTPTransportError
+from time import sleep
 from typing import Any, Dict, List, Optional, Tuple
 
+from google.auth.exceptions import TransportError
+from httplib2 import HttpLib2Error
+
 from backend.app.core.youtube_context import YouTubeRequestContext
+from backend.app.core.youtube_operation_state import content_fingerprint
 from backend.app.services.google_clients import build_google_client
-from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
+from backend.app.services.youtube_errors import YouTubeQuotaUnavailable, parse_youtube_error
 
 logger = logging.getLogger(__name__)
 MAX_PLAYLIST_ITEMS = 5_000
 MAX_VIDEO_IDS = 5_000
+PLAYLIST_CLEANUP_RETRY_DELAYS = (0.5, 1.0)
 
 
 def get_youtube_service(context: YouTubeRequestContext):
@@ -22,22 +29,27 @@ def _execute_with_quota(request, method: str, context: YouTubeRequestContext):
 
 
 def _deduplicate_videos(videos: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Keep the first occurrence of each video ID while preserving source order."""
+    """Keep unique video rows with every playlist entry and its original position."""
     unique_videos: List[Dict[str, Any]] = []
-    seen_video_ids = set()
+    videos_by_id = {}
 
-    for video in videos:
+    for position, video in enumerate(videos):
         video_id = str(video.get("video_id") or "").strip()
-        if not video_id or video_id in seen_video_ids:
+        if not video_id:
             continue
-        seen_video_ids.add(video_id)
+        playlist_entry = {"playlist_item_id": video.get("playlist_item_id"), "position": position}
+        if video_id in videos_by_id:
+            videos_by_id[video_id]["playlist_items"].append(playlist_entry)
+            continue
         unique_videos.append(
             {
                 **video,
                 "sequence": len(unique_videos) + 1,
                 "video_id": video_id,
+                "playlist_items": [playlist_entry],
             }
         )
+        videos_by_id[video_id] = unique_videos[-1]
 
     return unique_videos
 
@@ -65,7 +77,6 @@ def _snippet_thumbnail(snippet: Dict[str, Any], video_id: str) -> str:
 def fetch_playlist_items(
     context: YouTubeRequestContext,
     playlist_id: str,
-    hl: str = "zh-TW",
 ) -> List[Dict[str, Any]]:
     """Fetch all items from a YouTube playlist (handles pagination)."""
     service = get_youtube_service(context)
@@ -77,7 +88,6 @@ def fetch_playlist_items(
             playlistId=playlist_id,
             maxResults=50,
             pageToken=next_page_token,
-            hl=hl,
         )
         response = _execute_with_quota(request, "playlistItems.list", context)
         items.extend(response.get("items", []))
@@ -228,6 +238,87 @@ def get_video_status(
     return dict(items[0].get("status", {}))
 
 
+WRITABLE_SNIPPET_FIELDS = ("title", "description", "categoryId", "tags", "defaultLanguage", "defaultAudioLanguage")
+WRITABLE_STATUS_FIELDS = (
+    "privacyStatus",
+    "license",
+    "embeddable",
+    "publicStatsViewable",
+    "selfDeclaredMadeForKids",
+    "containsSyntheticMedia",
+)
+
+
+def video_publish_state(video: Dict[str, Any]) -> dict:
+    """Only mutable fields we preserve; provider read-only fields never enter writes."""
+    snippet, status = video.get("snippet") or {}, video.get("status") or {}
+    return {
+        "snippet": {key: snippet[key] for key in WRITABLE_SNIPPET_FIELDS if key in snippet},
+        "status": {key: status[key] for key in (*WRITABLE_STATUS_FIELDS, "publishAt") if key in status},
+        "channel_id": snippet.get("channelId"),
+    }
+
+
+def video_matches_public_draft(video: Dict[str, Any], title: str, description: str) -> bool:
+    snippet = video.get("snippet") or {}
+    return (
+        snippet.get("title") == title
+        and str(snippet.get("description") or "").replace("\r\n", "\n").replace("\r", "\n")
+        == description.replace("\r\n", "\n").replace("\r", "\n")
+        and (video.get("status") or {}).get("privacyStatus") == "public"
+    )
+
+
+def update_and_publish_video(
+    context: YouTubeRequestContext,
+    video_id: str,
+    title: str,
+    description: str,
+    *,
+    current_video: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Use exactly one update for the changed parts and only reads after an uncertain write."""
+    state = video_publish_state(current_video)
+    snippet, status = state["snippet"], state["status"]
+    body: dict[str, Any] = {"id": video_id}
+    parts = []
+    if content_fingerprint(snippet.get("title", ""), snippet.get("description", "")) != content_fingerprint(
+        title, description
+    ):
+        if not snippet.get("categoryId"):
+            raise ValueError(f"無法取得影片 {video_id} 的類別 ID。")
+        body["snippet"] = {**snippet, "title": title, "description": description}
+        parts.append("snippet")
+    if status.get("privacyStatus") != "public":
+        # publishAt is writable only for private videos; omit it when publishing now.
+        body["status"] = {key: value for key, value in status.items() if key in WRITABLE_STATUS_FIELDS}
+        body["status"]["privacyStatus"] = "public"
+        parts.append("status")
+    if not parts:
+        return {"id": video_id, "unchanged": True}
+    service = get_youtube_service(context)
+    request = service.videos().update(part=",".join(parts), body=body)
+    try:
+        response = _execute_with_quota(request, "videos.update", context)
+        if not isinstance(response, dict) or response.get("id") != video_id:
+            raise RuntimeError("YouTube write response missing video ID")
+        if not all(isinstance(response.get(part), dict) for part in parts) or not video_matches_public_draft(
+            {"snippet": response.get("snippet", snippet), "status": response.get("status", status)}, title, description
+        ):
+            raise RuntimeError("YouTube write response does not confirm the requested draft")
+        return response
+    except YouTubeQuotaUnavailable:
+        raise
+    except Exception as update_error:
+        try:
+            details = fetch_video_details(context, [video_id])
+            if details and video_matches_public_draft(details[0], title, description):
+                return {"id": video_id, "reconciled": True}
+        except Exception:
+            pass
+        raise update_error from None
+
+
 def set_video_public(
     context: YouTubeRequestContext,
     video_id: str,
@@ -267,21 +358,87 @@ def set_video_public(
         raise update_error from None
 
 
-def remove_playlist_item(context: YouTubeRequestContext, playlist_item_id: Optional[str]) -> Dict[str, Any]:
-    """Remove a To-Post item; a 404 is the idempotent 'already removed' case."""
+def _retryable_cleanup_error(exc: Exception) -> bool:
+    info = parse_youtube_error(exc)
+    if info.http_status is not None:
+        return (
+            info.http_status in {408, 429}
+            or 500 <= info.http_status < 600
+            or (info.http_status == 403 and info.reason.casefold() in {"ratelimitexceeded", "userratelimitexceeded"})
+        )
+    return isinstance(exc, (OSError, HTTPTransportError, HttpLib2Error, TransportError))
+
+
+def _playlist_item_exists(context: YouTubeRequestContext, service, playlist_item_id: str) -> bool:
+    request = service.playlistItems().list(part="id", id=playlist_item_id, maxResults=1, fields="items(id)")
+    response = _execute_with_quota(request, "playlistItems.list", context)
+    if not isinstance(response, dict) or not isinstance(response.get("items"), list):
+        raise RuntimeError("YouTube 移除確認回應不完整，請重新讀取 To-Post 後核對。")
+    return bool(response["items"])
+
+
+def remove_playlist_item(
+    context: YouTubeRequestContext, playlist_item_id: Optional[str], *, pre_delete_guard=None
+) -> Dict[str, Any]:
+    """Delete and confirm removal, reconciling before spending quota on another delete."""
 
     if not playlist_item_id:
-        return {"already_removed": True}
+        raise ValueError("缺少 To-Post 播放清單項目 ID，無法確認移除。")
     service = get_youtube_service(context)
-    try:
-        request = service.playlistItems().delete(id=playlist_item_id)
-        _execute_with_quota(request, "playlistItems.delete", context)
-        return {"deleted_playlist_item_id": playlist_item_id}
-    except Exception as exc:
-        response = getattr(exc, "resp", None)
-        if getattr(response, "status", None) == 404:
-            return {"deleted_playlist_item_id": playlist_item_id, "already_removed": True}
-        raise
+    confirmed_present = False
+    delete_required = True
+    delete_acknowledged = False
+    reconciled = False
+    delete_attempted = False
+    for attempt in range(len(PLAYLIST_CLEANUP_RETRY_DELAYS) + 1):
+        try:
+            if not confirmed_present:
+                # Also protects quota fallback and repeated requests: another
+                # attempt may already have committed this 50-unit deletion.
+                if not _playlist_item_exists(context, service, playlist_item_id):
+                    return {"deleted_playlist_item_id": playlist_item_id, "already_removed": True}
+                confirmed_present = True
+            if delete_required:
+                try:
+                    if pre_delete_guard is not None:
+                        try:
+                            pre_delete_guard()
+                        except Exception as exc:
+                            if type(exc).__name__ == "CleanupRetained":
+                                exc.cleanup_write_attempted = delete_attempted
+                            raise
+                    request = service.playlistItems().delete(id=playlist_item_id)
+                    delete_attempted = True
+                    _execute_with_quota(request, "playlistItems.delete", context)
+                    delete_acknowledged = True
+                except YouTubeQuotaUnavailable:
+                    raise
+                except Exception as exc:
+                    if parse_youtube_error(exc).http_status == 404:
+                        return {"deleted_playlist_item_id": playlist_item_id, "already_removed": True}
+                    if not _retryable_cleanup_error(exc):
+                        raise
+                    reconciled = True
+                # A failed confirmation read must retry the read, never blindly
+                # replay a write whose response may have been lost.
+                delete_required = False
+            if not _playlist_item_exists(context, service, playlist_item_id):
+                result = {"deleted_playlist_item_id": playlist_item_id}
+                if reconciled:
+                    result["reconciled"] = True
+                return result
+            # A successful delete can take time to appear in reads. Poll before
+            # reporting an incomplete cleanup, without paying for another delete.
+            delete_required = not delete_acknowledged
+        except YouTubeQuotaUnavailable:
+            raise
+        except Exception as exc:
+            if not _retryable_cleanup_error(exc) or attempt == len(PLAYLIST_CLEANUP_RETRY_DELAYS):
+                raise
+        if attempt < len(PLAYLIST_CLEANUP_RETRY_DELAYS):
+            logger.warning("Retrying YouTube To-Post cleanup confirmation, attempt %s", attempt + 2)
+            sleep(PLAYLIST_CLEANUP_RETRY_DELAYS[attempt])
+    raise RuntimeError("YouTube 尚未確認移出 To-Post，請重新讀取清單後再執行。")
 
 
 def publish_and_remove_playlist_item(

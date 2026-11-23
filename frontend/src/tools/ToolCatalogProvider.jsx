@@ -18,9 +18,10 @@ export function ToolCatalogProvider({ enabled, children }) {
     let cancelled = false;
     Promise.resolve()
       .then(() => api.getTools())
-      .then((payload) => reconcileToolCatalog(payload))
-      .then((tools) => {
-        if (!cancelled) setState({ status: 'ready', tools, error: '' });
+      .then((payload) => {
+        const issues = [];
+        const tools = reconcileToolCatalog(payload, { onIssue: (issue) => issues.push(issue) });
+        if (!cancelled) setState({ status: 'ready', tools, error: '', issues });
       })
       .catch((error) => {
         if (!cancelled) {

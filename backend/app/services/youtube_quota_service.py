@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import contextmanager
 from contextvars import ContextVar
 
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -71,3 +72,13 @@ __all__ = [
     "YouTubeQuotaMiddleware",
     "get_youtube_quota_tracker",
 ]
+
+
+@contextmanager
+def youtube_quota_context(value):
+    """Explicit scope for app-owned background work."""
+    token = _request_trackers.set(value)
+    try:
+        yield
+    finally:
+        _request_trackers.reset(token)

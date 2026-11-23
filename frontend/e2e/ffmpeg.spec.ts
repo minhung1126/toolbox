@@ -12,10 +12,11 @@ test('FFmpeg editing preserves filenames and updates trim, encoding and shell co
   await page.getByLabel('剪輯起始時間', { exact: true }).fill('00:00:02.000');
   await page.getByLabel('剪輯結束時間或長度').fill('00:00:08.000');
   await expect(command).toHaveText(
-    'ffmpeg -ss 00:00:02.000 -i "演唱會 source.mp4" -t 00:00:06.000 -c copy "clip final.mp4"'
+    `ffmpeg -ss 00:00:02.000 -i '演唱會 source.mp4' -t 00:00:06.000 -c copy 'clip final.mp4'`
   );
 
-  await page.getByRole('button', { name: 'H.264 高相容' }).click();
+  await page.getByRole('button', { name: /高相容 H.264/ }).click();
+  await page.getByText('進階：編碼器、畫質與轉檔模式').click();
   await page.getByLabel('解析度縮放').selectOption('720p');
   await page.getByLabel('影格率 (FPS)').selectOption('30');
   await page.getByLabel('音訊編碼器 (-c:a)').selectOption('none');
@@ -25,17 +26,18 @@ test('FFmpeg editing preserves filenames and updates trim, encoding and shell co
   await expect(command).toContainText('fps=30');
   await expect(command).toContainText('-an');
 
-  await page.getByRole('button', { name: 'PowerShell', exact: false }).click();
+  await page.getByLabel('執行環境', {exact:true}).selectOption('powershell');
+  await page.getByLabel('指令排版').selectOption('multiline');
   await expect(command).toContainText(/ffmpeg `\n/);
-  await page.getByRole('button', { name: 'CMD ( ^ )', exact: true }).click();
+  await page.getByLabel('執行環境', {exact:true}).selectOption('cmd');
   await expect(command).toContainText(/ffmpeg \^\n/);
-  await page.getByRole('button', { name: '單行指令', exact: true }).click();
+  await page.getByLabel('指令排版').selectOption('single');
   await expect(command).not.toContainText(/\n/);
 
-  await page.getByRole('button', { name: '擷取 MP3 音訊' }).click();
+  await page.getByRole('button', { name: '擷取音訊為 MP3' }).click();
   await expect(page.getByLabel('輸出檔名')).toHaveValue('clip final.mp3');
   await expect(command).toContainText('-vn -c:a libmp3lame -b:a 192k');
-  await page.getByRole('button', { name: '動態 GIF 圖片' }).click();
+  await page.getByRole('button', { name: '高品質動態 GIF' }).click();
   await expect(page.getByLabel('輸出檔名')).toHaveValue('clip final.gif');
   await expect(command).toContainText('palettegen');
   await expect(page.getByLabel('輸入檔名')).toHaveValue('演唱會 source.mp4');

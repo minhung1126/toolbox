@@ -66,6 +66,49 @@ describe('API request recovery', () => {
     expect(ApiError).toBeTypeOf('function');
   });
 
+  it('keeps the timeout active while a response body is still loading', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, options) => ({
+        ok: true,
+        status: 200,
+        text: () =>
+          new Promise((_resolve, reject) =>
+            options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+          ),
+      }))
+    );
+    const assertion = expect(api.getSystemInfo()).rejects.toMatchObject({ code: 'timeout' });
+    await vi.advanceTimersByTimeAsync(45_000);
+    await assertion;
+  });
+
+  it('cancels draft preparation after headers arrive without waiting for a stalled body', async () => {
+    const controller = new AbortController();
+    let reading;
+    const bodyStarted = new Promise((resolve) => {
+      reading = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, options) => ({
+        ok: true,
+        status: 200,
+        text: () =>
+          new Promise((_resolve, reject) => {
+            reading();
+            options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+          }),
+      }))
+    );
+    const request = api.prepareYoutubeDrafts({}, { signal: controller.signal });
+    const assertion = expect(request).rejects.toMatchObject({ name: 'AbortError' });
+    await bodyStarted;
+    controller.abort();
+    await assertion;
+  });
+
   it('keeps structured error detail codes from the backend', async () => {
     vi.stubGlobal(
       'fetch',
@@ -136,7 +179,7 @@ describe('API request recovery', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(
-      api.publishAndCleanup('https://www.youtube.com/playlist?list=PL123_abc-789', {
+      api.cleanupPublicItems('https://www.youtube.com/playlist?list=PL123_abc-789', {
         previewToken: 'signed-preview-token',
         previewSnapshot: { playlist_id: 'PL123_abc-789', video_ids: ['video-1'] },
       })
@@ -145,6 +188,8 @@ describe('API request recovery', () => {
     const [url, options] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/v1/youtube/publish-and-cleanup');
     expect(JSON.parse(options.body)).toEqual({
+      version: 2,
+      mode: 'cleanup_only',
       playlist_id: 'PL123_abc-789',
       preview_token: 'signed-preview-token',
       preview_snapshot: { playlist_id: 'PL123_abc-789', video_ids: ['video-1'] },

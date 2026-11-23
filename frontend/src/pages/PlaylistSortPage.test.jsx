@@ -831,7 +831,7 @@ describe('PlaylistSortPage', () => {
       expect(screen.getByText('我的最愛音樂 (3 首)')).toBeInTheDocument();
     });
 
-    const toggleBtn = screen.getByRole('button', { name: /貼上 Token 啟用 0 配額/ });
+    const toggleBtn = screen.getByRole('button', { name: /管理瀏覽器 Token/ });
     fireEvent.click(toggleBtn);
 
     expect(screen.getByTestId('quick-token-drawer')).toBeInTheDocument();

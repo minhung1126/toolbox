@@ -20,7 +20,7 @@ class StickyNotesPlugin(ToolPlugin):
             id="sticky-notes",
             name="Sticky Notes",
             title="便利貼備忘錄",
-            description="簡潔風格便利貼，支援多便籤文字編輯、備註標記、一鍵複製與最後編輯時間追蹤。",
+            description="保存文字與變數模板，自動儲存、複製及匯出備份；未確認的儲存保留草稿並提供核對。",
             category="日常生產力",
             icon="StickyNote",
             version="1.0.0",

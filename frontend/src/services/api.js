@@ -84,7 +84,8 @@ async function readResponseData(response) {
     let raw;
     try {
       raw = await response.text();
-    } catch {
+    } catch (error) {
+      if (error?.name === 'AbortError') throw error;
       return {};
     }
     if (typeof raw !== 'string' || !raw.trim()) return {};
@@ -96,7 +97,8 @@ async function readResponseData(response) {
   }
   try {
     return response?.json ? await response.json() : {};
-  } catch {
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
     return {};
   }
 }
@@ -174,8 +176,10 @@ async function request(endpoint, options = {}) {
     signal: controller.signal,
   };
   let response;
+  let data;
   try {
     response = await fetch(`${API_BASE}${endpoint}`, config);
+    data = await readResponseData(response);
   } catch (error) {
     if (error?.name === 'AbortError') {
       if (fetchOptions.signal?.aborted) {
@@ -190,7 +194,6 @@ async function request(endpoint, options = {}) {
       fetchOptions.signal.removeEventListener('abort', callerAbortListener);
     }
   }
-  const data = await readResponseData(response);
   if (!response.ok) {
     const retryAfter = payloadRetryAfter(data, response);
     if (response.status === 401) announceSessionExpired();
@@ -205,6 +208,13 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
+  getOperations: () => request('/operations'),
+  getOperation: (id, options = {}) => request(`/operations/${encodeURIComponent(id)}`, options),
+  reconcileOperation: (id, kind) =>
+    request(
+      `/operations/${encodeURIComponent(id)}/reconcile-${kind === 'youtube.playlist_sort' ? 'music' : 'youtube'}`,
+      { method: 'POST' }
+    ),
   getHealth: () => request('/health', { cache: 'no-store' }),
   getTools: () => request('/tools', { cache: 'no-store' }),
   getAuthConfig: () => request('/auth/config'),
@@ -246,10 +256,10 @@ export const api = {
     }),
   getYoutubeSlotSettings: () => request('/settings/youtube-slots'),
   getTeamPersonFilter: () => request('/settings/team-person-filter'),
-  updateTeamPersonFilter: ({ team = '', selectedPeople = [] }) =>
+  updateTeamPersonFilter: ({ team = '', teams = [], query = '', selectedPeople = [] }) =>
     request('/settings/team-person-filter', {
       method: 'PUT',
-      body: JSON.stringify({ team, selected_people: selectedPeople }),
+      body: JSON.stringify({ team, teams, query, selected_people: selectedPeople }),
     }),
   getYoutubeDraftSettings: () => request('/settings/youtube-drafts'),
   updateYoutubeDraftSettings: (videoType, config) =>
@@ -322,6 +332,33 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ video_id: videoId, title, description }),
     }),
+  getYoutubeEditStatuses: (videoIds) =>
+    request('/youtube/edit-status', { method: 'POST', body: JSON.stringify({ video_ids: videoIds }) }),
+  prepareYoutubeDrafts: (payload, { signal } = {}) =>
+    request('/youtube/drafts/prepare', {
+      method: 'POST',
+      signal,
+      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+      body: JSON.stringify(payload),
+    }),
+  previewYoutubeDrafts: (payload) =>
+    request('/youtube/drafts/preview', {
+      method: 'POST',
+      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+      body: JSON.stringify(payload),
+    }),
+  submitYoutubePublishJob: (payload) =>
+    request('/youtube/drafts/publish-jobs', { method: 'POST', body: JSON.stringify(payload) }),
+  findYoutubePublishJob: (requestId, options = {}) =>
+    request(`/youtube/drafts/publish-jobs/by-request/${encodeURIComponent(requestId)}`, options),
+  findYoutubePublishStage: (stageId, options = {}) =>
+    request(`/youtube/drafts/publish-jobs/by-stage/${encodeURIComponent(stageId)}`, options),
+  publishYoutubeDrafts: (payload) =>
+    request('/youtube/drafts/publish', {
+      method: 'POST',
+      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
+      body: JSON.stringify(payload),
+    }),
   batchUpdateMetadata: ({
     spreadsheetUrlOrId,
     playlistId,
@@ -352,11 +389,18 @@ export const api = {
         ...(previewSnapshot ? { preview_snapshot: previewSnapshot } : {}),
       }),
     }),
-  publishAndCleanup: (playlistId, { youtubeSlot, previewToken, previewSnapshot } = {}) =>
+  previewYoutubeCleanup: (playlistId) =>
+    request('/youtube/cleanup-preview', {
+      method: 'POST',
+      body: JSON.stringify({ playlist_id: normalizedYoutubePlaylistOrOriginal(playlistId) }),
+    }),
+  cleanupPublicItems: (playlistId, { youtubeSlot, previewToken, previewSnapshot } = {}) =>
     request('/youtube/publish-and-cleanup', {
       method: 'POST',
       timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
       body: JSON.stringify({
+        version: 2,
+        mode: 'cleanup_only',
         playlist_id: normalizedYoutubePlaylistOrOriginal(playlistId),
         ...(youtubeSlot ? { youtube_slot: youtubeSlot } : {}),
         ...(previewToken ? { preview_token: previewToken } : {}),
@@ -514,36 +558,4 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(token ? { token } : {}),
     }),
-  getVideoUploaderAuthUrl: () => request('/auth/video-uploader/url'),
-  disconnectVideoUploader: () => request('/auth/video-uploader/disconnect', { method: 'POST' }),
-  scanWeverseFolder: (folderPath) =>
-    request('/weverse-uploader/scan', {
-      method: 'POST',
-      body: JSON.stringify({ folder_path: folderPath }),
-    }),
-  parseWeverseFiles: (files) =>
-    request('/weverse-uploader/parse-files', {
-      method: 'POST',
-      body: JSON.stringify({ files }),
-    }),
-  uploadWeverseFromPath: (payload) =>
-    request('/weverse-uploader/upload-from-path', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  uploadWeverseFiles: (formData) =>
-    request('/weverse-uploader/upload-files', {
-      method: 'POST',
-      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
-      body: formData,
-    }),
-  retryWeverseCaptions: (taskId, formData) =>
-    request(`/weverse-uploader/tasks/${encodeURIComponent(taskId)}/retry-captions`, {
-      method: 'POST',
-      body: formData,
-      timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
-    }),
-  getWeverseUploadTask: (taskId) => request(`/weverse-uploader/tasks/${taskId}`),
-  getWeverseUploadHistory: (limit = 20) => request(`/weverse-uploader/history?limit=${limit}`),
-  getWeverseRecentPaths: () => request('/weverse-uploader/recent-paths'),
 };

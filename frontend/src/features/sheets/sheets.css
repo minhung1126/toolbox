@@ -400,3 +400,14 @@
     min-width: 200px;
   }
 }
+
+.selection-preview {
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre;
+}
+
+.sheet-copy-cell[aria-pressed='true'] {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}

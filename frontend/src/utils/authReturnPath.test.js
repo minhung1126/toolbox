@@ -13,7 +13,6 @@ describe('OAuth return paths', () => {
     expect(saveOAuthReturnPath('drive', '/youtube/drafts/videos')).toBe(true);
     expect(saveOAuthReturnPath('youtube', '/youtube/settings/connections')).toBe(true);
     expect(saveOAuthReturnPath('ytmusic', '/ytmusic/playlist-sort')).toBe(true);
-    expect(saveOAuthReturnPath('video_uploader', '/weverse-uploader')).toBe(true);
     expect(window.sessionStorage.getItem(OAUTH_RETURN_KEYS.google)).toBe('/youtube/drafts/videos');
     expect(consumeOAuthReturnPath('google', '/dashboard')).toBe('/youtube/drafts/videos');
     expect(window.sessionStorage.getItem(OAUTH_RETURN_KEYS.google)).toBeNull();
@@ -21,7 +20,6 @@ describe('OAuth return paths', () => {
     expect(consumeOAuthReturnPath('drive', '/dashboard')).toBe('/youtube/drafts/videos');
     expect(consumeOAuthReturnPath('youtube', '/dashboard')).toBe('/youtube/settings/connections');
     expect(consumeOAuthReturnPath('ytmusic', '/dashboard')).toBe('/ytmusic/playlist-sort');
-    expect(consumeOAuthReturnPath('video_uploader', '/dashboard')).toBe('/weverse-uploader');
   });
 
   it('consumes unsafe values and uses a safe fallback', () => {

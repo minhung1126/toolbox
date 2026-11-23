@@ -67,7 +67,8 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
         connected={isYtmusicConnected}
         connectedBadgeText={hasCustomToken ? '自訂 Token 連線中' : '專屬帳號已授權'}
         disconnectedBadgeText={activeYoutubeConnected ? '共用 YouTube 授權中' : '尚未授權'}
-        description="存取個人 YouTube Music 播放清單與音樂庫，完全獨立於 YouTube 創作者品牌頻道。更新操作採用 YouTube Music 協定，不消耗 YouTube Data API 配額（0 Credit）。"
+        description="讀取個人歌單、預覽排序，確認後改原歌單或建立新歌單。瀏覽器 Token 使用音樂協定；Google API 模式會計入本機配額估算。"
+        capabilities="讀取歌單、排序預覽、確認後更新或建立歌單"
         accountEmail={
           ytmusicAuth?.user?.email ||
           (hasCustomToken
@@ -92,51 +93,60 @@ export default function YtmusicSettingsPage({ authUser, refreshAuthUser }) {
         disconnectText="解除專屬授權"
       />
 
-      {/* 2. Custom Browser Token / Cookie Setup Card */}
-      <YtmusicTokenSettings
-        hasCustomToken={hasCustomToken}
-        tokenMutationUncertain={tokenMutationUncertain}
-        tokenValidationResult={tokenValidationResult}
-        validatingToken={validatingToken}
-        savingToken={savingToken}
-        showTokenUpdateForm={showTokenUpdateForm}
-        customTokenInput={customTokenInput}
-        handleSaveCustomToken={handleSaveCustomToken}
-        setTokenValidationResult={setTokenValidationResult}
-        handleValidateCustomToken={handleValidateCustomToken}
-        setShowTokenUpdateForm={setShowTokenUpdateForm}
-        setShowClearTokenConfirm={setShowClearTokenConfirm}
-        setCustomTokenInput={setCustomTokenInput}
-      />
+      <details
+        open={
+          (!isYtmusicConnected && !activeYoutubeConnected) ||
+          tokenMutationUncertain ||
+          tokenValidationResult?.valid === false ||
+          Boolean(ytmusicAuth?.last_refresh_error)
+        }
+      >
+        <summary>進階：Token 管理與憑證資訊</summary>
+        {/* 2. Custom Browser Token / Cookie Setup Card */}
+        <YtmusicTokenSettings
+          hasCustomToken={hasCustomToken}
+          tokenMutationUncertain={tokenMutationUncertain}
+          tokenValidationResult={tokenValidationResult}
+          validatingToken={validatingToken}
+          savingToken={savingToken}
+          showTokenUpdateForm={showTokenUpdateForm}
+          customTokenInput={customTokenInput}
+          handleSaveCustomToken={handleSaveCustomToken}
+          setTokenValidationResult={setTokenValidationResult}
+          handleValidateCustomToken={handleValidateCustomToken}
+          setShowTokenUpdateForm={setShowTokenUpdateForm}
+          setShowClearTokenConfirm={setShowClearTokenConfirm}
+          setCustomTokenInput={setCustomTokenInput}
+        />
 
-      {/* 3. Token Status Grid if connected via OAuth */}
-      {isYtmusicConnected && ytmusicAuth && !hasCustomToken && (
-        <div className="glass-panel card-padding settings-card">
-          <h3 className="ytmusic-settings-section-title">
-            <RefreshCw size={16} className="ytmusic-settings-section-icon" aria-hidden="true" /> 憑證健康狀態
-          </h3>
-          <div className="settings-grid">
-            <div className="glass-panel settings-info-card">
-              <strong>Token 狀態</strong>
-              <p>{tokenStatusLabel(ytmusicAuth.token_status)}</p>
+        {/* 3. Token Status Grid if connected via OAuth */}
+        {isYtmusicConnected && ytmusicAuth && !hasCustomToken && (
+          <div className="glass-panel card-padding settings-card">
+            <h3 className="ytmusic-settings-section-title">
+              <RefreshCw size={16} className="ytmusic-settings-section-icon" aria-hidden="true" /> 憑證健康狀態
+            </h3>
+            <div className="settings-grid">
+              <div className="glass-panel settings-info-card">
+                <strong>Token 狀態</strong>
+                <p>{tokenStatusLabel(ytmusicAuth.token_status)}</p>
+              </div>
+              <div className="glass-panel settings-info-card">
+                <strong>最近重新整理</strong>
+                <p>{formatTokenDate(ytmusicAuth.last_refreshed_at)}</p>
+              </div>
+              <div className="glass-panel settings-info-card">
+                <strong>目前 Token 到期時間</strong>
+                <p>{formatTokenDate(ytmusicAuth.token_expires_at)}</p>
+              </div>
             </div>
-            <div className="glass-panel settings-info-card">
-              <strong>最近重新整理</strong>
-              <p>{formatTokenDate(ytmusicAuth.last_refreshed_at)}</p>
-            </div>
-            <div className="glass-panel settings-info-card">
-              <strong>目前 Token 到期時間</strong>
-              <p>{formatTokenDate(ytmusicAuth.token_expires_at)}</p>
-            </div>
+            {ytmusicAuth.last_refresh_error && (
+              <div className="info-banner ytmusic-token-refresh-warning">
+                <span>Token 最近更新未成功；請點擊上方「重新授權」以更新憑證。</span>
+              </div>
+            )}
           </div>
-          {ytmusicAuth.last_refresh_error && (
-            <div className="info-banner ytmusic-token-refresh-warning">
-              <span>Token 最近更新未成功；請點擊上方「重新授權」以更新憑證。</span>
-            </div>
-          )}
-        </div>
-      )}
-
+        )}
+      </details>
       {/* 4. YouTube Music Default Preferences */}
       <YtmusicPreferences
         selectedRegion={selectedRegion}

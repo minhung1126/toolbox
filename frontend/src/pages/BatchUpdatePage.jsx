@@ -1,22 +1,24 @@
-import { ResultExport } from '../shared/ui/ResultExport';
 import { Button } from '../shared/ui';
 import '../features/youtube/youtube-shared.css';
-import React from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { PATHS } from '../routes/paths';
 import '../features/youtube/batch-update.css';
 import '../features/youtube/bulk-edit.css';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
-import ResultStatus from '../components/ResultStatus';
 import ThumbnailDialog from '../components/ThumbnailDialog';
 import VideoThumbnail from '../components/VideoThumbnail';
 import SheetDataSourcePanel from '../components/SheetDataSourcePanel';
 import SourceLinkInput from '../components/SourceLinkInput';
+import { personLabel } from '../features/sheets/model/personOptions';
 import TeamPersonFilterPanel from '../components/TeamPersonFilterPanel';
-import { YOUTUBE_COPY, formatResultCounts, formatVideoCount, formatVideoId } from '../utils/youtubeCopy';
+import { YOUTUBE_COPY, formatVideoCount, formatVideoId } from '../utils/youtubeCopy';
 import { youtubeRoutingReasonLabel } from '../features/youtube/model/routing';
 import {
   AlertCircle,
   CheckCircle2,
+  XCircle,
   Info,
   PlaySquare,
   RefreshCw,
@@ -24,7 +26,6 @@ import {
   Send,
   Shuffle,
   Video as VideoIcon,
-  XCircle,
 } from 'lucide-react';
 
 import {
@@ -36,9 +37,17 @@ import {
   resolveDraftConfig,
 } from '../utils/batchPreview';
 import PreviewField from '../components/batch/PreviewField';
-import BatchPreviewItem from '../components/batch/BatchPreviewItem';
-import BatchUpdateConfirmationContent from '../components/batch/BatchUpdateConfirmationContent';
 import { useBatchUpdateWorkflow } from '../features/youtube/hooks/useBatchUpdateWorkflow';
+import { draftPublishApi } from '../features/youtube/api/draftPublishApi';
+import {
+  createSavedDraft,
+  loadPublishDraft,
+  rememberDraftContext,
+  savePublishDraft,
+} from '../features/youtube/model/draftPublishStorage';
+import { getYoutubeAuthContext } from '../features/youtube/model/routing';
+import { prepareDraftAvailability } from '../features/youtube/model/prepareDraftState';
+import { editStatusLabel, useVideoEditStatus } from '../features/youtube/hooks/useVideoEditStatus';
 
 export {
   buildBatchPreview,
@@ -49,8 +58,24 @@ export {
   resolveDraftConfig,
 };
 
-export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Video' }) {
+export default function BatchUpdatePage(props) {
+  const account = props.authUser?.sub || props.authUser?.email || '';
+  const channel = getYoutubeAuthContext(props.authUser).channelId;
+  return <BatchUpdateEditor key={JSON.stringify([account, channel, props.videoType || 'Video'])} {...props} />;
+}
+
+function BatchUpdateEditor({ sysSettings, authUser, videoType = 'Video' }) {
   const toast = useToast();
+  const navigate = useNavigate();
+  const [preparing, setPreparing] = useState(false);
+  const [rebuildOpen, setRebuildOpen] = useState(false);
+  const [stagingError, setStagingError] = useState('');
+  const preparingRef = useRef(false);
+  const prepareController = useRef(null);
+  const mounted = useRef(true);
+  const [editFilter, setEditFilter] = useState('all');
+  const [includeUnknown, setIncludeUnknown] = useState(true);
+  const [videoQuery, setVideoQuery] = useState('');
   const {
     youtubeConnected,
     workStateError,
@@ -67,9 +92,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     configSaving,
     randomPreview,
     randomPreviewLoading,
-    loadingPreview,
     previewError,
-    batchPreview,
     videos,
     assignments,
     setAssignments,
@@ -81,30 +104,27 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     loadingSheet,
     loadingVideos,
     executing,
-    result,
     errorMsg,
     configSaveError,
     sourceError,
-    confirmOpen,
-    setConfirmOpen,
     previewImage,
     setPreviewImage,
-    quotaEstimate,
-    estimateLoading,
     hydrated,
     draftAutosaveStatus,
     playlistAutosaveStatus,
     sourceStale,
     teams,
-    selectedTeam,
-    setSelectedTeam,
+    selectedTeams,
+    setSelectedTeams,
+    personQuery,
+    setPersonQuery,
     teamPeople,
     selectedPeople,
     setSelectedPeople,
     loadingTeams,
     loadingPeople,
     teamPeopleError,
-    visibleSelectedTeam,
+    randomPreviewTeam,
     clearConfigSaveError,
     scheduleDraftSave,
     saveDraftConfig,
@@ -120,39 +140,153 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
     handleVideoCardKeyDown,
     setAllVideosSelected,
     applyBulkAssignment,
-    doExecute,
-    requestPreview,
-    requestExecute,
     sourceLabel,
-    previewCounts,
   } = useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast });
-  const workflowBusy = executing || loadingSheet || loadingVideos || loadingPreview || estimateLoading;
+  const workflowBusy = preparing || executing || loadingSheet || loadingVideos;
+  const account = authUser?.sub || authUser?.email || '';
+  const auth = getYoutubeAuthContext(authUser);
+  const channel = auth.channelId;
+  const editHistory = useVideoEditStatus(
+    account,
+    channel,
+    videos.map((video) => video.video_id)
+  );
+  const filteredVideos = videos.filter((video) => {
+    const status = editHistory.statuses[video.video_id] || 'unknown';
+    return (
+      (editFilter === 'all' || !editHistory.loading) &&
+      (editFilter === 'all' ||
+        status === editFilter ||
+        (editFilter === 'not_applied' && includeUnknown && status === 'unknown')) &&
+      `${video.title || ''} ${video.video_id} ${video.description || ''}`
+        .toLocaleLowerCase()
+        .includes(videoQuery.trim().toLocaleLowerCase())
+    );
+  });
+  const filteredIds = filteredVideos.map((video) => video.video_id);
+  const hiddenSelectedCount = selectedVideoIds.filter((id) => !filteredIds.includes(id)).length;
+  const stagedPath = videoType === 'Shorts' ? PATHS.youtubeShortsStaging : PATHS.youtubeVideoStaging;
+  const source = useMemo(
+    () => ({
+      spreadsheet_url_or_id: spreadsheetId.trim(),
+      playlist_id: playlistId,
+      video_type: videoType,
+      worksheet_name: worksheetName,
+      title_column: titleColumn,
+      description_column: descriptionColumn,
+      team: '',
+      assignments: videos.map((video) => ({
+        video_id: video.video_id,
+        person: assignments[video.video_id] || '不編輯',
+      })),
+    }),
+    [spreadsheetId, playlistId, videoType, worksheetName, titleColumn, descriptionColumn, videos, assignments]
+  );
+  const prepareContext = JSON.stringify([account, auth.authorizationFingerprint, source]);
+  const currentPrepareContext = useRef(prepareContext);
+  currentPrepareContext.current = prepareContext;
+  const assignedCount = source.assignments.filter((item) => item.person && item.person !== '不編輯').length;
+  const availability = prepareDraftAvailability({
+    preparing,
+    executing,
+    loadingSheet,
+    loadingVideos,
+    hydrated,
+    authenticated: Boolean(account && auth.authenticated),
+    channel,
+    sourceReady,
+    sourceStale,
+    worksheet: worksheets.some((sheet) => sheet.title === worksheetName) ? worksheetName : '',
+    titleColumn: columns.includes(titleColumn) ? titleColumn : '',
+    descriptionColumn: columns.includes(descriptionColumn) ? descriptionColumn : '',
+    assignedCount,
+  });
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      prepareController.current?.abort();
+    };
+  }, []);
+  useEffect(() => {
+    setRebuildOpen(false);
+    return () => prepareController.current?.abort();
+  }, [prepareContext]);
+  useEffect(() => {
+    if (!hydrated || !sourceReady || !account || !channel) return;
+    try {
+      rememberDraftContext(account, source, channel);
+    } catch {
+      setStagingError('瀏覽器無法保存暫存資料，請確認儲存空間與網站儲存權限。');
+    }
+  }, [account, channel, hydrated, source, sourceReady]);
+  const prepareDrafts = async (rebuild = false) => {
+    if (preparingRef.current) return toast.warning('正在產生暫存，請稍候。');
+    if (!availability.canPrepare) return toast.warning(availability.reason);
+    try {
+      if (!rebuild && channel && loadPublishDraft(account, channel, videoType)) {
+        setRebuildOpen(true);
+        return;
+      }
+    } catch (error) {
+      setStagingError(`無法讀取既有暫存：${error.message}`);
+      return;
+    }
+    preparingRef.current = true;
+    const controller = new AbortController();
+    prepareController.current = controller;
+    try {
+      setPreparing(true);
+      setStagingError('');
+      const stage = await draftPublishApi.prepare(source, { signal: controller.signal });
+      if (controller.signal.aborted || currentPrepareContext.current !== prepareContext || !mounted.current) {
+        if (mounted.current) setStagingError('來源或頻道變更，已取消產生暫存；請核對後重試。');
+        return;
+      }
+      if (stage.stage_snapshot.youtube_channel_id !== channel) throw new Error('授權頻道已變更，請重新讀取影片。');
+      const draft = createSavedDraft(stage, account, source);
+      savePublishDraft(draft);
+      rememberDraftContext(account, source, channel);
+      navigate(stagedPath);
+    } catch (error) {
+      if (mounted.current)
+        setStagingError(
+          controller.signal.aborted
+            ? '已取消產生暫存；既有暫存與手動修改仍保留，請核對來源與頻道後重試。'
+            : `建立暫存失敗：${error.message}`
+        );
+    } finally {
+      preparingRef.current = false;
+      if (mounted.current) {
+        setPreparing(false);
+        setRebuildOpen(false);
+      }
+    }
+  };
   return (
     <div className="section-gap batch-update-page">
       <ConfirmDialog
-        open={confirmOpen}
-        title={`確認${YOUTUBE_COPY.batchUpdate} ${formatVideoCount(previewCounts.willUpdate)}`}
-        content={
-          batchPreview ? (
-            <BatchUpdateConfirmationContent
-              batchPreview={batchPreview}
-              previewCounts={previewCounts}
-              quotaEstimate={quotaEstimate}
-            />
-          ) : null
-        }
-        confirmText={estimateLoading ? YOUTUBE_COPY.readLoading : `開始${YOUTUBE_COPY.batchUpdate}`}
-        cancelText="取消"
-        variant="destructive"
-        busy={executing || estimateLoading}
-        onConfirm={doExecute}
-        onCancel={() => setConfirmOpen(false)}
+        open={rebuildOpen}
+        title="重建發布前暫存？"
+        message="重建會取代此頻道目前的暫存與手動修改。尚未確認的 YouTube 寫入仍須先到作業紀錄核對。"
+        confirmText="重建暫存"
+        onConfirm={() => prepareDrafts(true)}
+        onCancel={() => setRebuildOpen(false)}
+        busy={preparing}
       />
+      <Link to={stagedPath}>繼續編輯草稿並公開</Link>
+      {stagingError && (
+        <div role="alert" className="error-banner">
+          {stagingError}
+        </div>
+      )}
+      <Link to={PATHS.operations}>查看作業紀錄／核對先前結果</Link>
       <header className="page-header">
         <div className="section-header">
           <VideoIcon size={24} color="var(--primary)" />
-          <h1>YouTube {videoType} 草稿</h1>
+          <h1>{videoType} 快速套用</h1>
         </div>
+        <p className="section-desc">① 快速套用人物並建立草稿；下一步為② 編輯草稿並公開。</p>
         <p className="section-desc">
           此頁只處理 {videoType}。先確認資料來源、工作表與欄位，再勾選要出現在人物下拉選單中的人物。
         </p>
@@ -169,7 +303,13 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
         )}
       </header>
 
+      <p role="status">
+        {videos.length ? '2. 配對人物並產生暫存' : '1. 讀取來源與影片'} · {videos.length} 支影片 · 目標頻道：
+        {authUser?.youtube?.slots?.[authUser?.youtube?.active_slot || 'primary']?.channel_title || '待連線核對'}
+      </p>
       <SheetDataSourcePanel
+        collapsible
+        summary={`標題：${titleColumn || '未選'}／說明：${descriptionColumn || '未選'}`}
         spreadsheetId={spreadsheetId}
         onSpreadsheetIdChange={handleSpreadsheetChange}
         worksheets={worksheets}
@@ -280,18 +420,18 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
 
       <TeamPersonFilterPanel
         teams={sourceStale ? [] : teams}
-        selectedTeam={sourceStale ? '' : selectedTeam}
-        onTeamChange={setSelectedTeam}
+        selectedTeams={selectedTeams}
+        onTeamsChange={setSelectedTeams}
+        query={personQuery}
+        onQueryChange={setPersonQuery}
         people={sourceStale ? [] : teamPeople}
-        selectedPeople={sourceStale ? [] : selectedPeople}
+        selectedPeople={selectedPeople}
         onSelectedPeopleChange={setSelectedPeople}
         loadingTeams={loadingTeams}
         loadingPeople={loadingPeople}
         error={teamPeopleError}
         disabled={workflowBusy || !authUser || !hydrated || !sourceReady || sourceStale}
-        teamEmptyLabel="請選擇團體"
-        peopleDisabledMessage="請先選擇團體；選定後才能載入人物。"
-        description="先選擇團體，再勾選要出現在每支影片人物選單中的人物。"
+        description="可跨團體選取人物；未選人物時，影片人物選單顯示全部可用人物。"
       />
 
       <div className="glass-panel card-padding random-preview-panel card-stack">
@@ -301,7 +441,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
               <Shuffle size={19} /> 試算表隨機抽查
             </h2>
             <p className="panel-description">
-              從「{visibleSelectedTeam || '尚未選擇團體'}
+              從「{randomPreviewTeam || '尚無可用成員'}
               」隨機抽一位真實成員，顯示目前選用欄位的內容；全團體列不會被抽中。
             </p>
           </div>
@@ -310,7 +450,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
               variant="primary"
               className="btn btn-primary"
               onClick={loadRandomPreview}
-              disabled={workflowBusy || randomPreviewLoading || !visibleSelectedTeam}
+              disabled={workflowBusy || randomPreviewLoading || !randomPreviewTeam}
             >
               <RefreshCw size={16} className={randomPreviewLoading ? 'spin' : ''} />{' '}
               {randomPreviewLoading ? '抽查中...' : randomPreview ? '換一位成員' : '隨機抽查'}
@@ -326,7 +466,9 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
         {randomPreview && (
           <div className="random-preview-content">
             <div className="random-preview-person">
-              <strong>抽中成員：{randomPreview.person}</strong>
+              <strong>
+                抽中成員：{randomPreview.person} · {randomPreview.team}
+              </strong>
             </div>
             <div className="responsive-grid">
               <PreviewField label={`標題欄位：${titleColumn}`} value={randomPreview.values?.[titleColumn]} />
@@ -378,6 +520,52 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
             </p>
           </div>
           <div className="glass-panel bulk-edit-panel card-stack">
+            <div className="toolbar">
+              <label className="form-group">
+                <span className="form-label">編輯套用狀態</span>
+                <select
+                  className="form-select"
+                  value={editFilter}
+                  onChange={(event) => setEditFilter(event.target.value)}
+                >
+                  <option value="all">全部（預設）</option>
+                  <option value="not_applied">尚未套用編輯</option>
+                  <option value="applied">已套用編輯</option>
+                  <option value="unknown">狀態未知</option>
+                </select>
+              </label>
+              <label className="form-group">
+                <span className="form-label">搜尋影片</span>
+                <input
+                  className="form-input"
+                  type="search"
+                  value={videoQuery}
+                  onChange={(event) => setVideoQuery(event.target.value)}
+                  placeholder="標題、描述或影片 ID"
+                />
+              </label>
+              <Button variant="secondary" disabled={editHistory.loading} onClick={editHistory.refresh}>
+                刷新套用紀錄
+              </Button>
+            </div>
+            {editFilter === 'not_applied' && (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={includeUnknown}
+                  onChange={(event) => setIncludeUnknown(event.target.checked)}
+                />{' '}
+                一起顯示狀態未知（無法確認歷史是否已編輯）
+              </label>
+            )}
+            <p role="status">
+              符合 {filteredVideos.length} / {videos.length} 支影片 · 已勾選 {selectedVideoIds.length} 支（其中{' '}
+              {hiddenSelectedCount} 支不在目前結果）。篩選只改變顯示；人物指定與暫存內容保留。
+            </p>
+            {editHistory.loading && <p role="status">正在讀取編輯套用紀錄…</p>}
+            {editHistory.error && (
+              <p role="alert">{editHistory.error} 未能判定的影片標為未知，可按「刷新套用紀錄」重試。</p>
+            )}
             <div className="action-bar bulk-edit-heading">
               <div>
                 <h3>批次勾選編輯（已勾選 {formatVideoCount(selectedVideoIds.length)}）</h3>
@@ -386,11 +574,11 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
               <label className="bulk-select-all">
                 <input
                   type="checkbox"
-                  checked={selectedVideoIds.length === videos.length}
-                  disabled={workflowBusy}
-                  onChange={(e) => setAllVideosSelected(e.target.checked)}
+                  checked={filteredIds.length > 0 && filteredIds.every((id) => selectedVideoIds.includes(id))}
+                  disabled={workflowBusy || !filteredIds.length}
+                  onChange={(e) => setAllVideosSelected(e.target.checked, filteredIds)}
                 />{' '}
-                全選 / 全不選
+                全選 / 全不選目前結果
               </label>
             </div>
             <div className="toolbar bulk-edit-controls">
@@ -404,11 +592,13 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
                 >
                   <option value="">請選擇人物</option>
                   <option value="不編輯">不編輯（略過）</option>
-                  {availablePeople.map((person) => (
-                    <option key={person} value={person}>
-                      {person}
-                    </option>
-                  ))}
+                  {[...new Set([...availablePeople, bulkPerson].filter((person) => person && person !== '不編輯'))].map(
+                    (person) => (
+                      <option key={person} value={person}>
+                        {personLabel(person)}
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
               <Button
@@ -422,7 +612,7 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
             </div>
           </div>
           <div className="video-card-grid">
-            {videos.map((video) => (
+            {filteredVideos.map((video) => (
               <div
                 key={video.video_id}
                 className={`glass-panel video-card ${assignments[video.video_id] && assignments[video.video_id] !== '不編輯' ? 'video-card-assigned' : 'video-card-skipped'}${selectedVideoIds.includes(video.video_id) ? ' video-card-selected' : ''}`}
@@ -454,6 +644,11 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
                 <div className="video-card-copy">
                   <h4>{video.title || '無標題影片'}</h4>
                   <p>{formatVideoId(video.video_id)}</p>
+                  <p>
+                    {editHistory.loading
+                      ? '套用狀態讀取中…'
+                      : editStatusLabel[editHistory.statuses[video.video_id] || 'unknown']}
+                  </p>
                 </div>
                 <div className="form-group video-card-assignment">
                   <label className="form-label">指定套用人物</label>
@@ -464,9 +659,15 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
                     onChange={(e) => setAssignments((current) => ({ ...current, [video.video_id]: e.target.value }))}
                   >
                     <option value="不編輯">不編輯（略過）</option>
-                    {availablePeople.map((person) => (
+                    {[
+                      ...new Set(
+                        [...availablePeople, assignments[video.video_id]].filter(
+                          (person) => person && person !== '不編輯'
+                        )
+                      ),
+                    ].map((person) => (
                       <option key={person} value={person}>
-                        {person}
+                        {personLabel(person)}
                       </option>
                     ))}
                   </select>
@@ -474,127 +675,39 @@ export default function BatchUpdatePage({ sysSettings, authUser, videoType = 'Vi
               </div>
             ))}
           </div>
-          {batchPreview && (
-            <section className="glass-panel card-padding batch-preview-panel" aria-label="完整批次變更預覽">
-              <div className="page-header">
-                <h3>{YOUTUBE_COPY.batchUpdate}預覽</h3>
-                <p className="section-desc">
-                  逐片核對目前內容、更新後內容、人物與處理狀態，再按下方「確認這份預覽並更新」。修改設定或人物後需重新產生預覽。
-                </p>
-              </div>
-              <div className="batch-preview-summary" aria-label="批次預覽狀態摘要">
-                <span className="batch-preview-summary-item batch-preview-summary-success">
-                  將更新 <strong>{formatVideoCount(previewCounts.willUpdate)}</strong>
-                </span>
-                <span className="batch-preview-summary-item">
-                  沒有變更 <strong>{formatVideoCount(previewCounts.unchanged)}</strong>
-                </span>
-                <span className="batch-preview-summary-item">
-                  略過 <strong>{formatVideoCount(previewCounts.skipped)}</strong>
-                </span>
-                <span className="batch-preview-summary-item batch-preview-summary-error">
-                  失敗 <strong>{formatVideoCount(previewCounts.failed)}</strong>
-                </span>
-              </div>
-              <div className="batch-preview-list">
-                {batchPreview.map((item, index) => (
-                  <BatchPreviewItem item={item} index={index} key={item.videoId || item.video_id} />
-                ))}
-              </div>
-            </section>
+          {!filteredVideos.length && !editHistory.loading && (
+            <p role="status">沒有符合目前搜尋與套用狀態的影片。請調整篩選，或一起顯示狀態未知的影片。</p>
           )}
           <div className="glass-panel execution-bar">
             <div>
-              <strong>將處理目前清單中的 {formatVideoCount(videos.length)}</strong>
-              <p>
-                {batchPreview
-                  ? '確認時會使用上方這份預覽；人物為「不編輯」的影片會略過。'
-                  : '先產生完整預覽，檢查逐片變更後再確認送出。'}
-              </p>
-            </div>
-            <div className="page-actions">
-              {batchPreview && (
-                <Button
-                  variant="secondary"
-                  className="btn btn-secondary"
-                  onClick={requestPreview}
-                  disabled={workflowBusy}
-                >
-                  <RefreshCw size={16} /> 重新產生預覽
-                </Button>
+              <strong>下一步：編輯草稿並公開</strong>
+              <p>先套用人物，再到獨立頁面逐片修改標題與描述。最後確認編輯並公開前，不會寫入 YouTube。</p>
+              <p>將處理全部 {assignedCount} 支已指定人物的影片（含篩選外影片）。</p>
+              {availability.reason && (
+                <p id="prepare-draft-reason" role="status">
+                  {availability.reason}
+                </p>
               )}
-              <Button
-                variant="success"
-                className="btn btn-success"
-                onClick={batchPreview ? requestExecute : requestPreview}
-                disabled={workflowBusy || (Boolean(batchPreview) && !previewCounts.willUpdate)}
-              >
-                <Send size={18} />{' '}
-                {executing
-                  ? YOUTUBE_COPY.updateLoading
-                  : loadingPreview
-                    ? '建立預覽中…'
-                    : estimateLoading
-                      ? '估算配額中…'
-                      : batchPreview
-                        ? '確認這份預覽並更新'
-                        : '產生完整批次預覽'}
-              </Button>
+              {(!auth.authenticated || !channel) && <Link to={PATHS.youtubeConnections}>前往 YouTube 設定</Link>}
             </div>
+            <Button
+              variant="primary"
+              onClick={() => prepareDrafts()}
+              disabled={!availability.canPrepare}
+              aria-describedby={availability.reason ? 'prepare-draft-reason' : undefined}
+              aria-busy={preparing || undefined}
+            >
+              <Send size={18} /> {preparing ? '產生暫存中…' : '套用人物並建立草稿'}
+            </Button>
+            {preparing && (
+              <Button variant="secondary" onClick={() => prepareController.current?.abort()}>
+                取消產生暫存
+              </Button>
+            )}
           </div>
         </div>
       )}
 
-      {result && (
-        <div className="glass-panel card-padding result-panel card-stack">
-          <ResultExport
-            filename="BatchUpdatePage"
-            rows={result.results.map((item) => ({
-              id: item.video_id,
-              title: item.title || '',
-              status: item.status,
-              reason: item.reason || '',
-              url: `https://youtu.be/${item.video_id}`,
-            }))}
-          />
-          <h3
-            className={
-              result.completed ? 'result-heading result-heading-success' : 'result-heading result-heading-warning'
-            }
-          >
-            <CheckCircle2 size={22} />{' '}
-            {result.completed
-              ? `YouTube ${YOUTUBE_COPY.batchUpdate}已執行完成`
-              : `YouTube ${YOUTUBE_COPY.batchUpdate}部分完成`}
-          </h3>
-          <p className="section-desc">
-            共 {formatVideoCount(result.total_count || 0)}：{formatResultCounts(result)}。
-          </p>
-          {result.quota_blocked && (
-            <div className="info-banner">
-              <Info size={15} />
-              <span>已達 YouTube 配額上限；未執行項目請於官方重設後重新讀取草稿影片並送出。</span>
-            </div>
-          )}
-          {(result.results || []).map((item) => (
-            <div key={item.video_id} className="result-item result-row">
-              <div>
-                <strong>{item.title || item.video_id}</strong>
-                <div className="result-meta">
-                  {formatVideoId(item.video_id)}
-                  {item.person ? ` · ${item.person}` : ''}
-                </div>
-                {item.reason && (
-                  <div className={item.status === 'failed' ? 'result-reason result-reason-failed' : 'result-reason'}>
-                    {item.reason}
-                  </div>
-                )}
-              </div>
-              <ResultStatus status={item.status} />
-            </div>
-          ))}
-        </div>
-      )}
       <ThumbnailDialog image={previewImage} onClose={() => setPreviewImage(null)} />
     </div>
   );

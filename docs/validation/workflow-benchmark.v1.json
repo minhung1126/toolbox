@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "baseline_commit": "9740ed6",
+  "browser": "Chromium 153.0.8010.12 (Playwright 1243)",
+  "provider": "fake",
+  "measurement": "single-run automation; timings are not human or production measurements",
+  "baseline": [
+    {
+      "version": 1,
+      "scenario": "copy-six-cells",
+      "clicks": 6,
+      "settingsNavigations": 0,
+      "elapsedMs": 1100,
+      "completed": true
+    },
+    {
+      "version": 1,
+      "scenario": "recover-video-read",
+      "clicks": 5,
+      "selectionActions": 1,
+      "settingsNavigations": 0,
+      "elapsedMs": 1207,
+      "completed": true,
+      "recoveredAfterReadError": true
+    },
+    {
+      "version": 1,
+      "scenario": "repeat-video-update",
+      "clicks": 4,
+      "selectionActions": 1,
+      "settingsNavigations": 0,
+      "elapsedMs": 1126,
+      "completed": true,
+      "recoveredAfterReadError": false
+    }
+  ],
+  "implementation": [
+    {
+      "version": 1,
+      "scenario": "copy-six-cells",
+      "clicks": 4,
+      "settingsNavigations": 0,
+      "elapsedMs": 551,
+      "completed": true
+    },
+    {
+      "version": 1,
+      "scenario": "recover-video-read",
+      "clicks": 5,
+      "selectionActions": 1,
+      "settingsNavigations": 0,
+      "elapsedMs": 1363,
+      "completed": true,
+      "recoveredAfterReadError": true
+    },
+    {
+      "version": 1,
+      "scenario": "repeat-video-update",
+      "clicks": 4,
+      "selectionActions": 1,
+      "settingsNavigations": 0,
+      "elapsedMs": 1223,
+      "completed": true,
+      "recoveredAfterReadError": false
+    }
+  ]
+}

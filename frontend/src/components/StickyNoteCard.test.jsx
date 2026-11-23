@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { NoteDraftsProvider } from '../features/notes/NoteDrafts';
 import StickyNoteCard, { formatNoteDate } from './StickyNoteCard';
 import { notesApi } from '../features/notes/api/notesApi';
 import * as clipboardModule from '../utils/clipboard';
@@ -11,6 +12,7 @@ vi.mock('../features/notes/api/notesApi', () => ({
   isAmbiguousNoteMutation: (error) =>
     ['notes_mutation_invalid', 'timeout', 'network_error'].includes(error?.code) || error?.status >= 500,
   notesApi: {
+    getNote: vi.fn(),
     updateNote: vi.fn(),
     deleteNote: vi.fn(),
   },
@@ -36,6 +38,37 @@ const mockNote = {
 describe('StickyNoteCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('keeps and copies new text after an ambiguous autosave and a server reread', async () => {
+    notesApi.updateNote.mockRejectedValueOnce(Object.assign(new Error('儲存逾時'), { code: 'timeout' }));
+    const onReconcile = vi.fn();
+    const { rerender } = render(<StickyNoteCard note={mockNote} onReconcile={onReconcile} />);
+    fireEvent.change(screen.getByLabelText('便利貼文字內容'), { target: { value: '不可遺失的新草稿' } });
+    expect(screen.getByText('有未儲存變更')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('儲存失敗 · 文字仍保留')).toBeInTheDocument());
+    rerender(<StickyNoteCard note={{ ...mockNote }} onReconcile={onReconcile} />);
+    expect(screen.getByDisplayValue('不可遺失的新草稿')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '一鍵複製文字內容' }));
+    expect(clipboardModule.copyToClipboard).toHaveBeenCalledWith('不可遺失的新草稿');
+    expect(screen.queryByText('已儲存', { exact: true })).not.toBeInTheDocument();
+  });
+
+  it('retains uncertain drafts across tool navigation and resumes only after a matching reread', async () => {
+    notesApi.updateNote.mockReset();
+    notesApi.updateNote.mockRejectedValueOnce(Object.assign(new Error('timeout'), { code: 'timeout' }));
+    const view = (show) => <NoteDraftsProvider>{show && <StickyNoteCard note={mockNote} />}</NoteDraftsProvider>;
+    const { rerender } = render(view(true));
+    fireEvent.change(screen.getByLabelText('便利貼文字內容'), { target: { value: '本次草稿' } });
+    await waitFor(() => expect(screen.getByText('儲存失敗 · 文字仍保留')).toBeInTheDocument());
+    rerender(view(false));
+    rerender(view(true));
+    expect(screen.getByDisplayValue('本次草稿')).toBeInTheDocument();
+    expect(screen.getByText(/上次儲存結果待核對；本次工作階段/)).toBeInTheDocument();
+    notesApi.getNote.mockResolvedValueOnce({ note: { ...mockNote, content: '本次草稿' } });
+    fireEvent.click(screen.getByRole('button', { name: '核對伺服器內容' }));
+    await waitFor(() => expect(screen.getByText('已儲存', { exact: true })).toBeInTheDocument());
+    expect(notesApi.updateNote).toHaveBeenCalledTimes(1);
   });
 
   it('formats dates consistently', () => {
@@ -144,7 +177,7 @@ describe('StickyNoteCard', () => {
     expect(screen.getAllByLabelText('變數 name')).toHaveLength(1);
     fireEvent.change(screen.getByLabelText('變數 name'), { target: { value: 'min' } });
     expect(screen.getByLabelText('替換結果')).toHaveTextContent('hi min. min {role}');
-    expect(screen.getByRole('status')).toHaveTextContent('尚未填寫：role');
+    expect(screen.getByText(/尚未填寫：/)).toHaveTextContent('尚未填寫：role');
     fireEvent.click(screen.getByRole('button', { name: '複製結果' }));
     expect(clipboardModule.copyToClipboard).toHaveBeenCalledWith('hi min. min {role}');
     await waitFor(() =>

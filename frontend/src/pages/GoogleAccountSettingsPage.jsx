@@ -85,6 +85,8 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
         </a>
       </div>
 
+      <h1>我的連線</h1>
+      <p>登入只驗證身分；試算表、YouTube 與音樂服務各自授權。</p>
       {/* 1. 控制台登入帳號 */}
       <div className="glass-panel card-padding settings-card card-stack">
         <div className="card-header">
@@ -164,6 +166,7 @@ export default function GoogleAccountSettingsPage({ authUser, sysSettings = {}, 
       {/* 2. Google 試算表授權 */}
       <ServiceAuthCard
         icon={FileSpreadsheet}
+        capabilities="唯讀試算表、複製文字與提供影片文案"
         title="Google 試算表授權"
         connected={isSheetsConnected}
         connectedBadgeText="已授權試算表"

@@ -1,0 +1,1 @@
+{"version":1,"filenames":["中文 影片.mp4","clip_$((2+3)).mp4","clip_$(printf expanded).mp4","clip_`printf expanded`.mp4","a'b.mp4","a\"b.mp4","folder\\clip.mp4","50%.mp4","clip!(x)&y.mp4","  spaced .mp4","tail\\"],"invalid_times":["","-1","NaN","Infinity","1:60","00:99:00","00:00:10junk","1e3"]}

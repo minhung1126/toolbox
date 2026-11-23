@@ -2,80 +2,92 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 import { api } from '../services/api';
 import useTeamPersonFilter from './useTeamPersonFilter';
+import { personKey } from '../features/sheets/model/personOptions';
 
 afterEach(() => vi.restoreAllMocks());
+const a = { team: 'A', person: '甲', kind: 'person' };
+const b = { team: 'B', person: '乙', kind: 'person' };
 
 describe('useTeamPersonFilter', () => {
   it('reports malformed provider options instead of silently showing no teams', async () => {
     vi.spyOn(api, 'parseSheetOptions').mockResolvedValue({ teams: [null] });
     const { result } = renderHook(() => useTeamPersonFilter({ source: 'sheet', worksheetName: '工作表' }));
-
     await waitFor(() => expect(result.current.error).toContain('工作表團體選項回應格式不正確'));
-    expect(result.current.errorType).toBe('teams');
+    expect(result.current.ready).toBe(false);
   });
 
-  it('loads teams and defaults a newly selected team to all people in API order', async () => {
-    const apiClient = {
-      parseSheetOptions: vi.fn().mockResolvedValue({ teams: ['團體 B', '團體 A'] }),
-      getTeamPeople: vi.fn().mockResolvedValue({ people: ['全團體', '乙', '甲'] }),
-    };
+  it('loads everyone without choosing a team and retains selections across team/search filters', async () => {
+    const apiClient = { parseSheetOptions: vi.fn().mockResolvedValue({ teams: ['A', 'B'], people: [a, b] }) };
     const { result } = renderHook(() => useTeamPersonFilter({ source: 'sheet', worksheetName: '工作表', apiClient }));
-
-    await waitFor(() => expect(result.current.teams).toEqual(['團體 B', '團體 A']));
-    expect(result.current.selectedTeam).toBe('');
-
-    act(() => result.current.setSelectedTeam('團體 A'));
-    await waitFor(() => expect(result.current.people).toEqual(['全團體', '乙', '甲']));
-    expect(result.current.selectedPeople).toEqual(['全團體', '乙', '甲']);
-    expect(apiClient.getTeamPeople).toHaveBeenCalledWith('sheet', '工作表', '團體 A');
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.people).toEqual([a, b]);
+    expect(result.current.selectedTeams).toEqual([]);
+    expect(result.current.selectedPeople).toEqual([]);
+    act(() => result.current.setSelectedPeople([personKey(a)]));
+    act(() => {
+      result.current.setSelectedTeams(['B']);
+      result.current.setQuery('乙');
+    });
+    act(() => result.current.setSelectedPeople([personKey(a), personKey(b)]));
+    act(() => {
+      result.current.setQuery('');
+      result.current.setSelectedTeams([]);
+    });
+    expect(result.current.selectedPeople).toEqual([personKey(a), personKey(b)]);
+    expect(apiClient.parseSheetOptions).toHaveBeenCalledTimes(1);
   });
 
-  it('ignores an older people response after a fast team switch', async () => {
+  it('ignores an older response after changing worksheet', async () => {
     let resolveOld;
-    let resolveNew;
     const apiClient = {
-      parseSheetOptions: vi.fn().mockResolvedValue({ teams: ['舊團體', '新團體'] }),
-      getTeamPeople: vi.fn(
-        (_, __, team) =>
+      parseSheetOptions: vi
+        .fn()
+        .mockReturnValueOnce(
           new Promise((resolve) => {
-            if (team === '舊團體') resolveOld = resolve;
-            else resolveNew = resolve;
+            resolveOld = resolve;
           })
-      ),
+        )
+        .mockResolvedValueOnce({ teams: ['B'], people: [b] }),
     };
-    const { result } = renderHook(() => useTeamPersonFilter({ source: 'sheet', worksheetName: '工作表', apiClient }));
-    await waitFor(() => expect(result.current.teams).toHaveLength(2));
-
-    act(() => result.current.setSelectedTeam('舊團體'));
-    await waitFor(() => expect(apiClient.getTeamPeople).toHaveBeenCalledWith('sheet', '工作表', '舊團體'));
-    act(() => result.current.setSelectedTeam('新團體'));
-    await waitFor(() => expect(apiClient.getTeamPeople).toHaveBeenCalledWith('sheet', '工作表', '新團體'));
-
-    await act(async () => {
-      resolveOld({ people: ['舊人物'] });
-      resolveNew({ people: ['新人物'] });
+    const { result, rerender } = renderHook((props) => useTeamPersonFilter({ source: 'sheet', ...props, apiClient }), {
+      initialProps: { worksheetName: 'old' },
     });
-    await waitFor(() => expect(result.current.people).toEqual(['新人物']));
-    expect(result.current.selectedPeople).toEqual(['新人物']);
+    rerender({ worksheetName: 'new' });
+    await waitFor(() => expect(result.current.people).toEqual([b]));
+    await act(async () => resolveOld({ teams: ['A'], people: [a] }));
+    expect(result.current.people).toEqual([b]);
   });
 
-  it('clears downstream state when the worksheet is disabled or changed', async () => {
-    const apiClient = {
-      parseSheetOptions: vi.fn().mockResolvedValue({ teams: ['團體'] }),
-      getTeamPeople: vi.fn().mockResolvedValue({ people: ['人物'] }),
-    };
-    const { result, rerender } = renderHook((props) => useTeamPersonFilter({ ...props, apiClient }), {
-      initialProps: { source: 'sheet', worksheetName: '工作表', enabled: true },
-    });
-    await waitFor(() => expect(result.current.teams).toEqual(['團體']));
-    act(() => result.current.setSelectedTeam('團體'));
-    await waitFor(() => expect(result.current.people).toEqual(['人物']));
-
-    rerender({ source: 'sheet', worksheetName: '另一張', enabled: false });
-    await waitFor(() => {
-      expect(result.current.teams).toEqual([]);
-      expect(result.current.selectedTeam).toBe('');
-      expect(result.current.people).toEqual([]);
-    });
+  it('migrates a legacy selection and keeps it while temporarily disabled or after failed refresh', async () => {
+    const apiClient = { parseSheetOptions: vi.fn().mockResolvedValue({ teams: ['A'], people: [a] }) };
+    const { result, rerender } = renderHook(
+      (props) =>
+        useTeamPersonFilter({
+          source: 'sheet',
+          worksheetName: 'sheet',
+          initialTeam: 'A',
+          initialSelectedPeople: ['甲'],
+          ...props,
+          apiClient,
+        }),
+      { initialProps: { enabled: true, refreshKey: 0 } }
+    );
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.selectedPeople).toEqual([personKey(a)]);
+    rerender({ enabled: false, refreshKey: 0 });
+    expect(result.current.selectedPeople).toEqual([personKey(a)]);
+    apiClient.parseSheetOptions.mockRejectedValue(new Error('offline'));
+    rerender({ enabled: true, refreshKey: 1 });
+    await waitFor(() => expect(result.current.error).toContain('offline'));
+    expect(result.current.selectedPeople).toEqual([personKey(a)]);
+    expect(result.current.ready).toBe(false);
   });
+});
+
+it('honors an explicitly empty team filter while retaining the legacy migration team', () => {
+  const { result } = renderHook(() => useTeamPersonFilter({ enabled: false, initialTeam: 'A', initialTeams: [] }));
+  expect(result.current.selectedTeams).toEqual([]);
+  act(() => result.current.resetSelection({ team: 'A', teams: [], selectedPeople: ['甲'] }));
+  expect(result.current.selectedTeams).toEqual([]);
+  expect(result.current.selectedPeople).toEqual([personKey(a)]);
 });

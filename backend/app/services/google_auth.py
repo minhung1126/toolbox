@@ -44,6 +44,7 @@ YOUTUBE_SCOPES = [
     "https://www.googleapis.com/auth/youtube",
 ]
 GOOGLE_TOKEN_REFRESH_WINDOW = timedelta(minutes=5)
+GOOGLE_TOKEN_REFRESH_RETRY_DELAY = timedelta(minutes=1)
 _google_refresh_lock = RLock()
 
 
@@ -108,7 +109,7 @@ def get_client_config(purpose: str = "login", slot: str = "primary") -> dict:
         youtube_slot = get_settings(settings).youtube_oauth_slot(normalize_youtube_slot(slot))
         client_id = youtube_slot.client_id
         client_secret = youtube_slot.client_secret
-    elif purpose in ("login", "sheets", "drive", "ytmusic", "video_uploader"):
+    elif purpose in ("login", "sheets", "drive", "ytmusic"):
         client_id = get_settings(settings).GOOGLE_CLIENT_ID
         client_secret = get_settings(settings).GOOGLE_CLIENT_SECRET
     else:
@@ -126,7 +127,7 @@ def get_client_config(purpose: str = "login", slot: str = "primary") -> dict:
 
 
 def _scopes_for(purpose: str) -> list[str]:
-    if purpose in ("youtube", "ytmusic", "video_uploader"):
+    if purpose in ("youtube", "ytmusic"):
         return YOUTUBE_SCOPES
     if purpose == "login":
         return LOGIN_SCOPES
@@ -162,11 +163,7 @@ def get_auth_url(purpose: str = "login", slot: str = "primary") -> tuple[str, st
     """Generate a Google OAuth URL and return its PKCE state."""
     slot_name = normalize_youtube_slot(slot) if purpose == "youtube" else "primary"
     flow = create_oauth_flow(purpose=purpose, slot=slot_name)
-    prompt = (
-        "consent select_account"
-        if purpose in ("youtube", "ytmusic", "video_uploader", "sheets", "drive")
-        else "consent"
-    )
+    prompt = "consent select_account" if purpose in ("youtube", "ytmusic", "sheets", "drive") else "consent"
     auth_url, state = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
@@ -224,7 +221,7 @@ def exchange_code_for_tokens(
                 "channel_title": channel.get("channel_title") or "",
             }
         )
-    elif purpose in ("ytmusic", "video_uploader"):
+    elif purpose in ("ytmusic"):
         try:
             channel = get_youtube_channel_info(creds, slot="primary")
             token_dict.update(
@@ -326,30 +323,53 @@ def _refresh_credentials(
     owner_sub: str,
     credential_key: str = "google",
     slot: str = "primary",
-) -> Credentials:
+) -> Optional[Credentials]:
     """Refresh under one process-wide lock and persist the rotated token atomically."""
     with _google_refresh_lock:
+        store = get_credential_store(credential_store)
         # Another request may have refreshed the persistent record while this
         # request was waiting for the lock. Always use the newest record.
         if credential_key == "youtube":
-            latest = get_credential_store(credential_store).get_youtube_credentials(owner_sub, slot=slot)
+            latest = store.get_youtube_credentials(owner_sub, slot=slot)
+            public = store.get_youtube_public(owner_sub, slot=slot)
         elif credential_key == "ytmusic":
-            latest = get_credential_store(credential_store).get_ytmusic_credentials(owner_sub)
-        elif credential_key == "video_uploader":
-            latest = get_credential_store(credential_store).get_video_uploader_credentials(owner_sub)
+            latest = store.get_ytmusic_credentials(owner_sub)
+            public = store.get_ytmusic_public(owner_sub)
         elif credential_key == "sheets":
-            latest = get_credential_store(credential_store).get_sheets_credentials(owner_sub) or get_credential_store(
-                credential_store
-            ).get_google_credentials(owner_sub)
+            latest = store.get_sheets_credentials(owner_sub)
+            public = store.get_sheets_public(owner_sub)
+            if not latest:
+                credential_key = "google"
+                latest = store.get_google_credentials(owner_sub)
+                public = store.get_google_public(owner_sub)
         elif credential_key == "drive":
-            latest = get_credential_store(credential_store).get_drive_credentials(owner_sub) or get_credential_store(
-                credential_store
-            ).get_google_credentials(owner_sub)
+            latest = store.get_drive_credentials(owner_sub)
+            public = store.get_drive_public(owner_sub)
+            if not latest:
+                credential_key = "google"
+                latest = store.get_google_credentials(owner_sub)
+                public = store.get_google_public(owner_sub)
         else:
-            latest = get_credential_store(credential_store).get_google_credentials(owner_sub)
+            latest = store.get_google_credentials(owner_sub)
+            public = store.get_google_public(owner_sub)
         active_dict = latest or token_dict
         purpose = "youtube" if credential_key == "youtube" else "login"
         credentials = _build_credentials(active_dict, purpose=purpose, slot=slot)
+        public = public or {}
+        # Revoked refresh tokens cannot recover without a new OAuth grant.
+        # Persisted state also prevents retries through service fallbacks and
+        # after a restart; saving a new connection resets the failure state.
+        if public.get("status") == "reauthorization_required":
+            return None
+        if public.get("status") == "refresh_failed":
+            try:
+                failed_at = datetime.fromisoformat(public["last_refresh_failed_at"])
+                if failed_at.tzinfo is None:
+                    failed_at = failed_at.replace(tzinfo=timezone.utc)
+            except (KeyError, TypeError, ValueError):
+                failed_at = None
+            if failed_at and datetime.now(timezone.utc) - failed_at < GOOGLE_TOKEN_REFRESH_RETRY_DELAY:
+                return credentials
         if not _needs_refresh(credentials):
             return credentials
 
@@ -365,8 +385,6 @@ def _refresh_credentials(
                 )
             elif credential_key == "ytmusic":
                 get_credential_store(credential_store).save_ytmusic_connection(refreshed, owner_sub=owner_sub)
-            elif credential_key == "video_uploader":
-                get_credential_store(credential_store).save_video_uploader_connection(refreshed, owner_sub=owner_sub)
             elif credential_key == "sheets":
                 if get_credential_store(credential_store).get_sheets_credentials(owner_sub):
                     get_credential_store(credential_store).save_sheets_connection(refreshed, owner_sub=owner_sub)
@@ -386,7 +404,8 @@ def _refresh_credentials(
             raw_message = str(exc).casefold()
             is_refresh_error = isinstance(exc, RefreshError)
             requires_reauthorization = is_refresh_error and any(
-                marker in raw_message for marker in ("invalid_grant", "invalid client", "revoked")
+                marker in raw_message
+                for marker in ("invalid_grant", "invalid_client", "invalid client", "unauthorized_client", "revoked")
             )
             # Never persist or expose the provider's raw response body. The
             # status is enough for the UI; diagnostics retain only the type.
@@ -400,12 +419,6 @@ def _refresh_credentials(
                 )
             elif credential_key == "ytmusic":
                 get_credential_store(credential_store).mark_ytmusic_refresh_failed(
-                    message,
-                    owner_sub=owner_sub,
-                    requires_reauthorization=requires_reauthorization,
-                )
-            elif credential_key == "video_uploader":
-                get_credential_store(credential_store).mark_video_uploader_refresh_failed(
                     message,
                     owner_sub=owner_sub,
                     requires_reauthorization=requires_reauthorization,
@@ -432,8 +445,15 @@ def _refresh_credentials(
                 get_credential_store(credential_store).mark_google_refresh_failed(
                     message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
                 )
-            logger.error("Failed to refresh Google token (%s): %s", credential_key, type(exc).__name__)
-            return credentials
+            logger.log(
+                logging.WARNING if requires_reauthorization else logging.ERROR,
+                "Failed to refresh Google token (%s/%s): %s status=%s",
+                credential_key,
+                slot,
+                type(exc).__name__,
+                "reauthorization_required" if requires_reauthorization else "refresh_failed",
+            )
+            return None if requires_reauthorization else credentials
 
 
 def build_credentials_from_dict(
@@ -442,7 +462,7 @@ def build_credentials_from_dict(
     credential_key: str = "google",
     owner_sub: str,
     slot: str = "primary",
-) -> Credentials:
+) -> Optional[Credentials]:
     """Reconstruct credentials and proactively refresh them before expiry."""
     purpose = "youtube" if credential_key == "youtube" else "login"
     credentials = _build_credentials(token_dict, purpose=purpose, slot=slot)
@@ -521,12 +541,11 @@ def _get_scoped_service_credentials(
                 return creds
 
     # 3. Fallback to legacy google login connection if it includes required scope
-    if credential_key != "video_uploader":
-        legacy_dict = get_credential_store(credential_store).get_google_credentials(sub)
-        if legacy_dict and legacy_dict.get("token"):
-            creds = build_credentials_from_dict(legacy_dict, credential_key="google", owner_sub=sub)
-            if creds and creds.valid and scope_checker(creds):
-                return creds
+    legacy_dict = get_credential_store(credential_store).get_google_credentials(sub)
+    if legacy_dict and legacy_dict.get("token"):
+        creds = build_credentials_from_dict(legacy_dict, credential_key="google", owner_sub=sub)
+        if creds and creds.valid and scope_checker(creds):
+            return creds
 
     return None
 
@@ -561,19 +580,6 @@ def get_ytmusic_credentials(session_id: Optional[str] = None, owner_sub: Optiona
         credential_key="ytmusic",
         scope_checker=has_youtube_scope,
         dedicated_getter=get_credential_store(credential_store).get_ytmusic_credentials,
-    )
-
-
-def get_video_uploader_credentials(
-    session_id: Optional[str] = None, owner_sub: Optional[str] = None
-) -> Optional[Credentials]:
-    """Load dedicated Video Uploader YouTube credentials for an authenticated user session or subject."""
-    return _get_scoped_service_credentials(
-        session_id=session_id,
-        owner_sub=owner_sub,
-        credential_key="video_uploader",
-        scope_checker=has_youtube_scope,
-        dedicated_getter=get_credential_store(credential_store).get_video_uploader_credentials,
     )
 
 

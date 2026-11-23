@@ -19,7 +19,7 @@ export function usePhotoCuratorWorkflow({ toast }) {
   } = usePhotoCuratorSession();
 
   const [draggedPhotoId, setDraggedPhotoId] = useState(null);
-  const [dragOverZone, setDragOverZone] = useState(null); // 'unassigned' | 'post-1' | 'post-2' | 'post-3'
+  const [dragOverZone, setDragOverZone] = useState(null); // 'unassigned' | 'post-N'
   const [dropPosition, setDropPosition] = useState(null);
   const [autoConfirmOpen, setAutoConfirmOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -92,16 +92,46 @@ export function usePhotoCuratorWorkflow({ toast }) {
     setPreviousArrangement({ posts, unassignedIds });
   }, [posts, unassignedIds, setPreviousArrangement]);
 
+  const restoreUnassignedPhotos = useCallback(
+    (photoIds) => {
+      setUnassignedIds((prev) => {
+        const nextIds = new Set([...prev, ...photoIds]);
+        // Photos retain their import order regardless of post arrangement or return order.
+        return photos.filter((photo) => nextIds.has(photo.id)).map((photo) => photo.id);
+      });
+    },
+    [photos, setUnassignedIds]
+  );
+
+  const handlePostCountChange = (count) => {
+    if (![3, 6, 9].includes(count) || count === posts.length) return;
+
+    rememberArrangement();
+    const returnedIds = posts.slice(count).flatMap((post) => post.photoIds);
+    setPosts(
+      Array.from(
+        { length: count },
+        (_, index) => posts[index] || { id: `post-${index + 1}`, title: `Post ${index + 1}`, photoIds: [] }
+      )
+    );
+    restoreUnassignedPhotos(returnedIds);
+    handleDragEnd();
+    if (returnedIds.length > 0) {
+      toast.info(`已切換為 ${count} 格，原多出貼文的 ${returnedIds.length} 張照片已移回待分配池。`);
+    }
+  };
+
   const undoArrangement = () => {
     if (!previousArrangement) return;
     setPosts((current) =>
-      current.map((post) => ({
+      previousArrangement.posts.map((post) => ({
         ...post,
-        photoIds: previousArrangement.posts.find((item) => item.id === post.id).photoIds,
+        title: current.find((item) => item.id === post.id)?.title ?? post.title,
       }))
     );
     setUnassignedIds(previousArrangement.unassignedIds);
     setPreviousArrangement(null);
+    handleDragEnd();
     toast.info('已復原上一次分組或排序。');
   };
 
@@ -136,10 +166,19 @@ export function usePhotoCuratorWorkflow({ toast }) {
           photoIds: post.photoIds.filter((id) => id !== photoId),
         }))
       );
-      setUnassignedIds((prev) => [photoId, ...prev]);
+      restoreUnassignedPhotos([photoId]);
     },
-    [photoMap, unassignedIds, rememberArrangement, setPosts, setUnassignedIds]
+    [photoMap, unassignedIds, rememberArrangement, restoreUnassignedPhotos, setPosts]
   );
+
+  const movePhotoToPosition = (photoId, postId, position) => {
+    const post = posts.find((item) => item.id === postId);
+    const currentIndex = post?.photoIds.indexOf(photoId) ?? -1;
+    const targetIndex = position - 1;
+    const targetPhotoId = post?.photoIds[targetIndex];
+    if (currentIndex < 0 || !targetPhotoId) return;
+    assignPhotoToPost(photoId, postId, targetPhotoId, targetIndex > currentIndex ? 'after' : 'before');
+  };
 
   // Delete photo completely from workbench
   const deletePhoto = useCallback(
@@ -210,23 +249,21 @@ export function usePhotoCuratorWorkflow({ toast }) {
     // Sort all photos by lastModified
     const sorted = [...photos].sort((a, b) => a.lastModified - b.lastModified);
     const total = sorted.length;
-    const basePerPost = Math.floor(total / 3);
-    const remainder = total % 3;
+    const basePerPost = Math.floor(total / posts.length);
+    const remainder = total % posts.length;
+    let offset = 0;
+    const distributedPosts = posts.map((post, index) => {
+      const count = basePerPost + (index < remainder ? 1 : 0);
+      const photoIds = sorted.slice(offset, offset + count).map((photo) => photo.id);
+      offset += count;
+      return { ...post, photoIds };
+    });
 
-    const count1 = basePerPost + (remainder > 0 ? 1 : 0);
-    const count2 = basePerPost + (remainder > 1 ? 1 : 0);
-
-    const post1Ids = sorted.slice(0, count1).map((p) => p.id);
-    const post2Ids = sorted.slice(count1, count1 + count2).map((p) => p.id);
-    const post3Ids = sorted.slice(count1 + count2).map((p) => p.id);
-
-    setPosts((prevPosts) => [
-      { ...prevPosts[0], photoIds: post1Ids },
-      { ...prevPosts[1], photoIds: post2Ids },
-      { ...prevPosts[2], photoIds: post3Ids },
-    ]);
+    setPosts(distributedPosts);
     setUnassignedIds([]);
-    toast.success(`已依時間軸自動均分：${count1} 張、${count2} 張、${post3Ids.length} 張`);
+    toast.success(
+      `已依檔案修改時間（非拍攝時間）自動均分：${distributedPosts.map((post) => `${post.photoIds.length} 張`).join('、')}`
+    );
   };
 
   // Reset all
@@ -260,6 +297,10 @@ export function usePhotoCuratorWorkflow({ toast }) {
 
   // Export structured ZIP
   const handleExportZip = async () => {
+    if (photos.some((photo) => !photo.file)) {
+      toast.warning('請先補齊缺少的本機照片再下載 ZIP。');
+      return;
+    }
     const assignedCount = posts.reduce((sum, post) => sum + post.photoIds.length, 0);
     if (assignedCount === 0) {
       toast.warning('目前尚未分配任何照片至貼文。');
@@ -336,7 +377,7 @@ export function usePhotoCuratorWorkflow({ toast }) {
     }
   };
 
-  // Post 1, 2, 3 Covers for IG 3-Grid Preview
+  // Covers for the selected Instagram grid size
   const coverPhotos = useMemo(() => {
     return posts.map((post) => {
       const coverId = post.photoIds[0];
@@ -350,6 +391,7 @@ export function usePhotoCuratorWorkflow({ toast }) {
     unassignedIds,
     posts,
     setPosts,
+    handlePostCountChange,
     draggedPhotoId,
     dragOverZone,
     dropPosition,
@@ -368,6 +410,7 @@ export function usePhotoCuratorWorkflow({ toast }) {
     handleFilesSelected,
     handleDropzoneDrop,
     assignPhotoToPost,
+    movePhotoToPosition,
     returnPhotoToUnassigned,
     deletePhoto,
     setAsCover,

@@ -1,291 +1,136 @@
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../services/api';
 import PublishCleanerPage from './PublishCleanerPage';
 
 const mocks = vi.hoisted(() => ({
-  api: {
-    getPlaylistVideos: vi.fn(),
-    estimateYoutubeQuota: vi.fn(),
-    publishAndCleanup: vi.fn(),
-    updateYoutubeVideoMetadata: vi.fn(),
-  },
-  saveWorkState: vi.fn(),
-  toast: {
-    warning: vi.fn(),
-    error: vi.fn(),
-    success: vi.fn(),
-  },
+  api: { previewCleanup: vi.fn(), estimateQuota: vi.fn(), cleanupPublicItems: vi.fn() },
+  toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() },
 }));
-
-vi.mock('../services/api', () => ({
-  api: mocks.api,
-  normalizeYoutubePlaylistInput: (value) => String(value || '').trim(),
-}));
-vi.mock('../hooks/useAccountWorkState', () => ({
-  default: () => ({ value: {}, error: '', save: mocks.saveWorkState }),
-}));
-vi.mock('../components/Toast', () => ({
-  useToast: () => mocks.toast,
-}));
-
-const primaryAuthUser = {
-  sub: 'owner-1',
-  youtube: {
-    active_slot: 'primary',
-    slots: {
-      primary: {
-        authenticated: true,
-        channel_id: 'channel-1',
-        channel_title: '工作頻道',
-        client_fingerprint: 'client-1',
-        token_status: 'active',
-        user: { email: 'creator@example.com' },
-      },
-    },
-  },
+vi.mock('../features/youtube/api/publishCleanupApi', () => ({ publishCleanupApi: mocks.api }));
+vi.mock('../components/Toast', () => ({ useToast: () => mocks.toast }));
+const auth = {
+  sub: 'owner',
+  youtube: { active_slot: 'primary', slots: { primary: { authenticated: true, channel_id: 'channel' } } },
 };
-
-const videoOne = {
-  video_id: 'video-1',
-  title: '影片一',
-  description: '描述一',
-  published_at: '2026-01-01T00:00:00Z',
+const item = {
+  playlist_id: 'playlist',
+  playlist_item_id: 'item',
+  video_id: 'video',
+  title: '已公開影片',
+  description: '',
+  observed_privacy: 'public',
+  candidate: true,
+  reason: '可清理',
 };
-
-const videoTwo = {
-  video_id: 'video-2',
-  title: '影片二',
-  description: '描述二',
-  published_at: '2026-01-02T00:00:00Z',
+const snapshot = {
+  version: 2,
+  mode: 'cleanup_only',
+  youtube_channel_id: 'channel',
+  youtube_slot: 'primary',
+  playlist_id: 'playlist',
+  items: [item],
 };
-
-function playlistResponse(playlistId, videos = [videoOne], overrides = {}) {
-  return {
-    playlist_id: playlistId,
-    videos,
-    source: 'youtube-api',
-    preview_snapshot: {
-      playlist_id: playlistId,
-      youtube_slot: 'primary',
-      data_version: 'version-1',
-      video_ids: videos.map((video) => video.video_id),
-    },
-    preview_token: `token-${playlistId}`,
-    data_version: 'version-1',
-    ...overrides,
-  };
+const preview = {
+  ...snapshot,
+  total_count: 1,
+  candidate_count: 1,
+  counts: { public: 1, private: 0, unlisted: 0, unknown: 0 },
+  preview_token: 'signed',
+  preview_snapshot: snapshot,
+};
+const result = {
+  version: 2,
+  mode: 'cleanup_only',
+  operation: 'youtube.publish_cleanup',
+  operation_id: 'operation',
+  completed: true,
+  total_count: 1,
+  succeeded_count: 1,
+  skipped_count: 0,
+  failed_count: 0,
+  not_attempted_count: 0,
+  needs_reconciliation_count: 0,
+  quota_blocked: false,
+  results: [{ ...item, status: 'succeeded' }],
+};
+const element = (playlist = 'playlist', user = auth) => (
+  <MemoryRouter>
+    <PublishCleanerPage authUser={user} sysSettings={{ default_playlist_id: playlist }} />
+  </MemoryRouter>
+);
+async function load() {
+  fireEvent.click(screen.getByRole('button', { name: '讀取 To-Post 播放清單' }));
+  await screen.findByText('已公開影片');
 }
 
-function renderPage({ authUser = primaryAuthUser, sysSettings = { default_playlist_id: 'playlist-a' } } = {}) {
-  return render(<PublishCleanerPage authUser={authUser} sysSettings={sysSettings} />);
-}
-
-function loadButton() {
-  return screen.getByRole('button', { name: /讀取 To-Post 播放清單/ });
-}
-
-async function loadCurrentPlaylist() {
-  fireEvent.click(loadButton());
-  await waitFor(() => expect(api.getPlaylistVideos).toHaveBeenCalled());
-}
-
-describe('PublishCleanerPage snapshot safety', () => {
+describe('cleanup-only page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    api.estimateYoutubeQuota.mockResolvedValue({ projected_units: 200, max_items_today: 2 });
-    api.publishAndCleanup.mockResolvedValue({
-      operation: 'youtube.publish_cleanup',
-      completed: true,
-      total_count: 1,
-      succeeded_count: 1,
-      warning_count: 0,
-      skipped_count: 0,
-      failed_count: 0,
-      not_attempted_count: 0,
-      quota_blocked: false,
-      results: [{ video_id: 'video-1', status: 'succeeded', title: '影片一' }],
-    });
-    api.updateYoutubeVideoMetadata.mockResolvedValue({});
+    mocks.api.previewCleanup.mockResolvedValue(preview);
+    mocks.api.estimateQuota.mockResolvedValue({ projected_units: 57 });
+    mocks.api.cleanupPublicItems.mockResolvedValue(result);
   });
-
-  it('keeps the shared playlist read-only and ignores stale responses after settings change', async () => {
-    const pending = {};
-    api.getPlaylistVideos.mockImplementation(
-      (playlistId) =>
-        new Promise((resolve) => {
-          pending[playlistId] = resolve;
-        })
-    );
-    const { rerender } = renderPage();
-
-    const input = screen.getByPlaceholderText('YouTube Playlist ID');
-    expect(input).toHaveAttribute('readonly');
-    await loadCurrentPlaylist();
-    rerender(<PublishCleanerPage authUser={primaryAuthUser} sysSettings={{ default_playlist_id: 'playlist-b' }} />);
-    await waitFor(() => expect(input).toHaveValue('playlist-b'));
-    await loadCurrentPlaylist();
-
-    await act(async () => {
-      pending['playlist-b'](playlistResponse('playlist-b', [{ ...videoTwo, title: 'B 影片' }]));
-    });
-    expect(await screen.findByText('B 影片')).toBeInTheDocument();
-
-    await act(async () => {
-      pending['playlist-a'](playlistResponse('playlist-a', [{ ...videoOne, title: 'A 舊影片' }]));
-    });
-    await waitFor(() => expect(screen.queryByText('A 舊影片')).not.toBeInTheDocument());
-    expect(screen.getByText('B 影片')).toBeInTheDocument();
-  });
-
-  it('clears executable data on a failed read and shows an empty playlist explicitly', async () => {
-    api.getPlaylistVideos
-      .mockResolvedValueOnce(playlistResponse('playlist-a'))
-      .mockRejectedValueOnce(new Error('網路中斷'))
-      .mockResolvedValueOnce(playlistResponse('playlist-c', []));
-    const { rerender } = renderPage();
-
-    await loadCurrentPlaylist();
-    expect(await screen.findByText('影片一')).toBeInTheDocument();
-
-    const input = screen.getByPlaceholderText('YouTube Playlist ID');
-    rerender(<PublishCleanerPage authUser={primaryAuthUser} sysSettings={{ default_playlist_id: 'playlist-b' }} />);
-    await waitFor(() => expect(input).toHaveValue('playlist-b'));
-    await loadCurrentPlaylist();
-    expect(await screen.findByText('讀取 To-Post 播放清單失敗：網路中斷')).toBeInTheDocument();
-    expect(screen.queryByText('影片一')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '設為公開並移出清單' })).not.toBeInTheDocument();
-
-    rerender(<PublishCleanerPage authUser={primaryAuthUser} sysSettings={{ default_playlist_id: 'playlist-c' }} />);
-    await waitFor(() => expect(input).toHaveValue('playlist-c'));
-    await loadCurrentPlaylist();
-    expect(await screen.findByText(/播放清單「playlist-c」目前沒有影片/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '設為公開並移出清單' })).not.toBeInTheDocument();
-  });
-
-  it('shows the exact confirmation snapshot and sends its complete preview payload', async () => {
-    api.getPlaylistVideos.mockResolvedValue(playlistResponse('playlist-a', [videoTwo, videoOne]));
-    renderPage();
-    await loadCurrentPlaylist();
-    expect(await screen.findByText('影片一')).toBeInTheDocument();
-    const pageList = screen.getByRole('list', { name: '待處理影片清單' });
-    const pageItems = within(pageList).getAllByRole('listitem');
-    expect(pageItems).toHaveLength(2);
-    expect(pageItems[0]).toHaveTextContent('影片一');
-    expect(pageItems[1]).toHaveTextContent('影片二');
-
-    fireEvent.click(screen.getByRole('button', { name: '設為公開並移出清單' }));
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog).toHaveTextContent('播放清單：playlist-a');
-    expect(dialog).toHaveTextContent('授權組合：primary／頻道 工作頻道／帳號 creator@example.com');
-    expect(dialog).toHaveTextContent('影片數量：2 支影片');
-    expect(dialog).toHaveTextContent('#1 影片一');
-    expect(dialog).toHaveTextContent('影片 ID：video-1');
-    expect(dialog).toHaveTextContent('#2 影片二');
-    expect(dialog).toHaveTextContent('影片 ID：video-2');
-    const videoList = within(dialog).getByRole('list', { name: '實際確認影片' });
-    expect(videoList).toBeInTheDocument();
-    expect(within(videoList).getAllByRole('listitem')).toHaveLength(2);
-
-    fireEvent.click(within(dialog).getByRole('button', { name: '設為公開並移出清單' }));
-    await waitFor(() => expect(api.publishAndCleanup).toHaveBeenCalledTimes(1));
-    expect(api.publishAndCleanup).toHaveBeenCalledWith('playlist-a', {
+  it('previews without writes and only cleans after a second confirmation', async () => {
+    render(element());
+    await load();
+    expect(mocks.api.cleanupPublicItems).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /編輯/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '清理已公開影片' }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('只移除預覽中的 1 筆清單成員');
+    fireEvent.click(within(dialog).getByRole('button', { name: '確認清理' }));
+    await screen.findByText(/已移除 1 · 保留 0/);
+    expect(mocks.api.cleanupPublicItems).toHaveBeenCalledTimes(1);
+    expect(mocks.api.cleanupPublicItems).toHaveBeenCalledWith('playlist', {
       youtubeSlot: 'primary',
-      previewSnapshot: expect.objectContaining({
-        playlist_id: 'playlist-a',
-        video_ids: ['video-2', 'video-1'],
-      }),
-      previewToken: 'token-playlist-a',
+      previewToken: 'signed',
+      previewSnapshot: snapshot,
     });
   });
-
-  it('rejects malformed playlist data instead of showing an empty executable preview', async () => {
-    api.getPlaylistVideos.mockResolvedValue(playlistResponse('playlist-a', [videoOne], { videos: undefined }));
-    renderPage();
-
-    await loadCurrentPlaylist();
-    expect(await screen.findByText('讀取 To-Post 播放清單失敗：播放清單預覽回應格式不正確。')).toBeInTheDocument();
-    expect(screen.queryByText(/播放清單「playlist-a」目前沒有影片/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '設為公開並移出清單' })).not.toBeInTheDocument();
+  it('has a clear empty candidate state and no edit or publication action', async () => {
+    mocks.api.previewCleanup.mockResolvedValue({
+      ...preview,
+      candidate_count: 0,
+      counts: { public: 0, private: 1, unlisted: 0, unknown: 0 },
+      items: [{ ...item, candidate: false, observed_privacy: 'private' }],
+    });
+    render(element());
+    await load();
+    expect(screen.getByText(/目前沒有可清理的已公開影片/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '清理已公開影片' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /編輯/ })).not.toBeInTheDocument();
   });
-
-  it('requires provider reconciliation when a publish request returns an invalid result', async () => {
-    api.getPlaylistVideos.mockResolvedValue(playlistResponse('playlist-a'));
-    api.publishAndCleanup.mockResolvedValueOnce({ completed: true });
-    renderPage();
-
-    await loadCurrentPlaylist();
-    expect(await screen.findByText('影片一')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '設為公開並移出清單' }));
-    const dialog = await screen.findByRole('dialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: '設為公開並移出清單' }));
-
-    expect(await screen.findByText(/伺服器結果格式不正確，發布操作可能已執行/)).toBeInTheDocument();
-    expect(mocks.toast.warning).toHaveBeenCalledWith('發布結果待核對，請先檢查 YouTube Studio');
+  it('ignores old reads and closes confirmation when source changes', async () => {
+    let resolve;
+    mocks.api.previewCleanup.mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      })
+    );
+    const view = render(element());
+    fireEvent.click(screen.getByRole('button', { name: '讀取 To-Post 播放清單' }));
+    view.rerender(element('other'));
+    await act(async () => resolve(preview));
+    expect(screen.queryByText('已公開影片')).not.toBeInTheDocument();
+    expect(mocks.api.cleanupPublicItems).not.toHaveBeenCalled();
+  });
+  it('shows unknown and quota interruption without a success toast', async () => {
+    mocks.api.cleanupPublicItems.mockResolvedValue({
+      ...result,
+      completed: false,
+      succeeded_count: 0,
+      needs_reconciliation_count: 1,
+      quota_blocked: true,
+      results: [{ ...item, status: 'needs_reconciliation' }],
+    });
+    render(element());
+    await load();
+    fireEvent.click(screen.getByRole('button', { name: '清理已公開影片' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '確認清理' }));
+    await waitFor(() => expect(screen.getByText(/待核對 1/)).toBeInTheDocument());
     expect(mocks.toast.success).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: '設為公開並移出清單' })).not.toBeInTheDocument();
-  });
-
-  it('requires provider reconciliation after an ambiguous publish timeout', async () => {
-    api.getPlaylistVideos.mockResolvedValue(playlistResponse('playlist-a'));
-    api.publishAndCleanup.mockRejectedValueOnce(Object.assign(new Error('連線逾時'), { code: 'timeout' }));
-    renderPage();
-
-    await loadCurrentPlaylist();
-    expect(await screen.findByText('影片一')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '設為公開並移出清單' }));
-    const dialog = await screen.findByRole('dialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: '設為公開並移出清單' }));
-
-    expect(await screen.findByText(/無法確認發布操作是否已完成/)).toBeInTheDocument();
-    expect(mocks.toast.warning).toHaveBeenCalledWith('發布結果待核對，請先檢查 YouTube Studio');
-    expect(screen.queryByRole('button', { name: '設為公開並移出清單' })).not.toBeInTheDocument();
-  });
-
-  it('invalidates an open confirmation when the shared setting or authorization changes', async () => {
-    api.getPlaylistVideos.mockResolvedValue(playlistResponse('playlist-a'));
-    const { rerender } = renderPage();
-    await loadCurrentPlaylist();
-    fireEvent.click(screen.getByRole('button', { name: '設為公開並移出清單' }));
-    expect(await screen.findByRole('dialog')).toBeInTheDocument();
-
-    const input = screen.getByPlaceholderText('YouTube Playlist ID');
-    rerender(<PublishCleanerPage authUser={primaryAuthUser} sysSettings={{ default_playlist_id: 'playlist-b' }} />);
-    await waitFor(() => expect(input).toHaveValue('playlist-b'));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '設為公開並移出清單' })).not.toBeInTheDocument();
-
-    rerender(
-      <PublishCleanerPage
-        authUser={{
-          ...primaryAuthUser,
-          youtube: { ...primaryAuthUser.youtube, active_slot: 'secondary' },
-        }}
-        sysSettings={{ default_playlist_id: 'playlist-b' }}
-      />
-    );
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '設為公開並移出清單' })).not.toBeInTheDocument();
-  });
-
-  it('invalidates the loaded snapshot when the data version changes', async () => {
-    api.getPlaylistVideos.mockResolvedValue(playlistResponse('playlist-a'));
-    const versionedAuth = {
-      ...primaryAuthUser,
-      youtube: { ...primaryAuthUser.youtube, data_version: 'version-1' },
-    };
-    const { rerender } = renderPage({ authUser: versionedAuth });
-    await loadCurrentPlaylist();
-    expect(await screen.findByText('影片一')).toBeInTheDocument();
-
-    rerender(
-      <PublishCleanerPage
-        authUser={{ ...versionedAuth, youtube: { ...versionedAuth.youtube, data_version: 'version-2' } }}
-        sysSettings={{ default_playlist_id: 'playlist-a' }}
-      />
-    );
-    expect(screen.queryByText('影片一')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '設為公開並移出清單' })).not.toBeInTheDocument();
+    expect(screen.getByText(/配額中止/)).toBeInTheDocument();
   });
 });

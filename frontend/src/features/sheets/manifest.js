@@ -5,9 +5,10 @@ import { PATHS } from '../../routes/paths';
 
 const manifest = {
   id: 'sheets-tools',
+  purpose: '文案與資料',
   name: 'Sheets & Data',
   title: '試算表與資料服務',
-  description: 'Google 試算表結構與內容跨表複製、欄位對照與來源偏好管理。',
+  description: '唯讀 Google 試算表，篩選人物與欄位後複製文字到剪貼簿。',
   category: '資料處理',
   icon: FileSpreadsheet,
   badge: '資料模組',
@@ -34,7 +35,7 @@ const manifest = {
     {
       id: 'sheet_copy',
       title: 'Sheet 內容複製',
-      description: '在工作表或試算表間依團體與人物篩選，快速複製儲存格內容。',
+      description: '依人物篩選工作表，將儲存格文字複製到剪貼簿，不會寫回試算表。',
       to: PATHS.sheetCopy,
       actionLabel: '進入內容複製',
       icon: Copy,

@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "presets": [
+    {
+      "id": "lossless-trim",
+      "name": "極速無損剪切 (Stream Copy)",
+      "description": "快速不重編碼；裁切受關鍵影格限制，不保證逐幀精準。",
+      "category": "剪輯裁剪",
+      "mode": "copy",
+      "video_codec": "copy",
+      "audio_codec": "copy",
+      "output_ext": "mp4",
+      "resolution": "original"
+    },
+    {
+      "id": "high-quality-h264",
+      "name": "高相容 H.264 (x264 平衡畫質)",
+      "description": "最通用的 MP4/H.264 編碼，CRF 23 視覺平衡，相容於幾乎所有播放器與社交平台。",
+      "category": "標準轉檔",
+      "mode": "reencode",
+      "video_codec": "libx264",
+      "audio_codec": "aac",
+      "crf": 23,
+      "preset": "medium",
+      "output_ext": "mp4",
+      "resolution": "original"
+    },
+    {
+      "id": "efficient-h265",
+      "name": "高效壓縮 H.265 (HEVC)",
+      "description": "在維持高畫質的同時顯著減少檔案大小，適合存檔與現代行動裝置播放。",
+      "category": "標準轉檔",
+      "mode": "reencode",
+      "video_codec": "libx265",
+      "audio_codec": "aac",
+      "crf": 26,
+      "preset": "medium",
+      "output_ext": "mp4",
+      "resolution": "original"
+    },
+    {
+      "id": "vertical-shorts",
+      "name": "社群 9:16 Shorts/Reels (黑邊補齊)",
+      "description": "將橫向影片等比例縮放至 1080x1920，並自動在上下居中補黑邊，適用於 Shorts 或 TikTok。",
+      "category": "社群短片",
+      "mode": "reencode",
+      "video_codec": "libx264",
+      "audio_codec": "aac",
+      "crf": 22,
+      "preset": "fast",
+      "video_filters": "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2",
+      "output_ext": "mp4",
+      "resolution": "shorts_9_16"
+    },
+    {
+      "id": "extract-audio-mp3",
+      "name": "擷取音訊為 MP3",
+      "description": "移除視訊軌，直接輸出高品質 192kbps MP3 音訊檔案。",
+      "category": "音訊處理",
+      "mode": "audio",
+      "audio_codec": "libmp3lame",
+      "audio_bitrate": "192k",
+      "output_ext": "mp3",
+      "resolution": "original",
+      "video_codec": "none"
+    },
+    {
+      "id": "mute-video",
+      "name": "移除音軌 (影片靜音)",
+      "description": "保留視訊流複製，移除所有音軌，生成純靜音影片。",
+      "category": "音訊處理",
+      "mode": "reencode",
+      "video_codec": "copy",
+      "output_ext": "mp4",
+      "extra_args": "-an",
+      "audio_codec": "none",
+      "resolution": "original"
+    },
+    {
+      "id": "animated-gif",
+      "name": "高品質動態 GIF",
+      "description": "使用調色盤濾鏡產生 GIF，畫質依來源與設定而定。",
+      "category": "特效轉檔",
+      "mode": "gif",
+      "video_filters": "fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
+      "output_ext": "gif",
+      "resolution": "original"
+    }
+  ]
+}

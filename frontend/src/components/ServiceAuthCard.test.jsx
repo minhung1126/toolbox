@@ -29,6 +29,7 @@ describe('ServiceAuthCard', () => {
     expect(screen.getByText(/唯讀存取試算表資料/)).toBeInTheDocument();
     expect(screen.getByText(/test@example.com/)).toBeInTheDocument();
 
+    fireEvent.click(screen.getByText('管理連線（重新授權／解除）'));
     const reconnectBtn = screen.getByRole('button', { name: '重新授權 Google 試算表' });
     fireEvent.click(reconnectBtn);
     expect(onConnect).toHaveBeenCalledTimes(1);

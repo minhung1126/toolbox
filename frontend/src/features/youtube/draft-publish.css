@@ -1,0 +1,100 @@
+.draft-publish-page,
+.draft-publish-list,
+.draft-publish-list article {
+  min-width: 0;
+}
+
+.draft-publish-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.draft-publish-card {
+  padding: var(--space-3);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.draft-publish-copy h2 {
+  font-size: var(--font-size-page-title);
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.draft-publish-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-main);
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.draft-publish-heading {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr) auto;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.draft-publish-thumbnail {
+  width: 4rem;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+
+.draft-publish-copy {
+  min-width: 0;
+}
+
+.draft-publish-metadata,
+.draft-publish-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-caption);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.draft-publish-page input:not([type='checkbox']),
+.draft-publish-page textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.draft-publish-page textarea {
+  min-height: 12rem;
+  resize: vertical;
+}
+
+.draft-publish-page p,
+.draft-publish-page li,
+.draft-publish-original {
+  overflow-wrap: anywhere;
+}
+
+.draft-publish-original pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+}
+
+.draft-publish-details {
+  min-width: 0;
+}
+
+.draft-publish-field-label {
+  color: var(--text-muted);
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+}
+
+.draft-publish-final-description {
+  min-width: 0;
+}

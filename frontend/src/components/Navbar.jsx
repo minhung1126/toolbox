@@ -18,6 +18,8 @@ import { getToolNavGroups } from '../tools/catalog';
 import { useToolCatalog } from '../tools/ToolCatalogProvider';
 
 function pathIsActive(pathname, item) {
+  if (item.activePaths) return item.activePaths.includes(pathname);
+  if (item.end) return pathname === item.to;
   if (item.activePrefix) return pathname === item.activePrefix || pathname.startsWith(`${item.activePrefix}/`);
   return pathname === item.to || pathname.startsWith(`${item.to}/`);
 }
@@ -75,31 +77,33 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
     if (!drawerOpen) return undefined;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
     let focusRetryFrame = null;
-
     const focusWithinDrawer = (target) => {
       if (focusRetryFrame !== null) window.cancelAnimationFrame(focusRetryFrame);
-      focusRetryFrame = null;
       const origin = document.activeElement;
-      target.focus();
-      if (document.activeElement !== origin) return;
-
-      // Chromium can ignore a focus call while the drawer is animating.
-      // Retry once, without overriding any subsequent user focus movement.
-      focusRetryFrame = window.requestAnimationFrame(() => {
+      const deadline = performance.now() + 350;
+      const attempt = () => {
         focusRetryFrame = null;
         const drawer = drawerRef.current;
         if (
-          document.activeElement === origin &&
-          target.isConnected &&
-          drawer?.classList.contains('is-open') &&
-          drawer.contains(target)
-        ) {
-          target.focus();
-        }
-      });
+          !target.isConnected ||
+          !drawer?.classList.contains('is-open') ||
+          !drawer.contains(target) ||
+          document.activeElement !== origin
+        )
+          return;
+        // Chromium can ignore focusing a footer outside the viewport while the
+        // drawer transform is in flight. Retry through that transition, without
+        // scrolling it or taking focus back after the user moves elsewhere.
+        target.focus({ preventScroll: true });
+        if (document.activeElement !== target && performance.now() < deadline)
+          focusRetryFrame = window.requestAnimationFrame(attempt);
+      };
+      attempt();
     };
+    const focusFrame = window.requestAnimationFrame(() => {
+      if (closeButtonRef.current) focusWithinDrawer(closeButtonRef.current);
+    });
 
     const onKeyDown = (event) => {
       if (event.key === 'Escape') {
@@ -155,7 +159,7 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
     return (
       <NavLink
         key={value.id}
-        to={value.to}
+        to={value.activePaths?.includes(pathname) ? pathname : value.to}
         end={!value.activePrefix}
         className={({ isActive }) =>
           `nav-item${child ? ' nav-item-child' : ''}${isActive || pathIsActive(pathname, value) ? ' active' : ''}`
@@ -314,11 +318,6 @@ export default function Navbar({ authUser, onLogout, sidebarCollapsed, setSideba
                 className={`badge ${authUser?.authorizations?.ytmusic?.connected ? 'badge-connected' : 'badge-disconnected'}`}
               >
                 {authUser?.authorizations?.ytmusic?.connected ? 'YT Music' : 'YT Music 未連結'}
-              </span>
-              <span
-                className={`badge ${authUser?.authorizations?.video_uploader?.connected ? 'badge-connected' : 'badge-disconnected'}`}
-              >
-                {authUser?.authorizations?.video_uploader?.connected ? '影片上傳' : '影片頻道未連結'}
               </span>
             </div>
           </div>

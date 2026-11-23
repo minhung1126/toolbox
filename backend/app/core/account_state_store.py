@@ -11,6 +11,7 @@ import copy
 import json
 import logging
 from collections.abc import Iterable
+from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 from threading import RLock
@@ -315,3 +316,13 @@ __all__ = [
     "WORK_STATE_KEYS",
     "account_state_store",
 ]
+
+
+@contextmanager
+def account_state_context(value):
+    """Explicit scope for app-owned background work."""
+    token = _request_store.set(value)
+    try:
+        yield
+    finally:
+        _request_store.reset(token)

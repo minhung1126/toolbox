@@ -32,7 +32,6 @@ from backend.app.services.google_auth import (
     get_drive_credentials,
     get_login_credentials,
     get_sheets_credentials,
-    get_video_uploader_credentials,
     get_youtube_credentials,
     get_ytmusic_credentials,
     has_drive_read_scope,
@@ -56,7 +55,6 @@ SHEETS_FLOW = "sheets"
 DRIVE_FLOW = "drive"
 YOUTUBE_FLOW = "youtube"
 YTMUSIC_FLOW = "ytmusic"
-VIDEO_UPLOADER_FLOW = "video_uploader"
 
 
 def redirect_with_auth_error(message: str, flow_type: str = LOGIN_FLOW) -> RedirectResponse:
@@ -65,8 +63,6 @@ def redirect_with_auth_error(message: str, flow_type: str = LOGIN_FLOW) -> Redir
         hash_key = "youtube_auth_error"
     elif flow_type == YTMUSIC_FLOW:
         hash_key = "ytmusic_auth_error"
-    elif flow_type == VIDEO_UPLOADER_FLOW:
-        hash_key = "video_uploader_auth_error"
     elif flow_type == SHEETS_FLOW:
         hash_key = "sheets_auth_error"
     elif flow_type == DRIVE_FLOW:
@@ -242,7 +238,6 @@ def get_auth_config():
         "drive_scopes": list(DRIVE_SCOPES),
         "youtube_scopes": list(YOUTUBE_SCOPES),
         "ytmusic_scopes": list(YOUTUBE_SCOPES),
-        "video_uploader_scopes": list(YOUTUBE_SCOPES),
         "youtube_default_slot": get_settings(settings).youtube_default_slot,
         "youtube_slots": youtube_slots,
     }
@@ -313,24 +308,6 @@ def get_ytmusic_auth_url(request: Request, response: Response):
 def disconnect_ytmusic(request: Request):
     """Disconnect the dedicated YouTube Music authorization."""
     return _disconnect_service(request, get_credential_store(credential_store).clear_ytmusic, "ytmusic")
-
-
-@router.get("/video-uploader/url")
-def get_video_uploader_auth_url(request: Request, response: Response):
-    """Generate the dedicated Video Uploader YouTube OAuth URL for an authenticated user."""
-    return _generate_flow_auth_url(
-        flow_type=VIDEO_UPLOADER_FLOW,
-        response=response,
-        session_id=_get_authenticated_session_id(request),
-        error_code="video_uploader_oauth_url_failed",
-        error_message="無法建立影片上傳 YouTube 頻道授權網址，請稍後再試。",
-    )
-
-
-@router.post("/video-uploader/disconnect")
-def disconnect_video_uploader(request: Request):
-    """Disconnect the dedicated Video Uploader YouTube authorization."""
-    return _disconnect_service(request, get_credential_store(credential_store).clear_video_uploader, "video_uploader")
 
 
 class YtmusicCustomTokenInput(BaseModel):
@@ -438,9 +415,8 @@ def google_oauth_callback(
         DRIVE_FLOW,
         YOUTUBE_FLOW,
         YTMUSIC_FLOW,
-        VIDEO_UPLOADER_FLOW,
     }:
-        flow_type = LOGIN_FLOW
+        return redirect_with_auth_error("此 OAuth 用途已停用，請重新開始授權。")
     flow_slot = "primary"
     if flow_type == YOUTUBE_FLOW:
         try:
@@ -455,8 +431,6 @@ def google_oauth_callback(
             message = "YouTube 頻道 Google 授權遭拒，請重新嘗試。"
         elif flow_type == YTMUSIC_FLOW:
             message = "YouTube Music 授權遭拒，請重新嘗試。"
-        elif flow_type == VIDEO_UPLOADER_FLOW:
-            message = "影片上傳 YouTube 授權遭拒，請重新嘗試。"
         elif flow_type == SHEETS_FLOW:
             message = "Google 試算表授權遭拒，請重新嘗試。"
         elif flow_type == DRIVE_FLOW:
@@ -477,8 +451,6 @@ def google_oauth_callback(
             message = "YouTube Google OAuth 工作階段已逾時，請重新嘗試。"
         elif flow_type == YTMUSIC_FLOW:
             message = "YouTube Music OAuth 工作階段已逾時，請重新嘗試。"
-        elif flow_type == VIDEO_UPLOADER_FLOW:
-            message = "影片上傳 YouTube OAuth 工作階段已逾時，請重新嘗試。"
         elif flow_type == SHEETS_FLOW:
             message = "Google 試算表 OAuth 工作階段已逾時，請重新嘗試。"
         elif flow_type == DRIVE_FLOW:
@@ -504,7 +476,7 @@ def google_oauth_callback(
         )
         user_info = token_dict.get("user") or {}
 
-        if flow_type in {SHEETS_FLOW, DRIVE_FLOW, YTMUSIC_FLOW, VIDEO_UPLOADER_FLOW}:
+        if flow_type in {SHEETS_FLOW, DRIVE_FLOW, YTMUSIC_FLOW}:
             owner_sub = _validate_callback_session(request, flow_state)
             if not owner_sub:
                 return redirect_with_auth_error("控制台登入已失效，請重新登入後再進行授權。", flow_type)
@@ -514,9 +486,6 @@ def google_oauth_callback(
             elif flow_type == DRIVE_FLOW:
                 get_credential_store(credential_store).save_drive_connection(token_dict, owner_sub=owner_sub)
                 response = RedirectResponse(url=f"{get_settings(settings).frontend_url}/#drive_auth_success=1")
-            elif flow_type == VIDEO_UPLOADER_FLOW:
-                get_credential_store(credential_store).save_video_uploader_connection(token_dict, owner_sub=owner_sub)
-                response = RedirectResponse(url=f"{get_settings(settings).frontend_url}/#video_uploader_auth_success=1")
             else:
                 get_credential_store(credential_store).save_ytmusic_connection(token_dict, owner_sub=owner_sub)
                 response = RedirectResponse(url=f"{get_settings(settings).frontend_url}/#ytmusic_auth_success=1")
@@ -581,8 +550,6 @@ def google_oauth_callback(
             message = "YouTube 頻道 Google 授權失敗，請重新嘗試。"
         elif flow_type == YTMUSIC_FLOW:
             message = "YouTube Music 授權失敗，請重新嘗試。"
-        elif flow_type == VIDEO_UPLOADER_FLOW:
-            message = "影片上傳 YouTube 頻道授權失敗，請重新嘗試。"
         elif flow_type == SHEETS_FLOW:
             message = "Google 試算表授權失敗，請重新嘗試。"
         elif flow_type == DRIVE_FLOW:
@@ -612,19 +579,14 @@ def get_user_status(request: Request):
     sheets_creds = get_sheets_credentials(session_id=session_id, owner_sub=session_sub)
     drive_creds = get_drive_credentials(session_id=session_id, owner_sub=session_sub)
     ytmusic_creds = get_ytmusic_credentials(session_id=session_id, owner_sub=session_sub)
-    video_uploader_creds = get_video_uploader_credentials(session_id=session_id, owner_sub=session_sub)
     sheets_public = get_credential_store(credential_store).get_sheets_public(session_sub) or {}
     drive_public = get_credential_store(credential_store).get_drive_public(session_sub) or {}
     ytmusic_public = get_credential_store(credential_store).get_ytmusic_public(session_sub) or {}
-    video_uploader_public = get_credential_store(credential_store).get_video_uploader_public(session_sub) or {}
 
     authorizations = {
         "sheets": _build_service_authorization_status(sheets_creds, sheets_public, has_sheets_scope, user_info),
         "drive": _build_service_authorization_status(drive_creds, drive_public, has_drive_read_scope, user_info),
         "ytmusic": _build_service_authorization_status(ytmusic_creds, ytmusic_public, has_youtube_scope, user_info),
-        "video_uploader": _build_service_authorization_status(
-            video_uploader_creds, video_uploader_public, has_youtube_scope, user_info
-        ),
     }
 
     google_scope_status = login_scope_status(
@@ -636,8 +598,8 @@ def get_user_status(request: Request):
 
     youtube_slots = {}
     for slot, slot_config in get_settings(settings).youtube_oauth_slots.items():
-        youtube_public = get_credential_store(credential_store).get_youtube_public(session_sub, slot=slot) or {}
         youtube_creds = get_youtube_credentials(session_id, slot=slot) if slot_config.configured else None
+        youtube_public = get_credential_store(credential_store).get_youtube_public(session_sub, slot=slot) or {}
         quota_limit, quota_buffer = get_runtime_config(runtime_config).get_youtube_quota_settings(slot)
         authenticated = bool(
             slot_config.configured and youtube_creds and youtube_creds.valid and youtube_public.get("channel_id")

@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from backend.app.core.account_state import get_account_setting, set_account_setting
 from backend.app.core.account_state_store import AccountStateStore, get_account_state_store
 from backend.app.core.dependencies import require_account_subject, require_login_credentials
+from backend.app.core.operation_store import OperationStore
 from backend.app.main import create_app
 from backend.app.services.ytmusic_service import resolve_ytmusic_locale
 
@@ -13,6 +14,7 @@ from backend.app.services.ytmusic_service import resolve_ytmusic_locale
 def configured_app(store):
     return create_app(
         account_state_store=store,
+        operation_store=OperationStore(store._path.with_suffix(".operations.sqlite3")),
         dependency_overrides={
             require_account_subject: lambda: "same-user",
             require_login_credentials: lambda: object(),

@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "checked_at_utc": "2026-11-17T00:11:57.763456+00:00",
+  "base_commit": "9740ed6528dd4d332258caf28ab3e4c42fb9d4c3",
+  "python": "3.12.14",
+  "backend": {
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "pytest": {
+      "passed": 411,
+      "skipped": 2,
+      "skip_reason": "pwsh / cmd.exe unavailable"
+    }
+  },
+  "frontend": {
+    "format_check": "passed",
+    "eslint": "passed",
+    "stylelint": "passed",
+    "typecheck": "passed",
+    "build": "passed",
+    "vitest": {
+      "files_passed": 84,
+      "tests_passed": 519
+    }
+  },
+  "browser": {
+    "chromium": "153.0.8010.12",
+    "e2e": {
+      "passed": 67
+    },
+    "linux_visual": {
+      "tests_passed": 6,
+      "reviewed_snapshots": 9,
+      "pixel_tolerance": 0
+    },
+    "focus_repeat_bundled": {
+      "passed": 12
+    },
+    "focus_repeat_system_chromium_156": {
+      "passed": 6
+    }
+  },
+  "not_verified": [
+    "Windows / Edge visual baseline review",
+    "PowerShell and CMD native argv",
+    "real provider smoke tests",
+    "deployment and deployment rollback",
+    "Docker runtime"
+  ],
+  "side_effects": {
+    "deployed": false,
+    "pushed": false,
+    "real_provider_writes": false,
+    "existing_data_deleted": false
+  }
+}

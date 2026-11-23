@@ -9,7 +9,7 @@ class YouTubeMusicPlugin(ToolPlugin):
             id="youtube-music",
             name="YouTube Music",
             title="YouTube Music",
-            description="YouTube Music 專屬音樂工具箱，提供智慧播放清單排序、自訂排序規則與即時雙欄模擬比對。",
+            description="讀取歌單並預覽排序；確認後改原歌單或建立新歌單，結果不明時先核對。",
             category="YouTube Music",
             icon="Disc3",
             version="1.0.0",

@@ -2,7 +2,7 @@ import logging
 import math
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from google.oauth2.credentials import Credentials
 
 from backend.app.api.youtube_helpers import (
@@ -20,10 +20,14 @@ from backend.app.api.youtube_helpers import (
 )
 from backend.app.api.youtube_models import (
     BatchUpdateInput,
+    DraftPrepareInput,
+    DraftPublishInput,
+    DraftPublishJobInput,
     PlaylistItemsInput,
     PublishCleanupInput,
     QuotaEstimateInput,
     VideoAssignment,
+    VideoEditStatusInput,
     VideoMetadataUpdateInput,
 )
 from backend.app.api.youtube_workflow_dependencies import (
@@ -46,6 +50,7 @@ from backend.app.core.dependencies import (
     require_youtube_context,
 )
 from backend.app.core.error_contract import http_error
+from backend.app.core.operation_store import OperationStore
 from backend.app.core.preview import (
     build_preview_token,
     input_digest,
@@ -56,6 +61,7 @@ from backend.app.core.preview import (
 )
 from backend.app.core.request_protection import enforce_workflow_rate_limit
 from backend.app.core.youtube_context import YouTubeRequestContext
+from backend.app.services.operation_journal import get_operation_store, run_youtube_recorded, tracked_write
 from backend.app.services.provider_errors import map_youtube_error
 from backend.app.services.sheets_service import (
     get_all_rows_for_sheet,
@@ -63,6 +69,7 @@ from backend.app.services.sheets_service import (
     matches_team_person,
     normalize_text,
 )
+from backend.app.services.youtube_edit_status import video_edit_statuses
 from backend.app.services.youtube_errors import YouTubeQuotaUnavailable
 from backend.app.services.youtube_quota_service import get_youtube_quota_tracker
 from backend.app.services.youtube_service import (
@@ -90,10 +97,14 @@ def _quota_estimate(operation: str, item_count: int, *, slot: Optional[str] = No
     elif operation == "youtube.publish_cleanup":
         breakdown = [
             # The workflow reads To-Post once for the preview snapshot and a
-            # second time immediately before the first write.
-            {"method": "playlistItems.list", "calls": pages * 2, "units": pages * 2},
-            {"method": "videos.list", "calls": pages, "units": pages},
-            {"method": "videos.update", "calls": count, "units": count * 50},
+            # second time immediately before the first write, then confirms
+            # each deletion with one-unit reads before and after the write.
+            {
+                "method": "playlistItems.list",
+                "calls": pages * (2 + count) + count * 2,
+                "units": pages * (2 + count) + count * 2,
+            },
+            {"method": "videos.list", "calls": pages + count, "units": pages + count},
             {"method": "playlistItems.delete", "calls": count, "units": count * 50},
         ]
     else:  # defensive for callers outside Pydantic/FastAPI
@@ -116,7 +127,7 @@ def _quota_estimate(operation: str, item_count: int, *, slot: Optional[str] = No
         number_pages = math.ceil(number / 50) if number else 0
         if operation == "youtube.metadata_update":
             return number_pages + number * 50
-        return number_pages * 3 + number * 100
+        return number_pages * (3 + number) + number * 53
 
     max_items_today = 0
     for number in range(1, count + 1):
@@ -213,6 +224,11 @@ def get_playlist_videos(
         videos, source, fallback_reason = fetch_playlist_preview(youtube_context, playlist_id)
         videos = [{**video, "youtube_slot": youtube_context.slot} for video in videos]
         preview_snapshot = playlist_snapshot_from_preview(videos)
+        # Keep the signed digest over every playlist occurrence, while exposing
+        # separate counts for the unique video rows and the cleanup writes.
+        preview_snapshot["playlist_item_count"] = preview_snapshot["video_count"]
+        preview_snapshot["video_ids"] = [video["video_id"] for video in videos]
+        preview_snapshot["video_count"] = len(videos)
         preview_snapshot["youtube_slot"] = youtube_context.slot
         preview_snapshot["youtube_channel_id"] = youtube_context.channel_id
         preview_snapshot["youtube_routing_mode"] = youtube_context.routing_mode
@@ -241,13 +257,52 @@ def get_playlist_videos(
         ).to_http_exception() from exc
 
 
+@router.post("/video-processing-status")
+def get_video_processing_status(
+    payload: VideoEditStatusInput,
+    context: YouTubeRequestContext = Depends(require_youtube_context),
+    operations: OperationStore = Depends(get_operation_store),
+):
+    if not context.channel_id:
+        raise http_error(409, "youtube_channel_required", "請先重新連線並確認 YouTube 頻道。")
+    return {
+        "version": 1,
+        "channel_id": context.channel_id,
+        "statuses": operations.video_processing_states(context.owner_sub, context.channel_id, payload.video_ids),
+    }
+
+
+@router.post("/edit-status")
+def get_video_edit_status(
+    payload: VideoEditStatusInput,
+    context: YouTubeRequestContext = Depends(require_youtube_context),
+    operations: OperationStore = Depends(get_operation_store),
+):
+    if not context.channel_id:
+        raise http_error(409, "youtube_channel_required", "請先重新連線並確認 YouTube 頻道。")
+    return {
+        "channel_id": context.channel_id,
+        "statuses": video_edit_statuses(operations, context.owner_sub, context.channel_id, payload.video_ids),
+    }
+
+
 @router.post("/video-metadata")
 def update_video_metadata(
     payload: VideoMetadataUpdateInput,
     creds: YouTubeRequestContext = Depends(require_youtube_context),
     _rate_limit: None = Depends(enforce_workflow_rate_limit),
+    operations: OperationStore = Depends(get_operation_store),
 ):
     """Update one video's title and description while preserving other metadata."""
+    if isinstance(operations, OperationStore):
+        return run_youtube_recorded(
+            operations,
+            payload,
+            creds,
+            None,
+            "youtube.metadata_update",
+            lambda _service: update_video_metadata(payload, creds=creds, _rate_limit=None, operations=None),
+        )
     youtube_context = creds
     video_id = normalize_text(payload.video_id)
     title = normalize_text(payload.title)
@@ -263,12 +318,13 @@ def update_video_metadata(
         if not detail:
             raise http_error(404, "youtube_not_found", "找不到指定的 YouTube 影片。", youtube_slot=context.slot)
 
-        update_single_video_metadata(
-            context,
+        tracked_write(
+            "metadata",
             video_id,
-            str(title),
-            description,
-            current_snippet=(detail.get("snippet") or {}),
+            lambda: update_single_video_metadata(
+                context, video_id, str(title), description, current_snippet=(detail.get("snippet") or {})
+            ),
+            {"title": str(title), "description": description, "parts": ["snippet"], "attempted_write": True},
         )
         return {
             "video_id": video_id,
@@ -336,11 +392,30 @@ def run_batch_metadata_update(
     sheet_creds: Credentials = Depends(require_sheets_credentials),
     _rate_limit: None = Depends(enforce_workflow_rate_limit),
     workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
+    operations: OperationStore = Depends(get_operation_store),
 ):
     """Validate and update selected videos synchronously, returning one result per video."""
     del _rate_limit
     workflows = _resolve_workflow_service(workflows)
-    return workflows.run_batch_metadata_update(payload, creds=creds, sheet_creds=sheet_creds)
+    if not isinstance(operations, OperationStore):  # Direct Python callers retain their existing contract.
+        return workflows.run_batch_metadata_update(payload, creds=creds, sheet_creds=sheet_creds)
+    return run_youtube_recorded(
+        operations,
+        payload,
+        creds,
+        workflows,
+        "youtube.metadata_update",
+        lambda service: service.run_batch_metadata_update(payload, creds=creds, sheet_creds=sheet_creds),
+    )
+
+
+@router.post("/cleanup-preview")
+def create_cleanup_preview(
+    payload: PlaylistItemsInput,
+    creds: YouTubeRequestContext = Depends(require_youtube_context),
+    workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
+):
+    return workflows.create_cleanup_preview(payload, creds=creds)
 
 
 @router.post("/publish-and-cleanup")
@@ -349,11 +424,100 @@ def run_publish_and_cleanup(
     creds: YouTubeRequestContext = Depends(require_youtube_context),
     _rate_limit: None = Depends(enforce_workflow_rate_limit),
     workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
+    operations: OperationStore = Depends(get_operation_store),
 ):
-    """Snapshot To-Post, sort oldest-first, then publish each video synchronously."""
+    """Remove only confirmed public playlist items; never change video metadata/privacy."""
     del _rate_limit
     workflows = _resolve_workflow_service(workflows)
-    return workflows.run_publish_and_cleanup(payload, creds=creds)
+    if not isinstance(operations, OperationStore):  # Direct Python callers retain their existing contract.
+        return workflows.run_publish_and_cleanup(payload, creds=creds)
+    return run_youtube_recorded(
+        operations,
+        payload,
+        creds,
+        workflows,
+        "youtube.publish_cleanup",
+        lambda service: service.run_publish_and_cleanup(payload, creds=creds),
+    )
+
+
+@router.post("/drafts/prepare")
+def prepare_draft_publish(
+    payload: DraftPrepareInput,
+    creds: YouTubeRequestContext = Depends(require_youtube_context),
+    sheet_creds: Credentials = Depends(require_sheets_credentials),
+    workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
+    operations: OperationStore = Depends(get_operation_store),
+):
+    return workflows.prepare_draft_publish(
+        payload,
+        creds=creds,
+        sheet_creds=sheet_creds,
+        operations=operations if isinstance(operations, OperationStore) else None,
+    )
+
+
+@router.post("/drafts/preview")
+def preview_draft_publish(
+    payload: DraftPublishInput,
+    creds: YouTubeRequestContext = Depends(require_youtube_context),
+    sheet_creds: Credentials = Depends(require_sheets_credentials),
+    workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
+    operations: OperationStore = Depends(get_operation_store),
+):
+    return workflows.preview_draft_publish(payload, creds=creds, sheet_creds=sheet_creds, operations=operations)
+
+
+@router.post("/drafts/publish-jobs", status_code=202)
+def submit_draft_publish_job(
+    payload: DraftPublishJobInput,
+    request: Request,
+    context: YouTubeRequestContext = Depends(require_youtube_context),
+    sheet_creds: Credentials = Depends(require_sheets_credentials),
+    _rate_limit: None = Depends(enforce_workflow_rate_limit),
+):
+    return request.app.state.youtube_publish_runner.submit(payload, context)
+
+
+@router.get("/drafts/publish-jobs/by-request/{request_id}")
+def find_draft_publish_job(
+    request_id: str,
+    context: YouTubeRequestContext = Depends(require_youtube_context),
+    operations: OperationStore = Depends(get_operation_store),
+):
+    from backend.app.services.operation_journal import public_operation
+
+    return public_operation(operations.find_request(context.owner_sub, context.channel_id, request_id), operations)
+
+
+@router.get("/drafts/publish-jobs/by-stage/{stage_id}")
+def find_legacy_draft_publish_job(
+    stage_id: str,
+    context: YouTubeRequestContext = Depends(require_youtube_context),
+    operations: OperationStore = Depends(get_operation_store),
+):
+    from backend.app.services.operation_journal import public_operation
+
+    return public_operation(operations.find_stage(context.owner_sub, context.channel_id, stage_id), operations)
+
+
+@router.post("/drafts/publish")
+def run_draft_publish(
+    payload: DraftPublishInput,
+    creds: YouTubeRequestContext = Depends(require_youtube_context),
+    sheet_creds: Credentials = Depends(require_sheets_credentials),
+    _rate_limit: None = Depends(enforce_workflow_rate_limit),
+    workflows: YoutubeWorkflowService = Depends(get_youtube_workflow_service),
+    operations: OperationStore = Depends(get_operation_store),
+):
+    return run_youtube_recorded(
+        operations,
+        payload,
+        creds,
+        workflows,
+        "youtube.metadata_publish",
+        lambda service: service.run_draft_publish(payload, creds=creds, sheet_creds=sheet_creds, operations=operations),
+    )
 
 
 __all__ = [

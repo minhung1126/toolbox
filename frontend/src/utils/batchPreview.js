@@ -1,3 +1,4 @@
+import { parsePersonKey, personLabel } from '../features/sheets/model/personOptions';
 import { normalizeTeamPersonFilter } from './teamPersonFilterStorage';
 
 export const DEFAULT_COLUMNS = {
@@ -17,7 +18,14 @@ export function resolveDraftConfig(serverConfig, cached) {
 }
 
 export function normalizeConfig(raw, defaults, sysSettings, sharedFilter) {
-  const normalizedSharedFilter = sharedFilter?.exists ? normalizeTeamPersonFilter(sharedFilter) : null;
+  const normalizedSharedFilter = normalizeTeamPersonFilter(
+    sharedFilter?.exists
+      ? sharedFilter
+      : {
+          team: raw?.selectedTeam || raw?.team || '',
+          selectedPeople: raw?.selectedPeople || raw?.selected_people || [],
+        }
+  );
   return {
     spreadsheetId: raw?.spreadsheetId || raw?.spreadsheet_id || sysSettings.default_spreadsheet_id || '',
     // Playlist overrides from older draft configs remain readable for
@@ -27,6 +35,8 @@ export function normalizeConfig(raw, defaults, sysSettings, sharedFilter) {
     titleColumn: raw?.titleColumn || raw?.title_column || defaults.title,
     descriptionColumn: raw?.descriptionColumn || raw?.description_column || defaults.description,
     selectedTeam: normalizedSharedFilter?.team || '',
+    selectedTeams: normalizedSharedFilter?.teams || [],
+    personQuery: normalizedSharedFilter?.query || '',
     selectedPeople: normalizedSharedFilter?.selectedPeople || [],
   };
 }
@@ -62,19 +72,28 @@ export function buildBatchPreview({
     };
     if (!person || person === '不編輯') return { ...base, reason: '未指定人物' };
 
+    const identity = parsePersonKey(person);
+    const targetTeam = identity?.team ?? team;
     const matches = sheetRows.filter((row) => {
-      if (String(row?.team || '').trim() !== String(team || '').trim()) return false;
+      if (String(row?.team || '').trim() !== String(targetTeam || '').trim()) return false;
       const rowPerson = String(row?.person || '').trim();
-      return person.endsWith(TEAM_OPTION_SUFFIX) ? !rowPerson : rowPerson === person;
+      return identity
+        ? identity.kind === 'team'
+          ? !rowPerson
+          : rowPerson === identity.person
+        : person === `${team}${TEAM_OPTION_SUFFIX}`
+          ? !rowPerson
+          : rowPerson === person;
     });
-    if (!matches.length) return { ...base, reason: `找不到團體 ${team} 的選項 ${person} 資料` };
+    if (!matches.length) return { ...base, reason: `找不到團體 ${targetTeam} 的選項 ${personLabel(person)} 資料` };
 
     const values = matches.map((row) => ({
       title: String(sheetRowValue(row, sheetColumns, titleColumn) || '').trim(),
       description: String(sheetRowValue(row, sheetColumns, descriptionColumn) || ''),
     }));
     const distinct = new Set(values.map((value) => JSON.stringify(value)));
-    if (distinct.size > 1) return { ...base, reason: `團體 ${team} 的選項 ${person} 有多筆且標題或描述內容不同` };
+    if (distinct.size > 1)
+      return { ...base, reason: `團體 ${targetTeam} 的選項 ${personLabel(person)} 有多筆且標題或描述內容不同` };
     const next = values[0];
     if (!next.title) return { ...base, newDescription: next.description, reason: `工作表的 ${titleColumn} 為空白` };
     if (next.title === base.currentTitle && next.description === base.currentDescription) {

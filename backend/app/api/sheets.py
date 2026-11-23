@@ -55,8 +55,9 @@ def spreadsheet_metadata(
     try:
         return get_spreadsheet_metadata(creds, target_id)
     except Exception as exc:
-        logger.error("Failed to read spreadsheet metadata: %s", type(exc).__name__)
-        raise map_google_sheets_error(exc, operation="metadata").to_http_exception() from exc
+        mapped = map_google_sheets_error(exc, operation="metadata")
+        logger.error("Failed to read spreadsheet metadata: %s code=%s", type(exc).__name__, mapped.code)
+        raise mapped.to_http_exception() from exc
 
 
 @router.post("/parse-options")
@@ -69,8 +70,9 @@ def parse_sheet_teams(
     try:
         return parse_options_from_sheets(creds, target_id, payload.worksheet_name)
     except Exception as exc:
-        logger.error("Failed to parse Google Sheet: %s", type(exc).__name__)
-        raise map_google_sheets_error(exc, operation="parse_options").to_http_exception() from exc
+        mapped = map_google_sheets_error(exc, operation="parse_options")
+        logger.error("Failed to parse Google Sheet: %s code=%s", type(exc).__name__, mapped.code)
+        raise mapped.to_http_exception() from exc
 
 
 @router.post("/people")
@@ -84,8 +86,9 @@ def get_team_people(
         people = get_people_for_team(creds, target_id, payload.worksheet_name, payload.team)
         return {"team": payload.team, "worksheet_name": payload.worksheet_name, "people": people}
     except Exception as exc:
-        logger.error("Failed to read people from sheet: %s", type(exc).__name__)
-        raise map_google_sheets_error(exc, operation="people").to_http_exception() from exc
+        mapped = map_google_sheets_error(exc, operation="people")
+        logger.error("Failed to read people from sheet: %s code=%s", type(exc).__name__, mapped.code)
+        raise mapped.to_http_exception() from exc
 
 
 @router.post("/random-member-preview")
@@ -100,8 +103,9 @@ def random_member_preview(
     except ValueError as exc:
         raise http_error(404, "sheets_member_not_found", "找不到符合條件的工作表成員資料。") from exc
     except Exception as exc:
-        logger.error("Failed to build random member preview: %s", type(exc).__name__)
-        raise map_google_sheets_error(exc, operation="random_member_preview").to_http_exception() from exc
+        mapped = map_google_sheets_error(exc, operation="random_member_preview")
+        logger.error("Failed to build random member preview: %s code=%s", type(exc).__name__, mapped.code)
+        raise mapped.to_http_exception() from exc
 
 
 @router.post("/copy-table")
@@ -114,5 +118,6 @@ def copyable_sheet_table(
     try:
         return get_copyable_sheet_table(creds, target_id, payload.worksheet_name)
     except Exception as exc:
-        logger.error("Failed to read copyable Sheet table: %s", type(exc).__name__)
-        raise map_google_sheets_error(exc, operation="copy_table").to_http_exception() from exc
+        mapped = map_google_sheets_error(exc, operation="copy_table")
+        logger.error("Failed to read copyable Sheet table: %s code=%s", type(exc).__name__, mapped.code)
+        raise mapped.to_http_exception() from exc

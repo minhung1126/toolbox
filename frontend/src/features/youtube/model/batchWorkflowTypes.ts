@@ -8,6 +8,8 @@ export interface BatchConfig {
   titleColumn: string;
   descriptionColumn: string;
   selectedTeam: string;
+  selectedTeams: string[];
+  personQuery: string;
   selectedPeople: string[];
 }
 export interface BatchWorkflowOptions {
