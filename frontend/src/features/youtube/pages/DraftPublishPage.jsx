@@ -394,6 +394,7 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
                   <div className="draft-publish-heading">
                     <VideoThumbnail
                       className="draft-publish-thumbnail"
+                      emptyClassName="video-thumbnail-empty draft-publish-thumbnail"
                       src={item.thumbnailUrl}
                       videoId={item.video_id}
                       alt={item.currentTitle}
