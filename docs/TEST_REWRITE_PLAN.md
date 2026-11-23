@@ -13,7 +13,7 @@
 | 暫存流程容易受操作耗時影響 | 重整前尚未收到人物指定的自動保存確認，造成還原結果依作業時序變動。 | Video 和 Shorts 各自驗證重試、保存及取消重建。等待正確工作狀態回應。另用三個獨立 viewport 驗證長描述與彈窗焦點。 |
 | 瀏覽器執行超時 | 本機 768 px 跨團選擇在重整時逾時，系統設定情境在單一案例走三種寬度時也觸及時間上限。 | 重整後由勾選狀態與列數確認還原。改寫的版面案例按寬度獨立執行。 |
 | 模擬請求會轉送至本機後端 | 瀏覽器測試通過時，預覽服務仍記錄一筆人物篩選的 API 代理連線失敗。 | 在測試 context 攔截 API，並停用測試預覽的開發代理。 |
-| 視覺比對無法進入或基準過時 | Dashboard 把所有路由當成可見卡片。舊 Edge 快照仍包含 Weverse 與改版前的 Dashboard。 | 等待可操作的搜尋與釘選控制項。核對新版畫面後更新七張 Edge 基準。三套 Playwright 組態使用獨立服務埠和輸出目錄。 |
+| 視覺比對無法進入或基準過時 | Dashboard 把所有路由當成可見卡片。兩個平台的基準仍顯示改版前的 Dashboard，舊 Edge 基準也保留 Weverse。 | 等待可操作的搜尋與釘選控制項。逐張核對後更新七張 Edge 與九張 Linux 基準。三套 Playwright 組態使用獨立服務埠和輸出目錄。 |
 | CI 診斷訊號混在一起 | 近期的 `Test frontend` 失敗實際來自 Stylelint，瀏覽器步驟當時尚未執行。 | 將前端檢查、單元測試、建置、瀏覽器安裝及 E2E 拆為具名步驟。保留失敗的 trace、畫面與錯誤上下文。[失敗紀錄](https://github.com/minhung1126/toolbox/actions/runs/44225929019) [後續成功紀錄](https://github.com/minhung1126/toolbox/actions/runs/44226248500) |
 
 ## 修正次序與驗收
@@ -21,8 +21,8 @@
 | 優先順序 | 工作 | 驗收 |
 | --- | --- | --- |
 | P0 · 已實作 | 修復編碼、FFmpeg 原生 Shell 與發布工作程序鎖。 | 跑完整 pytest／Vitest，包含 Bash、PowerShell 和 CMD。競爭發布程序無法取得鎖，恢復時依已知進度核對。 |
-| P1 · 已實作 | 改寫清理、Dashboard 與暫存 E2E。修復視覺就緒條件與 Edge 基準。 | 三種寬度的功能與 Edge 視覺比對通過。重跑暫存與新版面情境，確定每輪使用獨立 fixture。 |
-| P1 · 待 CI 驗證 | 執行 GitHub 的 Linux Chromium 功能、Linux 視覺與 Windows Edge 視覺矩陣。Linux Dashboard 基準早於新的三段 YouTube 流程。 | 用 Linux 的 `visual-linux-results` 核對三張 Dashboard 實際畫面並更新確認有變動的基準。修正案例在 CI 用 0 次 retries 連跑三輪。 |
+| P1 · 已實作 | 改寫清理、Dashboard 與暫存 E2E，並修復視覺就緒條件。 | 三種寬度的功能獨立執行。CI 上的版面與復原案例以零次重試連跑三輪，每次使用獨立 fixture。 |
+| P1 · 已實作 | 啟用工作分支的 GitHub 測試矩陣。使用 Linux Chromium 的實際畫面和既有 Windows Edge 基準。 | 核對兩種瀏覽器的功能與視覺結果。Linux 的九張基準由 CI artifact 逐張審核，維持零差異像素上限。 |
 | P2 · 已實作 | 16 項候選案例已集中或合併，8 項斷言已改為觀察實際狀態、操作與版面。 | 逐項裁決列出承接位置。章節下方列出跨層案例的驗收方式。 |
 | P2 · 已實作 | 三項操作量測改由 `npm run test:benchmark` 執行。標準 E2E 驗證讀取 503 後重新讀取成功。 | 量測工作輸出點擊數、設定頁跳轉次數及耗時。503 案例核對兩次讀取及零次準備與發布請求。 |
 
@@ -64,8 +64,8 @@ Linux 的視覺檢查使用 CI 安裝的 Chromium 與 Noto Sans CJK，執行 `np
 | Vitest | 指定 Git Bash 時 88 個測試檔、581 項通過。錯誤邊界案例會在 stderr 記錄刻意觸發的例外。 |
 | 前端品質檢查 | Prettier、ESLint、Stylelint、TypeScript 與正式建置通過。 |
 | 後端品質檢查 | Ruff lint 與格式通過。執行時排除本機無法讀取的舊 `backend/.pytest-tmp` 目錄。 |
-| Playwright 功能 | 初次修改後 Edge 79 項通過，11 項改寫的版面與暫存案例各跑三輪通過。整併及寬度獨立後收集 87 個功能情境。 |
+| Playwright 功能 | 整併後本機 Edge 的 87 項功能情境全數通過。測試分支首輪的 36 項版面與復原情境，各在零次重試設定下執行三輪，合計 108 次通過。 |
 | Playwright 視覺 | Windows Edge 的 6 個情境連續兩輪通過，每輪比對 9 張基準。 |
 | 按需量測 | 3 項通過，均產出操作次數與耗時的 JSON。 |
 | 測試預覽 | 驗證測試組態無 API 代理，最後一輪 E2E 沒有代理連線錯誤。 |
-| GitHub CI | 本機無 Linux 和 Docker 執行環境。Linux 組態已確認能收集 6 個視覺情境，Linux Chromium 與 Docker 實跑待 CI。 |
+| GitHub CI | 工作分支首輪的 Windows Edge 視覺與 Linux Chromium 功能通過。用 Linux 視覺 artifact 核對三張反映新 YouTube 流程的 Dashboard、六張共用元件與焦點畫面。後六張的差異落在字形邊緣，每張 146 至 159 個像素。[首輪測試](https://github.com/minhung1126/toolbox/actions/runs/45105278714) |
