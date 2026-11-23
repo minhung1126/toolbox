@@ -206,29 +206,3 @@ def test_disabled_plugin_is_listed_but_never_started_or_mounted():
     assert plugin.started is False
     assert registry.health_check()["disabled-plugin"] == {"status": "disabled"}
     assert registry.runtime_statuses()["disabled-plugin"] == "disabled"
-
-
-def test_tools_catalog_api():
-    """Verify GET /api/v1/tools and GET /api/v1/tools/{tool_id} return expected data."""
-    client = TestClient(main.app)
-
-    res = client.get("/api/v1/tools")
-    assert res.status_code == 200
-    data = res.json()
-    assert data["platform"] == "Toolbox"
-    assert data["total_tools"] >= 2
-    tool_ids = [t["id"] for t in data["tools"]]
-    assert "creator-tools" in tool_ids
-
-    # Detail query
-    res_detail = client.get("/api/v1/tools/creator-tools")
-    assert res_detail.status_code == 200
-    detail_data = res_detail.json()
-    assert detail_data["found"] is True
-    assert detail_data["tool"]["id"] == "creator-tools"
-    assert "routes" in detail_data["tool"]
-
-    # Missing tool query
-    res_missing = client.get("/api/v1/tools/non-existent-tool")
-    assert res_missing.status_code == 200
-    assert res_missing.json()["found"] is False

@@ -9,17 +9,20 @@ if (process.platform !== 'win32') throw new Error('Visual baselines require Wind
 const { webServer: _baseWebServer, use: baseUse, ...sharedConfig } = base;
 // The Edge baseline must not inherit a custom E2E executable or browser channel.
 const { channel: _baseChannel, launchOptions: _baseLaunchOptions, ...sharedUse } = baseUse ?? {};
+const port = Number(process.env.PLAYWRIGHT_EDGE_VISUAL_PORT || 4174);
+const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig(sharedConfig, {
   testIgnore: [],
   testMatch: '**/*.visual.spec.ts',
   workers: 2,
+  outputDir: './test-results/visual-edge',
   updateSnapshots: 'none',
   snapshotPathTemplate: '{testDir}/visual-baselines/{arg}{ext}',
   use: {
     ...sharedUse,
     channel: 'msedge',
-    baseURL: 'http://127.0.0.1:4174',
+    baseURL,
     locale: 'zh-TW',
     timezoneId: 'Asia/Taipei',
     colorScheme: 'dark',
@@ -27,9 +30,9 @@ export default defineConfig(sharedConfig, {
     deviceScaleFactor: 1,
   },
   webServer: {
-    command: 'node ./node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4174 --strictPort',
-    url: 'http://127.0.0.1:4174',
-    reuseExistingServer: !process.env.CI,
+    command: `node ./node_modules/vite/bin/vite.js preview --mode playwright --host 127.0.0.1 --port ${port} --strictPort`,
+    url: baseURL,
+    reuseExistingServer: false,
     timeout: 60_000,
   },
 });

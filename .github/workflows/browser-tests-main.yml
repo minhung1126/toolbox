@@ -1,8 +1,8 @@
-name: Browser tests on main
+name: Browser tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'codex/test-*']
   workflow_dispatch:
 
 permissions:
@@ -12,6 +12,8 @@ jobs:
   chromium:
     name: Linux Chromium end-to-end tests
     uses: ./.github/workflows/validate-container.yml
+    with:
+      repeat_browser_regressions: ${{ startsWith(github.ref_name, 'codex/test-') }}
 
   edge-visual:
     name: Windows Edge visual tests
@@ -79,13 +81,7 @@ jobs:
 
       - name: Compare reviewed Linux baselines
         working-directory: frontend
-        run: |
-          if [ ! -d e2e/visual-baselines-linux ]; then
-            npx playwright test --config playwright.visual.linux.config.ts --update-snapshots
-            echo '::error::Review the generated Linux snapshots artifact and commit approved images.'
-            exit 1
-          fi
-          npx playwright test --config playwright.visual.linux.config.ts
+        run: npx playwright test --config playwright.visual.linux.config.ts
 
       - name: Upload Linux snapshots and differences
         if: always()

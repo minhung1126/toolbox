@@ -30,24 +30,31 @@ describe('FFmpeg feature command model', () => {
     expect(buildTrimSummary({ ...options, duration: 100 }).endSec).toBe(20);
   });
 
-  it('keeps the selected source end time when fast seeking moves the output timeline', () => {
-    const endCutOptions = {
-      ...options,
-      seekMode: 'fast' as const,
-      cutMode: 'to' as const,
-      startTime: '00:00:02.000',
-      endTime: '00:00:04.000',
-    };
-    const summary = buildTrimSummary({ ...endCutOptions, duration: 8 });
-    const command = buildFfmpegCommand(endCutOptions);
+  it.each([
+    ['00:00:02.000', '00:00:04.000', '00:00:02.000', 2],
+    ['00:00:05.000', '00:00:20.000', '00:00:15.000', 15],
+  ] as const)(
+    'keeps the selected source end time when fast seeking from %s to %s',
+    (startTime, endTime, clipTime, seconds) => {
+      const endCutOptions = {
+        ...options,
+        seekMode: 'fast' as const,
+        cutMode: 'to' as const,
+        shellFormat: 'bash' as const,
+        startTime,
+        endTime,
+      };
+      const summary = buildTrimSummary({ ...endCutOptions, duration: 30 });
+      const command = buildFfmpegCommand(endCutOptions);
 
-    expect(summary.clipDurationSec).toBe(2);
-    expect(command.singleLine).toBe(`ffmpeg -ss 00:00:02.000 -i 'clip.mp4' -t 00:00:02.000 -c copy 'output.mp4'`);
-    expect(command.breakdown).toContainEqual({
-      flag: '-t 00:00:02.000',
-      label: '從起點裁切 00:00:02.000，至原影片時間點 00:00:04.000',
-    });
-  });
+      expect(summary.clipDurationSec).toBe(seconds);
+      expect(command.singleLine).toBe(`ffmpeg -ss ${startTime} -i 'clip.mp4' -t ${clipTime} -c copy 'output.mp4'`);
+      expect(command.breakdown).toContainEqual({
+        flag: `-t ${clipTime}`,
+        label: `從起點裁切 ${clipTime}，至原影片時間點 ${endTime}`,
+      });
+    }
+  );
 
   it('uses the original end timestamp for accurate seeking and for disabled start cuts', () => {
     const endCutOptions = { ...options, cutMode: 'to' as const };

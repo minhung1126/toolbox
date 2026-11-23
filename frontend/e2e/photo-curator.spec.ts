@@ -126,10 +126,16 @@ test('switching tools preserves local photos, grouping and titles', async ({ pag
 });
 
 for (const width of [390, 768, 1440]) {
-  test(`3, 6 and 9 grid presets keep previews and quick assignment within ${width}px`, async ({ page }, testInfo) => {
+  test(`3, 6 and 9 grid presets keep previews and quick assignment within ${width}px`, { tag: '@responsive' }, async ({ page }, testInfo) => {
     await mockAuthenticatedBackend(page);
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/photo-curator');
+    await expect(page.getByRole('heading', { level: 1, name: 'Instagram 貼文排版工作台' })).toBeVisible();
+    await expect(page.locator('.curator-workbench-grid')).toHaveCSS('display', 'grid');
+    await expect(page.locator('.post-column-card')).toHaveCount(3);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth))
+      .toBeLessThanOrEqual(1);
     await page.locator('.photo-dropzone input[type=file]').setInputFiles({
       name: 'pending.svg',
       mimeType: 'image/svg+xml',

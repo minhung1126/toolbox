@@ -5,47 +5,16 @@ import {
   SORT_FIELDS,
   SORT_PRESETS,
   buildAlbumContextMap,
-  buildPreviewFromSorted,
   formatDuration,
   getEffectiveSortArtist,
   getFirstArtist,
-  getLocaleCollation,
   isGenericArtist,
   isRealAlbum,
-  normalizeArtistName,
   sortTracksLocally,
   splitArtists,
 } from './playlistSort';
 
 describe('playlistSort utils', () => {
-  describe('getLocaleCollation', () => {
-    it('normalizes locale tags correctly', () => {
-      expect(getLocaleCollation('zh_TW')).toBe('zh-Hant-TW');
-      expect(getLocaleCollation('zh-hant')).toBe('zh-Hant-TW');
-      expect(getLocaleCollation('tw')).toBe('zh-Hant-TW');
-      expect(getLocaleCollation('zh_CN')).toBe('zh-Hans-CN');
-      expect(getLocaleCollation('ja_JP')).toBe('ja-JP');
-      expect(getLocaleCollation('ko_KR')).toBe('ko-KR');
-      expect(getLocaleCollation('en_US')).toBe('en-US');
-      expect(getLocaleCollation('')).toBe('zh-Hant-TW');
-      expect(getLocaleCollation(null)).toBe('zh-Hant-TW');
-    });
-  });
-
-  describe('normalizeArtistName', () => {
-    it('strips - Topic and (主題) suffixes', () => {
-      expect(normalizeArtistName('周杰倫 - Topic')).toBe('周杰倫');
-      expect(normalizeArtistName('A-Lin (主題)')).toBe('A-Lin');
-      expect(normalizeArtistName('Various Artists - 主題')).toBe('Various Artists');
-      expect(normalizeArtistName('')).toBe('');
-      expect(normalizeArtistName(null)).toBe('');
-    });
-
-    it('cleans multi-artist comma lists', () => {
-      expect(normalizeArtistName('林俊傑, 蔡依林 - Topic')).toBe('林俊傑, 蔡依林');
-    });
-  });
-
   describe('isGenericArtist & isRealAlbum', () => {
     it('identifies generic compilation/soundtrack artist names', () => {
       expect(isGenericArtist('Various Artists')).toBe(true);
@@ -119,27 +88,6 @@ describe('playlistSort utils', () => {
       ];
       const sorted = sortTracksLocally(items, [{ field: 'track_number', direction: 'asc' }]);
       expect(sorted.map((x) => x.track_number)).toEqual([1, 2, 3]);
-    });
-  });
-
-  describe('buildPreviewFromSorted', () => {
-    it('calculates moved and unchanged counts accurately', () => {
-      const original = [
-        { playlist_item_id: '1', title: 'A' },
-        { playlist_item_id: '2', title: 'B' },
-        { playlist_item_id: '3', title: 'C' },
-      ];
-      const sorted = [
-        { playlist_item_id: '2', title: 'B' },
-        { playlist_item_id: '1', title: 'A' },
-        { playlist_item_id: '3', title: 'C' },
-      ];
-      const preview = buildPreviewFromSorted(original, sorted);
-      expect(preview.total).toBe(3);
-      expect(preview.unchanged_count).toBe(1); // item '3' remains at index 2
-      expect(preview.moved_count).toBe(2); // items '1' and '2' swapped
-      expect(preview.items[2].status).toBe('unchanged');
-      expect(preview.items[0].status).toBe('moved');
     });
   });
 

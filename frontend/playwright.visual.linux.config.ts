@@ -5,17 +5,20 @@ import base from './playwright.config';
 const { webServer: _baseWebServer, use: baseUse, ...sharedConfig } = base;
 // Visual baselines must use the lockfile's bundled browser, regardless of E2E overrides.
 const { channel: _baseChannel, launchOptions: _baseLaunchOptions, ...sharedUse } = baseUse ?? {};
+const port = Number(process.env.PLAYWRIGHT_LINUX_VISUAL_PORT || 4175);
+const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig(sharedConfig, {
   testIgnore: [],
   testMatch: '**/*.visual.spec.ts',
   workers: 2,
+  outputDir: './test-results/visual-linux',
   updateSnapshots: 'none',
   snapshotPathTemplate: '{testDir}/visual-baselines-linux/{arg}{ext}',
   use: {
     ...sharedUse,
     browserName: 'chromium',
-    baseURL: 'http://127.0.0.1:4174',
+    baseURL,
     locale: 'zh-TW',
     timezoneId: 'Asia/Taipei',
     colorScheme: 'dark',
@@ -23,8 +26,8 @@ export default defineConfig(sharedConfig, {
     deviceScaleFactor: 1,
   },
   webServer: {
-    command: 'node ./node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4174 --strictPort',
-    url: 'http://127.0.0.1:4174',
+    command: `node ./node_modules/vite/bin/vite.js preview --mode playwright --host 127.0.0.1 --port ${port} --strictPort`,
+    url: baseURL,
     reuseExistingServer: false,
     timeout: 60_000,
   },

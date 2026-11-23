@@ -77,36 +77,6 @@ describe('ffmpegCommand utils', () => {
     });
   });
   describe('buildFfmpegCommand', () => {
-    it('generates lossless trim copy command by default with double quotes', () => {
-      const cmd = buildFfmpegCommand({
-        inputName: 'video.mp4',
-        outputName: 'video_cut.mp4',
-        enableStartCut: true,
-        startTime: '00:00:05.000',
-        seekMode: 'fast',
-        enableEndCut: true,
-        cutMode: 'to',
-        endTime: '00:00:20.000',
-        durationCut: '00:00:15.000',
-        transcodeMode: 'copy',
-        videoCodec: 'copy',
-        audioCodec: 'copy',
-        crf: 23,
-        encoderPreset: 'medium',
-        resolution: 'original',
-        fps: 'original',
-        shellFormat: 'bash',
-      });
-
-      expect(cmd.singleLine).toContain(
-        `ffmpeg -ss 00:00:05.000 -i 'video.mp4' -t 00:00:15.000 -c copy 'video_cut.mp4'`
-      );
-      expect(cmd.breakdown).toContainEqual({
-        flag: '-t 00:00:15.000',
-        label: '從起點裁切 00:00:15.000，至原影片時間點 00:00:20.000',
-      });
-    });
-
     it('quotes files with spaces and retains quotes when already present', () => {
       const cmd = buildFfmpegCommand({
         inputName: 'my input video.mp4',

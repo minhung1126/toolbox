@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import StickyNotesPage from './StickyNotesPage';
 import { notesApi } from '../features/notes/api/notesApi';
+import { api } from '../services/api';
 
 const toastMocks = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 
@@ -16,6 +17,8 @@ vi.mock('../features/notes/api/notesApi', () => ({
     deleteNote: vi.fn(),
   },
 }));
+
+vi.mock('../services/api', () => ({ api: { getNotes: vi.fn() } }));
 
 vi.mock('../components/Toast', () => ({
   useToast: () => toastMocks,
@@ -108,8 +111,10 @@ describe('StickyNotesPage', () => {
     });
   });
 
-  it('shows a read error instead of an empty state when the list contract is invalid', async () => {
-    notesApi.getNotes.mockRejectedValueOnce(new Error('便利貼清單回應格式不正確。'));
+  it('shows a read error when the returned count contradicts the note list', async () => {
+    const { notesApi: realNotesApi } = await vi.importActual('../features/notes/api/notesApi');
+    api.getNotes.mockResolvedValueOnce({ notes: [], total: 1 });
+    notesApi.getNotes.mockImplementationOnce(realNotesApi.getNotes);
     render(<StickyNotesPage />);
 
     expect(await screen.findByText('便利貼清單待核對')).toBeInTheDocument();

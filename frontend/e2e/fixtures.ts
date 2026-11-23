@@ -1,3 +1,4 @@
+import type { Page, Route } from '@playwright/test';
 import { getAllTools } from '../src/tools/catalog';
 import { PATHS } from '../src/routes/paths';
 
@@ -39,9 +40,9 @@ export const toolCatalog = getAllTools().map((tool) => ({
   ],
 }));
 
-export async function mockAuthenticatedBackend(page, responseOverrides: Record<string, unknown> = {}) {
+export async function mockAuthenticatedBackend(page: Page, responseOverrides: Record<string, unknown> = {}) {
   const workState: Record<string, unknown> = {};
-  await page.route('**/api/v1/**', async (route) => {
+  await page.context().route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     const responses: Record<string, unknown> = {
       '/api/v1/auth/user': {
@@ -58,7 +59,7 @@ export async function mockAuthenticatedBackend(page, responseOverrides: Record<s
       '/api/v1/settings/shared': {},
       '/api/v1/settings/youtube': {},
       '/api/v1/settings/team-person-filter': { configured: false, team: '', selected_people: [] },
-      '/api/v1/settings/work-state': async (workStateRoute) => {
+      '/api/v1/settings/work-state': async (workStateRoute: Route) => {
         if (workStateRoute.request().method() === 'PUT') {
           const { key, value } = workStateRoute.request().postDataJSON();
           workState[key] = value;

@@ -5,14 +5,14 @@ const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: '**/*.visual.spec.ts',
+  testIgnore: ['**/*.visual.spec.ts', '**/*.benchmark.spec.ts'],
   fullyParallel: true,
   workers: process.env.CI ? 2 : 4,
   expect: {
     timeout: 10_000,
   },
   reporter: 'list',
-  outputDir: './test-results',
+  outputDir: './test-results/e2e',
   use: {
     baseURL,
     trace: 'retain-on-failure',
@@ -24,9 +24,9 @@ export default defineConfig({
         : {}),
   },
   webServer: {
-    command: `node ./node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port ${port} --strictPort`,
+    command: `node ./node_modules/vite/bin/vite.js preview --mode playwright --host 127.0.0.1 --port ${port} --strictPort`,
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 60_000,
   },
 });
