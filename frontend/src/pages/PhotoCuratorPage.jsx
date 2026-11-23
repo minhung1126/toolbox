@@ -1,5 +1,4 @@
 import ProjectFiles from '../features/photo-curator/components/ProjectFiles';
-import MovePhotoDialog from '../features/photo-curator/components/MovePhotoDialog';
 import { Button } from '../shared/ui';
 import React, { useRef, useState } from 'react';
 import {
@@ -57,7 +56,7 @@ function PhotoCuratorWorkbench() {
   const toast = useToast();
   const workbenchRef = useRef(null);
   const [thumbnailSizeIndex, setThumbnailSizeIndex] = useState(1);
-  const [movingPhoto, setMovingPhoto] = useState(null);
+  const [activeOrderPhotoId, setActiveOrderPhotoId] = useState(null);
   const thumbnailSize = THUMBNAIL_SIZES[thumbnailSizeIndex];
   const {
     fileInputRef,
@@ -109,7 +108,7 @@ function PhotoCuratorWorkbench() {
       <CuratorHoverPreview
         containerRef={workbenchRef}
         photoMap={photoMap}
-        disabled={Boolean(draggedPhotoId || previewPhoto || autoConfirmOpen || resetConfirmOpen || movingPhoto)}
+        disabled={Boolean(draggedPhotoId || previewPhoto || autoConfirmOpen || resetConfirmOpen)}
       />
       {/* Header */}
       <header className="glass-panel page-header card-padding">
@@ -329,7 +328,7 @@ function PhotoCuratorWorkbench() {
 
       <p className="curator-arrangement-status" role="status">
         已分配 {assignedCount} / {photos.length}{' '}
-        張。拖曳照片到卡片上半部或下半部，可插入指定位置；也可使用前後移動按鈕或直接指定序號。
+        張。拖曳照片到卡片上半部或下半部可插入指定位置，也可在貼文內直接選擇序號。
         {unassignedIds.length > 0 && ' 尚未分配的照片不會包含在 ZIP 中。'}
       </p>
 
@@ -396,14 +395,6 @@ function PhotoCuratorWorkbench() {
                         {photo.name}
                       </div>
                       <div className="photo-card-quick-actions">
-                        <button
-                          type="button"
-                          className="btn-order-action"
-                          onClick={() => setMovingPhoto(photo)}
-                          aria-label={`指定序號 ${photo.name}`}
-                        >
-                          移至序號
-                        </button>
                         {posts.map((post, index) => (
                           <button
                             key={post.id}
@@ -437,6 +428,11 @@ function PhotoCuratorWorkbench() {
         <div className="posts-columns-grid">
           {posts.map((post, pIdx) => {
             const postPhotos = post.photoIds.map((id) => photoMap.get(id)).filter(Boolean);
+            const orderOptions = postPhotos.map((_, index) => (
+              <option key={index + 1} value={index + 1}>
+                {index === 0 ? '#01 封面' : `#${String(index + 1).padStart(2, '0')}`}
+              </option>
+            ));
             const isOverLimit = postPhotos.length > 10;
             const isDragTarget = dragOverZone === post.id;
 
@@ -487,6 +483,8 @@ function PhotoCuratorWorkbench() {
                   ) : (
                     postPhotos.map((photo, index) => {
                       const isCover = index === 0;
+                      // Large posts only need a full list of options on the select being used.
+                      const showAllOrderOptions = !isOverLimit || activeOrderPhotoId === photo.id;
                       return (
                         <div
                           key={photo.id}
@@ -503,28 +501,24 @@ function PhotoCuratorWorkbench() {
 
                           <div className="photo-card-info">
                             <div className="photo-card-header">
-                              <div className={`photo-order-badge ${isCover ? 'cover-badge' : ''}`}>
-                                {isCover ? (
-                                  <>
-                                    <Star size={11} className="star-icon" /> #01 封面
-                                  </>
-                                ) : (
-                                  `#${String(index + 1).padStart(2, '0')}`
-                                )}
-                              </div>
+                              <select
+                                className="photo-order-select"
+                                aria-label={`指定序號 ${photo.name}`}
+                                title="移至貼文內的指定序號"
+                                value={index + 1}
+                                disabled={postPhotos.length === 1}
+                                onFocus={() => setActiveOrderPhotoId(photo.id)}
+                                onPointerDown={() => setActiveOrderPhotoId(photo.id)}
+                                onBlur={() => setActiveOrderPhotoId(null)}
+                                onChange={(e) => movePhotoToPosition(photo.id, post.id, Number(e.target.value))}
+                              >
+                                {showAllOrderOptions ? orderOptions : orderOptions[index]}
+                              </select>
                               <div className="photo-card-name" title={photo.name}>
                                 {photo.name}
                               </div>
                             </div>
                             <div className="photo-card-controls">
-                              <button
-                                type="button"
-                                className="btn-order-action"
-                                onClick={() => setMovingPhoto(photo)}
-                                aria-label={`指定序號 ${photo.name}`}
-                              >
-                                移至序號
-                              </button>
                               {!isCover && (
                                 <button
                                   type="button"
@@ -601,14 +595,6 @@ function PhotoCuratorWorkbench() {
       </div>
 
       {/* Instagram Cover Grid Live Preview */}
-      {movingPhoto && (
-        <MovePhotoDialog
-          photo={movingPhoto}
-          posts={posts}
-          onMove={movePhotoToPosition}
-          onClose={() => setMovingPhoto(null)}
-        />
-      )}
       <section className="glass-panel ig-preview-section" aria-label="Instagram 主頁首圖排版預覽">
         <div className="ig-preview-header">
           <div className="ig-preview-title">

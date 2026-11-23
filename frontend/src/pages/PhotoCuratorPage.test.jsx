@@ -491,45 +491,40 @@ describe('PhotoCuratorPage', () => {
         <SeedArrangement />
       </PhotoCuratorSessionProvider>
     );
-    fireEvent.click(screen.getByRole('button', { name: '指定序號 80.jpg', exact: true }));
-    const input = screen.getByLabelText('目標序號（1–80）');
-    for (const value of ['', '0', '-1', '81', '1.5']) {
-      fireEvent.change(input, { target: { value } });
-      expect(screen.getByRole('button', { name: '確認移動' })).toBeDisabled();
-      expect(photoNames(container, 'post-1')).toEqual(names);
-    }
-    fireEvent.change(input, { target: { value: '5' } });
-    fireEvent.click(screen.getByRole('button', { name: '確認移動' }));
+    const order = screen.getByRole('combobox', { name: '指定序號 80.jpg', exact: true });
+    expect(order).toHaveValue('80');
+    fireEvent.focus(order);
+    expect(Array.from(order.options, (option) => option.value)).toEqual(names.map((_, index) => String(index + 1)));
+    fireEvent.change(order, { target: { value: '5' } });
     const moved = [...names.slice(0, 4), '80.jpg', ...names.slice(4, 79)];
     expect(photoNames(container, 'post-1')).toEqual(moved);
     expect(container.querySelectorAll('.post-item-card')).toHaveLength(80);
     fireEvent.click(screen.getByRole('button', { name: /下載分組照片/ }));
     await waitFor(() => expect(exportCuratedZip).toHaveBeenCalledOnce());
     expect(exportCuratedZip.mock.calls[0][0].posts[0].photoIds).toEqual(moved);
-    fireEvent.click(screen.getByRole('button', { name: '指定序號 80.jpg', exact: true }));
-    fireEvent.change(screen.getByLabelText('目標序號（1–80）'), { target: { value: '80' } });
-    fireEvent.click(screen.getByRole('button', { name: '確認移動' }));
+    fireEvent.change(order, { target: { value: '80' } });
     expect(photoNames(container, 'post-1')).toEqual(names);
     fireEvent.click(screen.getByRole('button', { name: /復原上一步/ }));
     expect(photoNames(container, 'post-1')).toEqual(moved);
   }, 20000);
 
-  it('inserts an unassigned photo at a chosen post position and updates its cover', () => {
+  it('offers numbered moves only for photos assigned to a post', () => {
     const { container } = render(<PhotoCuratorPage />);
     importAndAssign(container, ['first.jpg', 'second.jpg']);
     fireEvent.change(container.querySelector('input[type="file"]'), {
       target: { files: [new File(['image'], 'pool.jpg', { type: 'image/jpeg' })] },
     });
-    fireEvent.click(screen.getByRole('button', { name: '指定序號 pool.jpg', exact: true }));
-    fireEvent.click(screen.getByRole('button', { name: '確認移動' }));
+    expect(screen.queryByLabelText('指定序號 pool.jpg')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '+ P1', exact: true }));
+    const order = screen.getByRole('combobox', { name: '指定序號 pool.jpg' });
+    expect(order).toHaveValue('3');
+    fireEvent.change(order, { target: { value: '1' } });
     expect(photoNames(container, 'post-1')).toEqual(['pool.jpg', 'first.jpg', 'second.jpg']);
     expect(screen.getByAltText('Post 1 封面：pool.jpg')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '指定序號 first.jpg', exact: true }));
-    fireEvent.change(screen.getByLabelText('目標貼文'), { target: { value: 'post-2' } });
-    expect(screen.getByLabelText('目標序號（1–1）')).toHaveValue(1);
-    fireEvent.click(screen.getByRole('button', { name: '確認移動' }));
+    fireEvent.change(screen.getByLabelText('移動 first.jpg 至貼文'), { target: { value: 'post-2' } });
     expect(photoNames(container, 'post-1')).toEqual(['pool.jpg', 'second.jpg']);
     expect(photoNames(container, 'post-2')).toEqual(['first.jpg']);
+    expect(screen.getByRole('combobox', { name: '指定序號 first.jpg' })).toBeDisabled();
   });
 
   function dragPhoto(container, name, targetName, edge = 'before', postId = 'post-1') {

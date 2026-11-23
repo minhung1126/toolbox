@@ -173,13 +173,11 @@ export function usePhotoCuratorWorkflow({ toast }) {
 
   const movePhotoToPosition = (photoId, postId, position) => {
     const post = posts.find((item) => item.id === postId);
-    if (!post || !photoMap.has(photoId)) return false;
-    const remaining = post.photoIds.filter((id) => id !== photoId);
-    if (!Number.isInteger(position) || position < 1 || position > remaining.length + 1) return false;
-    if (post.photoIds.indexOf(photoId) === position - 1) return true;
-    assignPhotoToPost(photoId, postId, remaining[position - 1] || null);
-    toast.success(`已移至 ${post.title} 第 ${position} 張。`);
-    return true;
+    const currentIndex = post?.photoIds.indexOf(photoId) ?? -1;
+    const targetIndex = position - 1;
+    const targetPhotoId = post?.photoIds[targetIndex];
+    if (currentIndex < 0 || !targetPhotoId) return;
+    assignPhotoToPost(photoId, postId, targetPhotoId, targetIndex > currentIndex ? 'after' : 'before');
   };
 
   // Delete photo completely from workbench

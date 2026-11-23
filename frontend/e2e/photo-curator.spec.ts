@@ -306,20 +306,25 @@ for (const width of [390, 1440]) {
       }))
     );
     for (let i = 0; i < 3; i++) await page.getByRole('button', { name: '+ P1', exact: true }).first().click();
-    await page.getByRole('button', { name: '指定序號 c.svg', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: '移動到指定序號' });
-    await expect(dialog).toContainText('目前第 3 / 3 張');
-    const target = dialog.getByRole('spinbutton');
-    for (const value of ['0', '-1', '4', '1.5']) {
-      await target.fill(value);
-      await expect(dialog.getByRole('button', { name: '確認移動' })).toBeDisabled();
-    }
-    await target.fill('1');
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await dialog.screenshot({ path: testInfo.outputPath(`move-to-position-${width}.png`) });
-    await target.press('Enter');
-    await expect(page.locator('[data-post-id=post-1] .photo-card-name')).toHaveText(['c.svg', 'a.svg', 'b.svg']);
+    const post = page.locator('[data-post-id=post-1]');
+    const order = post.getByRole('combobox', { name: '指定序號 c.svg', exact: true });
+    const namesInPost = post.locator('.photo-card-name');
+    await expect(order).toHaveValue('3');
+    await expect(order.locator('option')).toHaveText(['#01 封面', '#02', '#03']);
+    await order.focus();
+    await order.selectOption('1');
+    await expect(order).toBeFocused();
+    await expect(order).toHaveValue('1');
+    await expect(namesInPost).toHaveText(['c.svg', 'a.svg', 'b.svg']);
     await expect(page.getByAltText('Post 1 封面：c.svg')).toBeVisible();
+    await order.selectOption('3');
+    await expect(order).toBeFocused();
+    await expect(namesInPost).toHaveText(['a.svg', 'b.svg', 'c.svg']);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('button', { name: /復原上一步/ }).click();
+    await expect(namesInPost).toHaveText(['c.svg', 'a.svg', 'b.svg']);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await post.screenshot({ path: testInfo.outputPath(`post-order-${width}.png`) });
     const projectDownload = page.waitForEvent('download');
     await page.getByRole('button', { name: '匯出排版專案', exact: true }).click();
     const project = await projectDownload;
