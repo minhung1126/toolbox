@@ -221,8 +221,6 @@ export const api = {
   getAuthUrl: () => request('/auth/url'),
   getSheetsAuthUrl: () => request('/auth/sheets/url'),
   disconnectSheets: () => request('/auth/sheets/disconnect', { method: 'POST' }),
-  getDriveAuthUrl: () => request('/auth/drive/url'),
-  disconnectDrive: () => request('/auth/drive/disconnect', { method: 'POST' }),
   getYtmusicAuthUrl: () => request('/auth/ytmusic/url'),
   disconnectYtmusic: () => request('/auth/ytmusic/disconnect', { method: 'POST' }),
   getYoutubeAuthUrl: (slot = 'primary') => request(`/auth/youtube/${encodeURIComponent(slot)}/url`),

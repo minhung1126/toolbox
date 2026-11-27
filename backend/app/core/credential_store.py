@@ -243,10 +243,6 @@ class CredentialStore:
         """Persist a dedicated Google Sheets connection for one OIDC subject."""
         return self._save_connection("sheets", token_dict, owner_sub)
 
-    def save_drive_connection(self, token_dict: Dict[str, Any], owner_sub: str) -> Dict[str, Any]:
-        """Persist a dedicated Google Drive connection for one OIDC subject."""
-        return self._save_connection("drive", token_dict, owner_sub)
-
     def save_ytmusic_connection(self, token_dict: Dict[str, Any], owner_sub: str) -> Dict[str, Any]:
         """Persist a dedicated YouTube Music connection for one OIDC subject."""
         return self._save_connection("ytmusic", token_dict, owner_sub)
@@ -269,9 +265,6 @@ class CredentialStore:
 
     def get_sheets_credentials(self, owner_sub: str) -> Optional[Dict[str, Any]]:
         return self._get_credentials("sheets", owner_sub)
-
-    def get_drive_credentials(self, owner_sub: str) -> Optional[Dict[str, Any]]:
-        return self._get_credentials("drive", owner_sub)
 
     def get_ytmusic_credentials(self, owner_sub: str) -> Optional[Dict[str, Any]]:
         return self._get_credentials("ytmusic", owner_sub)
@@ -330,9 +323,6 @@ class CredentialStore:
     def get_sheets_public(self, owner_sub: str) -> Optional[Dict[str, Any]]:
         return self._get_public("sheets", owner_sub)
 
-    def get_drive_public(self, owner_sub: str) -> Optional[Dict[str, Any]]:
-        return self._get_public("drive", owner_sub)
-
     def get_youtube_public(self, owner_sub: str, slot: str = "primary") -> Optional[Dict[str, Any]]:
         slot_name = normalize_youtube_slot(slot)
         return self._get_public(f"youtube_{slot_name}", owner_sub)
@@ -374,13 +364,6 @@ class CredentialStore:
             "sheets", message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
         )
 
-    def mark_drive_refresh_failed(
-        self, message: str, *, owner_sub: str, requires_reauthorization: bool = False
-    ) -> None:
-        self._mark_refresh_failed(
-            "drive", message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
-        )
-
     def mark_ytmusic_refresh_failed(
         self, message: str, *, owner_sub: str, requires_reauthorization: bool = False
     ) -> None:
@@ -419,9 +402,6 @@ class CredentialStore:
 
     def clear_sheets(self, owner_sub: str) -> None:
         self._clear("sheets", owner_sub)
-
-    def clear_drive(self, owner_sub: str) -> None:
-        self._clear("drive", owner_sub)
 
     def save_ytmusic_custom_token(
         self,

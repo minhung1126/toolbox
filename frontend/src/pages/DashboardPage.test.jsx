@@ -75,7 +75,6 @@ describe('DashboardPage', () => {
             email: 'creator@example.com',
             authorizations: {
               sheets: { connected: true },
-              drive: { connected: true },
             },
             youtube: {
               slots: {

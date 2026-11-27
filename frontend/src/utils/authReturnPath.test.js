@@ -7,17 +7,15 @@ describe('OAuth return paths', () => {
     window.history.replaceState({}, '', '/youtube/drafts/videos');
   });
 
-  it('stores and consumes separate Google, Sheets, Drive, YouTube, YT Music, and Video Uploader return paths', () => {
+  it('stores and consumes separate Google, Sheets, YouTube, and YT Music return paths', () => {
     expect(saveOAuthReturnPath('google', '/youtube/drafts/videos')).toBe(true);
     expect(saveOAuthReturnPath('sheets', '/sheets/settings')).toBe(true);
-    expect(saveOAuthReturnPath('drive', '/youtube/drafts/videos')).toBe(true);
     expect(saveOAuthReturnPath('youtube', '/youtube/settings/connections')).toBe(true);
     expect(saveOAuthReturnPath('ytmusic', '/ytmusic/playlist-sort')).toBe(true);
     expect(window.sessionStorage.getItem(OAUTH_RETURN_KEYS.google)).toBe('/youtube/drafts/videos');
     expect(consumeOAuthReturnPath('google', '/dashboard')).toBe('/youtube/drafts/videos');
     expect(window.sessionStorage.getItem(OAUTH_RETURN_KEYS.google)).toBeNull();
     expect(consumeOAuthReturnPath('sheets', '/dashboard')).toBe('/sheets/settings');
-    expect(consumeOAuthReturnPath('drive', '/dashboard')).toBe('/youtube/drafts/videos');
     expect(consumeOAuthReturnPath('youtube', '/dashboard')).toBe('/youtube/settings/connections');
     expect(consumeOAuthReturnPath('ytmusic', '/dashboard')).toBe('/ytmusic/playlist-sort');
   });

@@ -17,7 +17,6 @@ from backend.app.services.youtube_quota_service import get_youtube_quota_tracker
 
 logger = logging.getLogger(__name__)
 
-DRIVE_READONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 SHEETS_READONLY_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
 
 LOGIN_SCOPES = [
@@ -31,12 +30,6 @@ SHEETS_SCOPES = [
     "https://www.googleapis.com/auth/userinfo.profile",
     SHEETS_READONLY_SCOPE,
 ]
-DRIVE_SCOPES = [
-    "openid",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-    DRIVE_READONLY_SCOPE,
-]
 YOUTUBE_SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
@@ -46,14 +39,6 @@ YOUTUBE_SCOPES = [
 GOOGLE_TOKEN_REFRESH_WINDOW = timedelta(minutes=5)
 GOOGLE_TOKEN_REFRESH_RETRY_DELAY = timedelta(minutes=1)
 _google_refresh_lock = RLock()
-
-
-def has_drive_read_scope(credentials: Credentials | None) -> bool:
-    """Return whether credentials include the Drive read-only scope."""
-    if credentials is None:
-        return False
-    scopes = getattr(credentials, "scopes", None) or []
-    return DRIVE_READONLY_SCOPE in {str(scope).strip() for scope in scopes}
 
 
 def has_sheets_scope(credentials: Credentials | None) -> bool:
@@ -78,25 +63,21 @@ def has_youtube_scope(credentials: Credentials | None) -> bool:
 def login_scope_status(
     credentials: Credentials | None,
     sheets_credentials: Credentials | None = None,
-    drive_credentials: Credentials | None = None,
     ytmusic_credentials: Credentials | None = None,
 ) -> dict[str, object]:
     """Expose only non-sensitive OAuth scope state to the authenticated UI."""
     all_scopes: set[str] = set()
-    for creds in (credentials, sheets_credentials, drive_credentials, ytmusic_credentials):
+    for creds in (credentials, sheets_credentials, ytmusic_credentials):
         if creds:
             all_scopes.update(
                 str(scope).strip() for scope in (getattr(creds, "scopes", None) or []) if str(scope).strip()
             )
 
-    drive_ok = has_drive_read_scope(drive_credentials) or has_drive_read_scope(credentials)
     sheets_ok = has_sheets_scope(sheets_credentials) or has_sheets_scope(credentials)
     ytmusic_ok = has_youtube_scope(ytmusic_credentials)
 
     return {
         "scopes": sorted(all_scopes),
-        "drive_readonly": drive_ok,
-        "drive_reauthorization_required": bool(credentials and not drive_ok),
         "sheets_readonly": sheets_ok,
         "sheets_reauthorization_required": bool(credentials and not sheets_ok),
         "ytmusic_authorized": ytmusic_ok,
@@ -104,12 +85,12 @@ def login_scope_status(
 
 
 def get_client_config(purpose: str = "login", slot: str = "primary") -> dict:
-    """Build the OAuth client config for login, sheets, drive, ytmusic, or one YouTube slot."""
+    """Build the OAuth client config for login, sheets, ytmusic, or one YouTube slot."""
     if purpose == "youtube":
         youtube_slot = get_settings(settings).youtube_oauth_slot(normalize_youtube_slot(slot))
         client_id = youtube_slot.client_id
         client_secret = youtube_slot.client_secret
-    elif purpose in ("login", "sheets", "drive", "ytmusic"):
+    elif purpose in ("login", "sheets", "ytmusic"):
         client_id = get_settings(settings).GOOGLE_CLIENT_ID
         client_secret = get_settings(settings).GOOGLE_CLIENT_SECRET
     else:
@@ -133,8 +114,6 @@ def _scopes_for(purpose: str) -> list[str]:
         return LOGIN_SCOPES
     if purpose == "sheets":
         return SHEETS_SCOPES
-    if purpose == "drive":
-        return DRIVE_SCOPES
     raise ValueError(f"不支援的 Google OAuth 用途：{purpose}")
 
 
@@ -143,7 +122,7 @@ def create_oauth_flow(
     purpose: str = "login",
     slot: str = "primary",
 ) -> Flow:
-    """Create a PKCE OAuth flow for login, sheets, drive, ytmusic, or one YouTube slot."""
+    """Create a PKCE OAuth flow for login, sheets, ytmusic, or one YouTube slot."""
     slot_name = normalize_youtube_slot(slot) if purpose == "youtube" else "primary"
     config = get_client_config(purpose=purpose, slot=slot_name)
     redirect_uri = get_settings(settings).get_redirect_uri()
@@ -163,7 +142,7 @@ def get_auth_url(purpose: str = "login", slot: str = "primary") -> tuple[str, st
     """Generate a Google OAuth URL and return its PKCE state."""
     slot_name = normalize_youtube_slot(slot) if purpose == "youtube" else "primary"
     flow = create_oauth_flow(purpose=purpose, slot=slot_name)
-    prompt = "consent select_account" if purpose in ("youtube", "ytmusic", "sheets", "drive") else "consent"
+    prompt = "consent select_account" if purpose in ("youtube", "ytmusic", "sheets") else "consent"
     auth_url, state = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
@@ -296,7 +275,7 @@ def _build_credentials(token_dict: dict, *, purpose: str = "login", slot: str = 
         client_id=client_id,
         client_secret=client_secret,
         # A legacy token without a persisted scope list must not be treated as
-        # having the newly added Drive scope; the UI will ask for reauth.
+        # having elevated scopes; the UI will ask for reauth.
         scopes=token_dict.get("scopes") or [],
         expiry=parsed_expiry,
     )
@@ -342,13 +321,6 @@ def _refresh_credentials(
                 credential_key = "google"
                 latest = store.get_google_credentials(owner_sub)
                 public = store.get_google_public(owner_sub)
-        elif credential_key == "drive":
-            latest = store.get_drive_credentials(owner_sub)
-            public = store.get_drive_public(owner_sub)
-            if not latest:
-                credential_key = "google"
-                latest = store.get_google_credentials(owner_sub)
-                public = store.get_google_public(owner_sub)
         else:
             latest = store.get_google_credentials(owner_sub)
             public = store.get_google_public(owner_sub)
@@ -390,11 +362,6 @@ def _refresh_credentials(
                     get_credential_store(credential_store).save_sheets_connection(refreshed, owner_sub=owner_sub)
                 else:
                     get_credential_store(credential_store).save_google_connection(refreshed, owner_sub=owner_sub)
-            elif credential_key == "drive":
-                if get_credential_store(credential_store).get_drive_credentials(owner_sub):
-                    get_credential_store(credential_store).save_drive_connection(refreshed, owner_sub=owner_sub)
-                else:
-                    get_credential_store(credential_store).save_google_connection(refreshed, owner_sub=owner_sub)
             else:
                 get_credential_store(credential_store).save_google_connection(refreshed, owner_sub=owner_sub)
             return credentials
@@ -426,15 +393,6 @@ def _refresh_credentials(
             elif credential_key == "sheets":
                 if get_credential_store(credential_store).get_sheets_credentials(owner_sub):
                     get_credential_store(credential_store).mark_sheets_refresh_failed(
-                        message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
-                    )
-                else:
-                    get_credential_store(credential_store).mark_google_refresh_failed(
-                        message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
-                    )
-            elif credential_key == "drive":
-                if get_credential_store(credential_store).get_drive_credentials(owner_sub):
-                    get_credential_store(credential_store).mark_drive_refresh_failed(
                         message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
                     )
                 else:
@@ -558,17 +516,6 @@ def get_sheets_credentials(session_id: Optional[str] = None, owner_sub: Optional
         credential_key="sheets",
         scope_checker=has_sheets_scope,
         dedicated_getter=get_credential_store(credential_store).get_sheets_credentials,
-    )
-
-
-def get_drive_credentials(session_id: Optional[str] = None, owner_sub: Optional[str] = None) -> Optional[Credentials]:
-    """Load Google Drive credentials for an authenticated user session or subject."""
-    return _get_scoped_service_credentials(
-        session_id=session_id,
-        owner_sub=owner_sub,
-        credential_key="drive",
-        scope_checker=has_drive_read_scope,
-        dedicated_getter=get_credential_store(credential_store).get_drive_credentials,
     )
 
 

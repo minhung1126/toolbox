@@ -3,8 +3,6 @@ const AUTH_HASH_KEYS = [
   ['auth_error', 'google_error'],
   ['sheets_auth_success', 'sheets_success'],
   ['sheets_auth_error', 'sheets_error'],
-  ['drive_auth_success', 'drive_success'],
-  ['drive_auth_error', 'drive_error'],
   ['youtube_auth_success', 'youtube_success'],
   ['youtube_auth_error', 'youtube_error'],
   ['ytmusic_auth_success', 'ytmusic_success'],

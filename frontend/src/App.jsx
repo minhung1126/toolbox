@@ -316,11 +316,6 @@ export function AppContent() {
           await fetchUser({ source: 'ytmusic-oauth-callback' });
           setOauthReturnPath(consumeOAuthReturnPath('ytmusic', PATHS.ytmusicPlaylistSort));
           if (user) await fetchSettings();
-        } else if (authResult?.type === 'drive_success') {
-          toast.success('Google 雲端硬碟授權成功');
-          await fetchUser({ source: 'drive-oauth-callback' });
-          setOauthReturnPath(consumeOAuthReturnPath('drive', PATHS.dashboard));
-          if (user) await fetchSettings();
         } else if (authResult?.type === 'google_error') {
           const message = '控制台 Google 登入失敗，請重新嘗試。';
           consumeOAuthReturnPath('google', PATHS.dashboard);
@@ -342,11 +337,6 @@ export function AppContent() {
           const message = 'YouTube Music 授權失敗，請重新嘗試。';
           toast.error(message);
           setOauthReturnPath(consumeOAuthReturnPath('ytmusic', PATHS.ytmusicPlaylistSort));
-          if (user) await fetchSettings();
-        } else if (authResult?.type === 'drive_error') {
-          const message = 'Google 雲端硬碟授權失敗，請重新嘗試。';
-          toast.error(message);
-          setOauthReturnPath(consumeOAuthReturnPath('drive', PATHS.dashboard));
           if (user) await fetchSettings();
         } else if (user) {
           await fetchSettings();

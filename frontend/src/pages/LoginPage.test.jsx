@@ -67,6 +67,6 @@ describe('LoginPage readiness', () => {
     renderLoginPage();
 
     await waitFor(() => expect(screen.getByText(/模組化權限拆分/)).toBeInTheDocument());
-    expect(screen.getByText(/Google 試算表、雲端硬碟、YouTube 頻道分別獨立授權/)).toBeInTheDocument();
+    expect(screen.getByText(/Google 試算表、YouTube 頻道分別獨立授權/)).toBeInTheDocument();
   });
 });

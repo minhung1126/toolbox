@@ -1,10 +1,9 @@
 # Google API 與 OAuth 2.0 設定
 
-Toolbox 採用徹底解耦的模組化授權架構，將身分認證與各工具權限完全分離為 4 個獨立維度：
+Toolbox 採用徹底解耦的模組化授權架構，將身分認證與各工具權限完全分離為 3 個獨立維度：
 1. **控制台身分登入**（OpenID Connect: `openid`, `userinfo.email`, `userinfo.profile`）
 2. **Google 試算表讀取**（`spreadsheets.readonly`）
-3. **Google 雲端硬碟讀取**（`drive.readonly`）
-4. **YouTube 頻道管理**（YouTube Data API: `youtube`）
+3. **YouTube 頻道管理**（YouTube Data API: `youtube`）
 
 Google OAuth 憑證（Client ID 與 Client Secret）可在首次啟動時透過**網頁安裝精靈 (`/setup`)** 或後續於「系統安全與白名單 (`/settings/system`)」直接配置，並支援熱更新與 AES-256 加密保存。
 
@@ -13,7 +12,6 @@ Google OAuth 憑證（Client ID 與 Client Secret）可在首次啟動時透過*
 1. 建立 Google Cloud 專案。
 2. 啟用所需 API：
    - Google Sheets API
-   - Google Drive API
    - YouTube Data API v3
 3. 建立 Web application OAuth client。
 4. 設定 OAuth consent screen，加入測試帳號或送審上線。
@@ -56,17 +54,3 @@ python -m uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 確認 `http://localhost:8000/api/v1/health` 回傳 `status: "healthy"`，並檢查 `ready`、`configuration`、`youtube` 與 `warnings`。health response 只回報設定狀態，不回傳 client secret。
-
-## Google Drive 上傳
-
-「上傳至 YouTube」接受 Drive 資料夾或單一影片的 ID／網址。資料夾只讀取第一層，影片會依檔名自然排序，逐部下載到受保護的暫存區，再以 YouTube resumable upload 上傳為 `private`，最後加入帳號共用的 To-Post 播放清單。
-
-Drive 授權 scope 為 `https://www.googleapis.com/auth/drive.readonly`，在進入 Drive 上傳頁面時可獨立就地授權，不影響控制台身分登入。此 scope 屬於 Google Drive restricted scope，正式公開部署可能需要完成 Google OAuth 驗證與安全評估。系統只接受 `drive.google.com` 的來源輸入，不會直接請求使用者貼上的任意 URL。
-
-上傳工作與暫存資料保存於 `data/`；Docker 部署必須保留既有的 `./data:/app/data` volume。後端工作 API 為：
-
-- `POST /api/v1/youtube/uploads/preview`
-- `POST /api/v1/youtube/uploads/jobs`（回傳 `202` 與 `job_id`）
-- `GET /api/v1/youtube/uploads/jobs/{job_id}`
-- `POST /api/v1/youtube/uploads/jobs/{job_id}/cancel`
-- `POST /api/v1/youtube/uploads/jobs/{job_id}/retry`
