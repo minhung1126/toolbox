@@ -134,6 +134,8 @@ class Settings(BaseSettings):
         del __context
         if self.runtime_store is not None:
             self.runtime_store.bind_settings(self)
+        if self.secrets_store is not None and hasattr(self.secrets_store, "bind_settings"):
+            self.secrets_store.bind_settings(self)
         self.ENVIRONMENT = self.ENVIRONMENT.strip().casefold()
         if self.ENVIRONMENT not in {"development", "test", "staging", "production"}:
             raise ValueError("ENVIRONMENT must be one of development, test, staging, or production")
@@ -231,15 +233,28 @@ class Settings(BaseSettings):
             self._initialize_keys_unlocked()
 
     def _initialize_keys_unlocked(self) -> None:
-        if not self.SECRET_KEY or not self.CREDENTIAL_ENCRYPTION_KEY:
-            sec, enc = self.get_secrets_store().get_or_create_master_keys(
-                env_secret_key=self.SECRET_KEY,
-                env_encryption_key=self.CREDENTIAL_ENCRYPTION_KEY,
+        if self.SECRET_KEY and self.CREDENTIAL_ENCRYPTION_KEY and self.CREDENTIAL_ENCRYPTION_KEY == self.SECRET_KEY:
+            if self.is_production:
+                raise ValueError("SECRET_KEY and CREDENTIAL_ENCRYPTION_KEY must be different in production")
+            self.CREDENTIAL_ENCRYPTION_KEY = hashlib.sha256(
+                f"{self.SECRET_KEY}:credential-encryption".encode("utf-8")
+            ).hexdigest()
+            warnings.warn(
+                "SECRET_KEY and CREDENTIAL_ENCRYPTION_KEY matched; derived a separate development key.",
+                stacklevel=2,
             )
-            if not self.SECRET_KEY:
-                self.SECRET_KEY = sec
-            if not self.CREDENTIAL_ENCRYPTION_KEY:
-                self.CREDENTIAL_ENCRYPTION_KEY = enc
+
+        secrets_store = self.get_secrets_store()
+        if hasattr(secrets_store, "bind_settings"):
+            secrets_store.bind_settings(self)
+        sec, enc = secrets_store.get_or_create_master_keys(
+            env_secret_key=self.SECRET_KEY,
+            env_encryption_key=self.CREDENTIAL_ENCRYPTION_KEY,
+        )
+        if not self.SECRET_KEY.strip():
+            self.SECRET_KEY = sec
+        if not self.CREDENTIAL_ENCRYPTION_KEY.strip():
+            self.CREDENTIAL_ENCRYPTION_KEY = enc
 
         if not self.SECRET_KEY:
             if self.is_production:
@@ -267,6 +282,10 @@ class Settings(BaseSettings):
             warnings.warn(
                 "SECRET_KEY and CREDENTIAL_ENCRYPTION_KEY matched; derived a separate development key.",
                 stacklevel=2,
+            )
+            secrets_store.get_or_create_master_keys(
+                env_secret_key=self.SECRET_KEY,
+                env_encryption_key=self.CREDENTIAL_ENCRYPTION_KEY,
             )
 
         if self.is_production:
@@ -405,7 +424,7 @@ class Settings(BaseSettings):
 
     def sync_dynamic_config(self) -> None:
         """Sync in-memory settings with persistent system secrets and runtime config."""
-        with _settings_sync_lock:
+        with _settings_sync_lock, settings_context(self):
             runtime_config = self.get_runtime_store()
             system_secrets = self.get_secrets_store()
 
@@ -476,6 +495,10 @@ class Settings(BaseSettings):
 
 
 _request_settings: ContextVar[Settings | None] = ContextVar("settings", default=None)
+
+
+def get_scoped_settings() -> Settings | None:
+    return _request_settings.get()
 
 
 def get_settings(fallback: Settings | None = None) -> Settings:

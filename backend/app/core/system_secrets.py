@@ -42,6 +42,7 @@ SECRET_FIELDS = {
     "youtube_secondary_client_secret",
 }
 MAX_SETUP_PIN_ATTEMPTS = 5
+_MULTIPLE_SETTINGS = object()
 
 
 def _derive_fernet(key_material: str) -> Fernet:
@@ -99,44 +100,62 @@ class SystemSecretsManager:
         self._lock = RLock()
         self._master_secret_key: Optional[str] = None
         self._master_encryption_key: Optional[str] = None
+        self._fernet_cache: Dict[str, Fernet] = {}
         self._credentials_cache: Optional[Dict[str, str]] = None
+        self._credentials_cache_key: Optional[str] = None
+        self._bound_settings: Any = None
         self._setup_pin: Optional[str] = None
         self._pin_attempts_file = self._pin_file.with_name(f"{self._pin_file.name}.attempts")
         self._setup_pin_failures: int = 0
 
+    def bind_settings(self, config: Any) -> None:
+        """Bind a single owning Settings instance unless shared across multiple apps."""
+        if self is _DEFAULT_SYSTEM_SECRETS:
+            return
+        with self._lock:
+            if self._bound_settings is None or self._bound_settings is config:
+                self._bound_settings = config
+            else:
+                self._bound_settings = _MULTIPLE_SETTINGS
+
     def get_or_create_master_keys(self, env_secret_key: str = "", env_encryption_key: str = "") -> Tuple[str, str]:
         """Resolve persistent master keys from env, existing file, or auto-generation."""
         with self._lock:
-            # If already resolved and cached in memory
-            if self._master_secret_key and self._master_encryption_key:
+            secret_key = str(env_secret_key or "").strip()
+            encryption_key = str(env_encryption_key or "").strip()
+
+            # Reuse in-memory cache only when no differing explicit env key was provided.
+            if (
+                self._master_secret_key
+                and self._master_encryption_key
+                and (not secret_key or secret_key == self._master_secret_key)
+                and (not encryption_key or encryption_key == self._master_encryption_key)
+            ):
                 return self._master_secret_key, self._master_encryption_key
 
-            secret_key = env_secret_key.strip()
-            encryption_key = env_encryption_key.strip()
-
-            # Try loading existing secrets file
-            saved_secrets = read_json_file(self._secrets_file, {}, strict=True)
-            if not isinstance(saved_secrets, dict):
-                raise ValueError("Invalid master secrets structure")
-
-            # Priority 1: explicitly passed from environment
-            # Priority 2: saved in persistent .secrets.json
-            # Priority 3: auto-generate strong cryptographic keys
             needs_save = False
+            if not secret_key or not encryption_key:
+                # Try loading existing secrets file
+                saved_secrets = read_json_file(self._secrets_file, {}, strict=True)
+                if not isinstance(saved_secrets, dict):
+                    raise ValueError("Invalid master secrets structure")
 
-            if not secret_key:
-                secret_key = str(saved_secrets.get("secret_key") or "").strip()
+                # Priority 1: explicitly passed from environment
+                # Priority 2: saved in persistent .secrets.json
+                # Priority 3: auto-generate strong cryptographic keys
                 if not secret_key:
-                    secret_key = secrets.token_urlsafe(48)
-                    needs_save = True
+                    secret_key = str(saved_secrets.get("secret_key") or "").strip()
+                    if not secret_key:
+                        secret_key = secrets.token_urlsafe(48)
+                        needs_save = True
 
-            if not encryption_key:
-                encryption_key = str(saved_secrets.get("credential_encryption_key") or "").strip()
                 if not encryption_key:
-                    encryption_key = secrets.token_urlsafe(48)
-                    needs_save = True
+                    encryption_key = str(saved_secrets.get("credential_encryption_key") or "").strip()
+                    if not encryption_key:
+                        encryption_key = secrets.token_urlsafe(48)
+                        needs_save = True
 
-            if needs_save or not self._secrets_file.is_file():
+            if needs_save:
                 try:
                     atomic_write_json(
                         self._secrets_file,
@@ -152,28 +171,64 @@ class SystemSecretsManager:
                     logger.error("Failed to persist master keys: %s", type(exc).__name__)
                     raise
 
+            if encryption_key != self._master_encryption_key:
+                self._credentials_cache = None
+                self._credentials_cache_key = None
+
             self._master_secret_key = secret_key
             self._master_encryption_key = encryption_key
             return secret_key, encryption_key
 
-    def _get_fernet(self) -> Fernet:
+    def _resolve_encryption_key(self) -> str:
+        from backend.app.core.config import get_scoped_settings, get_settings, settings
+
+        scoped = get_scoped_settings()
+        if scoped is not None:
+            key = str(getattr(scoped, "CREDENTIAL_ENCRYPTION_KEY", "") or "").strip()
+            if key:
+                return key
+        elif self is _DEFAULT_SYSTEM_SECRETS:
+            key = str(getattr(get_settings(settings), "CREDENTIAL_ENCRYPTION_KEY", "") or "").strip()
+            if key:
+                return key
+        elif self._bound_settings is not None and self._bound_settings is not _MULTIPLE_SETTINGS:
+            key = str(getattr(self._bound_settings, "CREDENTIAL_ENCRYPTION_KEY", "") or "").strip()
+            if key:
+                return key
         _, encryption_key = self.get_or_create_master_keys()
-        return _derive_fernet(encryption_key)
+        return encryption_key
+
+    def _get_fernet(self) -> Fernet:
+        with self._lock:
+            encryption_key = self._resolve_encryption_key()
+            fernet = self._fernet_cache.get(encryption_key)
+            if fernet is None:
+                fernet = _derive_fernet(encryption_key)
+                self._fernet_cache[encryption_key] = fernet
+            return fernet
 
     def get_credentials(self, *, ignore_decrypt_errors: bool = False) -> Dict[str, str]:
         """Return decrypted OAuth client credentials from persistent store."""
         with self._lock:
             if self._credentials_cache is not None:
-                return dict(self._credentials_cache)
+                if not self._credentials_cache:
+                    return {}
+                active_key = self._resolve_encryption_key()
+                if self._credentials_cache_key == active_key:
+                    return dict(self._credentials_cache)
+                self._credentials_cache = None
+                self._credentials_cache_key = None
 
             data = read_json_file(self._credentials_file, {}, strict=True)
             if not isinstance(data, dict):
                 raise ValueError("Invalid system credentials structure")
             if not data:
                 self._credentials_cache = {}
+                self._credentials_cache_key = None
                 return {}
 
             try:
+                active_key = self._resolve_encryption_key()
                 fernet = self._get_fernet()
                 decrypted: Dict[str, str] = {}
                 had_decrypt_error = False
@@ -202,6 +257,7 @@ class SystemSecretsManager:
 
                 if not had_decrypt_error:
                     self._credentials_cache = decrypted
+                    self._credentials_cache_key = active_key
                 return dict(decrypted)
             except (OSError, json.JSONDecodeError) as exc:
                 logger.error("Failed to load system credentials: %s", type(exc).__name__)
@@ -215,6 +271,7 @@ class SystemSecretsManager:
                 if key in OAUTH_CREDENTIAL_FIELDS and val is not None:
                     current[key] = str(val).strip()
 
+            active_key = self._resolve_encryption_key()
             fernet = self._get_fernet()
             payload: Dict[str, Any] = {
                 "version": 1,
@@ -232,6 +289,7 @@ class SystemSecretsManager:
             try:
                 atomic_write_json(self._credentials_file, payload, indent=2)
                 self._credentials_cache = dict(current)
+                self._credentials_cache_key = active_key
                 logger.info("Successfully updated and persisted system OAuth credentials")
             except OSError as exc:
                 logger.error("Failed to save system credentials: %s", type(exc).__name__)
@@ -379,6 +437,7 @@ class SystemSecretsManager:
 
 
 system_secrets = SystemSecretsManager()
+_DEFAULT_SYSTEM_SECRETS = system_secrets
 
 
 def get_system_secrets(fallback: SystemSecretsManager | None = None) -> SystemSecretsManager:

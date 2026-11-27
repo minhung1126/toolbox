@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,7 +14,7 @@ from backend.app.core.credential_store import CredentialStore
 from backend.app.core.runtime_config import RuntimeConfig
 from backend.app.core.security import GOOGLE_OAUTH_STATE_SALT, sign_timed_data
 from backend.app.core.session_store import SessionStore
-from backend.app.core.system_secrets import SystemSecretsManager
+from backend.app.core.system_secrets import SystemSecretsManager, _derive_fernet
 from backend.app.main import create_app
 from backend.app.services.google_auth import LOGIN_SCOPES, SHEETS_SCOPES, YOUTUBE_SCOPES
 from backend.app.services.youtube_publish_jobs import JobIdentity, PublishJobRuntime
@@ -193,3 +194,122 @@ def test_publish_job_runtime_youtube_context_raises_403_on_decrypt_error(tmp_pat
         runtime._youtube_context(JobIdentity("owner-1", "chan-1", "primary", "manual"))
     assert exc.value.status_code == 403
     assert exc.value.detail["code"] == "youtube_scope_required"
+
+
+def test_settings_explicit_keys_sync_and_rotate_with_system_secrets(tmp_path: Path):
+    explicit_dir = tmp_path / "explicit"
+    mgr = SystemSecretsManager(explicit_dir)
+    cfg = Settings(
+        _env_file=None,
+        runtime_store=RuntimeConfig(explicit_dir / "runtime.json"),
+        secrets_store=mgr,
+        SECRET_KEY="explicit-secret-key-at-least-32-chars",
+        CREDENTIAL_ENCRYPTION_KEY="explicit-enc-key-at-least-32-chars",
+    )
+    mgr.update_credentials({"google_client_id": "cid", "google_client_secret": "csec-1"})
+    assert mgr._master_secret_key == cfg.SECRET_KEY
+    assert mgr._master_encryption_key == cfg.CREDENTIAL_ENCRYPTION_KEY
+    assert not (explicit_dir / ".secrets.json").exists()
+
+    raw_disk = json.loads((explicit_dir / "system_credentials.json").read_text(encoding="utf-8"))
+    token = raw_disk["google_client_secret"][4:].encode("utf-8")
+    assert _derive_fernet(cfg.CREDENTIAL_ENCRYPTION_KEY).decrypt(token).decode("utf-8") == "csec-1"
+
+    # Rotating CREDENTIAL_ENCRYPTION_KEY in Settings triggers strict decrypt failure, while update self-heals
+    rotated_cfg = Settings(
+        _env_file=None,
+        runtime_store=RuntimeConfig(explicit_dir / "runtime.json"),
+        secrets_store=mgr,
+        SECRET_KEY="explicit-secret-key-at-least-32-chars",
+        CREDENTIAL_ENCRYPTION_KEY="rotated-enc-key-at-least-32-chars",
+    )
+    assert mgr._master_encryption_key == rotated_cfg.CREDENTIAL_ENCRYPTION_KEY
+    with pytest.raises(RuntimeError, match="decrypt"):
+        mgr.get_credentials()
+
+    healed = mgr.update_credentials({"google_client_secret": "csec-2"})
+    assert healed["google_client_id"] == "cid"
+    assert healed["google_client_secret"] == "csec-2"
+    assert mgr.get_credentials()["google_client_secret"] == "csec-2"
+
+    # In-place key rotation on an active Settings instance also invalidates cache and triggers self-heal flow
+    rotated_cfg.CREDENTIAL_ENCRYPTION_KEY = "in-place-rotated-enc-key-32-chars"
+    with settings_context(rotated_cfg):
+        with pytest.raises(RuntimeError, match="decrypt"):
+            mgr.get_credentials()
+        mgr.update_credentials({"google_client_secret": "csec-3"})
+        assert mgr.get_credentials()["google_client_secret"] == "csec-3"
+
+    # Explicit Settings keys take precedence over a pre-existing stale .secrets.json
+    stale_dir = tmp_path / "stale-secrets"
+    stale_mgr = SystemSecretsManager(stale_dir)
+    stale_sec, stale_enc = stale_mgr.get_or_create_master_keys()
+    assert stale_enc != "override-enc-key-at-least-32-chars"
+    override_mgr = SystemSecretsManager(stale_dir)
+    override_cfg = Settings(
+        _env_file=None,
+        runtime_store=RuntimeConfig(stale_dir / "runtime.json"),
+        secrets_store=override_mgr,
+        SECRET_KEY="override-secret-key-at-least-32-chars",
+        CREDENTIAL_ENCRYPTION_KEY="override-enc-key-at-least-32-chars",
+    )
+    assert override_mgr._master_secret_key == override_cfg.SECRET_KEY != stale_sec
+    assert override_mgr._master_encryption_key == override_cfg.CREDENTIAL_ENCRYPTION_KEY != stale_enc
+    override_mgr.update_credentials({"google_client_id": "cid", "google_client_secret": "override-secret"})
+    raw_override = json.loads((stale_dir / "system_credentials.json").read_text(encoding="utf-8"))
+    assert (
+        _derive_fernet(override_cfg.CREDENTIAL_ENCRYPTION_KEY)
+        .decrypt(raw_override["google_client_secret"][4:].encode("utf-8"))
+        .decode("utf-8")
+        == "override-secret"
+    )
+
+
+def test_shared_system_secrets_manager_isolates_per_app_settings(tmp_path: Path):
+    shared_mgr = SystemSecretsManager(tmp_path)
+    cfg_alpha = Settings(
+        _env_file=None,
+        runtime_store=RuntimeConfig(tmp_path / "alpha" / "runtime.json"),
+        secrets_store=shared_mgr,
+        SECRET_KEY="alpha-secret-key-00000000000000000000000",
+        CREDENTIAL_ENCRYPTION_KEY="alpha-enc-key-000000000000000000000000",
+        ALLOWED_GOOGLE_EMAILS="user@example.test",
+    )
+    cfg_beta = Settings(
+        _env_file=None,
+        runtime_store=RuntimeConfig(tmp_path / "beta" / "runtime.json"),
+        secrets_store=shared_mgr,
+        SECRET_KEY="beta-secret-key-000000000000000000000000",
+        CREDENTIAL_ENCRYPTION_KEY="beta-enc-key-0000000000000000000000000",
+        ALLOWED_GOOGLE_EMAILS="user@example.test",
+    )
+    app_alpha = create_app(app_settings=cfg_alpha)
+    app_beta = create_app(app_settings=cfg_beta)
+
+    @app_alpha.post("/secrets-write")
+    def write_alpha():
+        shared_mgr.update_credentials({"google_client_id": "alpha-id", "google_client_secret": "alpha-secret"})
+        return {"secret": shared_mgr.get_credentials()["google_client_secret"]}
+
+    @app_beta.get("/secrets-read")
+    def read_beta():
+        try:
+            shared_mgr.get_credentials()
+            return {"decrypted": True}
+        except RuntimeError:
+            degraded = shared_mgr.get_credentials(ignore_decrypt_errors=True)
+            return {"decrypted": False, "secret": degraded["google_client_secret"]}
+
+    app_alpha.router.routes.insert(0, app_alpha.router.routes.pop())
+    app_beta.router.routes.insert(0, app_beta.router.routes.pop())
+
+    assert TestClient(app_alpha).post("/secrets-write").json() == {"secret": "alpha-secret"}
+    assert TestClient(app_beta).get("/secrets-read").json() == {"decrypted": False, "secret": ""}
+
+    raw = json.loads((tmp_path / "system_credentials.json").read_text(encoding="utf-8"))
+    assert (
+        _derive_fernet(cfg_alpha.CREDENTIAL_ENCRYPTION_KEY)
+        .decrypt(raw["google_client_secret"][4:].encode("utf-8"))
+        .decode("utf-8")
+        == "alpha-secret"
+    )
