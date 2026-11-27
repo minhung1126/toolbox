@@ -185,13 +185,20 @@ async def _safe_read_request_json(request: Request) -> dict[str, Any]:
         return {}
 
 
-async def require_youtube_context(request: Request) -> YouTubeRequestContext:
-    """Resolve one quota-aware YouTube slot once at request start."""
-    auth_session = get_authenticated_session(request)
+def _require_authenticated_session(request: Request) -> AuthenticatedSession:
+    """Sync wrapper so FastAPI runs session/credential/OAuth checks in the threadpool."""
+    return get_authenticated_session(request)
+
+
+def _resolve_youtube_context(
+    request: Request,
+    *,
+    auth_session: AuthenticatedSession,
+    body: dict[str, Any],
+) -> YouTubeRequestContext:
     session_id = auth_session.session_id
     owner_sub = auth_session.subject
 
-    body = await _safe_read_request_json(request)
     default_playlist_id = get_account_setting(owner_sub, "default_playlist_id", "")
     slot_hint = _get_preview_slot_hint(request.url.path, body)
     estimated_units = estimate_youtube_request_units(
@@ -219,15 +226,32 @@ async def require_youtube_context(request: Request) -> YouTubeRequestContext:
     )
 
 
-async def require_ytmusic_context(request: Request) -> YouTubeRequestContext:
+def require_youtube_context(
+    request: Request,
+    auth_session: AuthenticatedSession = Depends(_require_authenticated_session),
+    body: dict[str, Any] = Depends(_safe_read_request_json),
+) -> YouTubeRequestContext:
+    """Resolve one quota-aware YouTube slot once at request start."""
+    return _resolve_youtube_context(
+        request,
+        auth_session=auth_session,
+        body=body if isinstance(body, dict) else {},
+    )
+
+
+def require_ytmusic_context(
+    request: Request,
+    auth_session: AuthenticatedSession = Depends(_require_authenticated_session),
+    body: dict[str, Any] = Depends(_safe_read_request_json),
+) -> YouTubeRequestContext:
     """Resolve dedicated YouTube Music credentials and context.
 
     Prefers dedicated YouTube Music authorization. Falls back to YouTube context if available.
     Raises 403 if neither is authorized.
     """
-    auth_session = get_authenticated_session(request)
     session_id = auth_session.session_id
     owner_sub = auth_session.subject
+    parsed_body = body if isinstance(body, dict) else {}
 
     ytmusic_creds = get_ytmusic_credentials(session_id=session_id, owner_sub=owner_sub)
     if ytmusic_creds and ytmusic_creds.valid and has_youtube_scope(ytmusic_creds):
@@ -235,11 +259,9 @@ async def require_ytmusic_context(request: Request) -> YouTubeRequestContext:
         channel_id = ytmusic_public.get("channel_id")
         limiter = get_youtube_quota_tracker("primary")
 
-        body = await _safe_read_request_json(request)
-
         estimated_units = estimate_youtube_request_units(
             request.url.path,
-            body if isinstance(body, dict) else {},
+            parsed_body,
         )
 
         logger.info(
@@ -261,7 +283,11 @@ async def require_ytmusic_context(request: Request) -> YouTubeRequestContext:
         )
 
     try:
-        return await require_youtube_context(request)
+        return _resolve_youtube_context(
+            request,
+            auth_session=auth_session,
+            body=parsed_body,
+        )
     except HTTPException:
         logger.warning("YouTube Music access attempted without authorization (sub=%s)", owner_sub)
         raise http_error(

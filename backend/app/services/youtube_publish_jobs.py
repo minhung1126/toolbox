@@ -25,10 +25,12 @@ from backend.app.services.google_auth import (
     has_youtube_scope,
 )
 from backend.app.services.google_clients import google_client_context
+from backend.app.services.oauth_clients import oauth_client_context
 from backend.app.services.operation_journal import Recorder, public_operation, recording
 from backend.app.services.youtube_draft_publish import DraftPublishWorkflow
 
 logger = logging.getLogger(__name__)
+HEARTBEAT_INTERVAL_SECONDS = 5.0
 
 if os.name == "nt":
     import msvcrt
@@ -61,10 +63,22 @@ class JobIdentity:
 class PublishJobRuntime:
     """Explicit app resources; a queued job contains no Request or credentials."""
 
-    def __init__(self, *, config, credentials, accounts, trackers, client_factory, service, credential_loader=None):
+    def __init__(
+        self,
+        *,
+        config,
+        credentials,
+        accounts,
+        trackers,
+        client_factory,
+        service,
+        credential_loader=None,
+        oauth_client_factories=None,
+    ):
         self.config, self.credentials, self.accounts = config, credentials, accounts
         self.trackers, self.client_factory, self.service = trackers, client_factory, service
         self.credential_loader = credential_loader
+        self.oauth_client_factories = oauth_client_factories
 
     @contextmanager
     def scope(self):
@@ -78,6 +92,7 @@ class PublishJobRuntime:
             stack.enter_context(account_state_context(self.accounts))
             stack.enter_context(youtube_quota_context(self.trackers))
             stack.enter_context(google_client_context(self.client_factory))
+            stack.enter_context(oauth_client_context(self.oauth_client_factories))
             yield
 
     def _youtube_context(self, identity):
@@ -207,9 +222,12 @@ class YouTubePublishRunner:
                 raise
 
     def _heartbeat(self):
-        while not self.stop_event.wait(5):
-            with self.store.transaction() as db:
-                db.execute("UPDATE operation_executors SET heartbeat=? WHERE id=?", (time.time(), self.id))
+        while not self.stop_event.wait(HEARTBEAT_INTERVAL_SECONDS):
+            try:
+                with self.store.transaction() as db:
+                    db.execute("UPDATE operation_executors SET heartbeat=? WHERE id=?", (time.time(), self.id))
+            except Exception as exc:
+                logger.warning("Publish runner heartbeat update failed: %s", type(exc).__name__)
 
     def submit(self, payload, context):
         kind = "youtube.metadata_publish"
@@ -310,21 +328,33 @@ class YouTubePublishRunner:
             try:
                 with self.store.transaction() as db:
                     db.execute("UPDATE operation_executors SET state='stopped' WHERE id=?", (self.id,))
+            except Exception as exc:
+                logger.warning("Failed to mark publish executor stopped: %s", type(exc).__name__)
             finally:
                 self._release_file_lock()
 
     def shutdown(self):
         with self.lock:
             self.accepting = False
-            while True:
-                try:
-                    owner, operation_id = self.queue.get_nowait()
-                except queue.Empty:
-                    break
-                Recorder(self.store, self.store.get(owner, operation_id)).finish(failed=True)
-                self.capacity.release()
-                self.queue.task_done()
-            self.stop_event.set()
+            try:
+                while True:
+                    try:
+                        owner, operation_id = self.queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    try:
+                        Recorder(self.store, self.store.get(owner, operation_id)).finish(failed=True)
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to mark queued publish operation %s as failed during shutdown: %s",
+                            operation_id,
+                            type(exc).__name__,
+                        )
+                    finally:
+                        self.capacity.release()
+                        self.queue.task_done()
+            finally:
+                self.stop_event.set()
         if self.thread:
             self.thread.join(timeout=self.shutdown_timeout)
         if self.heartbeat_thread:

@@ -76,7 +76,7 @@ class RuntimeConfig:
 
     def _save(self):
         try:
-            atomic_write_json(self._path, self._data)
+            atomic_write_json(self._path, self._data, fsync=True)
         except Exception:
             self._data = deepcopy(self._persisted_data)
             raise

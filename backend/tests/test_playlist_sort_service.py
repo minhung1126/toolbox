@@ -683,8 +683,7 @@ def test_partial_data_api_sort_does_not_return_provider_exception(monkeypatch):
     assert "access_token=private-provider-value" not in str(updated)
 
 
-@pytest.mark.anyio
-async def test_preview_sort_quota_estimate_no_custom_token(monkeypatch):
+def test_preview_sort_quota_estimate_no_custom_token(monkeypatch):
     from types import SimpleNamespace
 
     import backend.app.api.playlist_sort as ps_api
@@ -713,7 +712,7 @@ async def test_preview_sort_quota_estimate_no_custom_token(monkeypatch):
         use_youtube_api=False,
     )
 
-    res = await preview_sort(inp, context=context, token_store=credential_store, client_factory=None)
+    res = preview_sort(inp, context=context, token_store=credential_store, client_factory=None)
     assert res["quota_estimate"]["engine"] == "youtube_data_api_v3"
     assert res["quota_estimate"]["units_per_move"] == 50
     assert res["quota_estimate"]["moved_count"] == 2
@@ -851,8 +850,7 @@ def test_sort_single_collaboration_uses_first_author():
     assert titles.index("I Don't Care") < titles.index("Baby")
 
 
-@pytest.mark.anyio
-async def test_apply_sort_strict_defense_blocks_fallback_when_token_fails(monkeypatch):
+def test_apply_sort_strict_defense_blocks_fallback_when_token_fails(monkeypatch):
     """When a custom token is present but fails, apply_sort blocks silent fallback to Data API."""
     from types import SimpleNamespace
     from unittest.mock import MagicMock
@@ -898,7 +896,7 @@ async def test_apply_sort_strict_defense_blocks_fallback_when_token_fails(monkey
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await apply_sort(inp, context=context, token_store=credential_store, client_factory=None)
+        apply_sort(inp, context=context, token_store=credential_store, client_factory=None)
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail["code"] == "TOKEN_FALLBACK_BLOCKED"
@@ -906,8 +904,7 @@ async def test_apply_sort_strict_defense_blocks_fallback_when_token_fails(monkey
     assert "access_token=private-provider-value" not in exc_info.value.detail["message"]
 
 
-@pytest.mark.anyio
-async def test_apply_sort_allows_fallback_when_explicitly_permitted(monkeypatch):
+def test_apply_sort_allows_fallback_when_explicitly_permitted(monkeypatch):
     """When allow_quota_fallback=True is passed, apply_sort permits Data API fallback."""
     from types import SimpleNamespace
     from unittest.mock import MagicMock
@@ -944,7 +941,7 @@ async def test_apply_sort_allows_fallback_when_explicitly_permitted(monkeypatch)
         allow_quota_fallback=True,
     )
 
-    res = await apply_sort(inp, context=context, token_store=credential_store, client_factory=None)
+    res = apply_sort(inp, context=context, token_store=credential_store, client_factory=None)
     assert res["status"] == "success"
     # verify allow_quota_fallback was passed as True
     _, kwargs = mock_apply.call_args

@@ -395,8 +395,8 @@ def update_allow_new_users(
 
 
 @router.get("/health")
-def get_system_health():
+def get_system_health(request: Request = None):
     """System health check endpoint aligned with plugin route metadata."""
     from backend.app.main import health_check
 
-    return health_check()
+    return health_check(request)

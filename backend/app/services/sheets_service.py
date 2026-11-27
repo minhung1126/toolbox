@@ -164,29 +164,36 @@ def get_spreadsheet_metadata(credentials: Credentials, spreadsheet_id_or_url: st
         )
         .execute()
     )
-    raw_sheets = metadata.get("sheets", [])
+    raw_sheets = metadata.get("sheets") or []
     if len(raw_sheets) > MAX_WORKSHEETS:
         raise ValueError("工作表數量超過系統上限")
+    titles = [
+        title
+        for sheet in raw_sheets
+        if isinstance(sheet, dict) and (title := (sheet.get("properties") or {}).get("title"))
+    ]
     worksheets = []
-    for sheet in raw_sheets:
-        title = sheet.get("properties", {}).get("title")
-        if not title:
-            continue
-        values = _validate_sheet_values(
+    if titles:
+        batch_result = (
             service.spreadsheets()
             .values()
-            .get(
+            .batchGet(
                 spreadsheetId=spreadsheet_id,
-                range=f"{quote_sheet_name(title)}!1:1",
+                ranges=[f"{quote_sheet_name(title)}!1:1" for title in titles],
             )
             .execute()
-            .get("values", [])
         )
-        columns = [normalize_text(value) for value in (values[0] if values else []) if normalize_text(value)]
-        worksheets.append({"title": title, "columns": columns})
+        value_ranges = (batch_result.get("valueRanges") or []) if isinstance(batch_result, dict) else []
+        for index, title in enumerate(titles):
+            value_range = (
+                value_ranges[index] if index < len(value_ranges) and isinstance(value_ranges[index], dict) else {}
+            )
+            values = _validate_sheet_values(value_range.get("values", []))
+            columns = [normalize_text(value) for value in (values[0] if values else []) if normalize_text(value)]
+            worksheets.append({"title": title, "columns": columns})
     return {
         "spreadsheet_id": spreadsheet_id,
-        "spreadsheet_title": metadata.get("properties", {}).get("title", ""),
+        "spreadsheet_title": (metadata.get("properties") or {}).get("title", ""),
         "worksheets": worksheets,
     }
 

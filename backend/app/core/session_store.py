@@ -33,6 +33,28 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _parse_expires_at(record: Any) -> Optional[datetime]:
+    if not isinstance(record, dict):
+        return None
+    raw = record.get("expires_at")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    try:
+        expires_at = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at
+
+
+def _is_expired(record: Any, now: Optional[datetime] = None) -> bool:
+    expires_at = _parse_expires_at(record)
+    if expires_at is None:
+        return True
+    return expires_at <= (now or _now())
+
+
 class SessionStore:
     def __init__(
         self, path: Path = _DEFAULT_PATH, *, encryption_key: str | None = None, defer_encryption_key: bool = False
@@ -52,7 +74,7 @@ class SessionStore:
         # from the signing SECRET_KEY.
         self._fernet = None if defer_encryption_key else derive_fernet(encryption_key)
         self._data: dict[str, Any] = {"version": 1, "sessions": {}}
-        self._last_purge_time: float = 0.0
+        self._last_purge_time: float | None = None
         self._loaded = False
 
     def _get_fernet(self):
@@ -86,7 +108,7 @@ class SessionStore:
 
     def _save(self) -> None:
         try:
-            atomic_write_json(self._path, self._data)
+            atomic_write_json(self._path, self._data, fsync=True)
         except Exception:
             # Do not expose a failed mutation from the in-memory cache.
             self._loaded = False
@@ -94,18 +116,7 @@ class SessionStore:
 
     def _purge_expired(self) -> None:
         now = _now()
-        expired = []
-        for session_id, record in self._data["sessions"].items():
-            if not isinstance(record, dict):
-                expired.append(session_id)
-                continue
-            try:
-                expires_at = datetime.fromisoformat(record["expires_at"])
-            except (KeyError, TypeError, ValueError):
-                expired.append(session_id)
-                continue
-            if expires_at <= now:
-                expired.append(session_id)
+        expired = [session_id for session_id, record in self._data["sessions"].items() if _is_expired(record, now)]
         for session_id in expired:
             self._data["sessions"].pop(session_id, None)
         if expired:
@@ -114,7 +125,7 @@ class SessionStore:
     def _maybe_purge_expired(self) -> None:
         """Purge expired sessions at most once per _PURGE_INTERVAL_SECONDS."""
         now = time.monotonic()
-        if now - self._last_purge_time < _PURGE_INTERVAL_SECONDS:
+        if self._last_purge_time is not None and now - self._last_purge_time < _PURGE_INTERVAL_SECONDS:
             return
         self._purge_expired()
         self._last_purge_time = now
@@ -140,6 +151,8 @@ class SessionStore:
             self._maybe_purge_expired()
             record = self._data["sessions"].get(session_id)
             if not isinstance(record, dict):
+                return None
+            if _is_expired(record):
                 return None
             encrypted = record.get("data")
             if not isinstance(encrypted, str):
@@ -168,10 +181,11 @@ class SessionStore:
         with self._lock:
             self._ensure_loaded()
             self._maybe_purge_expired()
+            now = _now()
             fernet = self._get_fernet()
             to_delete: list[str] = []
             for session_id, record in self._data["sessions"].items():
-                if not isinstance(record, dict):
+                if not isinstance(record, dict) or _is_expired(record, now):
                     continue
                 encrypted = record.get("data")
                 if not isinstance(encrypted, str):

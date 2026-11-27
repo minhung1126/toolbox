@@ -29,21 +29,58 @@ def secure_chmod(path: Path, mode: int = 0o600) -> None:
         os.chmod(path, mode)
 
 
-def atomic_write_json(
+def _open_secure_temp(tmp_path: Path):
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(tmp_path, flags, 0o600)
+    try:
+        return os.fdopen(fd, "w", encoding="utf-8")
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def atomic_write_text(
     path: Path,
-    data: Any,
+    content: str,
     *,
-    indent: int = 2,
-    fsync: bool = False,
+    fsync: bool = True,
     replace_fn: Any = None,
 ) -> None:
-    """Atomically write data as JSON using a unique temp file and os.replace."""
+    """Atomically write UTF-8 text using a 0o600 temp file and os.replace."""
     target_path = Path(path)
     target_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = target_path.with_name(f".{target_path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
     replacer = replace_fn or os.replace
     try:
-        with tmp_path.open("w", encoding="utf-8") as handle:
+        with _open_secure_temp(tmp_path) as handle:
+            handle.write(content)
+            if fsync:
+                handle.flush()
+                os.fsync(handle.fileno())
+        secure_chmod(tmp_path, 0o600)
+        replacer(tmp_path, target_path)
+        secure_chmod(target_path, 0o600)
+    except Exception:
+        with contextlib.suppress(OSError):
+            tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def atomic_write_json(
+    path: Path,
+    data: Any,
+    *,
+    indent: int = 2,
+    fsync: bool = True,
+    replace_fn: Any = None,
+) -> None:
+    """Atomically write data as JSON using a unique 0o600 temp file and os.replace."""
+    target_path = Path(path)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = target_path.with_name(f".{target_path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
+    replacer = replace_fn or os.replace
+    try:
+        with _open_secure_temp(tmp_path) as handle:
             json.dump(data, handle, ensure_ascii=False, indent=indent)
             if fsync:
                 handle.flush()
@@ -74,6 +111,7 @@ def read_json_file(path: Path, default: Any = None, *, strict: bool = False) -> 
 
 __all__ = [
     "atomic_write_json",
+    "atomic_write_text",
     "derive_fernet",
     "read_json_file",
     "secure_chmod",

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from backend.app.core.dependencies import require_account_subject
 from backend.app.core.error_contract import http_error
-from backend.app.core.notes_store import NotesStore, default_notes_store
+from backend.app.core.notes_store import NoteLimitError, NotesStore, default_notes_store
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class NoteResponse(BaseModel):
 
 @router.get("", response_model=Dict[str, Any])
 def list_notes(
-    q: Optional[str] = Query(default=None, description="關鍵字搜尋"),
+    q: Optional[str] = Query(default=None, max_length=200, description="關鍵字搜尋"),
     subject: str = Depends(require_account_subject),
     store: NotesStore = Depends(get_notes_store),
 ) -> Dict[str, Any]:
@@ -73,14 +73,17 @@ def create_note(
     store: NotesStore = Depends(get_notes_store),
 ) -> Dict[str, Any]:
     """Create a new sticky note for the authenticated user."""
-    note = store.create_note(
-        subject=subject,
-        content=payload.content,
-        remark=payload.remark,
-        pinned=payload.pinned,
-        note_type=payload.note_type,
-        variables=payload.variables,
-    )
+    try:
+        note = store.create_note(
+            subject=subject,
+            content=payload.content,
+            remark=payload.remark,
+            pinned=payload.pinned,
+            note_type=payload.note_type,
+            variables=payload.variables,
+        )
+    except NoteLimitError as exc:
+        raise http_error(400, exc.code, str(exc)) from exc
     return {
         "note": note,
         "status": "created",
@@ -108,15 +111,18 @@ def update_note(
     store: NotesStore = Depends(get_notes_store),
 ) -> Dict[str, Any]:
     """Update content, remark, or pinned state of a sticky note."""
-    note = store.update_note(
-        subject=subject,
-        note_id=note_id,
-        content=payload.content,
-        remark=payload.remark,
-        pinned=payload.pinned,
-        note_type=payload.note_type,
-        variables=payload.variables,
-    )
+    try:
+        note = store.update_note(
+            subject=subject,
+            note_id=note_id,
+            content=payload.content,
+            remark=payload.remark,
+            pinned=payload.pinned,
+            note_type=payload.note_type,
+            variables=payload.variables,
+        )
+    except NoteLimitError as exc:
+        raise http_error(400, exc.code, str(exc)) from exc
     if not note:
         raise http_error(404, "note_not_found", "找不到欲更新的便利貼。")
     return {

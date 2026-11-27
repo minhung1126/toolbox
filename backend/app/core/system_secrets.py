@@ -17,7 +17,13 @@ from typing import Any, Dict, Optional, Tuple
 from cryptography.fernet import Fernet, InvalidToken
 
 from backend.app.core.data_paths import data_directory
-from backend.app.core.persistence import atomic_write_json, derive_fernet, read_json_file, secure_chmod
+from backend.app.core.persistence import (
+    atomic_write_json,
+    atomic_write_text,
+    derive_fernet,
+    read_json_file,
+    secure_chmod,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +171,7 @@ class SystemSecretsManager:
                             "updated_at": datetime.now(timezone.utc).isoformat(),
                         },
                         indent=2,
+                        fsync=True,
                     )
                     logger.info("Persisted auto-generated master keys to %s", self._secrets_file.name)
                 except OSError as exc:
@@ -287,7 +294,7 @@ class SystemSecretsManager:
                     payload[field] = val
 
             try:
-                atomic_write_json(self._credentials_file, payload, indent=2)
+                atomic_write_json(self._credentials_file, payload, indent=2, fsync=True)
                 self._credentials_cache = dict(current)
                 self._credentials_cache_key = active_key
                 logger.info("Successfully updated and persisted system OAuth credentials")
@@ -370,9 +377,7 @@ class SystemSecretsManager:
                 self._pin_attempts_file.unlink(missing_ok=True)
             return
         try:
-            self._data_dir.mkdir(parents=True, exist_ok=True)
-            self._pin_attempts_file.write_text(str(self._setup_pin_failures), encoding="utf-8")
-            _secure_file_permissions(self._pin_attempts_file)
+            atomic_write_text(self._pin_attempts_file, str(self._setup_pin_failures), fsync=True)
         except OSError:
             pass
 
@@ -380,9 +385,7 @@ class SystemSecretsManager:
         pin = f"{secrets.randbelow(900000) + 100000}"
         while previous_pin and pin == previous_pin:
             pin = f"{secrets.randbelow(900000) + 100000}"
-        self._data_dir.mkdir(parents=True, exist_ok=True)
-        self._pin_file.write_text(pin, encoding="utf-8")
-        _secure_file_permissions(self._pin_file)
+        atomic_write_text(self._pin_file, pin, fsync=True)
         self._setup_pin = pin
         self._write_setup_pin_failures_unlocked(0)
 

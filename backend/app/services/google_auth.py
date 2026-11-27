@@ -1,15 +1,17 @@
 import logging
 from datetime import datetime, timedelta, timezone
-from threading import RLock
+from threading import Lock, RLock
 from typing import Callable, Optional
+from weakref import WeakKeyDictionary
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from oauthlib.oauth2.rfc6749.tokens import OAuth2Token
 
 from backend.app.core.config import get_settings, normalize_youtube_slot, settings
-from backend.app.core.credential_store import credential_store, get_credential_store
+from backend.app.core.credential_store import CredentialStore, _request_store, credential_store, get_credential_store
 from backend.app.core.session_store import get_session_store, session_store
 from backend.app.services.google_clients import build_google_client
 from backend.app.services.oauth_clients import get_oauth_flow_factory, get_refresh_request_factory
@@ -38,7 +40,55 @@ YOUTUBE_SCOPES = [
 ]
 GOOGLE_TOKEN_REFRESH_WINDOW = timedelta(minutes=5)
 GOOGLE_TOKEN_REFRESH_RETRY_DELAY = timedelta(minutes=1)
-_google_refresh_lock = RLock()
+GOOGLE_TOKEN_REFRESH_TIMEOUT_SECONDS = 10
+
+_refresh_locks_guard = Lock()
+_store_refresh_locks: WeakKeyDictionary[object, dict[tuple[str, str, str], RLock]] = WeakKeyDictionary()
+_fallback_refresh_locks: dict[tuple[int, str, str, str], RLock] = {}
+
+
+def _get_refresh_lock(
+    store: object,
+    owner_sub: str,
+    credential_key: str,
+    slot: str = "primary",
+) -> RLock:
+    slot_key = normalize_youtube_slot(slot) if credential_key == "youtube" else "primary"
+    bucket_key = (str(owner_sub or ""), str(credential_key or "google"), slot_key)
+    with _refresh_locks_guard:
+        try:
+            store_locks = _store_refresh_locks.get(store)
+            if store_locks is None:
+                store_locks = {}
+                _store_refresh_locks[store] = store_locks
+            lock = store_locks.get(bucket_key)
+            if lock is None:
+                lock = RLock()
+                store_locks[bucket_key] = lock
+            return lock
+        except TypeError:
+            fallback_key = (id(store), *bucket_key)
+            lock = _fallback_refresh_locks.get(fallback_key)
+            if lock is None:
+                lock = RLock()
+                _fallback_refresh_locks[fallback_key] = lock
+            return lock
+
+
+class _TimeoutRefreshRequest(Request):
+    """Requests transport wrapper enforcing an explicit OAuth refresh timeout."""
+
+    def __init__(self, session=None, *, timeout: float = GOOGLE_TOKEN_REFRESH_TIMEOUT_SECONDS):
+        super().__init__(session=session)
+        self.timeout = timeout
+
+    def __call__(self, url, method="GET", body=None, headers=None, timeout=None, **kwargs):
+        effective_timeout = self.timeout if timeout is None else timeout
+        return super().__call__(url, method=method, body=body, headers=headers, timeout=effective_timeout, **kwargs)
+
+
+def _default_refresh_request() -> Request:
+    return _TimeoutRefreshRequest()
 
 
 def has_sheets_scope(credentials: Credentials | None) -> bool:
@@ -251,14 +301,90 @@ def get_user_profile(credentials: Credentials) -> dict:
         return {"sub": "", "email": "Connected Account", "name": "", "picture": ""}
 
 
-def _build_credentials(token_dict: dict, *, purpose: str = "login", slot: str = "primary") -> Credentials:
+def _normalize_expiry(expiry: Optional[datetime]) -> Optional[datetime]:
+    if expiry is not None and expiry.tzinfo is not None:
+        return expiry.astimezone(timezone.utc).replace(tzinfo=None)
+    return expiry
+
+
+def _sync_credentials_attrs(target: Credentials, source: Credentials) -> None:
+    target.token = source.token
+    target.expiry = _normalize_expiry(source.expiry)
+    target._refresh_token = source._refresh_token
+    target._id_token = source._id_token
+    target._rapt_token = source._rapt_token
+    target._granted_scopes = source._granted_scopes
+    source_scopes = getattr(source, "_scopes", None)
+    if source_scopes is not None:
+        target._scopes = list(source_scopes)
+
+
+class _ManagedCredentials(Credentials):
+    """Credentials subclass routing implicit AuthorizedHttp refreshes through per-key locks and persistence."""
+
+    def __init__(
+        self,
+        *args,
+        owner_sub: Optional[str] = None,
+        credential_key: str = "google",
+        slot: str = "primary",
+        bound_store: Optional[CredentialStore] = None,
+        token_record: Optional[dict] = None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self._owner_sub = owner_sub
+        self._credential_key = credential_key
+        self._slot = slot
+        self._bound_store = bound_store
+        self._token_record = dict(token_record) if isinstance(token_record, dict) else {}
+
+    def _make_copy(self):
+        cred = super()._make_copy()
+        cred._owner_sub = self._owner_sub
+        cred._credential_key = self._credential_key
+        cred._slot = self._slot
+        cred._bound_store = self._bound_store
+        cred._token_record = dict(self._token_record)
+        return cred
+
+    def __setstate__(self, d):
+        super().__setstate__(d)
+        self._owner_sub = d.get("_owner_sub")
+        self._credential_key = d.get("_credential_key", "google")
+        self._slot = d.get("_slot", "primary")
+        self._bound_store = d.get("_bound_store")
+        token_record = d.get("_token_record")
+        self._token_record = dict(token_record) if isinstance(token_record, dict) else {}
+
+    def refresh(self, request=None):
+        if not self._owner_sub:
+            injected_factory = get_refresh_request_factory(None)
+            if injected_factory is not None:
+                transport = injected_factory()
+            elif request is None or type(request).__module__.startswith("google_auth_httplib2"):
+                transport = _default_refresh_request()
+            else:
+                transport = request
+            return Credentials.refresh(self, transport)
+        return _refresh_managed_credentials(self, request=request)
+
+
+def _build_credentials(
+    token_dict: dict,
+    *,
+    purpose: str = "login",
+    slot: str = "primary",
+    owner_sub: Optional[str] = None,
+    credential_key: Optional[str] = None,
+    bound_store: Optional[CredentialStore] = None,
+) -> Credentials:
     expiry = token_dict.get("expiry")
     parsed_expiry = None
     if expiry:
         try:
             parsed_expiry = datetime.fromisoformat(expiry)
-            if parsed_expiry.tzinfo:
-                parsed_expiry = parsed_expiry.astimezone(timezone.utc).replace(tzinfo=None)
+            parsed_expiry = _normalize_expiry(parsed_expiry)
         except (TypeError, ValueError):
             parsed_expiry = None
     if purpose == "youtube":
@@ -268,7 +394,9 @@ def _build_credentials(token_dict: dict, *, purpose: str = "login", slot: str = 
     else:
         client_id = token_dict.get("client_id") or get_settings(settings).GOOGLE_CLIENT_ID
         client_secret = get_settings(settings).GOOGLE_CLIENT_SECRET
-    return Credentials(
+    resolved_key = credential_key or ("youtube" if purpose == "youtube" else "google")
+    resolved_store = bound_store if bound_store is not None else _request_store.get()
+    return _ManagedCredentials(
         token=token_dict.get("token"),
         refresh_token=token_dict.get("refresh_token"),
         token_uri=token_dict.get("token_uri", "https://oauth2.googleapis.com/token"),
@@ -278,6 +406,11 @@ def _build_credentials(token_dict: dict, *, purpose: str = "login", slot: str = 
         # having elevated scopes; the UI will ask for reauth.
         scopes=token_dict.get("scopes") or [],
         expiry=parsed_expiry,
+        owner_sub=owner_sub,
+        credential_key=resolved_key,
+        slot=slot,
+        bound_store=resolved_store,
+        token_record=token_dict,
     )
 
 
@@ -313,152 +446,293 @@ def _safe_load_credentials(
         return None
 
 
+def _load_stored_record(
+    store: CredentialStore,
+    *,
+    owner_sub: str,
+    credential_key: str,
+    slot: str,
+) -> tuple[Optional[dict], dict]:
+    if credential_key == "youtube":
+        latest = _safe_load_credentials(
+            lambda: store.get_youtube_credentials(owner_sub, slot=slot),
+            label=f"youtube:{slot}",
+            owner_sub=owner_sub,
+        )
+        public = store.get_youtube_public(owner_sub, slot=slot)
+    elif credential_key == "ytmusic":
+        latest = _safe_load_credentials(
+            lambda: store.get_ytmusic_credentials(owner_sub),
+            label="ytmusic",
+            owner_sub=owner_sub,
+        )
+        public = store.get_ytmusic_public(owner_sub)
+    elif credential_key == "sheets":
+        latest = _safe_load_credentials(
+            lambda: store.get_sheets_credentials(owner_sub),
+            label="sheets",
+            owner_sub=owner_sub,
+        )
+        public = store.get_sheets_public(owner_sub)
+    else:
+        latest = _safe_load_credentials(
+            lambda: store.get_google_credentials(owner_sub),
+            label="google",
+            owner_sub=owner_sub,
+        )
+        public = store.get_google_public(owner_sub)
+    return latest, public or {}
+
+
+def _save_refreshed_record(
+    store: CredentialStore,
+    *,
+    owner_sub: str,
+    credential_key: str,
+    slot: str,
+    refreshed: dict,
+) -> None:
+    if credential_key == "youtube":
+        store.save_youtube_connection(refreshed, owner_sub=owner_sub, slot=slot)
+    elif credential_key == "ytmusic":
+        store.save_ytmusic_connection(refreshed, owner_sub=owner_sub)
+    elif credential_key == "sheets":
+        store.save_sheets_connection(refreshed, owner_sub=owner_sub)
+    else:
+        store.save_google_connection(refreshed, owner_sub=owner_sub)
+
+
+def _mark_refresh_failure(
+    store: CredentialStore,
+    *,
+    owner_sub: str,
+    credential_key: str,
+    slot: str,
+    exc: Exception,
+) -> bool:
+    raw_message = str(exc).casefold()
+    is_refresh_error = isinstance(exc, RefreshError)
+    requires_reauthorization = is_refresh_error and any(
+        marker in raw_message
+        for marker in ("invalid_grant", "invalid_client", "invalid client", "unauthorized_client", "revoked")
+    )
+    # Never persist or expose the provider's raw response body. The
+    # status is enough for the UI; diagnostics retain only the type.
+    message = "Google OAuth 憑證需要重新授權。" if requires_reauthorization else "Google OAuth 憑證更新失敗。"
+    if credential_key == "youtube":
+        store.mark_youtube_refresh_failed(
+            message,
+            owner_sub=owner_sub,
+            slot=slot,
+            requires_reauthorization=requires_reauthorization,
+        )
+    elif credential_key == "ytmusic":
+        store.mark_ytmusic_refresh_failed(
+            message,
+            owner_sub=owner_sub,
+            requires_reauthorization=requires_reauthorization,
+        )
+    elif credential_key == "sheets":
+        store.mark_sheets_refresh_failed(
+            message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
+        )
+    else:
+        store.mark_google_refresh_failed(
+            message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
+        )
+    logger.log(
+        logging.WARNING if requires_reauthorization else logging.ERROR,
+        "Failed to refresh Google token (%s/%s): %s status=%s",
+        credential_key,
+        slot,
+        type(exc).__name__,
+        "reauthorization_required" if requires_reauthorization else "refresh_failed",
+    )
+    return requires_reauthorization
+
+
+def _in_refresh_cooldown(public: dict) -> bool:
+    if public.get("status") != "refresh_failed":
+        return False
+    try:
+        failed_at = datetime.fromisoformat(public["last_refresh_failed_at"])
+        if failed_at.tzinfo is None:
+            failed_at = failed_at.replace(tzinfo=timezone.utc)
+    except (KeyError, TypeError, ValueError):
+        return False
+    return datetime.now(timezone.utc) - failed_at < GOOGLE_TOKEN_REFRESH_RETRY_DELAY
+
+
+def _resolve_effective_key(store: CredentialStore, owner_sub: str, credential_key: str) -> str:
+    if credential_key == "sheets":
+        has_dedicated = _safe_load_credentials(
+            lambda: store.get_sheets_credentials(owner_sub),
+            label="sheets",
+            owner_sub=owner_sub,
+        )
+        if not has_dedicated:
+            return "google"
+    return credential_key
+
+
+def _select_refresh_transport(request=None):
+    injected_factory = get_refresh_request_factory(None)
+    if injected_factory is not None:
+        return injected_factory()
+    if request is None or type(request).__module__.startswith("google_auth_httplib2"):
+        return _default_refresh_request()
+    return request
+
+
+def _refresh_managed_credentials(creds: _ManagedCredentials, *, request=None) -> None:
+    owner_sub = str(creds._owner_sub or "").strip()
+    active_store = get_credential_store(creds._bound_store or credential_store)
+    effective_key = _resolve_effective_key(active_store, owner_sub, creds._credential_key)
+    slot = normalize_youtube_slot(creds._slot) if effective_key == "youtube" else "primary"
+
+    for _attempt in range(2):
+        lock = _get_refresh_lock(active_store, owner_sub, effective_key, slot)
+        with lock:
+            latest, public = _load_stored_record(
+                active_store, owner_sub=owner_sub, credential_key=effective_key, slot=slot
+            )
+            if effective_key == "sheets" and not latest:
+                effective_key = "google"
+                slot = "primary"
+                continue
+
+            active_dict = (
+                latest
+                or dict(creds._token_record)
+                or {
+                    "token": creds.token,
+                    "refresh_token": creds.refresh_token,
+                    "token_uri": creds.token_uri,
+                    "client_id": creds.client_id,
+                    "scopes": list(creds.scopes) if creds.scopes else [],
+                    "expiry": creds.expiry.isoformat() if creds.expiry else None,
+                }
+            )
+            purpose = "youtube" if effective_key == "youtube" else "login"
+            latest_creds = _build_credentials(
+                active_dict,
+                purpose=purpose,
+                slot=slot,
+                owner_sub=owner_sub,
+                credential_key=effective_key,
+                bound_store=active_store,
+            )
+
+            if public.get("status") == "reauthorization_required":
+                raise RefreshError("Google OAuth 憑證需要重新授權。")
+            if _in_refresh_cooldown(public):
+                raise RefreshError("Google OAuth 憑證更新失敗。")
+
+            # If another thread already refreshed this credential in the store,
+            # adopt the fresh token instead of issuing a redundant OAuth POST.
+            if latest and latest_creds.token != creds.token and latest_creds.valid and not _needs_refresh(latest_creds):
+                _sync_credentials_attrs(creds, latest_creds)
+                creds._token_record = dict(active_dict)
+                return
+
+            transport = _select_refresh_transport(request)
+            try:
+                Credentials.refresh(latest_creds, transport)
+                refreshed = dict(active_dict)
+                refreshed["token"] = latest_creds.token
+                refreshed["refresh_token"] = latest_creds.refresh_token or active_dict.get("refresh_token")
+                refreshed["expiry"] = latest_creds.expiry.isoformat() if latest_creds.expiry else None
+                _save_refreshed_record(
+                    active_store,
+                    owner_sub=owner_sub,
+                    credential_key=effective_key,
+                    slot=slot,
+                    refreshed=refreshed,
+                )
+                _sync_credentials_attrs(creds, latest_creds)
+                creds._token_record = refreshed
+                return
+            except Exception as exc:
+                _mark_refresh_failure(
+                    active_store,
+                    owner_sub=owner_sub,
+                    credential_key=effective_key,
+                    slot=slot,
+                    exc=exc,
+                )
+                raise
+
+
 def _refresh_credentials(
     token_dict: dict,
     *,
     owner_sub: str,
     credential_key: str = "google",
     slot: str = "primary",
+    bound_store: Optional[CredentialStore] = None,
 ) -> Optional[Credentials]:
-    """Refresh under one process-wide lock and persist the rotated token atomically."""
-    with _google_refresh_lock:
-        store = get_credential_store(credential_store)
-        # Another request may have refreshed the persistent record while this
-        # request was waiting for the lock. Always use the newest record.
-        if credential_key == "youtube":
-            latest = _safe_load_credentials(
-                lambda: store.get_youtube_credentials(owner_sub, slot=slot),
-                label=f"youtube:{slot}",
-                owner_sub=owner_sub,
+    """Refresh under a per-(store, owner_sub, credential_key, slot) lock and persist atomically."""
+    active_store = get_credential_store(bound_store or credential_store)
+    effective_key = _resolve_effective_key(active_store, owner_sub, credential_key)
+    slot_name = normalize_youtube_slot(slot) if effective_key == "youtube" else "primary"
+
+    for _attempt in range(2):
+        lock = _get_refresh_lock(active_store, owner_sub, effective_key, slot_name)
+        with lock:
+            # Another request may have refreshed the persistent record while this
+            # request was waiting for the lock. Always use the newest record.
+            latest, public = _load_stored_record(
+                active_store, owner_sub=owner_sub, credential_key=effective_key, slot=slot_name
             )
-            public = store.get_youtube_public(owner_sub, slot=slot)
-        elif credential_key == "ytmusic":
-            latest = _safe_load_credentials(
-                lambda: store.get_ytmusic_credentials(owner_sub),
-                label="ytmusic",
+            if effective_key == "sheets" and not latest:
+                effective_key = "google"
+                slot_name = "primary"
+                continue
+
+            active_dict = latest or token_dict
+            purpose = "youtube" if effective_key == "youtube" else "login"
+            credentials = _build_credentials(
+                active_dict,
+                purpose=purpose,
+                slot=slot_name,
                 owner_sub=owner_sub,
+                credential_key=effective_key,
+                bound_store=active_store,
             )
-            public = store.get_ytmusic_public(owner_sub)
-        elif credential_key == "sheets":
-            latest = _safe_load_credentials(
-                lambda: store.get_sheets_credentials(owner_sub),
-                label="sheets",
-                owner_sub=owner_sub,
-            )
-            public = store.get_sheets_public(owner_sub)
-            if not latest:
-                credential_key = "google"
-                latest = _safe_load_credentials(
-                    lambda: store.get_google_credentials(owner_sub),
-                    label="google",
-                    owner_sub=owner_sub,
-                )
-                public = store.get_google_public(owner_sub)
-        else:
-            latest = _safe_load_credentials(
-                lambda: store.get_google_credentials(owner_sub),
-                label="google",
-                owner_sub=owner_sub,
-            )
-            public = store.get_google_public(owner_sub)
-        active_dict = latest or token_dict
-        purpose = "youtube" if credential_key == "youtube" else "login"
-        credentials = _build_credentials(active_dict, purpose=purpose, slot=slot)
-        public = public or {}
-        # Revoked refresh tokens cannot recover without a new OAuth grant.
-        # Persisted state also prevents retries through service fallbacks and
-        # after a restart; saving a new connection resets the failure state.
-        if public.get("status") == "reauthorization_required":
-            return None
-        if public.get("status") == "refresh_failed":
-            try:
-                failed_at = datetime.fromisoformat(public["last_refresh_failed_at"])
-                if failed_at.tzinfo is None:
-                    failed_at = failed_at.replace(tzinfo=timezone.utc)
-            except (KeyError, TypeError, ValueError):
-                failed_at = None
-            if failed_at and datetime.now(timezone.utc) - failed_at < GOOGLE_TOKEN_REFRESH_RETRY_DELAY:
+            # Revoked refresh tokens cannot recover without a new OAuth grant.
+            # Persisted state also prevents retries through service fallbacks and
+            # after a restart; saving a new connection resets the failure state.
+            if public.get("status") == "reauthorization_required":
+                return None
+            if _in_refresh_cooldown(public):
                 return credentials
-        if not _needs_refresh(credentials):
-            return credentials
+            if not _needs_refresh(credentials):
+                return credentials
 
-        try:
-            credentials.refresh(get_refresh_request_factory(Request)())
-            refreshed = dict(active_dict)
-            refreshed["token"] = credentials.token
-            refreshed["refresh_token"] = credentials.refresh_token or active_dict.get("refresh_token")
-            refreshed["expiry"] = credentials.expiry.isoformat() if credentials.expiry else None
-            if credential_key == "youtube":
-                get_credential_store(credential_store).save_youtube_connection(
-                    refreshed, owner_sub=owner_sub, slot=slot
-                )
-            elif credential_key == "ytmusic":
-                get_credential_store(credential_store).save_ytmusic_connection(refreshed, owner_sub=owner_sub)
-            elif credential_key == "sheets":
-                has_dedicated_sheets = _safe_load_credentials(
-                    lambda: get_credential_store(credential_store).get_sheets_credentials(owner_sub),
-                    label="sheets",
+            try:
+                Credentials.refresh(credentials, get_refresh_request_factory(_default_refresh_request)())
+                refreshed = dict(active_dict)
+                refreshed["token"] = credentials.token
+                refreshed["refresh_token"] = credentials.refresh_token or active_dict.get("refresh_token")
+                refreshed["expiry"] = credentials.expiry.isoformat() if credentials.expiry else None
+                _save_refreshed_record(
+                    active_store,
                     owner_sub=owner_sub,
+                    credential_key=effective_key,
+                    slot=slot_name,
+                    refreshed=refreshed,
                 )
-                if has_dedicated_sheets:
-                    get_credential_store(credential_store).save_sheets_connection(refreshed, owner_sub=owner_sub)
-                else:
-                    get_credential_store(credential_store).save_google_connection(refreshed, owner_sub=owner_sub)
-            else:
-                get_credential_store(credential_store).save_google_connection(refreshed, owner_sub=owner_sub)
-            return credentials
-        except Exception as exc:
-            from google.auth.exceptions import RefreshError
-
-            raw_message = str(exc).casefold()
-            is_refresh_error = isinstance(exc, RefreshError)
-            requires_reauthorization = is_refresh_error and any(
-                marker in raw_message
-                for marker in ("invalid_grant", "invalid_client", "invalid client", "unauthorized_client", "revoked")
-            )
-            # Never persist or expose the provider's raw response body. The
-            # status is enough for the UI; diagnostics retain only the type.
-            message = "Google OAuth 憑證需要重新授權。" if requires_reauthorization else "Google OAuth 憑證更新失敗。"
-            if credential_key == "youtube":
-                get_credential_store(credential_store).mark_youtube_refresh_failed(
-                    message,
+                return credentials
+            except Exception as exc:
+                requires_reauthorization = _mark_refresh_failure(
+                    active_store,
                     owner_sub=owner_sub,
-                    slot=slot,
-                    requires_reauthorization=requires_reauthorization,
+                    credential_key=effective_key,
+                    slot=slot_name,
+                    exc=exc,
                 )
-            elif credential_key == "ytmusic":
-                get_credential_store(credential_store).mark_ytmusic_refresh_failed(
-                    message,
-                    owner_sub=owner_sub,
-                    requires_reauthorization=requires_reauthorization,
-                )
-            elif credential_key == "sheets":
-                has_dedicated_sheets = _safe_load_credentials(
-                    lambda: get_credential_store(credential_store).get_sheets_credentials(owner_sub),
-                    label="sheets",
-                    owner_sub=owner_sub,
-                )
-                if has_dedicated_sheets:
-                    get_credential_store(credential_store).mark_sheets_refresh_failed(
-                        message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
-                    )
-                else:
-                    get_credential_store(credential_store).mark_google_refresh_failed(
-                        message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
-                    )
-            else:
-                get_credential_store(credential_store).mark_google_refresh_failed(
-                    message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
-                )
-            logger.log(
-                logging.WARNING if requires_reauthorization else logging.ERROR,
-                "Failed to refresh Google token (%s/%s): %s status=%s",
-                credential_key,
-                slot,
-                type(exc).__name__,
-                "reauthorization_required" if requires_reauthorization else "refresh_failed",
-            )
-            return None if requires_reauthorization else credentials
+                return None if requires_reauthorization else credentials
+    return None
 
 
 def build_credentials_from_dict(
@@ -470,13 +744,22 @@ def build_credentials_from_dict(
 ) -> Optional[Credentials]:
     """Reconstruct credentials and proactively refresh them before expiry."""
     purpose = "youtube" if credential_key == "youtube" else "login"
-    credentials = _build_credentials(token_dict, purpose=purpose, slot=slot)
+    bound_store = _request_store.get()
+    credentials = _build_credentials(
+        token_dict,
+        purpose=purpose,
+        slot=slot,
+        owner_sub=owner_sub,
+        credential_key=credential_key,
+        bound_store=bound_store,
+    )
     if _needs_refresh(credentials):
         return _refresh_credentials(
             token_dict,
             owner_sub=owner_sub,
             credential_key=credential_key,
             slot=slot,
+            bound_store=bound_store,
         )
     return credentials
 

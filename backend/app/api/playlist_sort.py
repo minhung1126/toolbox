@@ -5,7 +5,6 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from starlette.concurrency import run_in_threadpool
 
 from backend.app.core.credential_store import CredentialStore, credential_store
 from backend.app.core.dependencies import require_ytmusic_context
@@ -86,7 +85,7 @@ class SortApplyInput(BaseModel):
 
 
 @router.get("/playlists")
-async def get_playlists(
+def get_playlists(
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
     token_store: CredentialStore = Depends(get_playlist_credential_store),
     client_factory: YtmusicClientFactory | None = Depends(get_playlist_client_factory),
@@ -94,8 +93,7 @@ async def get_playlists(
     location: Optional[str] = None,
 ):
     try:
-        playlists = await run_in_threadpool(
-            fetch_user_playlists,
+        playlists = fetch_user_playlists(
             context,
             language=language,
             location=location,
@@ -113,7 +111,7 @@ async def get_playlists(
 
 
 @router.post("/preview")
-async def preview_sort(
+def preview_sort(
     input_data: SortPreviewInput,
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
     token_store: CredentialStore = Depends(get_playlist_credential_store),
@@ -126,8 +124,7 @@ async def preview_sort(
         needs_year_fallback = any(
             k.field in ("year", "release_year", "release_date", "album") for k in input_data.sort_keys
         )
-        original_items = await run_in_threadpool(
-            fetch_playlist_items_for_sort,
+        original_items = fetch_playlist_items_for_sort(
             context,
             input_data.playlist_id,
             fetch_album_details=input_data.fetch_album_details,
@@ -192,14 +189,16 @@ async def preview_sort(
         raise http_error(500, "PREVIEW_FAILED", "產生排序預覽失敗，請稍後再試。") from e
 
 
-async def _apply_sort(
+def _apply_sort(
     input_data: SortApplyInput,
     recorder=None,
-    context: YouTubeRequestContext = Depends(require_ytmusic_context),
-    rate_limit=Depends(enforce_workflow_rate_limit),
-    token_store: CredentialStore = Depends(get_playlist_credential_store),
-    client_factory: YtmusicClientFactory | None = Depends(get_playlist_client_factory),
+    *,
+    context: YouTubeRequestContext,
+    rate_limit=None,
+    token_store: CredentialStore = credential_store,
+    client_factory: YtmusicClientFactory | None = None,
 ):
+    del rate_limit
     try:
         has_full_sorted_ids = bool(input_data.sorted_item_ids)
         needs_album = any(
@@ -208,8 +207,7 @@ async def _apply_sort(
         )
         fetch_album = needs_album if not has_full_sorted_ids else False
 
-        original_items = await run_in_threadpool(
-            fetch_playlist_items_for_sort,
+        original_items = fetch_playlist_items_for_sort(
             context,
             input_data.playlist_id,
             fetch_album_details=fetch_album,
@@ -260,8 +258,7 @@ async def _apply_sort(
                     ]
                 ),
             )
-        result = await run_in_threadpool(
-            apply_sort_to_playlist,
+        result = apply_sort_to_playlist(
             context,
             input_data.playlist_id,
             preview["items"],
@@ -300,7 +297,7 @@ async def _apply_sort(
 
 
 @router.post("/apply")
-async def apply_sort(
+def apply_sort(
     input_data: SortApplyInput,
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
     rate_limit=Depends(enforce_workflow_rate_limit),
@@ -309,7 +306,7 @@ async def apply_sort(
     operations: OperationStore = Depends(get_operation_store),
 ):
     if not isinstance(operations, OperationStore):
-        return await _apply_sort(
+        return _apply_sort(
             input_data, context=context, rate_limit=rate_limit, token_store=token_store, client_factory=client_factory
         )
     operation, recorder = start_operation(
@@ -323,7 +320,7 @@ async def apply_sort(
         return {**operation["result"], "operation_id": operation["id"]}
     try:
         with recording(recorder):
-            result = await _apply_sort(
+            result = _apply_sort(
                 input_data,
                 recorder,
                 context=context,

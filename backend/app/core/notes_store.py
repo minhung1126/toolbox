@@ -8,6 +8,7 @@ and creation / last-updated ISO timestamps.
 from __future__ import annotations
 
 import copy
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -32,6 +33,46 @@ def _now_iso() -> str:
 
 MAX_NOTE_CONTENT_LENGTH = 20_000
 MAX_NOTE_REMARK_LENGTH = 200
+MAX_NOTES_PER_USER = 500
+MAX_NOTE_PAYLOAD_BYTES = 128 * 1024
+MAX_USER_NOTES_TOTAL_BYTES = 4 * 1024 * 1024
+
+
+class NoteLimitError(ValueError):
+    """Raised when a sticky note exceeds per-note or per-user storage caps."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _note_payload_bytes(note: dict[str, Any]) -> int:
+    return len(json.dumps(note, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+
+def _validate_user_limits(
+    user_notes: list[dict[str, Any]],
+    candidate_note: dict[str, Any],
+    *,
+    replacing_id: Optional[str] = None,
+) -> None:
+    if replacing_id is None and len(user_notes) >= MAX_NOTES_PER_USER:
+        raise NoteLimitError(
+            "note_count_limit_exceeded",
+            f"每個帳號最多只能儲存 {MAX_NOTES_PER_USER} 則便利貼。",
+        )
+    candidate_bytes = _note_payload_bytes(candidate_note)
+    if candidate_bytes > MAX_NOTE_PAYLOAD_BYTES:
+        raise NoteLimitError(
+            "note_payload_too_large",
+            "單則便利貼內容過大，超過系統容量上限。",
+        )
+    existing_bytes = sum(_note_payload_bytes(existing) for existing in user_notes if existing.get("id") != replacing_id)
+    if existing_bytes + candidate_bytes > MAX_USER_NOTES_TOTAL_BYTES:
+        raise NoteLimitError(
+            "notes_storage_limit_exceeded",
+            "便利貼總儲存空間已達上限，請刪除部分便利貼後再試。",
+        )
 
 
 class NotesStore:
@@ -135,6 +176,7 @@ class NotesStore:
             self._ensure_loaded()
             users = self._data.setdefault("users", {})
             user_notes = users.setdefault(clean_sub, [])
+            _validate_user_limits(user_notes, note)
             user_notes.insert(0, note)
             self._save()
             logger.info("Created sticky note %s for user %s", note["id"], clean_sub)
@@ -160,41 +202,47 @@ class NotesStore:
         with self._lock:
             self._ensure_loaded()
             user_notes = self._data.get("users", {}).get(clean_sub, [])
+            target_index = None
             target = None
-            for note in user_notes:
+            for idx, note in enumerate(user_notes):
                 if note.get("id") == clean_id:
+                    target_index = idx
                     target = note
                     break
 
-            if target is None:
+            if target is None or target_index is None:
                 return None
 
+            candidate = copy.deepcopy(target)
             changed = False
             if content is not None:
                 safe_content = content[:MAX_NOTE_CONTENT_LENGTH]
-                if target.get("content") != safe_content:
-                    target["content"] = safe_content
+                if candidate.get("content") != safe_content:
+                    candidate["content"] = safe_content
                     changed = True
             if remark is not None:
                 safe_remark = remark[:MAX_NOTE_REMARK_LENGTH]
-                if target.get("remark") != safe_remark:
-                    target["remark"] = safe_remark
+                if candidate.get("remark") != safe_remark:
+                    candidate["remark"] = safe_remark
                     changed = True
-            if pinned is not None and target.get("pinned") != pinned:
-                target["pinned"] = bool(pinned)
+            if pinned is not None and candidate.get("pinned") != pinned:
+                candidate["pinned"] = bool(pinned)
                 changed = True
 
-            if note_type is not None and target.get("note_type", "plain") != note_type:
-                target["note_type"] = note_type
+            if note_type is not None and candidate.get("note_type", "plain") != note_type:
+                candidate["note_type"] = note_type
                 changed = True
-            if variables is not None and target.get("variables", {}) != variables:
-                target["variables"] = copy.deepcopy(variables)
+            if variables is not None and candidate.get("variables", {}) != variables:
+                candidate["variables"] = copy.deepcopy(variables)
                 changed = True
 
             if changed:
-                target["updated_at"] = _now_iso()
+                candidate["updated_at"] = _now_iso()
+                _validate_user_limits(user_notes, candidate, replacing_id=clean_id)
+                user_notes[target_index] = candidate
                 self._save()
                 logger.info("Updated sticky note %s for user %s", clean_id, clean_sub)
+                return copy.deepcopy(candidate)
 
             return copy.deepcopy(target)
 

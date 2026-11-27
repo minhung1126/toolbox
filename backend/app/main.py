@@ -141,7 +141,9 @@ async def security_headers(request, call_next):
 
 
 def health_check(request: Request = None):
-    registry = request.app.state.tool_registry if request is not None else tool_registry
+    app_state = getattr(getattr(request, "app", None), "state", None)
+    app_registry = getattr(app_state, "tool_registry", None)
+    registry = app_registry if app_registry is not None else tool_registry
     google_oauth_ready = bool(get_settings(settings).GOOGLE_CLIENT_ID and get_settings(settings).GOOGLE_CLIENT_SECRET)
     youtube_primary = get_settings(settings).youtube_oauth_slot("primary")
     youtube_secondary = get_settings(settings).youtube_oauth_slot("secondary")
@@ -297,6 +299,7 @@ def create_app(
         client_factory=google_client_factory,
         service=None,
         credential_loader=youtube_publish_credential_loader,
+        oauth_client_factories=oauth_client_factories,
     )
     job_adapters.setdefault("_switch_youtube_context", runtime.fallback)
     runtime.service = create_youtube_workflow_service(job_adapters)

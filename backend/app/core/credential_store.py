@@ -115,7 +115,7 @@ class CredentialStore:
 
     def _save(self) -> None:
         try:
-            atomic_write_json(self._path, self._data)
+            atomic_write_json(self._path, self._data, fsync=True)
         except Exception:
             # Do not expose a failed mutation from the in-memory cache.
             self._loaded = False

@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -101,7 +99,7 @@ def test_master_key_and_setup_pin_failures_are_retryable_not_cached(tmp_path, mo
     keys = manager.get_or_create_master_keys()
     assert SystemSecretsManager(tmp_path).get_or_create_master_keys() == keys
     with monkeypatch.context() as patch:
-        patch.setattr(Path, "write_text", fail_write)
+        patch.setattr(secrets_module, "atomic_write_text", fail_write)
         with pytest.raises(PermissionError):
             manager.get_or_create_setup_pin()
     pin = manager.get_or_create_setup_pin()
