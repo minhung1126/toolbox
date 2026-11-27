@@ -83,7 +83,9 @@ class BuildCommandResponse(BaseModel):
 
 PRESET_TEMPLATES = [
     FfmpegPreset(**item)
-    for item in json.loads((Path(__file__).parents[1] / "resources/ffmpeg-presets.v1.json").read_text())["presets"]
+    for item in json.loads(
+        (Path(__file__).parents[1] / "resources/ffmpeg-presets.v1.json").read_text(encoding="utf-8")
+    )["presets"]
 ]
 
 

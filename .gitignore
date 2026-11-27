@@ -15,6 +15,9 @@ __pycache__/
 *$py.class
 .pytest_cache/
 .pytest-cache/
+.pytest-tmp/
+backend/.pytest-cache/
+backend/.pytest-tmp/
 .ruff_cache/
 
 # Local Git worktrees

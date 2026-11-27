@@ -1,6 +1,8 @@
 import json
+import os
 import shutil
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,12 +18,54 @@ from backend.app.core.operation_store import OperationStore
 from backend.app.main import create_app
 from backend.app.services.operation_journal import public_operation, recording, start_operation
 
-CASES = json.loads((Path(__file__).parents[1] / "app/resources/ffmpeg-command-cases.v1.json").read_text())
+CASES = json.loads(
+    (Path(__file__).parents[1] / "app/resources/ffmpeg-command-cases.v1.json").read_text(encoding="utf-8")
+)
+
+
+def _resolve_bash_executable() -> str | None:
+    if sys.platform != "win32":
+        return "bash"
+    candidates: list[str] = []
+    which_bash = shutil.which("bash")
+    if which_bash and not which_bash.lower().endswith(r"\system32\bash.exe"):
+        candidates.append(which_bash)
+    for env_var, suffix in (
+        ("PROGRAMFILES", r"Git\bin\bash.exe"),
+        ("PROGRAMFILES", r"Git\usr\bin\bash.exe"),
+        ("PROGRAMFILES(X86)", r"Git\bin\bash.exe"),
+        ("LOCALAPPDATA", r"Programs\Git\bin\bash.exe"),
+    ):
+        base = os.environ.get(env_var)
+        if base:
+            candidates.append(str(Path(base) / suffix))
+    git_path = shutil.which("git")
+    if git_path:
+        git_root = Path(git_path).resolve().parents[1]
+        candidates.extend([str(git_root / "bin" / "bash.exe"), str(git_root / "usr" / "bin" / "bash.exe")])
+    if which_bash and which_bash not in candidates:
+        candidates.append(which_bash)
+    seen: set[str] = set()
+    for candidate in candidates:
+        norm = os.path.normcase(candidate)
+        if norm in seen or not Path(candidate).is_file():
+            continue
+        seen.add(norm)
+        try:
+            probe = subprocess.run([candidate, "-c", "printf '%s' ok"], capture_output=True, timeout=5)
+            if probe.returncode == 0 and probe.stdout == b"ok":
+                return candidate
+        except OSError:
+            continue
+    return None
 
 
 @pytest.mark.parametrize("name", CASES["filenames"])
 @pytest.mark.parametrize("layout", ["single", "multiline"])
 def test_bash_receives_exact_argv(name, layout):
+    bash = _resolve_bash_executable()
+    if bash is None:
+        pytest.skip("bash unavailable on Windows: Git Bash not found")
     command = build_command(
         BuildCommandRequest(
             input_file=name, output_file="out.mp4", shell_dialect="bash", line_layout=layout, video_codec="libx264"
@@ -30,8 +74,8 @@ def test_bash_receives_exact_argv(name, layout):
     script = "ffmpeg() { printf '%s\\0' \"$@\"; }; " + (
         command.command_single if layout == "single" else command.command_multi
     )
-    result = subprocess.run(["bash", "-c", script], check=True, capture_output=True)
-    argv = result.stdout.decode().split("\0")[:-1]
+    result = subprocess.run([bash, "-c", script], check=True, capture_output=True)
+    argv = result.stdout.decode("utf-8").split("\0")[:-1]
     assert argv[argv.index("-i") + 1] == name
     assert argv[-1] == "out.mp4"
 
@@ -67,8 +111,7 @@ def test_native_shell_round_trip_when_available(shell, executable, tmp_path):
         pytest.skip(f"{executable} unavailable: native argv verification not completed")
     # Native integration is intentionally separate from string quoting assertions.
     fake = tmp_path / "argv.py"
-    fake.write_text("import json,sys; print(json.dumps(sys.argv[1:], ensure_ascii=False))")
-    import sys
+    fake.write_text("import json,sys; print(json.dumps(sys.argv[1:]))", encoding="utf-8")
 
     from backend.app.api.ffmpeg_generator import safe_quote_filename
 
@@ -81,10 +124,10 @@ def test_native_shell_round_trip_when_available(shell, executable, tmp_path):
         command = f"{safe_quote_filename(sys.executable, shell)} {safe_quote_filename(str(fake), shell)} {quoted}"
         if shell == "powershell":
             command = "$PSNativeCommandArgumentPassing = 'Standard'; & " + command
-            args = [path, "-NoProfile", "-Command", command]
+            args: str | list[str] = [path, "-NoProfile", "-Command", command]
         else:
-            args = [path, "/d", "/v:off", "/s", "/c", command]
-        result = subprocess.run(args, check=True, capture_output=True, text=True)
+            args = f'"{path}" /d /v:off /s /c "{command}"'
+        result = subprocess.run(args, check=True, capture_output=True, text=True, encoding="utf-8")
         assert json.loads(result.stdout) == [name]
 
 
@@ -143,7 +186,7 @@ def test_unknown_write_is_durable_and_never_replayed_after_restart(tmp_path):
 
 def test_backup_restore_and_version_rejection_leave_existing_json_untouched(tmp_path):
     existing = tmp_path / "notes.json"
-    existing.write_text('{"version":1,"users":{}}')
+    existing.write_text('{"version":1,"users":{}}', encoding="utf-8")
     store = OperationStore(tmp_path / "operations.sqlite3")
     store.claim("one", "youtube.metadata_update", Plan())
     backup = tmp_path / "journal.backup"
@@ -151,7 +194,7 @@ def test_backup_restore_and_version_rejection_leave_existing_json_untouched(tmp_
     store.claim("two", "youtube.metadata_update", Plan())
     store.restore(backup)
     assert len(store.list("one")) == 1 and store.list("two") == []
-    assert existing.read_text() == '{"version":1,"users":{}}'
+    assert existing.read_text(encoding="utf-8") == '{"version":1,"users":{}}'
     import sqlite3
 
     with sqlite3.connect(backup) as db:

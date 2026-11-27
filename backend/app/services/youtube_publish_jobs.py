@@ -30,6 +30,25 @@ from backend.app.services.youtube_draft_publish import DraftPublishWorkflow
 
 logger = logging.getLogger(__name__)
 
+if os.name == "nt":
+    import msvcrt
+
+    def _lock_nonblocking(handle) -> None:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+
+    def _unlock_file(handle) -> None:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+else:
+    import fcntl
+
+    def _lock_nonblocking(handle) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def _unlock_file(handle) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
 
 @dataclass(frozen=True)
 class JobIdentity:
@@ -125,19 +144,32 @@ class YouTubePublishRunner:
         self.stop_event = threading.Event()
         self.thread = self.heartbeat_thread = self.file_lock = None
 
-    def start(self):
-        import fcntl
+    def _release_file_lock(self) -> None:
+        handle = self.file_lock
+        self.file_lock = None
+        if handle is None:
+            return
+        try:
+            _unlock_file(handle)
+        except OSError:
+            pass
+        finally:
+            handle.close()
 
+    def start(self):
         with self.lock:
             if self.accepting:
                 return
             self.store.path.parent.mkdir(parents=True, exist_ok=True)
-            handle = open(self.store.path.with_suffix(".runner.lock"), "a+")
+            handle = open(self.store.path.with_suffix(".runner.lock"), "a+b")
             try:
-                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                _lock_nonblocking(handle)
             except OSError:
                 handle.close()
                 raise RuntimeError("YouTube publish runner requires one process per operation store") from None
+            except BaseException:
+                handle.close()
+                raise
             self.file_lock = handle
             try:
                 self.store.recover_lost_executor_jobs()
@@ -155,9 +187,13 @@ class YouTubePublishRunner:
                 self.thread.start()
                 self.heartbeat_thread.start()
             except BaseException:
-                handle.close()
-                self.file_lock = None
                 self.accepting = False
+                self.stop_event.set()
+                if self.thread and self.thread.is_alive():
+                    self.thread.join(timeout=self.shutdown_timeout)
+                if self.heartbeat_thread and self.heartbeat_thread.is_alive():
+                    self.heartbeat_thread.join(timeout=1)
+                self._release_file_lock()
                 raise
 
     def _heartbeat(self):
@@ -261,11 +297,11 @@ class YouTubePublishRunner:
                     self.capacity.release()
                     self.queue.task_done()
         finally:
-            with self.store.transaction() as db:
-                db.execute("UPDATE operation_executors SET state='stopped' WHERE id=?", (self.id,))
-            if self.file_lock:
-                self.file_lock.close()
-                self.file_lock = None
+            try:
+                with self.store.transaction() as db:
+                    db.execute("UPDATE operation_executors SET state='stopped' WHERE id=?", (self.id,))
+            finally:
+                self._release_file_lock()
 
     def shutdown(self):
         with self.lock:

@@ -249,7 +249,7 @@ def test_legacy_notes_remain_readable(tmp_path):
         "created_at": "2026-10-01",
         "updated_at": "2026-10-01",
     }
-    path.write_text(json.dumps({"version": 1, "users": {"owner": [legacy]}}))
+    path.write_text(json.dumps({"version": 1, "users": {"owner": [legacy]}}), encoding="utf-8")
     store = NotesStore(path)
     assert store.get_note("owner", "old") == legacy
     assert store.update_note("owner", "old", content="edited")["content"] == "edited"

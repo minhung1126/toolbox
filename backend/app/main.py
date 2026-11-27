@@ -66,13 +66,15 @@ async def lifespan(app: FastAPI):
         oauth_client_context(app.state.oauth_client_factories),
     ):
         _initialize_app_config(app)
-        await app.state.tool_registry.run_startup(app)
-        app.state.youtube_publish_runner.start()
         try:
+            await app.state.tool_registry.run_startup(app)
+            app.state.youtube_publish_runner.start()
             yield
         finally:
-            app.state.youtube_publish_runner.shutdown()
-            await app.state.tool_registry.run_shutdown(app)
+            try:
+                app.state.youtube_publish_runner.shutdown()
+            finally:
+                await app.state.tool_registry.run_shutdown(app)
 
 
 async def request_validation_error_handler(request: Request, exc: RequestValidationError):
