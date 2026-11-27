@@ -370,12 +370,15 @@ def test_unknown_write_survives_restart_and_blocks_new_previews_until_readonly_r
     another_stage = harness.prepare()
     blocked = harness.client.post("/api/v1/youtube/drafts/preview", json=another_stage)
     assert blocked.status_code == 409
-    # Only matching the title must not mark the publish as complete.
+    # Only matching the title must not mark the publish as complete, and
+    # confirming remote is not yet public resolves the unknown write to partial/failed.
     remote = harness.provider.videos_by_id["one"]
     remote["snippet"].update(title=draft["edits"][0]["title"], description=draft["edits"][0]["description"])
     endpoint = f"/api/v1/operations/{result['operation_id']}/reconcile-youtube"
     checked = harness.client.post(endpoint).json()
-    assert checked["state"] == "needs_reconciliation"
+    assert checked["state"] == "partial"
+    assert checked["result"]["results"][0]["status"] == "failed"
+    assert harness.client.post("/api/v1/youtube/drafts/preview", json=harness.prepare()).status_code == 200
     remote["status"]["privacyStatus"] = "public"
     checked = harness.client.post(endpoint).json()
     assert checked["state"] == "completed"

@@ -105,6 +105,7 @@ def build_preview_token(
     owner_sub: str,
     youtube_slot: str,
     operation: str,
+    youtube_channel_id: str = "",
     playlist_id: str = "",
     playlist: Mapping[str, Any] | None = None,
     sheet: Mapping[str, Any] | None = None,
@@ -115,6 +116,7 @@ def build_preview_token(
         "nonce": secrets.token_urlsafe(16),
         "owner": _owner_binding(owner_sub),
         "youtube_slot": str(youtube_slot or ""),
+        "youtube_channel_id": str(youtube_channel_id or "").strip(),
         "operation": str(operation or ""),
         "playlist_id": str(playlist_id or "").strip(),
         "playlist": dict(playlist or {}),
@@ -131,6 +133,7 @@ def verify_preview_token(
     owner_sub: str,
     youtube_slot: str,
     operation: str,
+    youtube_channel_id: str | None = None,
     playlist_id: str = "",
     playlist: Mapping[str, Any] | None = None,
     sheet: Mapping[str, Any] | None = None,
@@ -146,6 +149,9 @@ def verify_preview_token(
         return False
     if payload.get("youtube_slot") != str(youtube_slot or ""):
         return False
+    if youtube_channel_id is not None or payload.get("youtube_channel_id"):
+        if payload.get("youtube_channel_id", "") != str(youtube_channel_id or "").strip():
+            return False
     if payload.get("operation") != str(operation or ""):
         return False
     if payload.get("playlist_id", "") != str(playlist_id or "").strip():

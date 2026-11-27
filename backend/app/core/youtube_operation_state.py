@@ -215,7 +215,7 @@ def project_operation(db, operation):
                     "source": source,
                     "order": order,
                 }
-        elif person and "snippet" in parts and attempt.get("state") == "failed_before_write":
+        elif person and "snippet" in parts and attempt.get("state") in {"failed_before_write", "failed"}:
             previous["known_not_applied"] = True
         if verified and (
             phase == "publish" or phase == "metadata_publish" and intended.get("privacyStatus") == "public"
@@ -229,7 +229,7 @@ def project_operation(db, operation):
                     "source": source,
                 }
         if (
-            attempt.get("state") in {"failed_before_write", "needs_reconciliation"}
+            attempt.get("state") in {"failed_before_write", "failed", "needs_reconciliation"}
             and (previous.get("last_error") or {}).get("order", []) <= order
         ):
             previous["last_error"] = {"operation_id": operation["id"], "state": attempt["state"], "order": order}

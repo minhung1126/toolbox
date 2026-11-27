@@ -242,3 +242,73 @@ def test_cost_estimates_match_direct_metadata_and_publish_formulas(monkeypatch):
     assert publish["projected_units"] == (3 + 20) * 1 + 53 * 20
     assert publish["breakdown"][0] == {"method": "playlistItems.list", "calls": 62, "units": 62}
     assert publish["max_items_today"] == 20
+
+
+def test_playlists_insert_is_registered_in_auxiliary_methods_and_charges_50_units(tmp_path):
+    from backend.app.core.youtube_quota_limiter import YOUTUBE_AUXILIARY_QUOTA_METHODS
+
+    assert YOUTUBE_AUXILIARY_QUOTA_METHODS["playlists.insert"] == {"bucket": "general", "cost": 50}
+    ledger = make_ledger(tmp_path, configured_limit=200, safety_buffer_units=0)
+    res = ledger.execute(SuccessfulRequest(), "playlists.insert")
+    assert res == {"ok": True}
+    assert ledger.get_usage()["estimated_used_units"] == 50
+
+
+def test_policy_cap_refuses_50_unit_write_without_locking_1_unit_read(tmp_path):
+    ledger = make_ledger(tmp_path, configured_limit=10_000, safety_buffer_units=1_000)
+    # Use 8,970 units (policy_cap = 9,000, 30 units remaining below safety cap)
+    path = tmp_path / "youtube_quota_usage.json"
+    ledger.get_usage()
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["estimated_used_units"] = 8_970
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(YouTubeQuotaUnavailable) as caught:
+        ledger.execute(SuccessfulRequest(), "videos.update")
+    assert caught.value.code == "youtube_quota_safety_blocked"
+
+    # Must NOT persist blocked_until for local safety cap; 1-unit read must still succeed!
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["blocked_until"] is None
+    assert ledger.execute(SuccessfulRequest(), "videos.list") == {"ok": True}
+    assert ledger.get_usage()["estimated_used_units"] == 8_971
+
+
+def test_dynamic_quota_increase_immediately_unblocks_local_policy_cap_but_not_confirmed_exhausted(tmp_path):
+    from backend.app.core.runtime_config import RuntimeConfig
+
+    runtime = RuntimeConfig(tmp_path / "runtime.json")
+    runtime.update({"youtube_primary_general_quota_limit": 100, "youtube_primary_quota_safety_buffer_units": 50})
+    ledger = YouTubeQuotaLimiter(tmp_path / "youtube_quota_usage.json", runtime_store=runtime)
+    ledger.record("videos.update")
+    blocked_usage = ledger.get_usage()
+    assert blocked_usage["state"] == "safety_blocked"
+    assert blocked_usage["effective_available_units"] == 0
+    assert blocked_usage["blocked_until"] is None
+
+    # Simulate legacy persisted blocked_until under safety_blocked on disk
+    raw = json.loads((tmp_path / "youtube_quota_usage.json").read_text(encoding="utf-8"))
+    raw["state"] = "safety_blocked"
+    raw["blocked_until"] = blocked_usage["reset_at"]
+    (tmp_path / "youtube_quota_usage.json").write_text(json.dumps(raw), encoding="utf-8")
+
+    # Raise limit dynamically: immediately unblocked without waiting for Pacific midnight
+    runtime.update({"youtube_primary_general_quota_limit": 200, "youtube_primary_quota_safety_buffer_units": 50})
+    recovered = ledger.get_usage()
+    assert recovered["state"] == "normal"
+    assert recovered["effective_available_units"] == 100
+    assert recovered["blocked_until"] is None
+    assert ledger.execute(SuccessfulRequest(), "videos.update") == {"ok": True}
+
+    # Google 403 confirmed_exhausted remains blocked even if limit is raised
+    with pytest.raises(YouTubeQuotaUnavailable) as exhausted:
+        ledger.execute(
+            SimpleNamespace(execute=lambda: (_ for _ in ()).throw(HttpFailure("quotaExceeded"))), "videos.list"
+        )
+    assert exhausted.value.code == "youtube_quota_exhausted"
+    runtime.update({"youtube_primary_general_quota_limit": 10_000, "youtube_primary_quota_safety_buffer_units": 0})
+    assert ledger.get_usage()["state"] == "confirmed_exhausted"
+    assert ledger.get_usage()["effective_available_units"] == 0
+    with pytest.raises(YouTubeQuotaUnavailable) as still_blocked:
+        ledger.reserve("videos.list")
+    assert still_blocked.value.code == "youtube_quota_exhausted"

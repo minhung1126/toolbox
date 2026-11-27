@@ -295,6 +295,8 @@ def update_video_metadata(
 ):
     """Update one video's title and description while preserving other metadata."""
     if isinstance(operations, OperationStore):
+        if not normalize_text(payload.video_id) or not normalize_text(payload.title):
+            raise http_error(400, "youtube_video_input_invalid", "影片 ID 與標題不可為空白。")
         return run_youtube_recorded(
             operations,
             payload,
@@ -317,13 +319,19 @@ def update_video_metadata(
         detail = next((item for item in details if item.get("id") == video_id), None)
         if not detail:
             raise http_error(404, "youtube_not_found", "找不到指定的 YouTube 影片。", youtube_slot=context.slot)
+        snippet = detail.get("snippet") or {}
+        if context.channel_id and snippet.get("channelId") != context.channel_id:
+            raise http_error(
+                403,
+                "youtube_channel_mismatch",
+                "此影片不屬於目前授權的 YouTube 頻道。",
+                youtube_slot=context.slot,
+            )
 
         tracked_write(
             "metadata",
             video_id,
-            lambda: update_single_video_metadata(
-                context, video_id, str(title), description, current_snippet=(detail.get("snippet") or {})
-            ),
+            lambda: update_single_video_metadata(context, video_id, str(title), description, current_snippet=snippet),
             {"title": str(title), "description": description, "parts": ["snippet"], "attempted_write": True},
         )
         return {
@@ -368,6 +376,7 @@ def _playlist_preview_token(context: YouTubeRequestContext, playlist_id: str, vi
         owner_sub=context.owner_sub,
         youtube_slot=context.slot,
         operation="youtube.playlist_preview",
+        youtube_channel_id=context.channel_id or "",
         playlist_id=playlist_id,
         playlist=playlist_snapshot_from_preview(videos),
     )

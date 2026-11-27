@@ -253,9 +253,10 @@ def require_ytmusic_context(
     owner_sub = auth_session.subject
     parsed_body = body if isinstance(body, dict) else {}
 
+    store = get_credential_store(credential_store)
     ytmusic_creds = get_ytmusic_credentials(session_id=session_id, owner_sub=owner_sub)
     if ytmusic_creds and ytmusic_creds.valid and has_youtube_scope(ytmusic_creds):
-        ytmusic_public = get_credential_store(credential_store).get_ytmusic_public(owner_sub) or {}
+        ytmusic_public = store.get_ytmusic_public(owner_sub) or {}
         channel_id = ytmusic_public.get("channel_id")
         limiter = get_youtube_quota_tracker("primary")
 
@@ -282,20 +283,42 @@ def require_ytmusic_context(
             session_id=session_id,
         )
 
+    has_custom_token = bool(store.get_ytmusic_custom_token(owner_sub))
+    requires_data_api = bool(parsed_body.get("use_youtube_api") or parsed_body.get("allow_quota_fallback"))
+    if has_custom_token and not requires_data_api:
+        ytmusic_public = store.get_ytmusic_public(owner_sub) or {}
+        channel_id = ytmusic_public.get("channel_id")
+        logger.info("YouTube Music request routed with custom token (channel=%s)", channel_id)
+        return YouTubeRequestContext(
+            slot="primary",
+            credentials=None,
+            quota_limiter=get_youtube_quota_tracker("primary"),
+            owner_sub=owner_sub,
+            channel_id=channel_id,
+            routing_mode="ytmusic_custom_token",
+            selection_reason="ytmusic_custom_token",
+            estimated_units=0,
+            preferred_slot="primary",
+            session_id=session_id,
+        )
+
     try:
         return _resolve_youtube_context(
             request,
             auth_session=auth_session,
             body=parsed_body,
         )
-    except HTTPException:
-        logger.warning("YouTube Music access attempted without authorization (sub=%s)", owner_sub)
-        raise http_error(
-            403,
-            "ytmusic_scope_required",
-            "YouTube Music 權限不足，請先授權 YouTube Music 帳號。",
-            reauthorization_required=True,
-        )
+    except HTTPException as exc:
+        detail_code = exc.detail.get("code") if isinstance(exc.detail, dict) else None
+        if exc.status_code == 403 or detail_code == "youtube_slot_not_configured":
+            logger.warning("YouTube Music access attempted without authorization (sub=%s)", owner_sub)
+            raise http_error(
+                403,
+                "ytmusic_scope_required",
+                "YouTube Music 權限不足，請先授權 YouTube Music 帳號。",
+                reauthorization_required=True,
+            ) from exc
+        raise
 
 
 __all__ = [

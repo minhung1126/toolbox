@@ -21,7 +21,7 @@ class YouTubeRequestContext:
     """
 
     slot: str
-    credentials: Credentials
+    credentials: Credentials | None
     quota_limiter: YouTubeQuotaLimiter
     owner_sub: str
     channel_id: str | None = None

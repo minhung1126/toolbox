@@ -549,18 +549,14 @@ def test_apply_sort_to_playlist_resolves_synthetic_ids_via_data_api(monkeypatch)
         use_youtube_api=False,
     )
 
-    assert res["succeeded"] == 2
+    assert res["succeeded"] == 1
     assert res["failed"] == 0
-    assert len(recorded_updates) == 2
+    assert len(recorded_updates) == 1
 
-    # Verify that synthetic IDs (rgNdeflYdYw_82, BLnkLdzlCx4_80) were remapped to real Data API IDs
+    # Verify that synthetic IDs (rgNdeflYdYw_82) were remapped to real Data API IDs and moved once
     assert recorded_updates[0]["id"] == "REAL_ID_rgNd"
     assert recorded_updates[0]["snippet"]["position"] == 0
     assert recorded_updates[0]["snippet"]["resourceId"]["videoId"] == "rgNdeflYdYw"
-
-    assert recorded_updates[1]["id"] == "REAL_ID_BLnk"
-    assert recorded_updates[1]["snippet"]["position"] == 1
-    assert recorded_updates[1]["snippet"]["resourceId"]["videoId"] == "BLnkLdzlCx4"
 
 
 def test_apply_sort_to_playlist_new_playlist_via_data_api(monkeypatch):
@@ -663,20 +659,22 @@ def test_partial_data_api_sort_does_not_return_provider_exception(monkeypatch):
     youtube.playlistItems().update().execute.side_effect = [
         {"id": "updated"},
         RuntimeError("access_token=private-provider-value"),
+        RuntimeError("access_token=private-provider-value"),
     ]
     monkeypatch.setattr(service, "get_youtube_service", lambda _context: youtube)
     monkeypatch.setattr(service, "fetch_playlist_items", lambda *_args: [])
     monkeypatch.setattr(service, "_execute_with_quota", lambda request, _operation, _context: request.execute())
     items = [
-        {"video_id": "v1", "playlist_item_id": "item-1", "original_position": 1, "new_position": 0},
-        {"video_id": "v2", "playlist_item_id": "item-2", "original_position": 0, "new_position": 1},
+        {"video_id": "v1", "playlist_item_id": "item-1", "original_position": 2, "new_position": 0},
+        {"video_id": "v2", "playlist_item_id": "item-2", "original_position": 1, "new_position": 1},
+        {"video_id": "v3", "playlist_item_id": "item-3", "original_position": 0, "new_position": 2},
     ]
 
     created = apply_sort_to_playlist(context, "source", items, mode="new_playlist", use_youtube_api=True)
     updated = apply_sort_to_playlist(context, "source", items, mode="in_place", use_youtube_api=True)
 
-    assert (created["succeeded"], created["failed"]) == (1, 1)
-    assert (updated["succeeded"], updated["failed"]) == (1, 1)
+    assert (created["succeeded"], created["failed"]) == (1, 2)
+    assert (updated["succeeded"], updated["failed"]) == (1, 2)
     assert created["failed_items"][0]["video_id"] == "v2"
     assert updated["failed_items"][0]["playlist_item_id"] == "item-2"
     assert "access_token=private-provider-value" not in str(created)
@@ -946,3 +944,104 @@ def test_apply_sort_allows_fallback_when_explicitly_permitted(monkeypatch):
     # verify allow_quota_fallback was passed as True
     _, kwargs = mock_apply.call_args
     assert kwargs.get("allow_quota_fallback") is True
+
+
+def test_data_api_in_place_sort_moves_shifted_unchanged_items_into_exact_order(monkeypatch, tmp_path):
+    from unittest.mock import MagicMock
+
+    import backend.app.services.playlist_sort_service as pss
+    from backend.app.core.youtube_context import YouTubeRequestContext
+    from backend.app.core.youtube_quota_limiter import YouTubeQuotaLimiter
+
+    limiter = YouTubeQuotaLimiter(tmp_path / "youtube_quota_usage.json", configured_limit=1000, safety_buffer_units=0)
+    context = YouTubeRequestContext(
+        slot="primary",
+        credentials=object(),
+        quota_limiter=limiter,
+        owner_sub="test-user",
+    )
+
+    server_items = [
+        {"id": "item-A", "snippet": {"resourceId": {"videoId": "A"}, "position": 0}},
+        {"id": "item-B", "snippet": {"resourceId": {"videoId": "B"}, "position": 1}},
+        {"id": "item-C", "snippet": {"resourceId": {"videoId": "C"}, "position": 2}},
+        {"id": "item-D", "snippet": {"resourceId": {"videoId": "D"}, "position": 3}},
+    ]
+    monkeypatch.setattr(pss, "fetch_playlist_items", lambda _ctx, _pid: list(server_items))
+
+    def fake_update(part, body):
+        del part
+        target_id = body["id"]
+        pos = body["snippet"]["position"]
+        idx = next(i for i, item in enumerate(server_items) if item["id"] == target_id)
+        moved = server_items.pop(idx)
+        server_items.insert(pos, moved)
+        req = MagicMock()
+        req.execute.return_value = body
+        return req
+
+    mock_service = MagicMock()
+    mock_service.playlistItems().update.side_effect = fake_update
+    monkeypatch.setattr(pss, "get_youtube_service", lambda _ctx: mock_service)
+
+    original = [
+        {"playlist_item_id": "item-A", "video_id": "A", "position": 0},
+        {"playlist_item_id": "item-B", "video_id": "B", "position": 1},
+        {"playlist_item_id": "item-C", "video_id": "C", "position": 2},
+        {"playlist_item_id": "item-D", "video_id": "D", "position": 3},
+    ]
+    # Counterexample: B has original_position == new_position == 1 ("unchanged"),
+    # yet moving C to 0 shifts B to index 2 so B must still be moved back to 1.
+    target = [original[2], original[1], original[3], original[0]]
+    preview = build_sort_preview(original, target)
+    assert preview["items"][1]["status"] == "unchanged"
+
+    res = apply_sort_to_playlist(
+        context,
+        "PL_COUNTER",
+        preview["items"],
+        original_items=original,
+        mode="in_place",
+        use_youtube_api=True,
+    )
+
+    assert [item["id"] for item in server_items] == ["item-C", "item-B", "item-D", "item-A"]
+    assert res["moved"] == 3
+    assert res["succeeded"] == 3
+    assert res["failed"] == 0
+    assert res["quota_used"] == 150
+    assert limiter.get_usage()["estimated_used_units"] == 150
+
+
+def test_data_api_new_playlist_uses_real_quota_limiter_for_playlists_insert(monkeypatch, tmp_path):
+    from unittest.mock import MagicMock
+
+    import backend.app.services.playlist_sort_service as pss
+    from backend.app.core.youtube_context import YouTubeRequestContext
+    from backend.app.core.youtube_quota_limiter import YouTubeQuotaLimiter
+
+    limiter = YouTubeQuotaLimiter(tmp_path / "youtube_quota_usage.json", configured_limit=1000, safety_buffer_units=0)
+    context = YouTubeRequestContext(
+        slot="primary",
+        credentials=object(),
+        quota_limiter=limiter,
+        owner_sub="test-user",
+    )
+    mock_service = MagicMock()
+    mock_service.playlists().insert().execute.return_value = {"id": "NEW_PL_REAL"}
+    mock_service.playlistItems().insert().execute.return_value = {"id": "NEW_ITEM_REAL"}
+    monkeypatch.setattr(pss, "get_youtube_service", lambda _ctx: mock_service)
+
+    res = apply_sort_to_playlist(
+        context,
+        "PL_SRC",
+        [{"playlist_item_id": "i1", "video_id": "v1"}, {"playlist_item_id": "i2", "video_id": "v2"}],
+        mode="new_playlist",
+        new_playlist_title="Sorted",
+        use_youtube_api=True,
+    )
+
+    assert res["new_playlist_id"] == "NEW_PL_REAL"
+    assert res["succeeded"] == 2
+    assert res["quota_used"] == 150
+    assert limiter.get_usage()["estimated_used_units"] == 150

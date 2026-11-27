@@ -331,7 +331,7 @@ def test_metadata_preflight_quota_failure_switches_slot_before_writes(monkeypatc
 
     assert [item["status"] for item in response["results"]] == ["succeeded", "succeeded"]
     assert [item["youtube_slot"] for item in response["results"]] == ["secondary", "secondary"]
-    assert fetch_calls == ["primary", "secondary", "secondary"]
+    assert fetch_calls == ["primary", "secondary"]
     assert update_calls == [("secondary", "video-1"), ("secondary", "video-2")]
     assert response["youtube_slot_reason"] == "auto_secondary_quota_fallback"
 

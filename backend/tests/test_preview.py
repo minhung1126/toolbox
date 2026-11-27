@@ -62,3 +62,41 @@ def test_preview_snapshots_preserve_order_and_exclude_provider_payload():
     assert snapshot["video_ids"] == ["video-1", "", "video-2"]
     assert snapshot["video_count"] == 3
     assert "私密標題" not in str(snapshot)
+
+
+def test_preview_token_binds_youtube_channel_id():
+    token = build_preview_token(
+        owner_sub="owner-a",
+        youtube_slot="primary",
+        operation="youtube.batch_update",
+        youtube_channel_id="UC-1",
+    )
+    assert (
+        verify_preview_token(
+            token,
+            owner_sub="owner-a",
+            youtube_slot="primary",
+            operation="youtube.batch_update",
+            youtube_channel_id="UC-1",
+        )
+        is True
+    )
+    assert (
+        verify_preview_token(
+            token,
+            owner_sub="owner-a",
+            youtube_slot="primary",
+            operation="youtube.batch_update",
+            youtube_channel_id="UC-2",
+        )
+        is False
+    )
+    assert (
+        verify_preview_token(
+            token,
+            owner_sub="owner-a",
+            youtube_slot="primary",
+            operation="youtube.batch_update",
+        )
+        is False
+    )

@@ -197,14 +197,52 @@ class OperationStore:
         OperationStore._sync_targets(db, operation)
         project_operation(db, operation)
 
+    @staticmethod
+    def _is_zero_write_pre_failure(operation: dict) -> bool:
+        return (
+            operation.get("state") == "failed_before_write"
+            and not operation.get("outcome_unknown")
+            and all(item.get("state") == "failed_before_write" for item in operation.get("items", []))
+            and not any(
+                row.get("status") in {"running", "needs_reconciliation"}
+                for row in (operation.get("progress") or {}).get("rows", [])
+            )
+        )
+
+    @staticmethod
+    def _is_reconciled_zero_success_failure(operation: dict) -> bool:
+        if operation.get("state") != "partial" or operation.get("outcome_unknown"):
+            return False
+        items = operation.get("items") or []
+        if not all(item.get("state") in {"failed", "failed_before_write"} for item in items):
+            return False
+        progress_rows = (operation.get("progress") or {}).get("rows") or []
+        if not all(row.get("status") in {"failed", "failed_before_write"} for row in progress_rows):
+            return False
+        result = operation.get("result")
+        if isinstance(result, dict):
+            result_rows = result.get("results")
+            if isinstance(result_rows, list) and not all(
+                row.get("status") in {"failed", "failed_before_write"} for row in result_rows
+            ):
+                return False
+            if int(result.get("succeeded") or 0) != 0 or int(result.get("succeeded_count") or 0) != 0:
+                return False
+        return True
+
+    @classmethod
+    def _is_retryable_failed_operation(cls, operation: dict) -> bool:
+        return cls._is_zero_write_pre_failure(operation) or cls._is_reconciled_zero_success_failure(operation)
+
     def claim(self, owner, kind, payload, *, channel_id=None, progress_plan=None, executor_id=None, acceptance=None):
         original = payload.model_dump(mode="json")
-        request_id = original.pop("request_id", None)
+        raw_request_id = original.pop("request_id", None)
+        had_explicit_request_id = bool(raw_request_id)
         digest = hashlib.sha256(
             json.dumps({"input": original, "channel_id": channel_id}, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()
         # Old synchronous callers get a deterministic ID for the same signed plan.
-        request_id = request_id or digest
+        request_id = raw_request_id or digest
         plan = {key: value for key, value in original.items() if key != "preview_token"}
         with self.transaction() as db:
             row = db.execute(
@@ -214,13 +252,21 @@ class OperationStore:
             if row:
                 if row["digest"] != digest:
                     raise http_error(409, "operation_input_changed", "同一請求 ID 的輸入版本已變更，請重新預覽。")
-                return json.loads(row["document"]), False
-            # A different request ID must not bypass a claim for the same confirmed plan.
-            row = db.execute(
-                "SELECT document FROM operations WHERE owner=? AND kind=? AND digest=?", (owner, kind, digest)
-            ).fetchone()
-            if row:
                 existing = json.loads(row["document"])
+                if not (not had_explicit_request_id and self._is_retryable_failed_operation(existing)):
+                    return existing, False
+                request_id = f"{digest}:{uuid.uuid4().hex}"
+            # A different request ID (or omitted request_id retrying past a 0-write pre-failure
+            # or reconciled 0-success partial failure) must not bypass an active, completed,
+            # partially succeeded, or uncertain claim for the same confirmed plan.
+            rows = db.execute(
+                "SELECT document FROM operations WHERE owner=? AND kind=? AND digest=? ORDER BY rowid DESC",
+                (owner, kind, digest),
+            ).fetchall()
+            for candidate_row in rows:
+                existing = json.loads(candidate_row["document"])
+                if self._is_retryable_failed_operation(existing):
+                    continue
                 db.execute(
                     "INSERT INTO operation_requests VALUES (?,?,?,?,?)",
                     (owner, kind, request_id, existing["id"], digest),
@@ -423,10 +469,16 @@ class OperationStore:
             if row and row["digest"] != digest:
                 raise http_error(409, "operation_input_changed", "同一請求 ID 的輸入版本已變更，請重新預覽。")
             if not row:
-                row = db.execute(
-                    "SELECT document FROM operations WHERE owner=? AND kind=? AND digest=?", (owner, kind, digest)
-                ).fetchone()
-            return json.loads(row["document"]) if row else None
+                rows = db.execute(
+                    "SELECT document FROM operations WHERE owner=? AND kind=? AND digest=? ORDER BY rowid DESC",
+                    (owner, kind, digest),
+                ).fetchall()
+                for candidate_row in rows:
+                    candidate = json.loads(candidate_row["document"])
+                    if not self._is_retryable_failed_operation(candidate):
+                        return candidate
+                return None
+            return json.loads(row["document"])
 
     def recover_lost_executor_jobs(self):
         """Only call while holding the exclusive runner file lock; never replay a write."""

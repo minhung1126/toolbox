@@ -35,6 +35,7 @@ class DraftPublishWorkflow:
             owner_sub=context.owner_sub,
             youtube_slot=snapshot["youtube_slot"],
             operation=operation,
+            youtube_channel_id=context.channel_id or "",
             request_digest=self.ports.input_digest(snapshot),
         )
 
@@ -48,6 +49,7 @@ class DraftPublishWorkflow:
                 owner_sub=context.owner_sub,
                 youtube_slot=snapshot.get("youtube_slot", ""),
                 operation=operation,
+                youtube_channel_id=context.channel_id or "",
                 request_digest=self.ports.input_digest(snapshot),
                 **({"max_age": 30 * 24 * 60 * 60} if stage else {}),
             )

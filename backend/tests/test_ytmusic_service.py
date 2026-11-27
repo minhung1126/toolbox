@@ -15,7 +15,7 @@ from backend.app.services.ytmusic_service import (
 
 
 def test_parse_custom_token_input_json():
-    json_str = '{"User-Agent": "Mozilla/5.0", "Cookie": "SID=abc", "authorization": "SAPISIDHASH 123"}'
+    json_str = '{"User-Agent": "Mozilla/5.0", "Cookie": "SID=abc; SAPISID=sapi123", "authorization": "SAPISIDHASH 123"}'
     parsed = parse_custom_token_input(json_str)
     assert isinstance(parsed, dict)
     assert "SID=abc" in parsed.get("cookie", "")
@@ -328,7 +328,7 @@ def test_parse_custom_token_input_raw_headers():
 Accept: */*
 Accept-Language: zh-TW,zh;q=0.9
 Authorization: SAPISIDHASH 1699999999_abcdef
-Cookie: SID=my_sid_val; HSID=my_hsid_val
+Cookie: SID=my_sid_val; HSID=my_hsid_val; SAPISID=my_sapisid_val
 User-Agent: Mozilla/5.0
 X-Goog-AuthUser: 0
 """

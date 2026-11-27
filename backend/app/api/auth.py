@@ -3,9 +3,9 @@ import secrets
 from typing import Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.app.core.account_state import (
     get_account_active_slot,
@@ -14,7 +14,7 @@ from backend.app.core.account_state import (
 )
 from backend.app.core.config import get_settings, normalize_youtube_slot, settings
 from backend.app.core.credential_store import credential_store, get_credential_store
-from backend.app.core.dependencies import get_authenticated_session
+from backend.app.core.dependencies import AuthenticatedSession, get_authenticated_session
 from backend.app.core.error_contract import http_error
 from backend.app.core.runtime_config import get_runtime_config, runtime_config
 from backend.app.core.security import (
@@ -294,13 +294,16 @@ def disconnect_ytmusic(request: Request):
 
 
 class YtmusicCustomTokenInput(BaseModel):
-    token: str
+    token: str = Field(max_length=32_768)
 
 
 @router.post("/ytmusic/custom-token")
-def save_ytmusic_custom_token(payload: YtmusicCustomTokenInput, request: Request):
+def save_ytmusic_custom_token(
+    payload: YtmusicCustomTokenInput,
+    auth_session: AuthenticatedSession = Depends(get_authenticated_session),
+):
     """Save custom YouTube Music browser cookie/headers token."""
-    from backend.app.services.ytmusic_service import parse_custom_token_input
+    from backend.app.services.ytmusic_service import YtmusicTokenInputError, parse_custom_token_input
 
     token_str = payload.token.strip()
     if not token_str:
@@ -308,34 +311,37 @@ def save_ytmusic_custom_token(payload: YtmusicCustomTokenInput, request: Request
 
     try:
         parse_custom_token_input(token_str)
+    except YtmusicTokenInputError as exc:
+        raise http_error(400, "invalid_token", str(exc)) from exc
     except Exception as exc:
-        raise http_error(400, "invalid_token", f"Token 格式錯誤或解析失敗：{exc}") from exc
+        logger.warning("Custom YouTube Music token parse failed: %s", type(exc).__name__)
+        raise http_error(400, "invalid_token", "Token 格式錯誤或解析失敗，請確認貼上內容後再試。") from exc
 
-    auth_session = get_authenticated_session(request)
     get_credential_store(credential_store).save_ytmusic_custom_token(token_str, owner_sub=auth_session.subject)
     logger.info("Custom YouTube Music token updated for subject %s", auth_session.subject)
     return {"status": "success", "message": "YouTube Music 自訂 Token 已成功設定。"}
 
 
 @router.delete("/ytmusic/custom-token")
-def clear_ytmusic_custom_token(request: Request):
+def clear_ytmusic_custom_token(auth_session: AuthenticatedSession = Depends(get_authenticated_session)):
     """Clear custom YouTube Music browser token."""
-    auth_session = get_authenticated_session(request)
     get_credential_store(credential_store).clear_ytmusic_custom_token(auth_session.subject)
     logger.info("Custom YouTube Music token cleared for subject %s", auth_session.subject)
     return {"status": "success", "message": "YouTube Music 自訂 Token 已清除。"}
 
 
 class YtmusicTokenValidateInput(BaseModel):
-    token: Optional[str] = None
+    token: Optional[str] = Field(default=None, max_length=32_768)
 
 
 @router.post("/ytmusic/custom-token/validate")
-def validate_ytmusic_token(payload: YtmusicTokenValidateInput, request: Request):
+def validate_ytmusic_token(
+    payload: YtmusicTokenValidateInput,
+    auth_session: AuthenticatedSession = Depends(get_authenticated_session),
+):
     """Validate a custom YouTube Music token (either provided in payload or currently stored)."""
     from backend.app.services.ytmusic_service import YtmusicTokenInputError, validate_ytmusic_custom_token
 
-    auth_session = get_authenticated_session(request)
     token_str = (payload.token or "").strip()
     if not token_str:
         token_str = get_credential_store(credential_store).get_ytmusic_custom_token(auth_session.subject) or ""

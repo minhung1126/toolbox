@@ -503,8 +503,7 @@ def test_validate_ytmusic_custom_token_endpoint(tmp_path: Path, monkeypatch):
         email="test@example.com",
         credentials=None,
     )
-    monkeypatch.setattr(auth_api, "get_authenticated_session", lambda req: auth_sess)
-    monkeypatch.setattr(dependencies, "get_authenticated_session", lambda req: auth_sess)
+    monkeypatch.setitem(main.app.dependency_overrides, dependencies.get_authenticated_session, lambda: auth_sess)
 
     # Mock validate_ytmusic_custom_token in auth_api / ytmusic_service
     monkeypatch.setattr(

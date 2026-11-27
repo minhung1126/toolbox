@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_YTMUSIC_LANGUAGE = "zh_TW"
 DEFAULT_YTMUSIC_LOCATION = "TW"
+MAX_CUSTOM_TOKEN_LENGTH = 32_768
 
 
 class YtmusicTokenInputError(ValueError):
@@ -90,6 +91,8 @@ def parse_custom_token_input(
     raw = str(token_raw or "").strip()
     if not raw:
         raise YtmusicTokenInputError("Token 內容不可為空。")
+    if len(raw) > MAX_CUSTOM_TOKEN_LENGTH:
+        raise YtmusicTokenInputError(f"Token 長度不可超過 {MAX_CUSTOM_TOKEN_LENGTH} 字元。")
 
     user_headers: dict[str, str] = {}
 
@@ -145,18 +148,18 @@ def parse_custom_token_input(
     cookie = user_headers["cookie"].strip()
 
     # Normalize cookie to ensure SAPISID and __Secure-3PAPISID exist
-    sapisid_match = re.search(r"(?:^|;\s*)(?:__Secure-3PAPISID|SAPISID|__Secure-1PAPISID)=([^;]+)", cookie)
-    if sapisid_match:
-        sapisid_val = sapisid_match.group(1).strip()
-        if "__Secure-3PAPISID" not in cookie:
-            cookie = f"{cookie}; __Secure-3PAPISID={sapisid_val}"
-        if "SAPISID" not in cookie:
-            cookie = f"{cookie}; SAPISID={sapisid_val}"
-    else:
-        # Fallback for test tokens or unusual cookies missing SAPISID
-        if "__Secure-3PAPISID" not in cookie:
-            cookie = f"{cookie}; __Secure-3PAPISID=dummy_sapisid"
-        sapisid_val = "dummy_sapisid"
+    sapisid_val = ""
+    for match in re.finditer(r"(?:^|;\s*)(?:__Secure-3PAPISID|SAPISID|__Secure-1PAPISID)=([^;]*)", cookie):
+        candidate = match.group(1).strip()
+        if candidate:
+            sapisid_val = candidate
+            break
+    if not sapisid_val:
+        raise YtmusicTokenInputError("Token 缺少必要的瀏覽器 Cookie (SAPISID / __Secure-3PAPISID) 認證資訊。")
+    if "__Secure-3PAPISID" not in cookie:
+        cookie = f"{cookie}; __Secure-3PAPISID={sapisid_val}"
+    if "SAPISID" not in cookie:
+        cookie = f"{cookie}; SAPISID={sapisid_val}"
 
     user_headers["cookie"] = cookie
 
