@@ -53,6 +53,36 @@ describe('SetupWizardPage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/login');
   });
 
+  it('renders completed state when locked via .env OAuth, allowlist admin, or setup_locked', async () => {
+    for (const statusPayload of [
+      {
+        is_configured: true,
+        setup_completed: false,
+        needs_pin: false,
+        redirect_uri: 'https://toolbox.example.com/api/v1/auth/callback',
+      },
+      {
+        is_configured: false,
+        setup_completed: false,
+        has_admin: true,
+        needs_pin: false,
+        redirect_uri: 'https://toolbox.example.com/api/v1/auth/callback',
+      },
+      {
+        is_configured: false,
+        setup_completed: false,
+        setup_locked: true,
+        needs_pin: false,
+        redirect_uri: 'https://toolbox.example.com/api/v1/auth/callback',
+      },
+    ]) {
+      authApi.getSetupStatus.mockResolvedValueOnce(statusPayload);
+      const { unmount } = renderPage();
+      await screen.findByText('系統已完成設定');
+      unmount();
+    }
+  });
+
   it('renders setup form with development PIN auto-filled when in dev mode', async () => {
     authApi.getSetupStatus.mockResolvedValueOnce({
       is_configured: false,

@@ -36,7 +36,8 @@ FROM python:3.11-slim@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627a
 WORKDIR /app
 
 # 3.1 執行期標準環境變數（禁止寫入 .pyc、無緩衝日誌輸出、啟用虛擬環境與模組解析路徑）
-ENV PYTHONDONTWRITEBYTECODE=1 \
+ENV ENVIRONMENT=production \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
     PATH="/opt/venv/bin:$PATH" \

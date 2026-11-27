@@ -135,6 +135,165 @@ def test_production_requires_origin_or_referer(monkeypatch):
     assert error.value.status_code == 403
 
 
+def test_origin_null_and_malformed_origin_or_referer_rejected_in_all_environments(monkeypatch):
+    for env in ("development", "test", "staging", "production"):
+        monkeypatch.setattr(settings, "ENVIRONMENT", env)
+        for headers in (
+            [(b"origin", b"null")],
+            [(b"origin", b"")],
+            [(b"origin", b"null"), (b"referer", b"http://localhost:3000/")],
+            [(b"referer", b"about:blank")],
+        ):
+            req = Request(
+                {
+                    "type": "http",
+                    "method": "POST",
+                    "path": "/api/v1/settings/shared",
+                    "headers": headers,
+                    "query_string": b"",
+                    "server": ("testserver", 80),
+                }
+            )
+            with pytest.raises(HTTPException) as exc:
+                require_same_origin(req)
+            assert exc.value.status_code == 403
+            assert exc.value.detail["code"] == "csrf_origin_denied"
+
+
+def test_headerless_mutation_allowed_only_in_development_and_test(monkeypatch):
+    for env, expected_allow in (("development", True), ("test", True), ("staging", False), ("production", False)):
+        monkeypatch.setattr(settings, "ENVIRONMENT", env)
+        req = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/api/v1/settings/shared",
+                "headers": [],
+                "query_string": b"",
+                "server": ("testserver", 80),
+            }
+        )
+        if expected_allow:
+            require_same_origin(req)
+        else:
+            with pytest.raises(HTTPException) as exc:
+                require_same_origin(req)
+            assert exc.value.status_code == 403
+
+
+def test_staging_and_https_enforce_strict_security_headers_cookies_and_cors(tmp_path):
+    from backend.app.core.runtime_config import RuntimeConfig
+    from backend.app.core.system_secrets import SystemSecretsManager
+
+    for label, env, base_url in (
+        ("staging", "staging", "http://staging.example.test"),
+        ("https-dev", "development", "https://dev.example.test"),
+    ):
+        subdir = tmp_path / label
+        config = Settings(
+            _env_file=None,
+            runtime_store=RuntimeConfig(subdir / "runtime.json"),
+            secrets_store=SystemSecretsManager(subdir),
+            ENVIRONMENT=env,
+            PUBLIC_BASE_URL=base_url,
+            FRONTEND_URL=base_url,
+            ALLOWED_GOOGLE_EMAILS="admin@example.com",
+        )
+        assert config.is_strict_security is True
+        assert config.cookie_secure is True
+        assert config.allowlist_required is True
+        assert config.session_cookie_name.startswith("__Host-")
+        assert config.oauth_flow_cookie_name.startswith("__Host-")
+        assert "localhost" not in config.trusted_hosts
+        assert "testserver" not in config.trusted_hosts
+
+        client = TestClient(main.create_app(app_settings=config), base_url=base_url)
+        health = client.get("/api/v1/health")
+        assert health.status_code == 200
+        assert health.headers["strict-transport-security"] == "max-age=31536000; includeSubDomains"
+
+        cors_foreign = client.options(
+            "/api/v1/health",
+            headers={"Origin": "http://localhost:3000", "Access-Control-Request-Method": "GET"},
+        )
+        assert "access-control-allow-origin" not in cors_foreign.headers
+
+
+def test_trusted_proxy_ip_extraction_and_session_bucketed_rate_limiting(tmp_path, monkeypatch):
+    from backend.app.core import request_protection
+    from backend.app.core.request_protection import SlidingWindowLimiter, _client_key, _extract_client_ip
+    from backend.app.core.runtime_config import RuntimeConfig
+    from backend.app.core.session_store import SessionStore
+    from backend.app.core.system_secrets import SystemSecretsManager
+
+    with pytest.raises(ValueError, match="TRUSTED_PROXY_IPS"):
+        Settings(_env_file=None, TRUSTED_PROXY_IPS="not-an-ip")
+
+    subdir = tmp_path / "proxy-rate"
+    config = Settings(
+        _env_file=None,
+        runtime_store=RuntimeConfig(subdir / "runtime.json"),
+        secrets_store=SystemSecretsManager(subdir),
+        TRUSTED_PROXY_IPS="127.0.0.1,10.0.0.0/8",
+        ALLOWED_GOOGLE_EMAILS="admin@example.com",
+    )
+
+    def make_req(peer_host: str, headers=None, cookies=None):
+        raw_headers = [(k.lower().encode("ascii"), v.encode("ascii")) for k, v in (headers or {}).items()]
+        if cookies:
+            cookie_header = "; ".join(f"{k}={v}" for k, v in cookies.items())
+            raw_headers.append((b"cookie", cookie_header.encode("ascii")))
+        return Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/api/v1/auth/config",
+                "headers": raw_headers,
+                "query_string": b"",
+                "client": (peer_host, 12345),
+                "server": ("testserver", 80),
+            }
+        )
+
+    # Untrusted peer cannot spoof X-Forwarded-For
+    untrusted = make_req("198.51.100.5", headers={"X-Forwarded-For": "203.0.113.99"})
+    assert _extract_client_ip(untrusted, config) == "198.51.100.5"
+
+    # Trusted proxy walks right-to-left skipping trusted proxies, ignoring spoofed prefix
+    trusted = make_req("127.0.0.1", headers={"X-Forwarded-For": "1.1.1.1, 203.0.113.7, 10.1.2.3"})
+    assert _extract_client_ip(trusted, config) == "203.0.113.7"
+
+    # Valid authenticated session gets its own subject bucket, immune to unauthenticated flood
+    sessions = SessionStore(subdir / "sessions.json", encryption_key=config.CREDENTIAL_ENCRYPTION_KEY)
+    valid_sid = sessions.create(
+        {"credential_provider": "google_login", "user": {"sub": "user-42", "email": "admin@example.com"}}
+    )
+    limiter = SlidingWindowLimiter()
+    app = main.create_app(app_settings=config, session_store=sessions, request_limiter=limiter)
+    client = TestClient(app)
+
+    # Exhaust unauthenticated IP bucket ("testclient")
+    for _ in range(240):
+        limiter.check("testclient", "api", limit=240)
+    assert client.get("/api/v1/auth/config").status_code == 429
+
+    # Forged session cookie also hits IP bucket 429
+    client.cookies.set(config.session_cookie_name, "forged-session-id")
+    assert client.get("/api/v1/auth/config").status_code == 429
+
+    # Valid session cookie has its own subject:user-42 bucket and succeeds
+    client.cookies.set(config.session_cookie_name, valid_sid)
+    assert client.get("/api/v1/auth/config").status_code == 200
+    monkeypatch.setattr(request_protection, "session_store", sessions)
+    with main.settings_context(config):
+        assert _client_key(make_req("127.0.0.1", cookies={config.session_cookie_name: valid_sid})) == "subject:user-42"
+
+
+def test_docker_compose_binds_to_localhost():
+    compose_text = (Path(__file__).resolve().parents[2] / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "127.0.0.1:${HOST_PORT:-8000}:8000" in compose_text
+
+
 def test_quota_usage_requires_login():
     response = TestClient(main.app).get("/api/v1/youtube/quota-usage")
     assert response.status_code == 401

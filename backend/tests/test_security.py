@@ -82,18 +82,95 @@ def test_revoked_email_is_blocked_on_api_access(tmp_path: Path, monkeypatch):
     from backend.app.core.runtime_config import runtime_config
 
     runtime_config.set_allowed_emails(["admin@example.com"])
+    try:
+        request = Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/",
+                "headers": [(b"cookie", f"{dependencies.settings.session_cookie_name}={session_id}".encode())],
+                "query_string": b"",
+                "server": ("testserver", 80),
+            }
+        )
+        with pytest.raises(HTTPException) as error:
+            dependencies.get_authenticated_session(request)
+        assert error.value.status_code == 403
+        assert error.value.detail["code"] == "access_denied"
+    finally:
+        runtime_config.set_allowed_emails([])
 
-    request = Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": "/",
-            "headers": [(b"cookie", f"{dependencies.settings.session_cookie_name}={session_id}".encode())],
-            "query_string": b"",
-            "server": ("testserver", 80),
-        }
+
+def test_session_store_delete_by_email_is_case_insensitive_and_resilient(tmp_path: Path):
+    store = SessionStore(tmp_path / "sessions.json")
+    admin_sid = store.create(
+        {"credential_provider": "google_login", "user": {"sub": "s1", "email": "admin@example.com"}}
     )
-    with pytest.raises(HTTPException) as error:
-        dependencies.get_authenticated_session(request)
-    assert error.value.status_code == 403
-    assert error.value.detail["code"] == "access_denied"
+    revoked_1 = store.create(
+        {"credential_provider": "google_login", "user": {"sub": "s2", "email": "Revoked@Example.com"}}
+    )
+    revoked_2 = store.create(
+        {"credential_provider": "google_login", "user": {"sub": "s2", "email": "revoked@example.com"}}
+    )
+    store._data["sessions"]["corrupt"] = {"expires_at": "2099-01-01T00:00:00+00:00", "data": "not-fernet"}
+
+    deleted = store.delete_by_email("revoked@example.com")
+    assert deleted == 2
+    assert store.get(admin_sid) is not None
+    assert store.get(revoked_1) is None
+    assert store.get(revoked_2) is None
+
+
+def test_revoked_user_blocked_on_auth_user_and_callback_before_token_refresh(tmp_path: Path, monkeypatch):
+    from backend.app.api import auth as auth_api
+    from backend.app.core.config import Settings, settings_context
+    from backend.app.core.runtime_config import RuntimeConfig
+    from backend.app.core.system_secrets import SystemSecretsManager
+    from backend.app.main import create_app
+
+    subdir = tmp_path / "revoked-auth"
+    runtime = RuntimeConfig(subdir / "runtime.json")
+    runtime.set_allowed_emails(["admin@example.com"])
+    config = Settings(
+        _env_file=None,
+        runtime_store=runtime,
+        secrets_store=SystemSecretsManager(subdir),
+        PUBLIC_BASE_URL="http://localhost:8000",
+        GOOGLE_CLIENT_ID="client-id",
+        GOOGLE_CLIENT_SECRET="client-secret",
+    )
+    sessions = SessionStore(subdir / "sessions.json", encryption_key=config.CREDENTIAL_ENCRYPTION_KEY)
+    creds = CredentialStore(subdir / "creds.json", encryption_key=config.CREDENTIAL_ENCRYPTION_KEY)
+    revoked_user = {"sub": "revoked-sub", "email": "revoked@example.com"}
+    creds.save_google_connection({"token": "tok", "user": revoked_user}, owner_sub="revoked-sub")
+    sid = sessions.create({"credential_provider": "google_login", "user": revoked_user})
+
+    monkeypatch.setattr(
+        auth_api,
+        "get_login_credentials",
+        lambda _sid: pytest.fail("get_login_credentials must not run for revoked allowlist email"),
+    )
+
+    from fastapi.testclient import TestClient
+
+    client = TestClient(create_app(app_settings=config, session_store=sessions, credential_store=creds))
+    client.cookies.set(config.session_cookie_name, sid)
+    user_resp = client.get("/api/v1/auth/user")
+    assert user_resp.status_code == 200
+    assert user_resp.json()["authenticated"] is False
+
+    with settings_context(config):
+        flow_cookie = sign_timed_data(
+            {"flow_type": auth_api.SHEETS_FLOW, "state": "s", "code_verifier": "v", "session_id": sid},
+            salt=GOOGLE_OAUTH_STATE_SALT,
+        )
+    monkeypatch.setattr(
+        auth_api,
+        "exchange_code_for_tokens",
+        lambda **kwargs: {"token": "sheets-tok", "user": revoked_user},
+    )
+    client.cookies.set(config.oauth_flow_cookie_name, flow_cookie)
+    cb_resp = client.get("/api/v1/auth/callback", params={"code": "c", "state": "s"}, follow_redirects=False)
+    assert cb_resp.status_code == 307
+    assert "sheets_auth_error=" in cb_resp.headers["location"]
+    assert creds.get_sheets_credentials("revoked-sub") is None

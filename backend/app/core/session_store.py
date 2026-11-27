@@ -39,6 +39,8 @@ class SessionStore:
     ):
         self._path = path
         self._lock = RLock()
+        self._deferred = defer_encryption_key
+        self._fernet_cache: dict[str, Any] = {}
         if defer_encryption_key and encryption_key is not None:
             raise ValueError("deferred encryption cannot use an explicit key")
         if not defer_encryption_key and encryption_key is None:
@@ -55,10 +57,19 @@ class SessionStore:
 
     def _get_fernet(self):
         with self._lock:
-            if self._fernet is None:
-                settings.initialize_keys()
-                self._fernet = derive_fernet(settings.CREDENTIAL_ENCRYPTION_KEY)
-            return self._fernet
+            if self._fernet is not None:
+                return self._fernet
+            config = get_settings(settings)
+            config.initialize_keys()
+            key = config.CREDENTIAL_ENCRYPTION_KEY
+            if not self._deferred:
+                self._fernet = derive_fernet(key)
+                return self._fernet
+            fernet = self._fernet_cache.get(key)
+            if fernet is None:
+                fernet = derive_fernet(key)
+                self._fernet_cache[key] = fernet
+            return fernet
 
     def _load(self) -> None:
         with self._lock:
@@ -148,6 +159,39 @@ class SessionStore:
             self._ensure_loaded()
             self._data["sessions"].pop(session_id, None)
             self._save()
+
+    def delete_by_email(self, email: str) -> int:
+        """Delete all active sessions belonging to the given email address."""
+        target = str(email or "").strip().casefold()
+        if not target:
+            return 0
+        with self._lock:
+            self._ensure_loaded()
+            self._maybe_purge_expired()
+            fernet = self._get_fernet()
+            to_delete: list[str] = []
+            for session_id, record in self._data["sessions"].items():
+                if not isinstance(record, dict):
+                    continue
+                encrypted = record.get("data")
+                if not isinstance(encrypted, str):
+                    continue
+                try:
+                    payload = fernet.decrypt(encrypted.encode("ascii"))
+                    data = json.loads(payload.decode("utf-8"))
+                except (InvalidToken, ValueError, json.JSONDecodeError, RuntimeError):
+                    continue
+                if not isinstance(data, dict):
+                    continue
+                user = data.get("user") if isinstance(data.get("user"), dict) else {}
+                session_email = str(user.get("email") or "").strip().casefold()
+                if session_email == target:
+                    to_delete.append(session_id)
+            if to_delete:
+                for session_id in to_delete:
+                    self._data["sessions"].pop(session_id, None)
+                self._save()
+            return len(to_delete)
 
 
 session_store = SessionStore(defer_encryption_key=True)

@@ -132,7 +132,7 @@ async def security_headers(request, call_next):
         "media-src 'self' data: blob:; "
         "style-src 'self' 'unsafe-inline'; script-src 'self'",
     )
-    if get_settings(settings).is_production:
+    if get_settings(settings).is_strict_security:
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     cache_control = frontend_cache_control(request.url.path, response.headers.get("content-type"))
     if cache_control:
@@ -312,7 +312,7 @@ def create_app(
     application.middleware("http")(security_headers)
     application.get("/api/v1/health")(health_check)
     origins = {config.frontend_url, config.base_url}
-    if not config.is_production:
+    if not config.is_strict_security:
         origins.update(
             {
                 "http://localhost:3000",

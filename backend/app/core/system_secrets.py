@@ -41,6 +41,7 @@ SECRET_FIELDS = {
     "youtube_primary_client_secret",
     "youtube_secondary_client_secret",
 }
+MAX_SETUP_PIN_ATTEMPTS = 5
 
 
 def _derive_fernet(key_material: str) -> Fernet:
@@ -57,6 +58,23 @@ def mask_secret(value: str) -> str:
     if len(raw) <= 14:
         return f"{raw[:3]}****{raw[-3:]}"
     return f"{raw[:6]}****{raw[-4:]}"
+
+
+def resolve_secret_update(raw_value: Any, current_secret: str = "") -> Optional[str]:
+    """Validate and resolve a secret update payload value.
+
+    Returns ``None`` when the caller sent back the unchanged masked value of
+    ``current_secret`` (meaning keep as-is), ``""`` for explicit clear, or the
+    cleaned plaintext secret. Raises ``ValueError`` for any other masked string.
+    """
+    clean = str(raw_value if raw_value is not None else "").strip()
+    if clean == "":
+        return ""
+    if current_secret and clean == mask_secret(current_secret):
+        return None
+    if "****" in clean:
+        raise ValueError("請輸入完整的 OAuth 密鑰，勿傳入遮罩字串。")
+    return clean
 
 
 def _secure_file_permissions(path: Path) -> None:
@@ -83,6 +101,8 @@ class SystemSecretsManager:
         self._master_encryption_key: Optional[str] = None
         self._credentials_cache: Optional[Dict[str, str]] = None
         self._setup_pin: Optional[str] = None
+        self._pin_attempts_file = self._pin_file.with_name(f"{self._pin_file.name}.attempts")
+        self._setup_pin_failures: int = 0
 
     def get_or_create_master_keys(self, env_secret_key: str = "", env_encryption_key: str = "") -> Tuple[str, str]:
         """Resolve persistent master keys from env, existing file, or auto-generation."""
@@ -140,7 +160,7 @@ class SystemSecretsManager:
         _, encryption_key = self.get_or_create_master_keys()
         return _derive_fernet(encryption_key)
 
-    def get_credentials(self) -> Dict[str, str]:
+    def get_credentials(self, *, ignore_decrypt_errors: bool = False) -> Dict[str, str]:
         """Return decrypted OAuth client credentials from persistent store."""
         with self._lock:
             if self._credentials_cache is not None:
@@ -156,6 +176,7 @@ class SystemSecretsManager:
             try:
                 fernet = self._get_fernet()
                 decrypted: Dict[str, str] = {}
+                had_decrypt_error = False
                 for field in OAUTH_CREDENTIAL_FIELDS:
                     raw_val = data.get(field, "")
                     if not raw_val:
@@ -166,12 +187,21 @@ class SystemSecretsManager:
                             token = raw_val[4:].encode("utf-8")
                             decrypted[field] = fernet.decrypt(token).decode("utf-8")
                         except (InvalidToken, ValueError):
-                            logger.error("Failed to decrypt secret field: %s", field)
-                            raise RuntimeError("Cannot decrypt stored system credentials") from None
+                            if ignore_decrypt_errors:
+                                logger.warning(
+                                    "Failed to decrypt secret field %s; treating as empty for recovery/display",
+                                    field,
+                                )
+                                decrypted[field] = ""
+                                had_decrypt_error = True
+                            else:
+                                logger.error("Failed to decrypt secret field: %s", field)
+                                raise RuntimeError("Cannot decrypt stored system credentials") from None
                     else:
                         decrypted[field] = str(raw_val)
 
-                self._credentials_cache = decrypted
+                if not had_decrypt_error:
+                    self._credentials_cache = decrypted
                 return dict(decrypted)
             except (OSError, json.JSONDecodeError) as exc:
                 logger.error("Failed to load system credentials: %s", type(exc).__name__)
@@ -180,7 +210,7 @@ class SystemSecretsManager:
     def update_credentials(self, updates: Dict[str, Any]) -> Dict[str, str]:
         """Encrypt and persist updated system OAuth credentials."""
         with self._lock:
-            current = self.get_credentials()
+            current = self.get_credentials(ignore_decrypt_errors=True)
             for key, val in updates.items():
                 if key in OAUTH_CREDENTIAL_FIELDS and val is not None:
                     current[key] = str(val).strip()
@@ -209,78 +239,143 @@ class SystemSecretsManager:
 
             return dict(current)
 
-    def get_masked_credentials(self) -> Dict[str, Any]:
+    def get_masked_credentials(self, effective_settings: Any = None) -> Dict[str, Any]:
         """Return credentials masked for safe display in the Web UI."""
-        creds = self.get_credentials()
-        return {
-            "google": {
-                "client_id": creds.get("google_client_id", ""),
-                "has_client_secret": bool(creds.get("google_client_secret")),
-                "client_secret_masked": mask_secret(creds.get("google_client_secret", "")),
-                "configured": bool(creds.get("google_client_id") and creds.get("google_client_secret")),
-            },
-            "youtube_primary": {
-                "client_id": creds.get("youtube_primary_client_id", ""),
-                "has_client_secret": bool(creds.get("youtube_primary_client_secret")),
-                "client_secret_masked": mask_secret(creds.get("youtube_primary_client_secret", "")),
-                "configured": bool(
-                    creds.get("youtube_primary_client_id") and creds.get("youtube_primary_client_secret")
-                ),
-            },
-            "youtube_secondary": {
-                "client_id": creds.get("youtube_secondary_client_id", ""),
-                "has_client_secret": bool(creds.get("youtube_secondary_client_secret")),
-                "client_secret_masked": mask_secret(creds.get("youtube_secondary_client_secret", "")),
-                "configured": bool(
-                    creds.get("youtube_secondary_client_id") and creds.get("youtube_secondary_client_secret")
-                ),
-            },
-        }
+        stored = self.get_credentials(ignore_decrypt_errors=True)
+        groups = (
+            ("google", "google_client_id", "google_client_secret", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"),
+            (
+                "youtube_primary",
+                "youtube_primary_client_id",
+                "youtube_primary_client_secret",
+                "YOUTUBE_OAUTH_PRIMARY_CLIENT_ID",
+                "YOUTUBE_OAUTH_PRIMARY_CLIENT_SECRET",
+            ),
+            (
+                "youtube_secondary",
+                "youtube_secondary_client_id",
+                "youtube_secondary_client_secret",
+                "YOUTUBE_OAUTH_SECONDARY_CLIENT_ID",
+                "YOUTUBE_OAUTH_SECONDARY_CLIENT_SECRET",
+            ),
+        )
+        masked: Dict[str, Any] = {}
+        for group_name, id_key, secret_key, env_id_attr, env_secret_attr in groups:
+            stored_id = str(stored.get(id_key, "") or "").strip()
+            stored_secret = str(stored.get(secret_key, "") or "").strip()
+            if effective_settings is not None:
+                eff_id = str(getattr(effective_settings, env_id_attr, "") or "").strip()
+                eff_secret = str(getattr(effective_settings, env_secret_attr, "") or "").strip()
+                source = "dynamic" if (stored_id or stored_secret) else ("env" if (eff_id or eff_secret) else "none")
+            else:
+                eff_id = stored_id
+                eff_secret = stored_secret
+                source = "dynamic" if (eff_id or eff_secret) else "none"
+            masked[group_name] = {
+                "client_id": eff_id,
+                "has_client_secret": bool(eff_secret),
+                "client_secret_masked": mask_secret(eff_secret),
+                "configured": bool(eff_id and eff_secret),
+                "source": source,
+            }
+        return masked
 
     # Setup PIN & Initial Onboarding
-    def get_or_create_setup_pin(self) -> str:
-        """Return the active one-time Setup PIN, generating one if not already set."""
-        with self._lock:
-            if self._setup_pin:
-                return self._setup_pin
+    def _read_active_setup_pin_unlocked(self) -> str:
+        if self._setup_pin:
+            return self._setup_pin
+        if self._pin_file.is_file():
+            pin = self._pin_file.read_text(encoding="utf-8").strip()
+            if pin:
+                self._setup_pin = pin
+                return pin
+        return ""
 
-            if self._pin_file.is_file():
-                try:
-                    pin = self._pin_file.read_text(encoding="utf-8").strip()
-                    if pin:
-                        self._setup_pin = pin
-                        return pin
-                except OSError:
-                    raise
+    def _read_setup_pin_failures_unlocked(self) -> int:
+        if self._setup_pin_failures > 0:
+            return self._setup_pin_failures
+        if self._pin_attempts_file.is_file():
+            try:
+                raw = self._pin_attempts_file.read_text(encoding="utf-8").strip()
+                parsed = int(raw)
+                if parsed > 0:
+                    self._setup_pin_failures = parsed
+                    return parsed
+            except (OSError, ValueError):
+                return 0
+        return 0
 
-            pin = f"{secrets.randbelow(900000) + 100000}"
+    def _write_setup_pin_failures_unlocked(self, count: int) -> None:
+        self._setup_pin_failures = max(0, int(count))
+        if self._setup_pin_failures <= 0:
+            with contextlib.suppress(OSError):
+                self._pin_attempts_file.unlink(missing_ok=True)
+            return
+        try:
             self._data_dir.mkdir(parents=True, exist_ok=True)
-            self._pin_file.write_text(pin, encoding="utf-8")
-            _secure_file_permissions(self._pin_file)
-            self._setup_pin = pin
+            self._pin_attempts_file.write_text(str(self._setup_pin_failures), encoding="utf-8")
+            _secure_file_permissions(self._pin_attempts_file)
+        except OSError:
+            pass
 
-            logger.warning("=" * 66)
+    def _generate_and_persist_setup_pin_unlocked(self, *, previous_pin: str = "", rotated: bool = False) -> str:
+        pin = f"{secrets.randbelow(900000) + 100000}"
+        while previous_pin and pin == previous_pin:
+            pin = f"{secrets.randbelow(900000) + 100000}"
+        self._data_dir.mkdir(parents=True, exist_ok=True)
+        self._pin_file.write_text(pin, encoding="utf-8")
+        _secure_file_permissions(self._pin_file)
+        self._setup_pin = pin
+        self._write_setup_pin_failures_unlocked(0)
+
+        logger.warning("=" * 66)
+        if rotated:
+            logger.warning("[Toolbox Setup] Setup PIN invalidated after too many failed attempts.")
+            logger.warning("[Toolbox Setup] Rotated One-time Setup PIN: %s", pin)
+        else:
             logger.warning("[Toolbox Setup] Google OAuth is not configured.")
             logger.warning("[Toolbox Setup] Complete setup at the web interface: /setup")
             logger.warning("[Toolbox Setup] One-time Setup PIN: %s", pin)
-            logger.warning("=" * 66)
-            return pin
+        logger.warning("=" * 66)
+        return pin
+
+    def get_or_create_setup_pin(self) -> str:
+        """Return the active one-time Setup PIN, generating one if not already set."""
+        with self._lock:
+            existing = self._read_active_setup_pin_unlocked()
+            if existing:
+                return existing
+            return self._generate_and_persist_setup_pin_unlocked()
 
     def verify_setup_pin(self, pin: str) -> bool:
-        """Verify the user-provided setup PIN using constant-time comparison."""
+        """Verify the user-provided setup PIN against an existing PIN only."""
         with self._lock:
-            expected = self.get_or_create_setup_pin()
-            if not expected or not pin:
+            expected = self._read_active_setup_pin_unlocked()
+            if not expected:
                 return False
-            return secrets.compare_digest(str(pin).strip(), expected.strip())
+            candidate = str(pin or "").strip()
+            if candidate and secrets.compare_digest(candidate, expected.strip()):
+                self._write_setup_pin_failures_unlocked(0)
+                return True
+            failures = self._read_setup_pin_failures_unlocked() + 1
+            if failures >= MAX_SETUP_PIN_ATTEMPTS:
+                logger.warning("Setup PIN verification failed %d times; rotating Setup PIN", failures)
+                self._generate_and_persist_setup_pin_unlocked(previous_pin=expected, rotated=True)
+                return False
+            self._write_setup_pin_failures_unlocked(failures)
+            return False
 
     def clear_setup_pin(self) -> None:
         """Clear the setup PIN once configuration is completed."""
         with self._lock:
             self._setup_pin = None
+            self._setup_pin_failures = 0
             if self._pin_file.is_file():
                 with contextlib.suppress(OSError):
                     self._pin_file.unlink(missing_ok=True)
+            if self._pin_attempts_file.is_file():
+                with contextlib.suppress(OSError):
+                    self._pin_attempts_file.unlink(missing_ok=True)
 
 
 system_secrets = SystemSecretsManager()

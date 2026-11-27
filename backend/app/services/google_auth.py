@@ -296,6 +296,23 @@ def _needs_refresh(credentials: Credentials) -> bool:
     return expiry - now <= GOOGLE_TOKEN_REFRESH_WINDOW
 
 
+def _safe_load_credentials(
+    loader: Callable[[], Optional[dict]],
+    *,
+    label: str,
+    owner_sub: str,
+) -> Optional[dict]:
+    try:
+        return loader()
+    except RuntimeError:
+        logger.warning(
+            "Stored %s credentials could not be decrypted for subject %s; reauthorization required",
+            label,
+            owner_sub,
+        )
+        return None
+
+
 def _refresh_credentials(
     token_dict: dict,
     *,
@@ -309,20 +326,40 @@ def _refresh_credentials(
         # Another request may have refreshed the persistent record while this
         # request was waiting for the lock. Always use the newest record.
         if credential_key == "youtube":
-            latest = store.get_youtube_credentials(owner_sub, slot=slot)
+            latest = _safe_load_credentials(
+                lambda: store.get_youtube_credentials(owner_sub, slot=slot),
+                label=f"youtube:{slot}",
+                owner_sub=owner_sub,
+            )
             public = store.get_youtube_public(owner_sub, slot=slot)
         elif credential_key == "ytmusic":
-            latest = store.get_ytmusic_credentials(owner_sub)
+            latest = _safe_load_credentials(
+                lambda: store.get_ytmusic_credentials(owner_sub),
+                label="ytmusic",
+                owner_sub=owner_sub,
+            )
             public = store.get_ytmusic_public(owner_sub)
         elif credential_key == "sheets":
-            latest = store.get_sheets_credentials(owner_sub)
+            latest = _safe_load_credentials(
+                lambda: store.get_sheets_credentials(owner_sub),
+                label="sheets",
+                owner_sub=owner_sub,
+            )
             public = store.get_sheets_public(owner_sub)
             if not latest:
                 credential_key = "google"
-                latest = store.get_google_credentials(owner_sub)
+                latest = _safe_load_credentials(
+                    lambda: store.get_google_credentials(owner_sub),
+                    label="google",
+                    owner_sub=owner_sub,
+                )
                 public = store.get_google_public(owner_sub)
         else:
-            latest = store.get_google_credentials(owner_sub)
+            latest = _safe_load_credentials(
+                lambda: store.get_google_credentials(owner_sub),
+                label="google",
+                owner_sub=owner_sub,
+            )
             public = store.get_google_public(owner_sub)
         active_dict = latest or token_dict
         purpose = "youtube" if credential_key == "youtube" else "login"
@@ -358,7 +395,12 @@ def _refresh_credentials(
             elif credential_key == "ytmusic":
                 get_credential_store(credential_store).save_ytmusic_connection(refreshed, owner_sub=owner_sub)
             elif credential_key == "sheets":
-                if get_credential_store(credential_store).get_sheets_credentials(owner_sub):
+                has_dedicated_sheets = _safe_load_credentials(
+                    lambda: get_credential_store(credential_store).get_sheets_credentials(owner_sub),
+                    label="sheets",
+                    owner_sub=owner_sub,
+                )
+                if has_dedicated_sheets:
                     get_credential_store(credential_store).save_sheets_connection(refreshed, owner_sub=owner_sub)
                 else:
                     get_credential_store(credential_store).save_google_connection(refreshed, owner_sub=owner_sub)
@@ -391,7 +433,12 @@ def _refresh_credentials(
                     requires_reauthorization=requires_reauthorization,
                 )
             elif credential_key == "sheets":
-                if get_credential_store(credential_store).get_sheets_credentials(owner_sub):
+                has_dedicated_sheets = _safe_load_credentials(
+                    lambda: get_credential_store(credential_store).get_sheets_credentials(owner_sub),
+                    label="sheets",
+                    owner_sub=owner_sub,
+                )
+                if has_dedicated_sheets:
                     get_credential_store(credential_store).mark_sheets_refresh_failed(
                         message, owner_sub=owner_sub, requires_reauthorization=requires_reauthorization
                     )
@@ -450,7 +497,11 @@ def get_login_credentials(session_id: Optional[str] = None) -> Optional[Credenti
     # a backend restart.
     if session_data.get("credential_provider") != "google_login" or not session_sub:
         return None
-    token_dict = get_credential_store(credential_store).get_google_credentials(session_sub)
+    token_dict = _safe_load_credentials(
+        lambda: get_credential_store(credential_store).get_google_credentials(session_sub),
+        label="google",
+        owner_sub=session_sub,
+    )
     if not token_dict or not token_dict.get("token"):
         return None
     credential_user = token_dict.get("user") if isinstance(token_dict.get("user"), dict) else {}
@@ -484,7 +535,7 @@ def _get_scoped_service_credentials(
     if not sub:
         return None
     # 1. Dedicated service credentials
-    token_dict = dedicated_getter(sub)
+    token_dict = _safe_load_credentials(lambda: dedicated_getter(sub), label=credential_key, owner_sub=sub)
     if token_dict and token_dict.get("token"):
         creds = build_credentials_from_dict(token_dict, credential_key=credential_key, owner_sub=sub)
         if creds and creds.valid and scope_checker(creds):
@@ -492,14 +543,22 @@ def _get_scoped_service_credentials(
 
     # 2. Fallback to youtube connection if checking ytmusic
     if credential_key == "ytmusic":
-        yt_dict = get_credential_store(credential_store).get_youtube_credentials(sub, slot="primary")
+        yt_dict = _safe_load_credentials(
+            lambda: get_credential_store(credential_store).get_youtube_credentials(sub, slot="primary"),
+            label="youtube:primary",
+            owner_sub=sub,
+        )
         if yt_dict and yt_dict.get("token"):
             creds = build_credentials_from_dict(yt_dict, credential_key="youtube", owner_sub=sub, slot="primary")
             if creds and creds.valid and scope_checker(creds):
                 return creds
 
     # 3. Fallback to legacy google login connection if it includes required scope
-    legacy_dict = get_credential_store(credential_store).get_google_credentials(sub)
+    legacy_dict = _safe_load_credentials(
+        lambda: get_credential_store(credential_store).get_google_credentials(sub),
+        label="google_fallback",
+        owner_sub=sub,
+    )
     if legacy_dict and legacy_dict.get("token"):
         creds = build_credentials_from_dict(legacy_dict, credential_key="google", owner_sub=sub)
         if creds and creds.valid and scope_checker(creds):
@@ -541,7 +600,11 @@ def get_youtube_credentials(session_id: Optional[str] = None, slot: str = "prima
     login_credentials = get_login_credentials(session_id)
     if not session_id or not login_credentials or not login_credentials.valid:
         return None
-    token_dict = get_credential_store(credential_store).get_youtube_credentials(owner_sub, slot=slot_name)
+    token_dict = _safe_load_credentials(
+        lambda: get_credential_store(credential_store).get_youtube_credentials(owner_sub, slot=slot_name),
+        label=f"youtube:{slot_name}",
+        owner_sub=owner_sub,
+    )
     if not token_dict or not token_dict.get("token"):
         return None
     return build_credentials_from_dict(

@@ -1,4 +1,5 @@
 import hashlib
+import ipaddress
 import secrets
 import threading
 import warnings
@@ -8,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -50,10 +51,26 @@ class YouTubeOAuthSlot:
 _settings_sync_lock = threading.RLock()
 
 
+def _parse_trusted_proxy_networks(value: str) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for raw_entry in str(value or "").split(","):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError as exc:
+            raise ValueError(f"Invalid TRUSTED_PROXY_IPS entry: {entry}") from exc
+    return tuple(networks)
+
+
 class Settings(BaseSettings):
     runtime_store: Any = Field(default=None, exclude=True, repr=False)
     secrets_store: Any = Field(default=None, exclude=True, repr=False)
     defer_key_initialization: bool = Field(default=False, exclude=True, repr=False)
+    _env_baseline: dict[str, Any] = PrivateAttr(default_factory=dict)
+    _last_synced_creds: set[str] = PrivateAttr(default_factory=set)
+    _last_synced_runtime: set[str] = PrivateAttr(default_factory=set)
 
     def get_runtime_store(self):
         from backend.app.core.runtime_config import runtime_config
@@ -74,6 +91,7 @@ class Settings(BaseSettings):
     PUBLIC_BASE_URL: str = ""
     FRONTEND_URL: str = ""
     TRUSTED_HOSTS: str = ""
+    TRUSTED_PROXY_IPS: str = ""
 
     # Access is intentionally single-admin. Keep this comma-separated so the
     # same .env works with pydantic-settings and Docker. This must stay in the
@@ -120,6 +138,7 @@ class Settings(BaseSettings):
         if self.ENVIRONMENT not in {"development", "test", "staging", "production"}:
             raise ValueError("ENVIRONMENT must be one of development, test, staging, or production")
 
+        _parse_trusted_proxy_networks(self.TRUSTED_PROXY_IPS)
         self.YOUTUBE_OAUTH_DEFAULT_SLOT = normalize_youtube_slot(self.YOUTUBE_OAUTH_DEFAULT_SLOT)
         self._validate_oauth_pair(
             "GOOGLE_CLIENT_ID",
@@ -174,6 +193,20 @@ class Settings(BaseSettings):
                 self.FRONTEND_URL = "http://localhost:3000"
             else:
                 self.FRONTEND_URL = self.PUBLIC_BASE_URL
+
+        self._env_baseline = {
+            "GOOGLE_CLIENT_ID": self.GOOGLE_CLIENT_ID,
+            "GOOGLE_CLIENT_SECRET": self.GOOGLE_CLIENT_SECRET,
+            "YOUTUBE_OAUTH_PRIMARY_CLIENT_ID": self.YOUTUBE_OAUTH_PRIMARY_CLIENT_ID,
+            "YOUTUBE_OAUTH_PRIMARY_CLIENT_SECRET": self.YOUTUBE_OAUTH_PRIMARY_CLIENT_SECRET,
+            "YOUTUBE_OAUTH_SECONDARY_CLIENT_ID": self.YOUTUBE_OAUTH_SECONDARY_CLIENT_ID,
+            "YOUTUBE_OAUTH_SECONDARY_CLIENT_SECRET": self.YOUTUBE_OAUTH_SECONDARY_CLIENT_SECRET,
+            "YOUTUBE_OAUTH_PRIMARY_LABEL": self.YOUTUBE_OAUTH_PRIMARY_LABEL,
+            "YOUTUBE_OAUTH_SECONDARY_LABEL": self.YOUTUBE_OAUTH_SECONDARY_LABEL,
+            "YOUTUBE_OAUTH_SECONDARY_ENABLED": self.YOUTUBE_OAUTH_SECONDARY_ENABLED,
+            "YOUTUBE_OAUTH_DEFAULT_SLOT": self.YOUTUBE_OAUTH_DEFAULT_SLOT,
+            "ALLOW_NEW_USERS": self.ALLOW_NEW_USERS,
+        }
 
         # Explicitly validate if caller passed empty keys in production
         if "SECRET_KEY" in self.model_fields_set and not self.SECRET_KEY and self.is_production:
@@ -256,15 +289,22 @@ class Settings(BaseSettings):
         return self.ENVIRONMENT == "production"
 
     @property
+    def is_strict_security(self) -> bool:
+        return self.ENVIRONMENT in {"staging", "production"} or self.scheme == "https"
+
+    @property
+    def trusted_proxy_networks(self) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+        return _parse_trusted_proxy_networks(self.TRUSTED_PROXY_IPS)
+
+    @property
     def cookie_secure(self) -> bool:
-        return self.is_production or urlparse(self.PUBLIC_BASE_URL).scheme.lower() == "https"
+        return self.is_strict_security
 
     @property
     def allowlist_required(self) -> bool:
-        # HTTPS deployments are treated conservatively even when an operator
-        # has not opted into the full production profile yet. This is a safety
-        # gate, not environment detection; ``is_production`` remains explicit.
-        return self.is_production or self.scheme == "https"
+        # Staging and HTTPS deployments are treated conservatively alongside
+        # production. This is a safety gate; ``is_production`` remains explicit.
+        return self.is_strict_security
 
     @property
     def scheme(self) -> str:
@@ -285,17 +325,17 @@ class Settings(BaseSettings):
             return configured
         parsed = urlparse(self.PUBLIC_BASE_URL)
         defaults = {parsed.hostname} if parsed.hostname else set()
-        if not self.is_production:
+        if not self.is_strict_security:
             defaults.update({"localhost", "127.0.0.1", "0.0.0.0", "testserver"})
         return tuple(sorted(defaults)) or ("localhost",)
 
     @property
     def session_cookie_name(self) -> str:
-        return "__Host-creator_tools_session" if self.is_production else "creator_tools_session"
+        return "__Host-creator_tools_session" if self.cookie_secure else "creator_tools_session"
 
     @property
     def oauth_flow_cookie_name(self) -> str:
-        return "__Host-creator_tools_oauth_flow" if self.is_production else "creator_tools_oauth_flow"
+        return "__Host-creator_tools_oauth_flow" if self.cookie_secure else "creator_tools_oauth_flow"
 
     @property
     def allowed_google_emails(self) -> frozenset[str]:
@@ -369,39 +409,70 @@ class Settings(BaseSettings):
             runtime_config = self.get_runtime_store()
             system_secrets = self.get_secrets_store()
 
-            creds = system_secrets.get_credentials()
+            creds = system_secrets.get_credentials(ignore_decrypt_errors=True)
+            cred_mappings = (
+                ("google_client_id", "GOOGLE_CLIENT_ID"),
+                ("google_client_secret", "GOOGLE_CLIENT_SECRET"),
+                ("youtube_primary_client_id", "YOUTUBE_OAUTH_PRIMARY_CLIENT_ID"),
+                ("youtube_primary_client_secret", "YOUTUBE_OAUTH_PRIMARY_CLIENT_SECRET"),
+                ("youtube_secondary_client_id", "YOUTUBE_OAUTH_SECONDARY_CLIENT_ID"),
+                ("youtube_secondary_client_secret", "YOUTUBE_OAUTH_SECONDARY_CLIENT_SECRET"),
+            )
+            for cred_key, attr in cred_mappings:
+                dyn_val = creds.get(cred_key, "")
+                if dyn_val:
+                    setattr(self, attr, dyn_val)
+                    self._last_synced_creds.add(attr)
+                elif attr in self._last_synced_creds:
+                    setattr(self, attr, self._env_baseline.get(attr, ""))
+                    self._last_synced_creds.discard(attr)
 
-            if creds.get("google_client_id"):
-                self.GOOGLE_CLIENT_ID = creds["google_client_id"]
-            if creds.get("google_client_secret"):
-                self.GOOGLE_CLIENT_SECRET = creds["google_client_secret"]
-            if creds.get("youtube_primary_client_id"):
-                self.YOUTUBE_OAUTH_PRIMARY_CLIENT_ID = creds["youtube_primary_client_id"]
-            if creds.get("youtube_primary_client_secret"):
-                self.YOUTUBE_OAUTH_PRIMARY_CLIENT_SECRET = creds["youtube_primary_client_secret"]
-            if creds.get("youtube_secondary_client_id"):
-                self.YOUTUBE_OAUTH_SECONDARY_CLIENT_ID = creds["youtube_secondary_client_id"]
-            if creds.get("youtube_secondary_client_secret"):
-                self.YOUTUBE_OAUTH_SECONDARY_CLIENT_SECRET = creds["youtube_secondary_client_secret"]
-
-            sec_enabled = runtime_config.get("youtube_oauth_secondary_enabled", None)
+            sec_enabled = runtime_config.get_persisted("youtube_oauth_secondary_enabled", None)
             if sec_enabled is not None:
                 self.YOUTUBE_OAUTH_SECONDARY_ENABLED = bool(sec_enabled)
-            pri_label = runtime_config.get("youtube_oauth_primary_label", None)
+                self._last_synced_runtime.add("YOUTUBE_OAUTH_SECONDARY_ENABLED")
+            elif "YOUTUBE_OAUTH_SECONDARY_ENABLED" in self._last_synced_runtime:
+                self.YOUTUBE_OAUTH_SECONDARY_ENABLED = bool(
+                    self._env_baseline.get("YOUTUBE_OAUTH_SECONDARY_ENABLED", False)
+                )
+                self._last_synced_runtime.discard("YOUTUBE_OAUTH_SECONDARY_ENABLED")
+
+            pri_label = runtime_config.get_persisted("youtube_oauth_primary_label", None)
             if pri_label:
                 self.YOUTUBE_OAUTH_PRIMARY_LABEL = str(pri_label)
-            sec_label = runtime_config.get("youtube_oauth_secondary_label", None)
+                self._last_synced_runtime.add("YOUTUBE_OAUTH_PRIMARY_LABEL")
+            elif "YOUTUBE_OAUTH_PRIMARY_LABEL" in self._last_synced_runtime:
+                self.YOUTUBE_OAUTH_PRIMARY_LABEL = str(self._env_baseline.get("YOUTUBE_OAUTH_PRIMARY_LABEL", "Primary"))
+                self._last_synced_runtime.discard("YOUTUBE_OAUTH_PRIMARY_LABEL")
+
+            sec_label = runtime_config.get_persisted("youtube_oauth_secondary_label", None)
             if sec_label:
                 self.YOUTUBE_OAUTH_SECONDARY_LABEL = str(sec_label)
-            def_slot = runtime_config.get("youtube_oauth_default_slot", None)
+                self._last_synced_runtime.add("YOUTUBE_OAUTH_SECONDARY_LABEL")
+            elif "YOUTUBE_OAUTH_SECONDARY_LABEL" in self._last_synced_runtime:
+                self.YOUTUBE_OAUTH_SECONDARY_LABEL = str(
+                    self._env_baseline.get("YOUTUBE_OAUTH_SECONDARY_LABEL", "Secondary")
+                )
+                self._last_synced_runtime.discard("YOUTUBE_OAUTH_SECONDARY_LABEL")
+
+            def_slot = runtime_config.get_persisted("youtube_oauth_default_slot", None)
             if def_slot:
                 try:
                     self.YOUTUBE_OAUTH_DEFAULT_SLOT = normalize_youtube_slot(def_slot)
+                    self._last_synced_runtime.add("YOUTUBE_OAUTH_DEFAULT_SLOT")
                 except ValueError:
                     pass
-            allow_users = runtime_config.get("allow_new_users", None)
+            elif "YOUTUBE_OAUTH_DEFAULT_SLOT" in self._last_synced_runtime:
+                self.YOUTUBE_OAUTH_DEFAULT_SLOT = str(self._env_baseline.get("YOUTUBE_OAUTH_DEFAULT_SLOT", "primary"))
+                self._last_synced_runtime.discard("YOUTUBE_OAUTH_DEFAULT_SLOT")
+
+            allow_users = runtime_config.get_persisted("allow_new_users", None)
             if allow_users is not None:
                 self.ALLOW_NEW_USERS = bool(allow_users)
+                self._last_synced_runtime.add("ALLOW_NEW_USERS")
+            elif "ALLOW_NEW_USERS" in self._last_synced_runtime:
+                self.ALLOW_NEW_USERS = bool(self._env_baseline.get("ALLOW_NEW_USERS", True))
+                self._last_synced_runtime.discard("ALLOW_NEW_USERS")
 
 
 _request_settings: ContextVar[Settings | None] = ContextVar("settings", default=None)

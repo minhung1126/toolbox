@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 
 from backend.app.api.ffmpeg_generator import (
@@ -5,9 +7,21 @@ from backend.app.api.ffmpeg_generator import (
     safe_quote_filename,
     seconds_to_hhmmss,
 )
-from backend.app.main import app
+from backend.app.core.dependencies import require_login_credentials
+from backend.app.main import create_app
 from backend.app.tools.builtin.ffmpeg_generator import FfmpegGeneratorPlugin
 from backend.app.tools.registry import tool_registry
+
+
+def _authed_client():
+    return TestClient(create_app(dependency_overrides={require_login_credentials: lambda: SimpleNamespace(valid=True)}))
+
+
+def test_ffmpeg_endpoints_require_authentication():
+    client = TestClient(create_app())
+    assert client.get("/api/v1/ffmpeg-generator/presets").status_code == 401
+    assert client.post("/api/v1/ffmpeg-generator/parse-time", json={"seconds": 10}).status_code == 401
+    assert client.post("/api/v1/ffmpeg-generator/build", json={}).status_code == 401
 
 
 def test_ffmpeg_generator_plugin_metadata():
@@ -38,7 +52,7 @@ def test_safe_quote_filename():
 
 
 def test_ffmpeg_presets_api():
-    client = TestClient(app)
+    client = _authed_client()
     resp = client.get("/api/v1/ffmpeg-generator/presets", headers={"Origin": "http://localhost:3000"})
     assert resp.status_code == 200
     presets = resp.json()
@@ -52,7 +66,7 @@ def test_ffmpeg_presets_api():
 
 
 def test_ffmpeg_parse_time_api():
-    client = TestClient(app)
+    client = _authed_client()
     # Valid string
     resp = client.post(
         "/api/v1/ffmpeg-generator/parse-time",
@@ -85,7 +99,7 @@ def test_ffmpeg_parse_time_api():
 
 
 def test_ffmpeg_build_command_stream_copy():
-    client = TestClient(app)
+    client = _authed_client()
     payload = {
         "input_file": "my test video.mp4",
         "output_file": "output.mp4",
@@ -112,7 +126,7 @@ def test_ffmpeg_build_command_stream_copy():
 
 
 def test_ffmpeg_build_command_reencode():
-    client = TestClient(app)
+    client = _authed_client()
     payload = {
         "input_file": "clip.mp4",
         "output_file": "encoded.mp4",

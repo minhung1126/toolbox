@@ -163,19 +163,27 @@ def _disconnect_service(request: Request, clear_fn, service_name: str) -> dict:
 
 
 def _validate_callback_session(request: Request, flow_state: Optional[dict]) -> Optional[str]:
-    session_id = request.cookies.get(get_settings(settings).session_cookie_name)
+    config = get_settings(settings)
+    session_id = request.cookies.get(config.session_cookie_name)
     expected_session_id = (flow_state or {}).get("session_id")
     session_data = get_session_store(session_store).get(session_id) if session_id else None
-    owner_sub = str(((session_data or {}).get("user") or {}).get("sub") or "").strip()
-    login_credentials = get_login_credentials(session_id) if session_id else None
+    session_user = (session_data or {}).get("user") if isinstance((session_data or {}).get("user"), dict) else {}
+    owner_sub = str(session_user.get("sub") or "").strip()
+    email = str(session_user.get("email") or "").strip().casefold()
     if (
         not session_id
         or not expected_session_id
         or not secrets.compare_digest(session_id, str(expected_session_id))
         or not owner_sub
-        or not login_credentials
-        or not login_credentials.valid
     ):
+        return None
+    if (config.allowed_google_emails or config.allowlist_required or email) and not config.is_google_email_allowed(
+        email
+    ):
+        logger.warning("Revoked or disallowed user attempted OAuth callback: %s", email)
+        return None
+    login_credentials = get_login_credentials(session_id)
+    if not login_credentials or not login_credentials.valid:
         return None
     return owner_sub
 
@@ -527,9 +535,25 @@ def google_oauth_callback(
 @router.get("/user")
 def get_user_status(request: Request):
     """Check control-panel login, sheets, ytmusic, and YouTube authorization status."""
-    session_id = request.cookies.get(get_settings(settings).session_cookie_name)
+    config = get_settings(settings)
+    session_id = request.cookies.get(config.session_cookie_name)
     session_data = get_session_store(session_store).get(session_id) or {}
-    session_sub = str(((session_data.get("user") or {}).get("sub") or "")).strip() or None
+    session_user = session_data.get("user") if isinstance(session_data.get("user"), dict) else {}
+    session_sub = str(session_user.get("sub") or "").strip() or None
+    if session_sub:
+        session_email = str(session_user.get("email") or "").strip().casefold()
+        if not session_email:
+            public_google = get_credential_store(credential_store).get_google_public(session_sub) or {}
+            session_email = str((public_google.get("user") or {}).get("email") or "").strip().casefold()
+        if (
+            config.allowed_google_emails or config.allowlist_required or session_email
+        ) and not config.is_google_email_allowed(session_email):
+            logger.warning("Revoked or disallowed user checked /auth/user: %s", session_email)
+            return {
+                "authenticated": False,
+                "user": None,
+                "youtube": {"slots": {}},
+            }
     creds = get_login_credentials(session_id) if session_sub else None
     if not session_sub or not creds or not creds.valid:
         return {

@@ -60,6 +60,35 @@ describe('SystemSettingsPage', () => {
     expect(screen.getByText('不可自刪')).toBeInTheDocument();
   });
 
+  it('displays .env credential source when configured via environment variables', async () => {
+    systemSettingsApi.getCredentials.mockResolvedValueOnce({
+      status: 'success',
+      credentials: {
+        google: {
+          client_id: 'env-client.apps.googleusercontent.com',
+          has_client_secret: true,
+          client_secret_masked: 'GOCSPX****env1',
+          configured: true,
+          source: 'env',
+        },
+      },
+      public_base_url: 'https://toolbox.example.com',
+      redirect_uri: 'https://toolbox.example.com/api/v1/auth/callback',
+    });
+    systemSettingsApi.getAllowlist.mockResolvedValueOnce({
+      allowed_emails: ['admin@example.com'],
+      current_user_email: 'admin@example.com',
+      allowlist_required: true,
+      allow_new_users: true,
+    });
+
+    renderPage();
+
+    await screen.findByText(/已配置並正常運作（來源：\.env 環境變數）/);
+    expect(screen.getByText('env-client.apps.googleusercontent.com')).toBeInTheDocument();
+    expect(screen.getByText('GOCSPX****env1')).toBeInTheDocument();
+  });
+
   it('allows editing and updating Google OAuth credentials', async () => {
     systemSettingsApi.getCredentials.mockResolvedValueOnce({
       status: 'success',

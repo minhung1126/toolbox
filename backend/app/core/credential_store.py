@@ -69,6 +69,8 @@ class CredentialStore:
     ):
         self._path = path
         self._lock = RLock()
+        self._deferred = defer_encryption_key
+        self._fernet_cache: dict[str, Any] = {}
         if defer_encryption_key and encryption_key is not None:
             raise ValueError("deferred encryption cannot use an explicit key")
         if not defer_encryption_key and encryption_key is None:
@@ -84,10 +86,19 @@ class CredentialStore:
 
     def _get_fernet(self):
         with self._lock:
-            if self._fernet is None:
-                settings.initialize_keys()
-                self._fernet = derive_fernet(settings.CREDENTIAL_ENCRYPTION_KEY)
-            return self._fernet
+            if self._fernet is not None:
+                return self._fernet
+            config = get_settings(settings)
+            config.initialize_keys()
+            key = config.CREDENTIAL_ENCRYPTION_KEY
+            if not self._deferred:
+                self._fernet = derive_fernet(key)
+                return self._fernet
+            fernet = self._fernet_cache.get(key)
+            if fernet is None:
+                fernet = derive_fernet(key)
+                self._fernet_cache[key] = fernet
+            return fernet
 
     def _load(self) -> None:
         with self._lock:
@@ -184,9 +195,17 @@ class CredentialStore:
             users = self._data.setdefault("users", {})
             user_records = users.setdefault(subject, {})
             previous = user_records.get(storage_key)
-            previous_credentials = (
-                self._decrypt_json(previous.get("credentials_encrypted")) if isinstance(previous, dict) else None
-            )
+            previous_credentials = None
+            if isinstance(previous, dict) and previous.get("credentials_encrypted"):
+                try:
+                    previous_credentials = self._decrypt_json(previous.get("credentials_encrypted"))
+                except RuntimeError:
+                    logger.warning(
+                        "Failed to decrypt prior %s credentials for subject %s; overwriting with new authorization",
+                        storage_key,
+                        subject,
+                    )
+                    previous_credentials = None
             # Client secrets are deployment configuration, never credential
             # data. Refresh code resolves the secret from the selected slot.
             credentials = {field: value for field, value in token_dict.items() if field != "client_secret"}

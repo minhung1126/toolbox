@@ -3,6 +3,7 @@ export interface SystemOAuthCredentialSummary {
   has_client_secret: boolean;
   client_secret_masked: string;
   configured: boolean;
+  source?: 'dynamic' | 'env' | 'none';
 }
 
 export interface SystemOAuthCredentials {

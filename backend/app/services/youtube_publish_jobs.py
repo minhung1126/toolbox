@@ -84,7 +84,15 @@ class PublishJobRuntime:
         from backend.app.services.youtube_quota_service import get_youtube_quota_tracker
 
         public = self.credentials.get_youtube_public(identity.owner, slot=identity.slot) or {}
-        token = self.credentials.get_youtube_credentials(identity.owner, slot=identity.slot)
+        try:
+            token = self.credentials.get_youtube_credentials(identity.owner, slot=identity.slot)
+        except RuntimeError:
+            logger.warning(
+                "Stored youtube:%s credentials could not be decrypted for subject %s",
+                identity.slot,
+                identity.owner,
+            )
+            raise http_error(403, "youtube_scope_required", "YouTube 授權已失效，請重新連線。") from None
         if not token or public.get("channel_id") != identity.channel_id:
             raise http_error(403, "youtube_authorization_changed", "YouTube 授權或頻道已變更，尚未寫入，請重新預覽。")
         creds = build_credentials_from_dict(
@@ -105,8 +113,10 @@ class PublishJobRuntime:
         if self.credential_loader is not None:
             return self.credential_loader(identity)
         public = self.credentials.get_google_public(identity.owner) or {}
-        email = (public.get("user") or {}).get("email") or public.get("email")
-        if self.config.allowlist_required and (not email or not self.config.is_google_email_allowed(email)):
+        email = str((public.get("user") or {}).get("email") or public.get("email") or "").strip().casefold()
+        if (
+            self.config.allowed_google_emails or self.config.allowlist_required or email
+        ) and not self.config.is_google_email_allowed(email):
             raise http_error(403, "access_denied", "目前帳號未列於允許名單。")
         context = self._youtube_context(identity)
         sheets = get_sheets_credentials(owner_sub=identity.owner)

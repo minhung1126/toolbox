@@ -1,11 +1,19 @@
 """API router for Photo Curator tool."""
 
-from typing import List
+from typing import Annotated, List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-router = APIRouter(prefix="/photo-curator", tags=["Photo Curator"])
+from backend.app.core.dependencies import require_login_credentials
+
+router = APIRouter(
+    prefix="/photo-curator",
+    tags=["Photo Curator"],
+    dependencies=[Depends(require_login_credentials)],
+)
+
+FilenameStr = Annotated[str, Field(max_length=500)]
 
 
 class PresetBucket(BaseModel):
@@ -105,14 +113,14 @@ class ChecklistRequestItem(BaseModel):
     post_index: int = Field(..., ge=1, le=10, description="Post index 1, 2, or 3")
     title: str = Field(default="", max_length=200)
     cover_filename: str = Field(default="", max_length=500)
-    photo_count: int = Field(default=0, ge=0)
-    photo_filenames: List[str] = Field(default_factory=list)
+    photo_count: int = Field(default=0, ge=0, le=500)
+    photo_filenames: List[FilenameStr] = Field(default_factory=list, max_length=500)
 
 
 class ChecklistRequest(BaseModel):
-    posts: List[ChecklistRequestItem] = Field(default_factory=list)
+    posts: List[ChecklistRequestItem] = Field(default_factory=list, max_length=10)
     notes: str = Field(default="", max_length=5000)
-    unassigned_filenames: List[str] = Field(default_factory=list)
+    unassigned_filenames: List[FilenameStr] = Field(default_factory=list, max_length=500)
 
 
 class ChecklistResponse(BaseModel):
@@ -127,7 +135,7 @@ def get_preset_templates() -> List[PresetTemplate]:
 
 def _sanitize_md(val: str) -> str:
     """Sanitize text embedded within markdown code blocks or titles."""
-    return str(val or "").replace("`", "'").strip()
+    return str(val or "").replace("`", "'").replace("\r", "").replace("\n", "").strip()
 
 
 @router.post("/checklist", response_model=ChecklistResponse)

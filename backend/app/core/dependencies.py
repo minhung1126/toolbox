@@ -74,9 +74,10 @@ def get_authenticated_session(request: Request) -> AuthenticatedSession:
         raise http_error(401, "login_required", "控制台登入已失效，請重新登入 Google 帳號。")
 
     email = str((user or {}).get("email") or "").strip().casefold()
-    if (get_settings(settings).allowed_google_emails or get_settings(settings).allowlist_required) and not get_settings(
-        settings
-    ).is_google_email_allowed(email):
+    config = get_settings(settings)
+    if (config.allowed_google_emails or config.allowlist_required or email) and not config.is_google_email_allowed(
+        email
+    ):
         logger.warning("Revoked or disallowed user attempted API access: %s", email)
         raise http_error(403, "access_denied", "此 Google 帳號未列入系統允許名單，存取遭拒。")
 

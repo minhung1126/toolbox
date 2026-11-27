@@ -366,6 +366,11 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
                 {googleCreds.configured ? (
                   <span className="system-settings-status-text system-settings-status-text-success">
                     ✓ 已配置並正常運作
+                    {googleCreds.source === 'env'
+                      ? '（來源：.env 環境變數）'
+                      : googleCreds.source === 'dynamic'
+                        ? '（來源：系統保險庫）'
+                        : ''}
                   </span>
                 ) : (
                   <span className="system-settings-status-text system-settings-status-text-danger">尚未完成設定</span>

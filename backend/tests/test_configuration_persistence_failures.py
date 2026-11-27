@@ -78,15 +78,18 @@ def test_corrupt_configuration_is_not_overwritten(tmp_path, kind, raw):
     assert path.read_text(encoding="utf-8") == raw
 
 
-def test_wrong_encryption_key_does_not_overwrite_system_credentials(tmp_path):
+def test_wrong_encryption_key_allows_system_credentials_recovery_while_strict_read_raises(tmp_path, caplog):
     manager = SystemSecretsManager(tmp_path)
     manager.update_credentials({"google_client_id": "client", "google_client_secret": "original-secret"})
-    before = (tmp_path / "system_credentials.json").read_bytes()
     replacement = SystemSecretsManager(tmp_path)
     replacement.get_or_create_master_keys(env_secret_key="other-signing-key", env_encryption_key="other-encryption-key")
     with pytest.raises(RuntimeError, match="decrypt"):
-        replacement.update_credentials({"google_client_secret": "replacement"})
-    assert (tmp_path / "system_credentials.json").read_bytes() == before
+        replacement.get_credentials()
+    updated = replacement.update_credentials({"google_client_secret": "replacement"})
+    assert updated["google_client_id"] == "client"
+    assert updated["google_client_secret"] == "replacement"
+    assert replacement.get_credentials()["google_client_secret"] == "replacement"
+    assert "Failed to decrypt secret field google_client_secret" in caplog.text
 
 
 def test_master_key_and_setup_pin_failures_are_retryable_not_cached(tmp_path, monkeypatch):
