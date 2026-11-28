@@ -15,11 +15,11 @@ describe('sheetsFilterApi', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('passes valid ordered team and people options through', async () => {
-    api.parseSheetOptions.mockResolvedValue({
+    vi.mocked(api.parseSheetOptions).mockResolvedValue({
       teams: ['團體 B', '團體 A'],
       people: [{ team: '團體 A', person: '甲', kind: 'person' }],
     });
-    api.getTeamPeople.mockResolvedValue({ people: ['全團體', '乙', '甲'] });
+    vi.mocked(api.getTeamPeople).mockResolvedValue({ people: ['全團體', '乙', '甲'] });
 
     await expect(sheetsFilterApi.parseSheetOptions('sheet-id', '工作表')).resolves.toEqual({
       teams: ['團體 B', '團體 A'],
@@ -33,8 +33,8 @@ describe('sheetsFilterApi', () => {
   });
 
   it('rejects malformed options instead of treating them as empty lists', async () => {
-    api.parseSheetOptions.mockResolvedValue({ teams: [null] });
-    api.getTeamPeople.mockResolvedValue({ people: '甲' });
+    vi.mocked(api.parseSheetOptions).mockResolvedValue({ teams: [null] } as never);
+    vi.mocked(api.getTeamPeople).mockResolvedValue({ people: '甲' } as never);
 
     await expect(sheetsFilterApi.parseSheetOptions('sheet-id', '工作表')).rejects.toThrow('團體選項回應格式不正確');
     await expect(sheetsFilterApi.getTeamPeople('sheet-id', '工作表', '團體')).rejects.toThrow('人物選項回應格式不正確');
@@ -42,14 +42,14 @@ describe('sheetsFilterApi', () => {
 
   it('validates account filter reads and writes', async () => {
     const filter = { configured: true, team: '團體', selected_people: ['甲'] };
-    api.getTeamPersonFilter.mockResolvedValue(filter);
-    api.updateTeamPersonFilter.mockResolvedValue(filter);
+    vi.mocked(api.getTeamPersonFilter).mockResolvedValue(filter);
+    vi.mocked(api.updateTeamPersonFilter).mockResolvedValue(filter);
 
     await expect(sheetsFilterApi.getSharedFilter()).resolves.toEqual(filter);
     await expect(sheetsFilterApi.updateSharedFilter({ team: '團體', selectedPeople: ['甲'] })).resolves.toEqual(filter);
     expect(api.updateTeamPersonFilter).toHaveBeenCalledWith({ team: '團體', selectedPeople: ['甲'] });
 
-    api.getTeamPersonFilter.mockResolvedValue({ configured: true, selected_people: '甲' });
+    vi.mocked(api.getTeamPersonFilter).mockResolvedValue({ configured: true, selected_people: '甲' } as never);
     await expect(sheetsFilterApi.getSharedFilter()).rejects.toThrow('帳號隊伍／人物篩選回應格式不正確');
   });
 });

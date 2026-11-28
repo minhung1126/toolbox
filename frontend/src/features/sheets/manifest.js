@@ -54,11 +54,13 @@ const manifest = {
   routes: [
     {
       path: PATHS.sheetCopy.slice(1),
+      title: 'Sheet 內容複製',
       component: lazy(() => import('../../pages/SheetCopyPage')),
-      getProps: ({ sysSettings }) => ({ sysSettings }),
+      getProps: ({ sysSettings, onSharedFilterSaved }) => ({ sysSettings, onSharedFilterSaved }),
     },
     {
       path: PATHS.sheetSettings.slice(1),
+      title: '預設 Google Sheet',
       component: lazy(() => import('../../pages/GoogleSheetSettingsPage')),
       getProps: ({ pageProps }) => pageProps,
     },

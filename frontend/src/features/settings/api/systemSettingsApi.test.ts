@@ -21,7 +21,7 @@ describe('systemSettingsApi', () => {
   it('forwards credential reads and updates through the typed system API', async () => {
     const summary = { client_id: 'client-id', has_client_secret: true, client_secret_masked: '****', configured: true };
     const credentials = {
-      status: 'success',
+      status: 'success' as const,
       credentials: { google: summary, youtube_primary: summary, youtube_secondary: summary },
       public_base_url: '',
       redirect_uri: '',
@@ -44,9 +44,9 @@ describe('systemSettingsApi', () => {
       allowlist_required: true,
       allow_new_users: true,
     };
-    const mutation = { status: 'success', ...allowlist };
+    const mutation = { status: 'success' as const, ...allowlist };
     const removed = { ...mutation, allowed_emails: [] };
-    const policy = { status: 'success', allow_new_users: false, message: 'updated' };
+    const policy = { status: 'success' as const, allow_new_users: false, message: 'updated' };
     vi.mocked(api.getAllowlist).mockResolvedValueOnce(allowlist);
     vi.mocked(api.addAllowlistEmail).mockResolvedValueOnce(mutation);
     vi.mocked(api.removeAllowlistEmail).mockResolvedValueOnce(removed);
@@ -64,9 +64,9 @@ describe('systemSettingsApi', () => {
   });
 
   it('rejects malformed confirmations instead of reporting a setting change as saved', async () => {
-    vi.mocked(api.updateSystemCredentials).mockResolvedValueOnce({ status: 'success', credentials: {} });
-    vi.mocked(api.addAllowlistEmail).mockResolvedValueOnce({ status: 'success', allowed_emails: [] });
-    vi.mocked(api.updateAllowNewUsers).mockResolvedValueOnce({ status: 'success', allow_new_users: true });
+    vi.mocked(api.updateSystemCredentials).mockResolvedValueOnce({ status: 'success', credentials: {} } as never);
+    vi.mocked(api.addAllowlistEmail).mockResolvedValueOnce({ status: 'success', allowed_emails: [] } as never);
+    vi.mocked(api.updateAllowNewUsers).mockResolvedValueOnce({ status: 'success', allow_new_users: true } as never);
 
     await expect(systemSettingsApi.updateCredentials({ google_client_id: 'new' })).rejects.toMatchObject({
       code: 'system_settings_response_invalid',

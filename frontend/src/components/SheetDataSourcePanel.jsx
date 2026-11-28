@@ -4,6 +4,7 @@ import SourceLinkInput from './SourceLinkInput';
 import { EmptyState, StatusMessage } from './StatusMessage';
 import { sheetsSettingsApi } from '../features/sheets/api/sheetsSettingsApi';
 import { saveOAuthReturnPath } from '../utils/authReturnPath';
+import { useToast } from './Toast';
 
 export default function SheetDataSourcePanel({
   collapsible = false,
@@ -22,6 +23,7 @@ export default function SheetDataSourcePanel({
   autosaveStatus = null,
   children,
 }) {
+  const toast = useToast();
   const [expanded, setExpanded] = useState(false);
   const sourceDisabled = disabled || loading;
   const dependentDisabled = disabled || loading || stale || !sourceReady;
@@ -32,9 +34,14 @@ export default function SheetDataSourcePanel({
     try {
       saveOAuthReturnPath('sheets', window.location.pathname + window.location.search);
       const res = await sheetsSettingsApi.getAuthUrl();
-      if (res?.auth_url) window.location.href = res.auth_url;
+      if (res?.auth_url) {
+        window.location.href = res.auth_url;
+      } else {
+        toast.error('無法取得 Google 試算表授權連結，請稍後再試。');
+      }
     } catch (err) {
       console.error('Failed to get sheets auth url:', err);
+      toast.error(`無法取得 Google 試算表授權連結：${err?.message || '請稍後再試'}`);
     }
   };
 

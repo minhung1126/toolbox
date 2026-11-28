@@ -17,7 +17,7 @@ describe('ytmusicSettingsApi', () => {
 
   it('delegates OAuth connection operations to the shared HTTP client', async () => {
     const authUrl = { auth_url: 'https://accounts.google.com/o/oauth2/auth' };
-    const disconnectResult = { status: 'ytmusic_disconnected' };
+    const disconnectResult = { status: 'ytmusic_disconnected' as const };
     vi.mocked(api.getYtmusicAuthUrl).mockResolvedValue(authUrl);
     vi.mocked(api.disconnectYtmusic).mockResolvedValue(disconnectResult);
 
@@ -27,8 +27,8 @@ describe('ytmusicSettingsApi', () => {
 
   it('delegates custom token save, validation, and clear operations', async () => {
     const token = 'cookie: SAPISID=value';
-    const validation = { status: 'success', valid: true, account_name: 'Music User' };
-    const mutation = { status: 'success', message: 'done' };
+    const validation = { status: 'success' as const, valid: true, account_name: 'Music User' };
+    const mutation = { status: 'success' as const, message: 'done' };
     vi.mocked(api.validateYtmusicCustomToken).mockResolvedValue(validation);
     vi.mocked(api.saveYtmusicCustomToken).mockResolvedValue(mutation);
     vi.mocked(api.clearYtmusicCustomToken).mockResolvedValue(mutation);
@@ -42,15 +42,15 @@ describe('ytmusicSettingsApi', () => {
 
   it('rejects malformed OAuth and disconnect responses', async () => {
     vi.mocked(api.getYtmusicAuthUrl).mockResolvedValue({ auth_url: 'javascript:alert(1)' });
-    vi.mocked(api.disconnectYtmusic).mockResolvedValue({ status: 'success' });
+    vi.mocked(api.disconnectYtmusic).mockResolvedValue({ status: 'success' } as never);
 
     await expect(ytmusicSettingsApi.getAuthUrl()).rejects.toMatchObject({ code: 'ytmusic_settings_response_invalid' });
     await expect(ytmusicSettingsApi.disconnect()).rejects.toMatchObject({ code: 'ytmusic_settings_response_invalid' });
   });
 
   it('does not accept malformed token mutation or validation responses as success', async () => {
-    vi.mocked(api.saveYtmusicCustomToken).mockResolvedValue({ status: 'success' });
-    vi.mocked(api.clearYtmusicCustomToken).mockResolvedValue({ status: 'failed', message: 'not cleared' });
+    vi.mocked(api.saveYtmusicCustomToken).mockResolvedValue({ status: 'success' } as never);
+    vi.mocked(api.clearYtmusicCustomToken).mockResolvedValue({ status: 'failed', message: 'not cleared' } as never);
     vi.mocked(api.validateYtmusicCustomToken).mockResolvedValue({ status: 'success', valid: false });
 
     await expect(ytmusicSettingsApi.save('cookie')).rejects.toMatchObject({

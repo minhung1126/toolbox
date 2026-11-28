@@ -1,10 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Route } from '@playwright/test';
 import { mockAuthenticatedBackend } from './fixtures';
 
 test('quota health supports refresh, failure recovery and responsive shared controls', async ({ page }, testInfo) => {
   let fail = false;
   await mockAuthenticatedBackend(page, {
-    '/api/v1/youtube/quota-usage': async (route) => {
+    '/api/v1/youtube/quota-usage': async (route: Route) => {
       await route.fulfill({
         status: fail ? 503 : 200,
         json: fail

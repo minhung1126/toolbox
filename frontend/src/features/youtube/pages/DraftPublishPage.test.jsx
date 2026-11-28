@@ -420,4 +420,98 @@ describe('editable publish staging', () => {
     expect(api.previewYoutubeDrafts).not.toHaveBeenCalled();
     expect(api.submitYoutubePublishJob).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { label: '429 rate limit', error: { status: 429, code: 'youtube_quota_exhausted', message: '配額不足' } },
+    {
+      label: '409 operation_requires_reconciliation',
+      error: { status: 409, code: 'operation_requires_reconciliation', message: '已有待核對作業' },
+    },
+    {
+      label: '409 youtube_channel_required',
+      error: { status: 409, code: 'youtube_channel_required', message: '頻道不符' },
+    },
+    { label: '409 stale_preview', error: { status: 409, code: 'stale_preview', message: '預覽已過期' } },
+    { label: '400 bad request', error: { status: 400, code: 'bad_request', message: '請求格式錯誤' } },
+    { label: '401 login required', error: { status: 401, code: 'login_required', message: '登入已逾期' } },
+    { label: '403 forbidden', error: { status: 403, code: 'access_denied', message: '權限不足' } },
+    { label: '404 not found', error: { status: 404, code: 'not_found', message: '找不到來源' } },
+    { label: '422 validation error', error: { status: 422, code: 'validation_error', message: '欄位驗證失敗' } },
+    { label: '503 queue full', error: { status: 503, code: 'publish_queue_full', message: '佇列已滿' } },
+  ])('clears pending, operation_ref, and pollError on definite rejection ($label)', async ({ error }) => {
+    const draft = seed();
+    draft.operation_ref = { version: 1, operation_id: 'previous-op', request_id: 'previous-req', revision: 2 };
+    draft.edits[0].title = 'Preserve manual edit';
+    savePublishDraft(draft);
+    api.submitYoutubePublishJob.mockRejectedValueOnce(error);
+
+    renderPage();
+    await confirmPublish();
+
+    await screen.findByText(new RegExp(`${error.message}.*尚未建立發布作業`));
+    const saved = loadPublishDraft('owner', 'channel', 'Video');
+    expect(saved.pending).toBeUndefined();
+    expect(saved.operation_ref).toEqual({
+      version: 1,
+      operation_id: 'previous-op',
+      request_id: 'previous-req',
+      revision: 2,
+    });
+    expect(saved.edits[0].title).toBe('Preserve manual edit');
+    expect(screen.getAllByRole('button', { name: '編輯', exact: true })[0]).toBeEnabled();
+    expect(screen.queryByText(/受理結果待確認/)).not.toBeInTheDocument();
+  });
+
+  it('clears pending in localStorage even if page unmounts before a 401 rejection settles', async () => {
+    const draft = seed();
+    draft.operation_ref = { version: 1, operation_id: 'prev-op', request_id: 'prev-req', revision: 1 };
+    savePublishDraft(draft);
+    let rejectSubmit;
+    api.submitYoutubePublishJob.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectSubmit = reject;
+        })
+    );
+
+    const view = renderPage();
+    await confirmPublish();
+    await waitFor(() => expect(api.submitYoutubePublishJob).toHaveBeenCalledOnce());
+    expect(loadPublishDraft('owner', 'channel', 'Video').pending).toBeTruthy();
+
+    view.unmount();
+    await act(async () => {
+      rejectSubmit({ status: 401, code: 'login_required', message: '登入已失效' });
+    });
+
+    const saved = loadPublishDraft('owner', 'channel', 'Video');
+    expect(saved.pending).toBeUndefined();
+    expect(saved.operation_ref).toEqual({
+      version: 1,
+      operation_id: 'prev-op',
+      request_id: 'prev-req',
+      revision: 1,
+    });
+  });
+
+  it.each([
+    { label: 'status 0 network_error', error: { status: 0, code: 'network_error', message: '網路連線失敗' } },
+    { label: 'status 0 timeout', error: { status: 0, code: 'timeout', message: '請求逾時' } },
+    { label: 'status undefined AbortError', error: new DOMException('Aborted', 'AbortError') },
+    { label: '500 internal error', error: { status: 500, code: 'internal_error', message: '伺服器錯誤' } },
+    { label: '502 bad gateway', error: { status: 502, code: 'bad_gateway', message: '閘道錯誤' } },
+    { label: '504 gateway timeout', error: { status: 504, code: 'gateway_timeout', message: '閘道逾時' } },
+  ])('retains pending on ambiguous submission outcome ($label)', async ({ error }) => {
+    seed();
+    api.submitYoutubePublishJob.mockRejectedValueOnce(error);
+
+    renderPage();
+    await confirmPublish();
+
+    await screen.findByText(/受理結果不明時保留原請求 ID/);
+    const saved = loadPublishDraft('owner', 'channel', 'Video');
+    expect(saved.pending).toBeTruthy();
+    expect(saved.operation_ref?.request_id).toBe(saved.pending.request_id);
+    expect(screen.getAllByRole('button', { name: '編輯', exact: true })[0]).toBeDisabled();
+  });
 });

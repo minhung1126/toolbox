@@ -17,6 +17,12 @@ import { buildPreviewFromSorted, sortTracksLocally } from '../model/playlistSort
 interface WorkflowError extends Error {
   status?: number;
   code?: string;
+  details?: {
+    code?: string;
+    message?: string;
+    retryable?: boolean;
+    field_errors?: Record<string, string[]>;
+  } | null;
   detail?: { code?: string; message?: string };
 }
 
@@ -74,7 +80,6 @@ export function usePlaylistSortWorkflow({
   accountKey,
   applyLockRef,
   reconciliationMessage,
-  setReconciliationMessage,
   activeLanguage,
   activeLocation,
   activeSortKeys,
@@ -205,7 +210,6 @@ export function usePlaylistSortWorkflow({
     activeSortKeys,
     selectedPlaylistId,
     setApplyResult,
-    setReconciliationMessage,
     setCachedOriginalTracks,
     setIsManuallyAdjusted,
     setPreviewData,
@@ -314,7 +318,7 @@ export function usePlaylistSortWorkflow({
       } catch (caughtError: unknown) {
         if (!mounted.current || accountVersion.current !== applyVersion) return;
         const error = normalizeWorkflowError(caughtError);
-        const errorCode = error.code || error.detail?.code;
+        const errorCode = error.code || error.details?.code || error.detail?.code;
         if (
           errorCode === 'playlist_write_unknown' ||
           errorCode === 'playlist_sort_result_invalid' ||
@@ -345,7 +349,11 @@ export function usePlaylistSortWorkflow({
         ) {
           dispatchWorkflow({ type: 'transition', phase: 'ready', patch: {} });
           setStrictFallbackPrompt({
-            message: error.message || error.detail?.message || 'YouTube Music Token 認證失效或已過期。',
+            message:
+              error.message ||
+              error.details?.message ||
+              error.detail?.message ||
+              'YouTube Music Token 認證失效或已過期。',
             quotaUnits:
               quotaEstimate?.total_units ||
               (applyMode === 'new_playlist' ? (previewData?.total || 0) + 1 : previewData?.moved_count || 0) * 50,
@@ -367,9 +375,7 @@ export function usePlaylistSortWorkflow({
     [
       applyInFlight,
       dispatchWorkflow,
-      accountKey,
       reconciliationMessage,
-      setReconciliationMessage,
       activeLanguage,
       activeLocation,
       activeSortKeys,
@@ -379,7 +385,6 @@ export function usePlaylistSortWorkflow({
       previewToken,
       quotaEstimate,
       selectedPlaylistId,
-      setApplyResult,
       setApplying,
       setCachedOriginalTracks,
       setIsManuallyAdjusted,

@@ -36,6 +36,7 @@ const manifest = {
   routes: [
     {
       path: PATHS.ffmpegGenerator.slice(1),
+      title: 'FFmpeg 命令行生成器',
       component: lazy(() => import('../../pages/FfmpegGeneratorPage')),
       getProps: ({ pageProps }) => pageProps,
     },

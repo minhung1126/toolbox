@@ -27,11 +27,16 @@ export function useDraftPublishOperation({
   callback.current = onOperation;
   const latestRevision = useRef(0);
   const inFlight = useRef(false);
+  const hasPending = Boolean(pending);
   const operationId = reference?.operation_id;
   const requestId = pending?.request_id;
   const stageId = pending?.stage_snapshot.stage_id;
   useEffect(() => {
-    if (!pending || !enabled) return;
+    if (!pending) {
+      setPollError('');
+      return;
+    }
+    if (!enabled) return;
     let cancelled = false,
       timer: ReturnType<typeof setTimeout>;
     const controller = new AbortController();
@@ -62,8 +67,9 @@ export function useDraftPublishOperation({
         }
         terminal = !['prepared', 'running'].includes(next.state);
         failures = 0;
-      } catch (error: any) {
+      } catch (caughtError: unknown) {
         if (cancelled) return;
+        const error = caughtError as { status?: number; retryAfter?: number; message?: string };
         failures += 1;
         delay = Math.max([2000, 5000, 10000][Math.min(failures - 1, 2)], Number(error.retryAfter || 0) * 1000);
         setPollError(
@@ -84,6 +90,6 @@ export function useDraftPublishOperation({
     };
     // A reference revision update does not restart polling or overlap a read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [operationId, requestId, stageId, enabled, refreshKey]);
+  }, [hasPending, operationId, requestId, stageId, enabled, refreshKey]);
   return { operation, pollError, refresh: () => setRefreshKey((value) => value + 1) };
 }

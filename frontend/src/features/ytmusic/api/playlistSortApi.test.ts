@@ -22,7 +22,7 @@ describe('playlistSortApi', () => {
 
     vi.mocked(api.getPlaylistSortPlaylists).mockResolvedValueOnce({
       playlists: [{ id: 'playlist-1', item_count: '2' }],
-    });
+    } as never);
     await expect(playlistSortApi.list({ language: 'en', location: 'US' })).rejects.toThrow('播放清單回應格式不正確。');
   });
 
@@ -32,7 +32,7 @@ describe('playlistSortApi', () => {
         total: 1,
         moved_count: 1,
         unchanged_count: 0,
-        items: [{ playlist_item_id: 'item-1', original_position: 0, new_position: 0, status: 'moved' }],
+        items: [{ playlist_item_id: 'item-1', original_position: 0, new_position: 0, status: 'moved' as const }],
       },
       preview_token: 'token-1',
       quota_estimate: { total_units: 50, moved_count: 1, units_per_move: 50 },
@@ -43,27 +43,38 @@ describe('playlistSortApi', () => {
     vi.mocked(api.previewPlaylistSort).mockResolvedValueOnce({
       ...preview,
       preview: { ...preview.preview, items: [{ playlist_item_id: 'item-1' }] },
-    });
+    } as never);
     await expect(playlistSortApi.preview(request)).rejects.toThrow('排序預覽曲目回應格式不正確。');
 
     vi.mocked(api.previewPlaylistSort).mockResolvedValueOnce({
       ...preview,
       preview: { ...preview.preview, items: [{ ...preview.preview.items[0], title: { malformed: true } }] },
-    });
+    } as never);
     await expect(playlistSortApi.preview(request)).rejects.toThrow('排序預覽曲目回應格式不正確。');
 
-    vi.mocked(api.previewPlaylistSort).mockResolvedValueOnce({ ...preview, quota_estimate: { total_units: '50' } });
+    vi.mocked(api.previewPlaylistSort).mockResolvedValueOnce({
+      ...preview,
+      quota_estimate: { total_units: '50' },
+    } as never);
     await expect(playlistSortApi.preview(request)).rejects.toThrow('排序預覽配額回應格式不正確。');
   });
 
   it('rejects a malformed apply result instead of reporting a false success', async () => {
-    const result = { mode: 'in_place', total: 3, moved: 2, succeeded: 2, failed: 0, failed_items: [], quota_used: 100 };
+    const result = {
+      mode: 'in_place' as const,
+      total: 3,
+      moved: 2,
+      succeeded: 2,
+      failed: 0,
+      failed_items: [],
+      quota_used: 100,
+    };
     vi.mocked(api.applyPlaylistSort).mockResolvedValueOnce(result);
     await expect(playlistSortApi.apply({ ...request, previewToken: 'token-1' })).resolves.toEqual(result);
 
     const partial = {
       ...result,
-      mode: 'new_playlist',
+      mode: 'new_playlist' as const,
       moved: 3,
       succeeded: 2,
       failed: 1,
@@ -73,7 +84,7 @@ describe('playlistSortApi', () => {
     vi.mocked(api.applyPlaylistSort).mockResolvedValueOnce(partial);
     await expect(playlistSortApi.apply({ ...request, previewToken: 'token-1' })).resolves.toEqual(partial);
 
-    vi.mocked(api.applyPlaylistSort).mockResolvedValueOnce({ ...result, succeeded: '2' });
+    vi.mocked(api.applyPlaylistSort).mockResolvedValueOnce({ ...result, succeeded: '2' } as never);
     await expect(playlistSortApi.apply({ ...request, previewToken: 'token-1' })).rejects.toThrow(
       '排序套用回應格式不正確。'
     );
@@ -83,11 +94,37 @@ describe('playlistSortApi', () => {
       { ...result, failed: 1 },
       { ...result, failed_items: [{ error: '失敗' }] },
       { ...result, mode: 'new_playlist' },
+      { ...result, mode: 'in_place', new_playlist_url: 'javascript:alert(1)' },
+      { ...result, mode: 'in_place', new_playlist_url: 'https://evil.example/playlist?list=1' },
+      {
+        ...result,
+        mode: 'new_playlist',
+        moved: 3,
+        succeeded: 3,
+        new_playlist_url: 'https://evil.example/playlist?list=1',
+      },
+      {
+        ...result,
+        mode: 'new_playlist',
+        moved: 3,
+        succeeded: 3,
+        new_playlist_url: 'https://user:pass@www.youtube.com/playlist?list=1',
+      },
     ]) {
-      vi.mocked(api.applyPlaylistSort).mockResolvedValueOnce(malformed);
+      vi.mocked(api.applyPlaylistSort).mockResolvedValueOnce(malformed as never);
       await expect(playlistSortApi.apply({ ...request, previewToken: 'token-1' })).rejects.toThrow(
         '排序套用回應格式不正確。'
       );
     }
+
+    const validYoutubeResult = {
+      ...result,
+      mode: 'new_playlist' as const,
+      moved: 3,
+      succeeded: 3,
+      new_playlist_url: 'https://www.youtube.com/playlist?list=PL123',
+    };
+    vi.mocked(api.applyPlaylistSort).mockResolvedValueOnce(validYoutubeResult);
+    await expect(playlistSortApi.apply({ ...request, previewToken: 'token-1' })).resolves.toEqual(validYoutubeResult);
   });
 });

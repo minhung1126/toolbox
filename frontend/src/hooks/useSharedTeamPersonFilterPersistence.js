@@ -17,6 +17,8 @@ export default function useSharedTeamPersonFilterPersistence({
   query = '',
   selectedPeople = /** @type {string[]} */ ([]),
   ready = false,
+  initialSavedFilter,
+  onSaved,
   onError,
 }) {
   const filter = useMemo(
@@ -24,20 +26,29 @@ export default function useSharedTeamPersonFilterPersistence({
     [selectedPeople, team, teams, query]
   );
   const serialized = useMemo(() => JSON.stringify(filter), [filter]);
+  const initialSavedSerialized = useMemo(() => {
+    if (initialSavedFilter === undefined) return undefined;
+    return JSON.stringify(normalizeTeamPersonFilter(initialSavedFilter || {}));
+  }, [initialSavedFilter]);
   const recordRef = useRef({
     desiredFilter: null,
     desiredSerialized: '',
     desiredVersion: 0,
     lastSavedVersion: 0,
-    lastSavedSerialized: '',
+    lastSavedSerialized: initialSavedSerialized ?? '',
     inFlightPromise: null,
     timer: null,
     timerResolve: null,
     ready: false,
   });
   const mountedRef = useRef(true);
+  const onSavedRef = useRef(onSaved);
   const onErrorRef = useRef(onError);
   const [status, setStatus] = useState(emptyStatus);
+
+  useEffect(() => {
+    onSavedRef.current = onSaved;
+  }, [onSaved]);
 
   useEffect(() => {
     onErrorRef.current = onError;
@@ -66,6 +77,7 @@ export default function useSharedTeamPersonFilterPersistence({
         record.inFlightPromise = null;
         record.lastSavedVersion = version;
         record.lastSavedSerialized = nextSerialized;
+        onSavedRef.current?.(result);
         const hasNewerValue = record.desiredVersion > version;
         if (!hasNewerValue) {
           updateStatus({ saving: false, saved: true, error: '', lastSaved: nextFilter });
@@ -128,6 +140,14 @@ export default function useSharedTeamPersonFilterPersistence({
 
   useEffect(() => {
     const record = recordRef.current;
+    if (
+      initialSavedSerialized !== undefined &&
+      record.lastSavedVersion === 0 &&
+      record.desiredVersion === 0 &&
+      !record.inFlightPromise
+    ) {
+      record.lastSavedSerialized = initialSavedSerialized;
+    }
     record.ready = ready;
     if (!ready) {
       if (record.timer) window.clearTimeout(record.timer);
@@ -150,19 +170,32 @@ export default function useSharedTeamPersonFilterPersistence({
     onErrorRef.current?.('');
     scheduleSave();
     return undefined;
-  }, [filter, ready, scheduleSave, serialized, updateStatus]);
+  }, [filter, initialSavedSerialized, ready, scheduleSave, serialized, updateStatus]);
 
   useEffect(() => {
     mountedRef.current = true;
     const record = recordRef.current;
     return () => {
       mountedRef.current = false;
-      if (record.timer) window.clearTimeout(record.timer);
-      record.timer = null;
-      record.timerResolve?.(null);
-      record.timerResolve = null;
+      if (record.timer) {
+        window.clearTimeout(record.timer);
+        record.timer = null;
+        const resolveTimer = record.timerResolve;
+        record.timerResolve = null;
+        if (record.ready && record.desiredFilter && record.desiredVersion > record.lastSavedVersion) {
+          flushSave().then(
+            (result) => resolveTimer?.(result),
+            () => resolveTimer?.(null)
+          );
+          return;
+        }
+        resolveTimer?.(null);
+      } else {
+        record.timerResolve?.(null);
+        record.timerResolve = null;
+      }
     };
-  }, []);
+  }, [flushSave]);
 
   return {
     saving: status.saving,

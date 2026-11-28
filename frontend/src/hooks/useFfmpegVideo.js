@@ -45,6 +45,16 @@ export function useFfmpegVideo({
       }
 
       setVideoError(null);
+      setDuration(0);
+      setCurrentTime(0);
+      setIsPlaying(false);
+      setIsPlayingTrimmed(false);
+      setVideoMeta({
+        width: 0,
+        height: 0,
+        size: file.size || 0,
+        name: file.name || '',
+      });
       setVideoFile(file);
       setVideoUrl(URL.createObjectURL(file));
       onFileSelected?.(file);
@@ -52,6 +62,18 @@ export function useFfmpegVideo({
     },
     [onFileSelected, toast]
   );
+
+  const clearVideo = useCallback(() => {
+    videoRef.current?.pause?.();
+    setVideoFile(null);
+    setVideoUrl('');
+    setVideoError(null);
+    setDuration(0);
+    setCurrentTime(0);
+    setIsPlaying(false);
+    setIsPlayingTrimmed(false);
+    setVideoMeta({ width: 0, height: 0, size: 0, name: '' });
+  }, []);
 
   const handleDrop = useCallback(
     (event) => {
@@ -96,14 +118,23 @@ export function useFfmpegVideo({
   const togglePlay = useCallback(() => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
-      videoRef.current.play();
       setIsPlaying(true);
+      const playPromise = videoRef.current.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch((err) => {
+          setIsPlaying(false);
+          setIsPlayingTrimmed(false);
+          if (err?.name !== 'AbortError') {
+            toast?.error?.('無法播放此影片預覽，請確認格式或瀏覽器支援。');
+          }
+        });
+      }
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
       setIsPlayingTrimmed(false);
     }
-  }, []);
+  }, [toast]);
 
   const seekTo = useCallback(
     (seconds) => {
@@ -133,9 +164,18 @@ export function useFfmpegVideo({
     const startSeconds = enableStartCut ? parseHmsToSeconds(startTime) : 0;
     videoRef.current.currentTime = startSeconds;
     setIsPlayingTrimmed(true);
-    videoRef.current.play();
     setIsPlaying(true);
-  }, [enableStartCut, startTime]);
+    const playPromise = videoRef.current.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch((err) => {
+        setIsPlaying(false);
+        setIsPlayingTrimmed(false);
+        if (err?.name !== 'AbortError') {
+          toast?.error?.('無法播放此影片預覽，請確認格式或瀏覽器支援。');
+        }
+      });
+    }
+  }, [enableStartCut, startTime, toast]);
 
   return {
     videoRef,
@@ -155,6 +195,7 @@ export function useFfmpegVideo({
     playbackRate,
     videoError,
     setVideoError,
+    clearVideo,
     handleSelectFile,
     handleDrop,
     handleLoadedMetadata,

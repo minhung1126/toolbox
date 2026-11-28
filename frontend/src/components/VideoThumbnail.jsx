@@ -3,10 +3,19 @@ import { ImageOff } from 'lucide-react';
 
 function normalizeHttps(url) {
   if (!url || typeof url !== 'string') return '';
-  if (url.startsWith('http://')) {
-    return `https://${url.slice(7)}`;
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.username || parsed.password) return '';
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+    if (parsed.protocol === 'http:') {
+      parsed.protocol = 'https:';
+    }
+    return parsed.toString();
+  } catch {
+    return '';
   }
-  return url;
 }
 
 export default function VideoThumbnail({
@@ -19,6 +28,7 @@ export default function VideoThumbnail({
   onPreview,
   ariaLabel,
 }) {
+  const safeVideoId = videoId ? encodeURIComponent(String(videoId)) : '';
   const initialUrl = normalizeHttps(src);
   const [currentSrc, setCurrentSrc] = useState(initialUrl);
   const [failed, setFailed] = useState(false);
@@ -27,24 +37,25 @@ export default function VideoThumbnail({
   useEffect(() => {
     const normalized = normalizeHttps(src);
     setCurrentSrc(normalized);
-    setFailed(!normalized && !videoId);
+    setFailed(!normalized && !safeVideoId);
     fallbackStep.current = 0;
-  }, [src, videoId]);
+  }, [safeVideoId, src]);
 
   const handleError = () => {
-    if (videoId && fallbackStep.current === 0) {
+    if (safeVideoId && fallbackStep.current === 0) {
       fallbackStep.current = 1;
-      setCurrentSrc(`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`);
-    } else if (videoId && fallbackStep.current === 1) {
+      setCurrentSrc(`https://i.ytimg.com/vi/${safeVideoId}/hqdefault.jpg`);
+    } else if (safeVideoId && fallbackStep.current === 1) {
       fallbackStep.current = 2;
-      setCurrentSrc(`https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`);
+      setCurrentSrc(`https://i.ytimg.com/vi/${safeVideoId}/mqdefault.jpg`);
     } else {
       setFailed(true);
     }
   };
 
   const effectiveSrc =
-    currentSrc || (videoId && fallbackStep.current === 0 ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
+    currentSrc ||
+    (safeVideoId && fallbackStep.current === 0 ? `https://i.ytimg.com/vi/${safeVideoId}/hqdefault.jpg` : '');
 
   if (failed || !effectiveSrc) {
     return (
@@ -75,7 +86,7 @@ export default function VideoThumbnail({
         onClick={() =>
           onPreview({
             src: effectiveSrc,
-            fallbackSrc: videoId ? `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg` : undefined,
+            fallbackSrc: safeVideoId ? `https://i.ytimg.com/vi/${safeVideoId}/mqdefault.jpg` : undefined,
             videoId,
             alt: alt || '影片縮圖',
           })

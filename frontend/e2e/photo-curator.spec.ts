@@ -329,7 +329,10 @@ for (const width of [390, 1440]) {
     await page.getByRole('button', { name: '匯出排版專案', exact: true }).click();
     const project = await projectDownload;
     const path = (await project.path())!;
-    const data = JSON.parse(await readFile(path, 'utf8'));
+    const data = JSON.parse(await readFile(path, 'utf8')) as {
+      photos: Array<{ id: string; name: string }>;
+      posts: Array<{ photoIds: string[] }>;
+    };
     const names = new Map(data.photos.map((photo) => [photo.id, photo.name]));
     expect(data.posts[0].photoIds.map((id) => names.get(id))).toEqual(['c.svg', 'a.svg', 'b.svg']);
     const zipDownload = page.waitForEvent('download');

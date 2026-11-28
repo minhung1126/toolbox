@@ -8,6 +8,20 @@ import type {
   PlaylistSortPreviewResponse,
 } from './types';
 
+const YOUTUBE_PLAYLIST_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'music.youtube.com', 'm.youtube.com']);
+
+export function isValidYoutubePlaylistUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || !value || value.trim() !== value) return false;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:') return false;
+    if (url.username || url.password) return false;
+    return YOUTUBE_PLAYLIST_HOSTS.has(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -95,6 +109,7 @@ function parseSortPreview(value: unknown): PlaylistSortPreviewResponse {
 }
 
 function parseSortApply(value: unknown): PlaylistSortApplyResponse {
+  const hasNewPlaylistUrl = isRecord(value) && value.new_playlist_url != null && value.new_playlist_url !== '';
   if (
     !isRecord(value) ||
     (value.mode !== 'in_place' && value.mode !== 'new_playlist') ||
@@ -115,10 +130,9 @@ function parseSortApply(value: unknown): PlaylistSortApplyResponse {
         item.error.length > 0
     ) ||
     (value.mode === 'new_playlist' &&
-      (value.moved !== value.total ||
-        typeof value.new_playlist_url !== 'string' ||
-        !value.new_playlist_url.startsWith('https://'))) ||
-    (value.new_playlist_url != null && typeof value.new_playlist_url !== 'string')
+      (value.moved !== value.total || !isValidYoutubePlaylistUrl(value.new_playlist_url))) ||
+    (value.new_playlist_url != null && typeof value.new_playlist_url !== 'string') ||
+    (hasNewPlaylistUrl && !isValidYoutubePlaylistUrl(value.new_playlist_url))
   ) {
     throw Object.assign(new Error('排序套用回應格式不正確。'), { code: 'playlist_sort_result_invalid' });
   }

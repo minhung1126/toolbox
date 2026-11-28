@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { parseCleanupPreview, parseCleanupResult } from './publishCleanupApi';
+import { parseCleanupPreview, parseCleanupResult, type CleanupItem } from './publishCleanupApi';
 
-const item = {
+const item: CleanupItem = {
   playlist_id: 'playlist',
   playlist_item_id: 'item',
   video_id: 'video',
@@ -45,7 +45,7 @@ const result = {
 describe('cleanup v2 contracts', () => {
   it('accepts exact item snapshots and preserves unknown results', () => {
     expect(parseCleanupPreview(preview, 'playlist')).toEqual(preview);
-    expect(parseCleanupResult(result, [item] as any)).toEqual(result);
+    expect(parseCleanupResult(result, [item])).toEqual(result);
   });
   it.each([
     { ...preview, total_count: 2 },
@@ -62,6 +62,6 @@ describe('cleanup v2 contracts', () => {
     { ...result, results: [{ ...item, playlist_item_id: 'other', status: 'succeeded' }] },
     { ...result, results: [] },
   ])('never accepts malformed or mismatched cleanup results', (value) => {
-    expect(() => parseCleanupResult(value, [item] as any)).toThrow();
+    expect(() => parseCleanupResult(value, [item])).toThrow();
   });
 });

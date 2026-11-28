@@ -70,21 +70,29 @@ export default function DashboardPage({ authUser, sysSettings = {} }) {
     return cards.length ? [{ ...tool, featureCards: cards }] : [];
   });
   const purposeOrder = ['管理影片', '整理音樂', '處理素材', '文案與資料', '我的連線', '管理系統'];
-  const purposeGroups = purposeOrder.flatMap((purpose) => {
-    const featureCards = visibleTools.flatMap((tool) =>
-      tool.featureCards
-        .filter((card) => {
-          const category = card.to.includes('/settings')
-            ? tool.id === 'system-utility'
-              ? '管理系統'
-              : '我的連線'
-            : tool.purpose;
-          return category === purpose;
-        })
-        .map((card) => ({ ...card, ownerTool: tool }))
-    );
-    return featureCards.length ? [{ id: purpose, title: purpose, purpose, category: purpose, featureCards }] : [];
+  const groupedCards = new Map();
+  visibleTools.forEach((tool) => {
+    tool.featureCards.forEach((card) => {
+      const groupKey = card.to.includes('/settings')
+        ? tool.id === 'system-utility'
+          ? '管理系統'
+          : '我的連線'
+        : tool.purpose || tool.category || '其他工具';
+      if (!groupedCards.has(groupKey)) groupedCards.set(groupKey, []);
+      groupedCards.get(groupKey).push({ ...card, ownerTool: tool });
+    });
   });
+  const orderedGroupKeys = [
+    ...purposeOrder.filter((purpose) => groupedCards.has(purpose)),
+    ...[...groupedCards.keys()].filter((key) => !purposeOrder.includes(key)),
+  ];
+  const purposeGroups = orderedGroupKeys.map((groupKey) => ({
+    id: groupKey,
+    title: groupKey,
+    purpose: groupKey,
+    category: groupKey,
+    featureCards: groupedCards.get(groupKey),
+  }));
   const visibleCardCount = visibleTools.reduce((count, tool) => count + tool.featureCards.length, 0);
   const sheetsConnected = Boolean(
     authUser?.authorizations?.sheets?.connected || authUser?.google_scopes?.sheets_readonly

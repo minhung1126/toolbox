@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { buildFfmpegCommand, buildTrimSummary } from './ffmpegCommand';
+import {
+  buildFfmpegCommand,
+  buildTrimSummary,
+  formatFileSize,
+  parseHmsToSeconds,
+  quoteFilename,
+  secondsToHms,
+} from './ffmpegCommand';
+import { PRESET_LIST } from './presets';
 import type { CommandOptions } from './types';
 
 const options: CommandOptions = {
@@ -100,5 +108,63 @@ describe('FFmpeg feature command model', () => {
     const command = buildFfmpegCommand({ ...options, transcodeMode: 'gif', outputName: 'output.gif' });
     expect(command.singleLine).toContain('palettegen[p];[s1][p]paletteuse');
     expect(command.singleLine).not.toContain('-c:a');
+  });
+
+  it('converts seconds to HH:MM:SS.mmm and parses HMS strings', () => {
+    expect(secondsToHms(0)).toBe('00:00:00.000');
+    expect(secondsToHms(65.5)).toBe('00:01:05.500');
+    expect(secondsToHms(3661)).toBe('01:01:01.000');
+    expect(secondsToHms(-1)).toBe('00:00:00.000');
+
+    expect(parseHmsToSeconds('00:01:05.500')).toBe(65.5);
+    expect(parseHmsToSeconds('01:00:00')).toBe(3600);
+    expect(parseHmsToSeconds('02:30')).toBe(150);
+    expect(parseHmsToSeconds('')).toBeNaN();
+    expect(parseHmsToSeconds('invalid')).toBeNaN();
+  });
+
+  it('formats file sizes and flags invalid trim ranges', () => {
+    expect(formatFileSize(500)).toBe('500.0 B');
+    expect(formatFileSize(1024)).toBe('1.0 KB');
+    expect(formatFileSize(1048576)).toBe('1.0 MB');
+    expect(formatFileSize(0)).toBe('0 B');
+
+    const summary = buildTrimSummary({
+      enableStartCut: true,
+      startTime: '00:01:00.000',
+      enableEndCut: true,
+      cutMode: 'to',
+      endTime: '00:00:30.000',
+      durationCut: '00:00:30.000',
+      duration: 100,
+    });
+    expect(summary.isInvalid).toBe(true);
+  });
+
+  it('quotes filenames safely and retains existing quotes in buildFfmpegCommand', () => {
+    expect(quoteFilename('video.mp4')).toBe("'video.mp4'");
+    expect(quoteFilename('"video.mp4"')).toBe(`'"video.mp4"'`);
+    expect(quoteFilename('   ')).toBe("'   '");
+    expect(quoteFilename('')).toBe("''");
+
+    const cmd = buildFfmpegCommand({
+      ...options,
+      inputName: 'my input video.mp4',
+      outputName: `'"already_quoted.mp4"'`,
+      enableStartCut: false,
+      startTime: '00:00:00.000',
+      seekMode: 'fast',
+      enableEndCut: false,
+      shellFormat: 'single',
+    });
+    expect(cmd.singleLine).toContain(`'my input video.mp4'`);
+    expect(cmd.singleLine).toContain(`'"already_quoted.mp4"'`);
+    expect(cmd.singleLine).not.toContain('""already_quoted.mp4""');
+  });
+
+  it('defines standard presets including lossless, h264, gif', () => {
+    expect(PRESET_LIST.some((p) => p.id === 'lossless-trim')).toBe(true);
+    expect(PRESET_LIST.some((p) => p.id === 'animated-gif')).toBe(true);
+    expect(PRESET_LIST.some((p) => p.id === 'extract-audio-mp3')).toBe(true);
   });
 });

@@ -1,18 +1,28 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../../services/api';
+import type { DraftPublishRequest } from '../api/draftPublishApi';
 import { useDraftPublishOperation } from './useDraftPublishOperation';
 import { parsePublishOperation } from '../api/draftPublishOperation';
 
 vi.mock('../../../services/api', () => ({
   api: { getOperation: vi.fn(), findYoutubePublishJob: vi.fn(), findYoutubePublishStage: vi.fn() },
 }));
-const pending: any = {
+const pending: DraftPublishRequest = {
   request_id: 'request',
-  stage_snapshot: { stage_id: 'stage', youtube_channel_id: 'channel' },
+  stage_token: 'stage-token',
+  stage_snapshot: {
+    version: 1,
+    stage_id: 'stage',
+    video_type: 'Video',
+    youtube_slot: 'primary',
+    youtube_channel_id: 'channel',
+    source: {},
+    plan: [],
+  },
   edits: [{ video_id: 'video', title: 'Final', description: 'Final text', skip: false }],
 };
-function operation(status = 'running', revision = 1): any {
+function operation(status = 'running', revision = 1) {
   const statuses = [
     'queued',
     'running',
@@ -119,7 +129,7 @@ describe('publish operation polling', () => {
   });
   it('ignores old revisions and late responses after unmount', async () => {
     const receive = vi.fn();
-    let resolve: any;
+    let resolve!: (value: Record<string, unknown>) => void;
     vi.mocked(api.getOperation)
       .mockResolvedValueOnce(operation('running', 1))
       .mockImplementationOnce(
@@ -159,5 +169,25 @@ describe('publish operation polling', () => {
         pending
       )
     ).toThrow();
+  });
+  it('clears pollError when pending transitions to undefined', async () => {
+    vi.mocked(api.findYoutubePublishJob).mockRejectedValue({ status: 404, message: 'not found' });
+    const view = renderHook(
+      ({ currentPending }: { currentPending: DraftPublishRequest | undefined }) =>
+        useDraftPublishOperation({
+          pending: currentPending,
+          enabled: true,
+          onOperation: vi.fn(),
+        }),
+      { initialProps: { currentPending: pending as DraftPublishRequest | undefined } }
+    );
+    await tick();
+    expect(view.result.current.pollError).toContain('受理結果待確認');
+
+    view.rerender({ currentPending: undefined });
+    expect(view.result.current.pollError).toBe('');
+
+    await tick(15000);
+    expect(api.findYoutubePublishJob).toHaveBeenCalledTimes(1);
   });
 });

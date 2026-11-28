@@ -91,4 +91,68 @@ describe('useFfmpegVideo', () => {
     expect(result.current.isPlayingTrimmed).toBe(false);
     expect(result.current.currentTime).toBe(2);
   });
+
+  it('resets duration, currentTime, playback state, and videoMeta when selecting a new or unplayable video', () => {
+    const { result } = renderVideoHook();
+    result.current.videoRef.current = {
+      duration: 42,
+      videoWidth: 1280,
+      videoHeight: 720,
+      currentTime: 10,
+      paused: true,
+      pause: vi.fn(),
+      play: vi.fn(),
+    };
+
+    const firstFile = new File(['first'], 'first.mp4', { type: 'video/mp4' });
+    act(() => result.current.handleSelectFile(firstFile));
+    act(() => result.current.handleLoadedMetadata());
+    expect(result.current.duration).toBe(42);
+    expect(result.current.videoMeta).toEqual({ width: 1280, height: 720, size: 5, name: 'first.mp4' });
+
+    const secondFile = new File(['mkv-bytes'], 'broken.mkv', { type: '' });
+    act(() => result.current.handleSelectFile(secondFile));
+
+    expect(result.current.duration).toBe(0);
+    expect(result.current.currentTime).toBe(0);
+    expect(result.current.isPlaying).toBe(false);
+    expect(result.current.isPlayingTrimmed).toBe(false);
+    expect(result.current.videoMeta).toEqual({ width: 0, height: 0, size: 9, name: 'broken.mkv' });
+
+    act(() => result.current.clearVideo());
+    expect(result.current.videoFile).toBeNull();
+    expect(result.current.videoUrl).toBe('');
+    expect(result.current.duration).toBe(0);
+    expect(result.current.videoMeta).toEqual({ width: 0, height: 0, size: 0, name: '' });
+  });
+
+  it('handles rejected play() promises safely and resets playback state', async () => {
+    const { result } = renderVideoHook();
+    const notSupported = Object.assign(new Error('NotSupportedError'), { name: 'NotSupportedError' });
+    result.current.videoRef.current = {
+      paused: true,
+      currentTime: 0,
+      pause: vi.fn(),
+      play: vi
+        .fn()
+        .mockRejectedValueOnce(notSupported)
+        .mockRejectedValueOnce(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+    };
+
+    await act(async () => {
+      result.current.togglePlay();
+      await Promise.resolve();
+    });
+    expect(result.current.isPlaying).toBe(false);
+    expect(toast.error).toHaveBeenCalledWith('無法播放此影片預覽，請確認格式或瀏覽器支援。');
+
+    toast.error.mockClear();
+    await act(async () => {
+      result.current.playTrimmedSegment();
+      await Promise.resolve();
+    });
+    expect(result.current.isPlaying).toBe(false);
+    expect(result.current.isPlayingTrimmed).toBe(false);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
 });

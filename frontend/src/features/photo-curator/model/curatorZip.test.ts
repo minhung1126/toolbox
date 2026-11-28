@@ -1,7 +1,8 @@
+import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { exportCuratedZip, generateChecklistText } from './curatorZip';
 
-describe('curatorZip utils', () => {
+describe('curatorZip model', () => {
   describe('generateChecklistText', () => {
     it('produces formatted checklist text for posts', () => {
       const photos = [
@@ -43,11 +44,11 @@ describe('curatorZip utils', () => {
 
     it('creates zip blob and triggers anchor download', async () => {
       vi.setSystemTime(new Date('2026-10-09T16:30:52Z'));
-      global.URL.createObjectURL = vi.fn(() => 'blob:mock-download-url');
-      global.URL.revokeObjectURL = vi.fn();
-      let downloadedAnchor;
-      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function recordDownloadClick() {
-        downloadedAnchor = this;
+      globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock-download-url');
+      globalThis.URL.revokeObjectURL = vi.fn();
+      let downloadedAnchor: HTMLAnchorElement | undefined;
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {
+        downloadedAnchor = document.body.querySelector('a') ?? undefined;
       });
 
       const dummyFile = new Blob(['hello'], { type: 'image/jpeg' });
@@ -56,7 +57,7 @@ describe('curatorZip utils', () => {
 
       await exportCuratedZip({ posts, photoMap, checklistContent: 'test checklist' });
 
-      expect(global.URL.createObjectURL).toHaveBeenCalled();
+      expect(globalThis.URL.createObjectURL).toHaveBeenCalled();
       expect(downloadedAnchor).toHaveAttribute('href', 'blob:mock-download-url');
       expect(downloadedAnchor).toHaveAttribute('download', 'Instagram_1格貼文_2026-10-10_00-30-52.zip');
 

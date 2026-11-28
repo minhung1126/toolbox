@@ -123,7 +123,98 @@ describe('API request recovery', () => {
       code: 'youtube_quota_exhausted',
       details: { reset_at: 'reset' },
       message: '配額已用完',
+      retryable: false,
+      fieldErrors: {},
+      field_errors: {},
     });
+  });
+
+  it('preserves English detail messages, field_errors, and retryable on ApiError', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        json: async () => ({
+          detail: {
+            code: 'validation_error',
+            message: 'Playlist ID is invalid',
+            retryable: false,
+            field_errors: { playlist_id: ['Must not be empty'] },
+          },
+        }),
+      })
+    );
+
+    await expect(api.getYoutubeQuotaUsage()).rejects.toMatchObject({
+      status: 422,
+      code: 'validation_error',
+      message: 'Playlist ID is invalid',
+      retryable: false,
+      fieldErrors: { playlist_id: ['Must not be empty'] },
+      field_errors: { playlist_id: ['Must not be empty'] },
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        json: async () => ({
+          detail: {
+            code: 'validation_error',
+            message: '',
+            retryable: true,
+            field_errors: { email: ['Invalid email address'] },
+          },
+        }),
+      })
+    );
+
+    await expect(api.getYoutubeQuotaUsage()).rejects.toMatchObject({
+      status: 422,
+      message: 'Invalid email address',
+      retryable: true,
+      fieldErrors: { email: ['Invalid email address'] },
+    });
+  });
+
+  it('marks network_error and timeout ApiErrors as retryable and forwards optional request_id in applyPlaylistSort', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')));
+    await expect(api.getSystemInfo()).rejects.toMatchObject({
+      code: 'network_error',
+      retryable: true,
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        mode: 'in_place',
+        total: 1,
+        moved: 0,
+        succeeded: 0,
+        failed: 0,
+        failed_items: [],
+        quota_used: 0,
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.applyPlaylistSort({
+      playlistId: 'pl-1',
+      sortKeys: [{ field: 'title', direction: 'asc' }],
+      previewToken: 'tok-1',
+      requestId: 'req-123',
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ request_id: 'req-123' });
+
+    await api.applyPlaylistSort({
+      playlistId: 'pl-1',
+      sortKeys: [{ field: 'title', direction: 'asc' }],
+      previewToken: 'tok-1',
+    });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).not.toHaveProperty('request_id');
   });
 
   it('sends queue-free YouTube metadata input and returns direct per-video results', async () => {

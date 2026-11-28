@@ -64,7 +64,7 @@ export default function BatchUpdatePage(props) {
   return <BatchUpdateEditor key={JSON.stringify([account, channel, props.videoType || 'Video'])} {...props} />;
 }
 
-function BatchUpdateEditor({ sysSettings, authUser, videoType = 'Video' }) {
+function BatchUpdateEditor({ sysSettings, authUser, onSharedFilterSaved, videoType = 'Video' }) {
   const toast = useToast();
   const navigate = useNavigate();
   const [preparing, setPreparing] = useState(false);
@@ -141,7 +141,7 @@ function BatchUpdateEditor({ sysSettings, authUser, videoType = 'Video' }) {
     setAllVideosSelected,
     applyBulkAssignment,
     sourceLabel,
-  } = useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast });
+  } = useBatchUpdateWorkflow({ sysSettings, authUser, onSharedFilterSaved, videoType, toast });
   const workflowBusy = preparing || executing || loadingSheet || loadingVideos;
   const account = authUser?.sub || authUser?.email || '';
   const auth = getYoutubeAuthContext(authUser);

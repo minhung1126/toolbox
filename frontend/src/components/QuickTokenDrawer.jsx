@@ -12,7 +12,8 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { ytmusicSettingsApi } from '../features/ytmusic/api/ytmusicSettingsApi';
+import { isAmbiguousYtmusicSettingsMutation, ytmusicSettingsApi } from '../features/ytmusic/api/ytmusicSettingsApi';
+import ConfirmDialog from './ConfirmDialog';
 import { useToast } from './Toast';
 import '../features/ytmusic/quick-token-drawer.css';
 
@@ -30,12 +31,17 @@ export default function QuickTokenDrawer({
   const [tokenInput, setTokenInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [tokenMutationUncertain, setTokenMutationUncertain] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
   const [showGuide, setShowGuide] = useState(false);
 
   if (!isOpen) return null;
 
+  const busy = saving || validating || tokenMutationUncertain;
+
   const handleValidate = async (tokenToTest = null) => {
+    if (saving || validating) return;
     const raw = (tokenToTest !== null ? tokenToTest : tokenInput).trim();
     setValidating(true);
     setValidationResult(null);
@@ -61,6 +67,7 @@ export default function QuickTokenDrawer({
   };
 
   const handleSave = async () => {
+    if (busy) return;
     const trimmed = tokenInput.trim();
     if (!trimmed) {
       toast.warning('請先貼入 Cookie、cURL 或 Node.js fetch 代碼');
@@ -73,26 +80,58 @@ export default function QuickTokenDrawer({
       setTokenInput('');
       setValidationResult(null);
       if (onTokenSaved) {
-        await onTokenSaved();
+        try {
+          await onTokenSaved();
+        } catch {
+          toast.warning('Token 已儲存，但授權狀態無法重新讀取；請重新整理頁面。');
+        }
       }
     } catch (err) {
-      toast.error(`儲存 Token 失敗：${err.message || '格式不正確'}`);
+      if (isAmbiguousYtmusicSettingsMutation(err)) {
+        setTokenMutationUncertain(true);
+        toast.error('無法確認 Token 是否已儲存；請先核對授權狀態，勿直接重送。');
+        try {
+          await onTokenSaved?.();
+          if (onTokenSaved) setTokenMutationUncertain(false);
+        } catch {
+          // Keep uncertain lock when status refresh fails.
+        }
+      } else {
+        toast.error(`儲存 Token 失敗：${err.message || '格式不正確'}`);
+      }
     } finally {
       setSaving(false);
     }
   };
 
-  const handleClear = async () => {
+  const handleConfirmClear = async () => {
+    if (busy) return;
+    setShowClearConfirm(false);
     setSaving(true);
     try {
       await ytmusicSettingsApi.clear();
       toast.success('已清除自訂 Token，將改用 Google API 模式');
       setValidationResult(null);
       if (onTokenCleared) {
-        await onTokenCleared();
+        try {
+          await onTokenCleared();
+        } catch {
+          toast.warning('Token 已清除，但授權狀態無法重新讀取；請重新整理頁面。');
+        }
       }
     } catch (err) {
-      toast.error(`清除 Token 失敗：${err.message || '未知錯誤'}`);
+      if (isAmbiguousYtmusicSettingsMutation(err)) {
+        setTokenMutationUncertain(true);
+        toast.error('無法確認 Token 是否已清除；請先核對授權狀態，勿直接重送。');
+        try {
+          await onTokenCleared?.();
+          if (onTokenCleared) setTokenMutationUncertain(false);
+        } catch {
+          // Keep uncertain lock when status refresh fails.
+        }
+      } else {
+        toast.error(`清除 Token 失敗：${err.message || '未知錯誤'}`);
+      }
     } finally {
       setSaving(false);
     }
@@ -154,8 +193,8 @@ export default function QuickTokenDrawer({
             </button>
             <button
               type="button"
-              onClick={handleClear}
-              disabled={validating || saving}
+              onClick={() => setShowClearConfirm(true)}
+              disabled={busy}
               className="btn btn-secondary btn-sm quick-token-small-button quick-token-clear-button"
             >
               <Trash2 size={12} /> 清除
@@ -238,6 +277,18 @@ export default function QuickTokenDrawer({
         </div>
       )}
 
+      {tokenMutationUncertain && (
+        <div className="quick-token-validation quick-token-validation-invalid" role="alert">
+          <div className="quick-token-validation-content">
+            <AlertCircle size={16} className="quick-token-validation-icon" aria-hidden="true" />
+            <div className="quick-token-validation-copy">
+              <div className="quick-token-validation-title">無法確認 Token 變更結果</div>
+              <div className="quick-token-validation-message">請先重新整理或核對帳號授權狀態後再操作。</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Input textarea */}
       <div className="form-group quick-token-textarea-group">
         <textarea
@@ -246,7 +297,7 @@ export default function QuickTokenDrawer({
           onChange={(e) => setTokenInput(e.target.value)}
           placeholder="在此貼上右鍵複製的『Copy as cURL』、『Copy as Node.js fetch』或 Cookie 字串…"
           className="form-input quick-token-textarea"
-          disabled={saving || validating}
+          disabled={busy}
         />
       </div>
 
@@ -255,7 +306,7 @@ export default function QuickTokenDrawer({
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving || validating || !tokenInput.trim()}
+          disabled={busy || !tokenInput.trim()}
           className="btn btn-primary btn-sm quick-token-action"
         >
           {saving ? <Loader2 size={13} className="spin" /> : <Key size={13} />}
@@ -274,6 +325,20 @@ export default function QuickTokenDrawer({
           取消
         </button>
       </div>
+
+      <ConfirmDialog
+        open={showClearConfirm}
+        title="清除自訂 Token"
+        message="確定要清除 YouTube Music 自訂 Token 嗎？清除後將改用 Google OAuth / API 模式。"
+        confirmText="確認清除"
+        cancelText="取消"
+        variant="destructive"
+        busy={saving}
+        onConfirm={handleConfirmClear}
+        onCancel={() => {
+          if (!saving) setShowClearConfirm(false);
+        }}
+      />
     </div>
   );
 }

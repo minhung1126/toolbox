@@ -8,7 +8,8 @@ import {
   youtubeRoutingLabel,
   youtubeRoutingMode,
   youtubeRoutingReasonLabel,
-} from './youtubeRouting';
+  type YoutubeRoutingState,
+} from './routing';
 
 describe('YouTube routing helpers', () => {
   it('defaults unknown routing modes to auto-primary', () => {
@@ -34,7 +35,7 @@ describe('YouTube routing helpers', () => {
   });
 
   it('uses only the active slot for manual connectivity', () => {
-    const manual = {
+    const manual: YoutubeRoutingState = {
       routing_mode: 'manual',
       active_slot: 'primary',
       slots: { primary: { authenticated: false }, secondary: { authenticated: true } },
@@ -46,7 +47,7 @@ describe('YouTube routing helpers', () => {
   });
 
   it('treats a channel mismatch or a blocked slot as unusable', () => {
-    const youtube = {
+    const youtube: YoutubeRoutingState = {
       routing_mode: 'auto_primary',
       active_slot: 'primary',
       slots: {
@@ -74,7 +75,7 @@ describe('YouTube routing helpers', () => {
   });
 
   it('generates consistent authorization fingerprints and auth context', () => {
-    const youtube = {
+    const youtube: YoutubeRoutingState = {
       active_slot: 'primary',
       routing_mode: 'auto_primary',
       slots: {
@@ -112,7 +113,7 @@ describe('YouTube routing helpers', () => {
     expect(
       getYoutubeAuthorizationFingerprint({
         ...youtube,
-        slots: { primary: { ...youtube.slots.primary, channel_mismatch: true, can_be_active: false } },
+        slots: { primary: { ...youtube.slots?.primary, channel_mismatch: true, can_be_active: false } },
       })
     ).not.toBe(fingerprint);
   });

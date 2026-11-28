@@ -12,8 +12,9 @@ import { buildClipboardSelection } from '../features/sheets/model/clipboardSelec
 import { copyToClipboard } from '../utils/clipboard';
 import '../features/sheets/sheets.css';
 
-export default function SheetCopyPage({ sysSettings }) {
+export default function SheetCopyPage({ sysSettings, onSharedFilterSaved }) {
   const {
+    ready: workStateReady,
     value: savedState,
     error: workStateError,
     saving: workStateSaving,
@@ -55,6 +56,9 @@ export default function SheetCopyPage({ sysSettings }) {
   const [copyStatus, setCopyStatus] = useState('');
   const initialLoadRequestedRef = useRef(false);
   const worksheetRequestRef = useRef(0);
+  const workStateHydratedRef = useRef(false);
+  const localWorkStateEditedRef = useRef(false);
+  const lastPersistedWorkStateRef = useRef(null);
 
   const sourceStale = spreadsheetId.trim() !== appliedSpreadsheetId.trim();
   const teamPersonFilter = useTeamPersonFilter({
@@ -91,10 +95,53 @@ export default function SheetCopyPage({ sysSettings }) {
     query: personQuery,
     selectedPeople,
     ready: filterPersistenceReady,
+    initialSavedFilter: sharedFilter,
+    onSaved: onSharedFilterSaved,
     onError: setSharedFilterSaveError,
   });
 
+  const serializedWorkState = useMemo(
+    () =>
+      JSON.stringify({
+        spreadsheetId,
+        worksheetName,
+        visibleKeys,
+        query,
+        autoCollapse,
+      }),
+    [autoCollapse, query, spreadsheetId, visibleKeys, worksheetName]
+  );
+
   useEffect(() => {
+    if (!workStateReady) return;
+    if (!workStateHydratedRef.current) {
+      workStateHydratedRef.current = true;
+      if (!localWorkStateEditedRef.current) {
+        const nextSpreadsheetId = saved.spreadsheetId || sysSettings.default_spreadsheet_id || '';
+        const nextWorksheetName = saved.worksheetName || '';
+        const nextVisibleKeys = Array.isArray(saved.visibleKeys) ? saved.visibleKeys : [];
+        const nextQuery = saved.query || '';
+        const nextAutoCollapse = saved.autoCollapse === true;
+        const hydratedSnapshot = {
+          spreadsheetId: nextSpreadsheetId,
+          worksheetName: nextWorksheetName,
+          visibleKeys: nextVisibleKeys,
+          query: nextQuery,
+          autoCollapse: nextAutoCollapse,
+        };
+        lastPersistedWorkStateRef.current = JSON.stringify(hydratedSnapshot);
+        if (nextSpreadsheetId !== spreadsheetId) setSpreadsheetId(nextSpreadsheetId);
+        if (nextSpreadsheetId !== appliedSpreadsheetId) setAppliedSpreadsheetId(nextSpreadsheetId);
+        if (nextWorksheetName !== worksheetName) setWorksheetName(nextWorksheetName);
+        if (JSON.stringify(nextVisibleKeys) !== JSON.stringify(visibleKeys)) setVisibleKeys(nextVisibleKeys);
+        if (nextQuery !== query) setQuery(nextQuery);
+        if (nextAutoCollapse !== autoCollapse) setAutoCollapse(nextAutoCollapse);
+        return;
+      }
+      lastPersistedWorkStateRef.current = '';
+    }
+    if (lastPersistedWorkStateRef.current === serializedWorkState) return;
+    lastPersistedWorkStateRef.current = serializedWorkState;
     saveWorkState({
       spreadsheetId,
       worksheetName,
@@ -102,7 +149,23 @@ export default function SheetCopyPage({ sysSettings }) {
       query,
       autoCollapse,
     });
-  }, [autoCollapse, query, saveWorkState, spreadsheetId, visibleKeys, worksheetName]);
+  }, [
+    appliedSpreadsheetId,
+    autoCollapse,
+    query,
+    saveWorkState,
+    saved.autoCollapse,
+    saved.query,
+    saved.spreadsheetId,
+    saved.visibleKeys,
+    saved.worksheetName,
+    serializedWorkState,
+    spreadsheetId,
+    sysSettings.default_spreadsheet_id,
+    visibleKeys,
+    workStateReady,
+    worksheetName,
+  ]);
 
   useEffect(() => {
     if (!copiedCell) return undefined;
@@ -170,13 +233,14 @@ export default function SheetCopyPage({ sysSettings }) {
   }, [loadWorksheet, spreadsheetId, worksheetName]);
 
   useEffect(() => {
-    if (spreadsheetId && !initialLoadRequestedRef.current) {
+    if (workStateReady && spreadsheetId && !initialLoadRequestedRef.current) {
       initialLoadRequestedRef.current = true;
       refresh();
     }
-  }, [refresh, spreadsheetId]);
+  }, [refresh, spreadsheetId, workStateReady]);
 
   const handleSpreadsheetChange = (event) => {
+    localWorkStateEditedRef.current = true;
     const nextValue = event.target.value;
     setSpreadsheetId(nextValue);
     if (nextValue.trim() !== appliedSpreadsheetId.trim()) {
@@ -186,6 +250,7 @@ export default function SheetCopyPage({ sysSettings }) {
   };
 
   const handleWorksheetChange = (nextWorksheet) => {
+    localWorkStateEditedRef.current = true;
     if (nextWorksheet) loadWorksheet(nextWorksheet, appliedSpreadsheetId);
   };
 
@@ -274,7 +339,10 @@ export default function SheetCopyPage({ sysSettings }) {
               id="sheet-copy-auto-collapse"
               type="checkbox"
               checked={autoCollapse}
-              onChange={(event) => setAutoCollapse(event.target.checked)}
+              onChange={(event) => {
+                localWorkStateEditedRef.current = true;
+                setAutoCollapse(event.target.checked);
+              }}
             />
             <span>自動折疊內容格子</span>
           </label>
@@ -342,7 +410,10 @@ export default function SheetCopyPage({ sysSettings }) {
               id="sheet-copy-query"
               className="form-input"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                localWorkStateEditedRef.current = true;
+                setQuery(event.target.value);
+              }}
               placeholder="搜尋表格內容"
               disabled={displayDisabled}
             />
@@ -355,12 +426,22 @@ export default function SheetCopyPage({ sysSettings }) {
               <span>
                 <button
                   type="button"
-                  onClick={() => setVisibleKeys(columns.map((column) => column.key))}
+                  onClick={() => {
+                    localWorkStateEditedRef.current = true;
+                    setVisibleKeys(columns.map((column) => column.key));
+                  }}
                   disabled={displayDisabled}
                 >
                   全選
                 </button>
-                <button type="button" onClick={() => setVisibleKeys([])} disabled={displayDisabled}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    localWorkStateEditedRef.current = true;
+                    setVisibleKeys([]);
+                  }}
+                  disabled={displayDisabled}
+                >
                   全不選
                 </button>
               </span>
@@ -374,13 +455,14 @@ export default function SheetCopyPage({ sysSettings }) {
                       type="checkbox"
                       checked={visibleKeys.includes(column.key)}
                       disabled={displayDisabled}
-                      onChange={() =>
+                      onChange={() => {
+                        localWorkStateEditedRef.current = true;
                         setVisibleKeys((current) =>
                           current.includes(column.key)
                             ? current.filter((key) => key !== column.key)
                             : [...current, column.key]
-                        )
-                      }
+                        );
+                      }}
                     />
                     {column.label}
                   </label>

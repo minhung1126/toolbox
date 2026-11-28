@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import DashboardPage from './DashboardPage';
 import { PATHS } from '../routes/paths';
 import { api } from '../services/api';
+import * as catalogModule from '../tools/catalog';
 import { getAllTools } from '../tools/catalog';
 import { ToolCatalogProvider } from '../tools/ToolCatalogProvider';
 import { AccountWorkStateProvider } from '../hooks/useAccountWorkState';
@@ -251,5 +252,38 @@ describe('DashboardPage', () => {
     expect(screen.getByText('creator@example.com')).toBeVisible();
     fireEvent.click(toggle);
     expect(details).not.toBeVisible();
+  });
+
+  it('renders tools without a hardcoded purpose using dynamic category fallback', async () => {
+    const baseTools = getAllTools();
+    const customTools = [
+      ...baseTools,
+      {
+        ...baseTools[0],
+        id: 'example-template',
+        purpose: undefined,
+        category: '開發者範本',
+        title: '開發者範本工具',
+        featureCards: [
+          {
+            ...baseTools[0].featureCards[0],
+            id: 'example_template_card',
+            title: '範本卡片入口',
+            description: '沒有 purpose 的外掛也應該顯示',
+            to: '/example-tool',
+            actionLabel: '進入範本工具',
+          },
+        ],
+      },
+    ];
+    vi.spyOn(catalogModule, 'reconcileToolCatalog').mockReturnValue(customTools);
+    vi.spyOn(api, 'getTools').mockResolvedValue({ tools: [] });
+
+    renderDashboard({ catalog: true });
+
+    expect(await screen.findByRole('heading', { name: '開發者範本' })).toBeInTheDocument();
+    expect(screen.getByText('範本卡片入口')).toBeInTheDocument();
+    const expectedTotalCards = customTools.reduce((sum, t) => sum + (t.featureCards?.length || 0), 0);
+    expect(screen.getByText(`顯示 ${expectedTotalCards} / ${expectedTotalCards} 個工具入口`)).toBeInTheDocument();
   });
 });

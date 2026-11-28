@@ -36,6 +36,7 @@ const manifest = {
   routes: [
     {
       path: PATHS.notes.slice(1),
+      title: '便利貼備忘錄',
       component: lazy(() => import('../../pages/StickyNotesPage')),
       getProps: ({ pageProps }) => pageProps,
     },

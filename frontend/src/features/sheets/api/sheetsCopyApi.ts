@@ -1,5 +1,5 @@
 import { api } from '../../../services/api';
-import type { CopyableSheetColumn, CopyableSheetRow, CopyableSheetTable, SpreadsheetMetadata } from './types';
+import type { CopyableSheetTable, SpreadsheetMetadata } from './types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

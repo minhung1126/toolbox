@@ -24,13 +24,14 @@ export default function TeamPersonFilterPanel({
   const [expanded, setExpanded] = useState(false);
   const [undo, setUndo] = useState(null);
   const busy = disabled || loading || loadingTeams || loadingPeople;
+  const activeTeams = selectedTeams.filter((team) => teams.includes(team));
   const results = people.filter(
-    (person) => (!selectedTeams.length || selectedTeams.includes(person.team)) && matchesPersonSearch(person, query)
+    (person) => (!activeTeams.length || activeTeams.includes(person.team)) && matchesPersonSearch(person, query)
   );
   const resultKeys = results.map(personKey);
   const resultKeySet = new Set(resultKeys);
   const selectedSet = new Set(selectedPeople);
-  const hasFilters = Boolean(query || selectedTeams.length);
+  const hasFilters = Boolean(query || activeTeams.length);
   const resetFilters = () => {
     onQueryChange('');
     onTeamsChange([]);
@@ -87,8 +88,8 @@ export default function TeamPersonFilterPanel({
       <div className="person-team-filters" role="group" aria-label="團體快速篩選">
         <button
           type="button"
-          className={`person-filter-chip${!selectedTeams.length ? ' is-active' : ''}`}
-          aria-pressed={!selectedTeams.length}
+          className={`person-filter-chip${!activeTeams.length ? ' is-active' : ''}`}
+          aria-pressed={!activeTeams.length}
           disabled={busy}
           onClick={() => onTeamsChange([])}
         >
@@ -98,8 +99,8 @@ export default function TeamPersonFilterPanel({
           <button
             key={team}
             type="button"
-            className={`person-filter-chip${selectedTeams.includes(team) ? ' is-active' : ''}`}
-            aria-pressed={selectedTeams.includes(team)}
+            className={`person-filter-chip${activeTeams.includes(team) ? ' is-active' : ''}`}
+            aria-pressed={activeTeams.includes(team)}
             disabled={busy}
             onClick={() =>
               onTeamsChange(

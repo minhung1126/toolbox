@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 import { mockAuthenticatedBackend, draftPublishResponses } from './fixtures';
 import { personKey, personName } from '../src/features/sheets/model/personOptions';
 
@@ -14,7 +14,7 @@ const people = [
   })),
 ];
 
-async function setup(page) {
+async function setup(page: Page) {
   let filter = { configured: false, team: '', teams: [] as string[], query: '', selected_people: [] as string[] };
   await mockAuthenticatedBackend(page, {
     '/api/v1/auth/user': {
@@ -24,7 +24,7 @@ async function setup(page) {
       youtube: { slots: { primary: { authenticated: true, channel_id: 'channel-e2e' } }, active_slot: 'primary' },
     },
     '/api/v1/settings/shared': { default_spreadsheet_id: 'sheet-a', default_playlist_id: 'PLtest' },
-    '/api/v1/settings/team-person-filter': async (route) => {
+    '/api/v1/settings/team-person-filter': async (route: Route) => {
       if (route.request().method() === 'PUT') filter = { ...route.request().postDataJSON(), configured: true };
       await route.fulfill({ json: filter });
     },

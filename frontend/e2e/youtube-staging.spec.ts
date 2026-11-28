@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Route } from '@playwright/test';
 import { draftPublishResponses, mockAuthenticatedBackend } from './fixtures';
 import { personKey } from '../src/features/sheets/model/personOptions';
 
@@ -47,7 +47,7 @@ for (const videoType of ['Video', 'Shorts']) {
       },
       '/api/v1/youtube/edit-status': { channel_id: 'channel-e2e', statuses: { applied: 'applied', new: 'unknown' } },
       ...fakes,
-      '/api/v1/youtube/drafts/prepare': async (route) => {
+      '/api/v1/youtube/drafts/prepare': async (route: Route) => {
         prepareCalls += 1;
         if (failPrepare) {
           failPrepare = false;
@@ -56,7 +56,7 @@ for (const videoType of ['Video', 'Shorts']) {
         }
         await fakes['/api/v1/youtube/drafts/prepare'](route);
       },
-      '/api/v1/youtube/drafts/publish-jobs': async (route) => {
+      '/api/v1/youtube/drafts/publish-jobs': async (route: Route) => {
         writes += 1;
         await fakes['/api/v1/youtube/drafts/publish-jobs'](route);
       },

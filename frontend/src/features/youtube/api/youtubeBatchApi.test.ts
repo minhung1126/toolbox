@@ -32,7 +32,7 @@ const plan = [
     currentDescription: 'Old description',
     newTitle: 'New',
     newDescription: 'New description',
-    status: 'ready',
+    status: 'ready' as const,
     willUpdate: true,
   },
 ];
@@ -101,33 +101,33 @@ describe('youtubeBatchApi', () => {
     vi.mocked(api.getPlaylistVideos).mockResolvedValueOnce(response);
     await expect(youtubeBatchApi.getPlaylistVideos('playlist-1')).resolves.toEqual(response);
 
-    vi.mocked(api.getPlaylistVideos).mockResolvedValueOnce({ playlist_id: 'playlist-1' });
+    vi.mocked(api.getPlaylistVideos).mockResolvedValueOnce({ playlist_id: 'playlist-1' } as never);
     await expect(youtubeBatchApi.getPlaylistVideos('playlist-1')).rejects.toThrow('草稿播放清單回應格式不正確。');
   });
 
   it('rejects incomplete or contradictory batch plans before they can be confirmed', async () => {
-    vi.mocked(api.getBatchPreview).mockResolvedValueOnce(preview);
+    vi.mocked(api.getBatchPreview).mockResolvedValueOnce(preview as never);
     await expect(youtubeBatchApi.getBatchPreview(request)).resolves.toEqual(preview);
 
-    vi.mocked(api.getBatchPreview).mockResolvedValueOnce({ ...preview, plan: undefined });
+    vi.mocked(api.getBatchPreview).mockResolvedValueOnce({ ...preview, plan: undefined } as never);
     await expect(youtubeBatchApi.getBatchPreview(request)).rejects.toThrow('批次更新預覽回應格式不正確。');
 
     vi.mocked(api.getBatchPreview).mockResolvedValueOnce({
       ...preview,
       preview_snapshot: { ...preview.preview_snapshot, video_ids: ['different-video'] },
-    });
+    } as never);
     await expect(youtubeBatchApi.getBatchPreview(request)).rejects.toThrow('批次更新預覽快照與計劃不一致。');
   });
 
   it('rejects incomplete execution results instead of reporting success', async () => {
     const updateRequest = { ...request, previewToken: 'signed-token', previewSnapshot: preview.preview_snapshot };
-    vi.mocked(api.batchUpdateMetadata).mockResolvedValueOnce(result);
+    vi.mocked(api.batchUpdateMetadata).mockResolvedValueOnce(result as never);
     await expect(youtubeBatchApi.updateMetadata(updateRequest)).resolves.toEqual(result);
 
-    vi.mocked(api.batchUpdateMetadata).mockResolvedValueOnce({ ...result, results: undefined });
+    vi.mocked(api.batchUpdateMetadata).mockResolvedValueOnce({ ...result, results: undefined } as never);
     await expect(youtubeBatchApi.updateMetadata(updateRequest)).rejects.toThrow('批次更新結果回應格式不正確。');
 
-    vi.mocked(api.batchUpdateMetadata).mockResolvedValueOnce({ ...result, succeeded_count: 0 });
+    vi.mocked(api.batchUpdateMetadata).mockResolvedValueOnce({ ...result, succeeded_count: 0 } as never);
     await expect(youtubeBatchApi.updateMetadata(updateRequest)).rejects.toThrow('批次更新結果計數不一致。');
   });
 });

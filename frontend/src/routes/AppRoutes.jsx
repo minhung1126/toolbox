@@ -109,6 +109,7 @@ export default function AppRoutes({
   oauthReturnPath,
   clearOAuthReturnPath,
   sysSettings,
+  onSharedFilterSaved,
 }) {
   const appShellProps = {
     authUser,
@@ -125,8 +126,14 @@ export default function AppRoutes({
     sidebarCollapsed,
     setSidebarCollapsed,
   };
-  const pageProps = { authUser, sysSettings, refreshSettings: fetchSettings, refreshAuthUser: fetchUser };
-  const featureRouteContext = { authUser, sysSettings, pageProps };
+  const pageProps = {
+    authUser,
+    sysSettings,
+    refreshSettings: fetchSettings,
+    refreshAuthUser: fetchUser,
+    onSharedFilterSaved,
+  };
+  const featureRouteContext = { authUser, sysSettings, onSharedFilterSaved, pageProps };
 
   return (
     <>

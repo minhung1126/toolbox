@@ -40,6 +40,7 @@ export interface PlaylistSortApplyRequest extends PlaylistSortPreviewRequest {
   newPlaylistTitle?: string;
   sortedItemIds?: string[];
   allowQuotaFallback?: boolean;
+  requestId?: string;
 }
 
 export interface PlaylistSortApplyResponse {

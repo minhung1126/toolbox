@@ -75,4 +75,26 @@ describe('TeamPersonFilterPanel', () => {
     expect(screen.getByRole('searchbox')).toBeDisabled();
     expect(screen.getByText('讀取中…')).toBeInTheDocument();
   });
+
+  it('ignores off-sheet selectedTeams when filtering current sheet results and preserves them when toggling local chips', () => {
+    const onTeamsChange = vi.fn();
+    render(
+      <TeamPersonFilterPanel
+        teams={['Team A', 'Team B']}
+        people={[a, b, c]}
+        selectedTeams={['Team C']}
+        onTeamsChange={onTeamsChange}
+        query=""
+        onQueryChange={vi.fn()}
+        selectedPeople={[]}
+        onSelectedPeopleChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('符合 3 人・已選 0 人')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '全部團體' })).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Team A', exact: true }));
+    expect(onTeamsChange).toHaveBeenCalledWith(['Team C', 'Team A']);
+  });
 });
