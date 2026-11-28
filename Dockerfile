@@ -18,7 +18,7 @@ RUN npm run build
 # ==========================================
 # Stage 2: Build Python Backend Dependencies
 # ==========================================
-FROM python:3.11-slim@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627accd3d51053a93 AS backend-builder
+FROM python:3.11-slim@sha256:7032841967d07aa3353905945dc186901c89b6b319c61425f4439f677a4a8a34 AS backend-builder
 WORKDIR /app
 
 # 建立獨立虛擬環境隔離 Python 套件，避免污染最終運行映像
@@ -32,7 +32,7 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 # ==========================================
 # Stage 3: Production Runtime
 # ==========================================
-FROM python:3.11-slim@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627accd3d51053a93 AS runner
+FROM python:3.11-slim@sha256:7032841967d07aa3353905945dc186901c89b6b319c61425f4439f677a4a8a34 AS runner
 WORKDIR /app
 
 # 3.1 執行期標準環境變數（禁止寫入 .pyc、無緩衝日誌輸出、啟用虛擬環境與模組解析路徑）
@@ -69,6 +69,6 @@ USER app
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD ["python", "-c", "import os,urllib.request;urllib.request.urlopen('http://127.0.0.1:%s/api/v1/health' % os.environ.get('PORT','8000'), timeout=3)"]
+    CMD ["python", "-c", "import os,urllib.parse,urllib.request;hosts=[h.strip() for h in os.environ.get('TRUSTED_HOSTS','').split(',') if h.strip()];host=hosts[0] if hosts else (urllib.parse.urlparse(os.environ.get('PUBLIC_BASE_URL','')).hostname or '127.0.0.1');host='health.'+host[2:] if host.startswith('*.') else ('127.0.0.1' if host=='*' else host);req=urllib.request.Request('http://127.0.0.1:%s/api/v1/health' % os.environ.get('PORT','8000'), headers={'Host': host});urllib.request.urlopen(req, timeout=3)"]
 
 CMD ["sh", "-c", "exec uvicorn backend.app.main:app --host \"${BIND_HOST}\" --port \"${PORT}\" --workers 1"]
