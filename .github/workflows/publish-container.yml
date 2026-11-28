@@ -58,7 +58,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate and push automated version tag
+      - name: Compute next version tag (dry run)
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.2
         with:
@@ -66,6 +66,7 @@ jobs:
           default_bump: patch
           release_branches: main
           create_annotated_tag: true
+          dry_run: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -107,3 +108,11 @@ jobs:
             APP_COMMIT_SHA=${{ github.sha }}
           cache-from: type=gha,scope=container-build
           cache-to: type=gha,mode=max,scope=container-build
+
+      - name: Push version tag after successful image push
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+          release_branches: main
+          create_annotated_tag: true
