@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -257,3 +258,84 @@ def test_queued_preview_expiry_and_shutdown_never_start_a_provider_write(job_har
     new_payload["preview_token"] += "different"
     response = submit(h, new_payload, "shutdown")
     assert response.status_code == 503
+
+
+def test_runner_lock_rejects_contention_and_releases_on_shutdown_with_nonempty_lock_file(tmp_path):
+    store_path = tmp_path / "ops.sqlite3"
+    store_path.with_suffix(".runner.lock").write_bytes(b"stale-lock-content\n")
+    runner1 = YouTubePublishRunner(OperationStore(store_path), runtime=None)
+    runner2 = YouTubePublishRunner(OperationStore(store_path), runtime=None)
+    runner1.start()
+    try:
+        with pytest.raises(RuntimeError, match="one process"):
+            runner2.start()
+        assert runner2.file_lock is None
+        assert runner2.accepting is False
+    finally:
+        runner1.shutdown()
+    assert runner1.file_lock is None
+    runner2.start()
+    try:
+        assert runner2.accepting is True
+        assert runner2.file_lock is not None
+    finally:
+        runner2.shutdown()
+    assert runner2.file_lock is None
+
+
+def test_runner_releases_lock_when_startup_fails_after_locking(tmp_path, monkeypatch):
+    store_path = tmp_path / "ops.sqlite3"
+    runner1 = YouTubePublishRunner(OperationStore(store_path), runtime=None)
+
+    def fail_recover():
+        raise RuntimeError("recover failed")
+
+    monkeypatch.setattr(runner1.store, "recover_lost_executor_jobs", fail_recover)
+    with pytest.raises(RuntimeError, match="recover failed"):
+        runner1.start()
+    assert runner1.file_lock is None
+    assert runner1.accepting is False
+
+    runner2 = YouTubePublishRunner(OperationStore(store_path), runtime=None)
+    runner2.start()
+    try:
+        assert runner2.accepting is True
+        assert runner2.file_lock is not None
+    finally:
+        runner2.shutdown()
+    assert runner2.file_lock is None
+
+
+def test_publish_job_runtime_enforces_allowlist_in_http_development_mode(tmp_path):
+    from backend.app.core.config import Settings
+    from backend.app.core.credential_store import CredentialStore
+    from backend.app.core.runtime_config import RuntimeConfig
+    from backend.app.core.system_secrets import SystemSecretsManager
+    from backend.app.services.youtube_publish_jobs import JobIdentity, PublishJobRuntime
+
+    config = Settings(
+        _env_file=None,
+        runtime_store=RuntimeConfig(tmp_path / "runtime.json"),
+        secrets_store=SystemSecretsManager(tmp_path),
+        ENVIRONMENT="development",
+        PUBLIC_BASE_URL="http://localhost:8000",
+        ALLOWED_GOOGLE_EMAILS="admin@example.com",
+    )
+    assert config.allowlist_required is False
+    creds = CredentialStore(tmp_path / "creds.json", encryption_key=config.CREDENTIAL_ENCRYPTION_KEY)
+    creds.save_google_connection(
+        {"token": "tok", "user": {"sub": "revoked-user", "email": "revoked@example.com"}},
+        owner_sub="revoked-user",
+    )
+    runtime = PublishJobRuntime(
+        config=config,
+        credentials=creds,
+        accounts=SimpleNamespace(),
+        trackers=None,
+        client_factory=None,
+        service=None,
+    )
+    with pytest.raises(HTTPException) as exc:
+        runtime.load_credentials(JobIdentity("revoked-user", "chan-1", "primary", "manual"))
+    assert exc.value.status_code == 403
+    assert exc.value.detail["code"] == "access_denied"

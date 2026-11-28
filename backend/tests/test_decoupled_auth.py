@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,20 +10,20 @@ from starlette.requests import Request
 from backend.app.api import youtube as youtube_api
 from backend.app.core import dependencies, youtube_routing
 from backend.app.core.account_state_store import AccountStateStore
-from backend.app.core.config import settings
+from backend.app.core.config import Settings, settings, settings_context
 from backend.app.core.credential_store import CredentialStore
+from backend.app.core.runtime_config import RuntimeConfig
+from backend.app.core.security import GOOGLE_OAUTH_STATE_SALT, sign_timed_data
 from backend.app.core.session_store import SessionStore
+from backend.app.core.system_secrets import SystemSecretsManager
 from backend.app.core.youtube_context import YouTubeRequestContext
 from backend.app.main import create_app
 from backend.app.services import google_auth
 from backend.app.services.google_auth import (
-    DRIVE_READONLY_SCOPE,
-    DRIVE_SCOPES,
     LOGIN_SCOPES,
     SHEETS_READONLY_SCOPE,
     SHEETS_SCOPES,
     YOUTUBE_SCOPES,
-    has_drive_read_scope,
     has_sheets_scope,
     has_youtube_scope,
 )
@@ -42,16 +43,16 @@ def _token_payload(scopes: list[str], token: str = "test-token", sub: str = "tes
 
 
 def test_scopes_are_strictly_decoupled():
-    """Verify login scopes contain only identity, while sheets and drive have dedicated scopes."""
+    """Verify login scopes contain only identity, while sheets and youtube have dedicated scopes."""
     assert SHEETS_READONLY_SCOPE not in LOGIN_SCOPES
-    assert DRIVE_READONLY_SCOPE not in LOGIN_SCOPES
+    assert "https://www.googleapis.com/auth/youtube" not in LOGIN_SCOPES
     assert "openid" in LOGIN_SCOPES
 
     assert SHEETS_READONLY_SCOPE in SHEETS_SCOPES
-    assert DRIVE_READONLY_SCOPE not in SHEETS_SCOPES
+    assert "https://www.googleapis.com/auth/youtube" not in SHEETS_SCOPES
 
-    assert DRIVE_READONLY_SCOPE in DRIVE_SCOPES
-    assert SHEETS_READONLY_SCOPE not in DRIVE_SCOPES
+    assert "https://www.googleapis.com/auth/youtube" in YOUTUBE_SCOPES
+    assert SHEETS_READONLY_SCOPE not in YOUTUBE_SCOPES
 
 
 def test_login_only_session_keeps_connection_pages_available_but_rejects_provider_actions(tmp_path: Path, monkeypatch):
@@ -276,51 +277,8 @@ def test_require_sheets_credentials_rejects_login_only_and_accepts_sheets(tmp_pa
     assert creds.token == "sheets-access-token"
 
 
-def test_require_drive_credentials_rejects_login_only_and_accepts_drive(tmp_path: Path, monkeypatch):
-    """Ensure require_drive_credentials blocks login-only tokens and grants access with drive scope."""
-    cred_store = CredentialStore(tmp_path / "creds.json")
-    sess_store = SessionStore(tmp_path / "sess.json")
-    monkeypatch.setattr(dependencies, "session_store", sess_store)
-    monkeypatch.setattr(google_auth, "credential_store", cred_store)
-    monkeypatch.setattr(google_auth, "session_store", sess_store)
-
-    sub = "subject-drive-test"
-    login_token = _token_payload(LOGIN_SCOPES, sub=sub)
-    cred_store.save_google_connection(login_token, owner_sub=sub)
-    session_id = sess_store.create({"credential_provider": "google_login", "user": {"sub": sub}})
-
-    req = Request(
-        {
-            "type": "http",
-            "method": "POST",
-            "path": "/drive/access/check",
-            "headers": [(b"cookie", f"creator_session={session_id}".encode())],
-            "query_string": b"",
-            "server": ("testserver", 80),
-        }
-    )
-
-    # Without drive authorization -> raises 403 google_drive_scope_required
-    try:
-        dependencies.require_drive_credentials(req, owner_sub=sub)
-        raise AssertionError("Expected 403 HTTPException")
-    except HTTPException as exc:
-        assert exc.status_code == 403
-        assert exc.detail["code"] == "google_drive_scope_required"
-
-    # Now authorize dedicated Drive
-    drive_token = _token_payload(DRIVE_SCOPES, token="drive-access-token", sub=sub)
-    cred_store.save_drive_connection(drive_token, owner_sub=sub)
-
-    # Should succeed and return valid credentials with drive scope
-    creds = dependencies.require_drive_credentials(req, owner_sub=sub)
-    assert creds is not None
-    assert has_drive_read_scope(creds)
-    assert creds.token == "drive-access-token"
-
-
 def test_legacy_credentials_with_scopes_fallback_cleanly(tmp_path: Path, monkeypatch):
-    """Ensure backward compatibility: an existing google connection containing sheets/drive scopes works."""
+    """Ensure backward compatibility: an existing google connection containing sheets scope works."""
     cred_store = CredentialStore(tmp_path / "creds.json")
     sess_store = SessionStore(tmp_path / "sess.json")
     monkeypatch.setattr(dependencies, "session_store", sess_store)
@@ -328,8 +286,7 @@ def test_legacy_credentials_with_scopes_fallback_cleanly(tmp_path: Path, monkeyp
     monkeypatch.setattr(google_auth, "session_store", sess_store)
 
     sub = "subject-legacy-test"
-    # Legacy connection that contained both sheets and drive scopes
-    legacy_scopes = LOGIN_SCOPES + [SHEETS_READONLY_SCOPE, DRIVE_READONLY_SCOPE]
+    legacy_scopes = LOGIN_SCOPES + [SHEETS_READONLY_SCOPE]
     legacy_token = _token_payload(legacy_scopes, token="legacy-token", sub=sub)
     cred_store.save_google_connection(legacy_token, owner_sub=sub)
     session_id = sess_store.create({"credential_provider": "google_login", "user": {"sub": sub}})
@@ -345,36 +302,135 @@ def test_legacy_credentials_with_scopes_fallback_cleanly(tmp_path: Path, monkeyp
         }
     )
 
-    # Fallback resolves sheets and drive credentials from legacy google connection
+    # Fallback resolves sheets credentials from legacy google connection
     sheets_creds = dependencies.require_sheets_credentials(req, owner_sub=sub)
     assert sheets_creds.token == "legacy-token"
     assert has_sheets_scope(sheets_creds)
 
-    drive_creds = dependencies.require_drive_credentials(req, owner_sub=sub)
-    assert drive_creds.token == "legacy-token"
-    assert has_drive_read_scope(drive_creds)
 
-
-def test_clear_sheets_and_drive(tmp_path: Path):
-    """Ensure clear_sheets and clear_drive remove only the targeted authorization."""
+def test_clear_sheets_preserves_other_connections(tmp_path: Path):
+    """Ensure clear_sheets removes only the sheets authorization."""
     store = CredentialStore(tmp_path / "creds.json")
     sub = "sub-clear-test"
     store.save_google_connection(_token_payload(LOGIN_SCOPES, sub=sub), owner_sub=sub)
     store.save_sheets_connection(_token_payload(SHEETS_SCOPES, sub=sub), owner_sub=sub)
-    store.save_drive_connection(_token_payload(DRIVE_SCOPES, sub=sub), owner_sub=sub)
+    store.save_ytmusic_connection(_token_payload(YOUTUBE_SCOPES, sub=sub), owner_sub=sub)
 
     assert store.get_google_credentials(sub) is not None
     assert store.get_sheets_credentials(sub) is not None
-    assert store.get_drive_credentials(sub) is not None
+    assert store.get_ytmusic_credentials(sub) is not None
 
     store.clear_sheets(sub)
     assert store.get_sheets_credentials(sub) is None
     assert store.get_google_credentials(sub) is not None
-    assert store.get_drive_credentials(sub) is not None
+    assert store.get_ytmusic_credentials(sub) is not None
 
-    store.clear_drive(sub)
-    assert store.get_drive_credentials(sub) is None
-    assert store.get_google_credentials(sub) is not None
+
+def test_legacy_credential_store_with_drive_key_is_ignored_cleanly(tmp_path: Path):
+    """Ensure existing credential_store.json files with a legacy 'drive' entry load and operate safely."""
+    sub = "subject-legacy-drive-json"
+    store_path = tmp_path / "credential_store.json"
+    config = Settings(
+        _env_file=None,
+        runtime_store=RuntimeConfig(tmp_path / "runtime.json"),
+        secrets_store=SystemSecretsManager(tmp_path),
+        GOOGLE_CLIENT_ID="test-client",
+        GOOGLE_CLIENT_SECRET="test-secret",
+        YOUTUBE_OAUTH_PRIMARY_CLIENT_ID="test-yt-client",
+        YOUTUBE_OAUTH_PRIMARY_CLIENT_SECRET="test-yt-secret",
+        ALLOWED_GOOGLE_EMAILS=f"{sub}@example.test",
+    )
+    with settings_context(config):
+        seed_store = CredentialStore(store_path)
+        seed_store.save_google_connection(_token_payload(LOGIN_SCOPES, sub=sub), owner_sub=sub)
+        seed_store.save_sheets_connection(_token_payload(SHEETS_SCOPES, token="sheets-ok", sub=sub), owner_sub=sub)
+        seed_store.save_ytmusic_connection(_token_payload(YOUTUBE_SCOPES, token="ytmusic-ok", sub=sub), owner_sub=sub)
+        yt_payload = _token_payload(YOUTUBE_SCOPES, token="yt-ok", sub=sub)
+        yt_payload["channel_id"] = "channel-123"
+        yt_payload["channel_title"] = "Channel 123"
+        seed_store.save_youtube_connection(yt_payload, owner_sub=sub, slot="primary")
+
+    raw_data = json.loads(store_path.read_text(encoding="utf-8"))
+    raw_data["users"][sub]["drive"] = {
+        "owner_sub": sub,
+        "credentials_encrypted": "legacy-or-unreadable-ciphertext",
+        "scopes": ["https://www.googleapis.com/auth/drive.readonly"],
+        "status": "active",
+    }
+    store_path.write_text(json.dumps(raw_data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    with settings_context(config):
+        reloaded_store = CredentialStore(store_path)
+        sessions = SessionStore(tmp_path / "sessions.json")
+        session_id = sessions.create(
+            {"credential_provider": "google_login", "user": {"sub": sub, "email": f"{sub}@example.test"}}
+        )
+        client = TestClient(
+            create_app(
+                app_settings=config,
+                session_store=sessions,
+                credential_store=reloaded_store,
+                account_state_store=AccountStateStore(tmp_path / "account-state.json"),
+            )
+        )
+        client.cookies.set(config.session_cookie_name, session_id)
+
+        response = client.get("/api/v1/auth/user")
+        assert response.status_code == 200
+        status = response.json()
+        assert status["authenticated"] is True
+        assert "drive" not in status["authorizations"]
+        assert "drive_readonly" not in status["google_scopes"]
+        assert "drive_reauthorization_required" not in status["google_scopes"]
+        assert status["authorizations"]["sheets"]["connected"] is True
+        assert status["authorizations"]["ytmusic"]["connected"] is True
+        assert status["youtube"]["slots"]["primary"]["authenticated"] is True
+
+        reloaded_store.save_sheets_connection(_token_payload(SHEETS_SCOPES, token="sheets-v2", sub=sub), owner_sub=sub)
+        assert reloaded_store.get_sheets_credentials(sub)["token"] == "sheets-v2"
+        reloaded_store.clear_sheets(sub)
+        assert reloaded_store.get_sheets_credentials(sub) is None
+        assert reloaded_store.get_google_credentials(sub) is not None
+        assert reloaded_store.get_ytmusic_credentials(sub) is not None
+        assert reloaded_store.get_youtube_credentials(sub, slot="primary") is not None
+
+
+def test_retired_drive_auth_endpoints_and_callback_rejected(tmp_path: Path):
+    """Verify retired Drive OAuth endpoints return 404, config omits drive_scopes, and drive callbacks fail closed."""
+    config = Settings(
+        _env_file=None,
+        runtime_store=RuntimeConfig(tmp_path / "runtime.json"),
+        secrets_store=SystemSecretsManager(tmp_path),
+        GOOGLE_CLIENT_ID="test-client",
+        GOOGLE_CLIENT_SECRET="test-secret",
+    )
+    app = create_app(
+        app_settings=config,
+        session_store=SessionStore(tmp_path / "sessions.json"),
+        credential_store=CredentialStore(tmp_path / "creds.json", encryption_key=config.CREDENTIAL_ENCRYPTION_KEY),
+    )
+    client = TestClient(app)
+
+    assert client.get("/api/v1/auth/drive/url").status_code == 404
+    assert client.post("/api/v1/auth/drive/disconnect", headers={"Origin": config.frontend_url}).status_code == 404
+
+    config_resp = client.get("/api/v1/auth/config")
+    assert config_resp.status_code == 200
+    assert "drive_scopes" not in config_resp.json()
+
+    with settings_context(config):
+        signed_drive_cookie = sign_timed_data(
+            {"flow_type": "drive", "state": "state-123", "code_verifier": "verifier-123"},
+            salt=GOOGLE_OAUTH_STATE_SALT,
+        )
+    client.cookies.set(config.oauth_flow_cookie_name, signed_drive_cookie)
+    callback_resp = client.get(
+        "/api/v1/auth/callback",
+        params={"code": "auth-code", "state": "state-123"},
+        follow_redirects=False,
+    )
+    assert callback_resp.status_code in (302, 307)
+    assert "/#auth_error=" in callback_resp.headers["location"]
 
 
 def test_ytmusic_decoupled_credentials(tmp_path: Path, monkeypatch):
@@ -447,8 +503,7 @@ def test_validate_ytmusic_custom_token_endpoint(tmp_path: Path, monkeypatch):
         email="test@example.com",
         credentials=None,
     )
-    monkeypatch.setattr(auth_api, "get_authenticated_session", lambda req: auth_sess)
-    monkeypatch.setattr(dependencies, "get_authenticated_session", lambda req: auth_sess)
+    monkeypatch.setitem(main.app.dependency_overrides, dependencies.get_authenticated_session, lambda: auth_sess)
 
     # Mock validate_ytmusic_custom_token in auth_api / ytmusic_service
     monkeypatch.setattr(

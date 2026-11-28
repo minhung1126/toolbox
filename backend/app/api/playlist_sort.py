@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Annotated, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
-from starlette.concurrency import run_in_threadpool
+from pydantic import BaseModel, Field, field_validator
 
 from backend.app.core.credential_store import CredentialStore, credential_store
 from backend.app.core.dependencies import require_ytmusic_context
@@ -57,36 +56,64 @@ def _quota_http_exception(exc: YouTubeQuotaUnavailable) -> HTTPException:
     )
 
 
+SortFieldLiteral = Literal[
+    "artist",
+    "album",
+    "track_number",
+    "track",
+    "year",
+    "release_year",
+    "release_date",
+    "title",
+    "duration",
+    "duration_seconds",
+    "added_at",
+    "published_at",
+    "original_position",
+    "position",
+    "random",
+]
+
+
 class SortKeyInput(BaseModel):
-    field: str
-    direction: str = "asc"
+    field: SortFieldLiteral
+    direction: Literal["asc", "desc"] = "asc"
 
 
 class SortPreviewInput(BaseModel):
-    playlist_id: str
-    sort_keys: list[SortKeyInput]
+    playlist_id: str = Field(min_length=1, max_length=256)
+    sort_keys: list[SortKeyInput] = Field(max_length=16)
     fetch_album_details: bool = True
     use_youtube_api: bool = False
-    language: Optional[str] = None
-    location: Optional[str] = None
+    language: Optional[str] = Field(default=None, max_length=32)
+    location: Optional[str] = Field(default=None, max_length=16)
 
 
 class SortApplyInput(BaseModel):
     request_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
-    playlist_id: str
-    sort_keys: list[SortKeyInput]
-    preview_token: str
-    mode: str = "in_place"
-    new_playlist_title: Optional[str] = None
+    playlist_id: str = Field(min_length=1, max_length=256)
+    sort_keys: list[SortKeyInput] = Field(max_length=16)
+    preview_token: str = Field(min_length=1, max_length=16_384)
+    mode: Literal["in_place", "new_playlist"] = "in_place"
+    new_playlist_title: Optional[str] = Field(default=None, max_length=150)
     use_youtube_api: bool = False
-    sorted_item_ids: Optional[list[str]] = None
-    language: Optional[str] = None
-    location: Optional[str] = None
+    sorted_item_ids: Optional[list[Annotated[str, Field(min_length=1, max_length=256)]]] = Field(
+        default=None, max_length=5000
+    )
+    language: Optional[str] = Field(default=None, max_length=32)
+    location: Optional[str] = Field(default=None, max_length=16)
     allow_quota_fallback: bool = False
+
+    @field_validator("sorted_item_ids")
+    @classmethod
+    def unique_sorted_item_ids(cls, value: Optional[list[str]]) -> Optional[list[str]]:
+        if value is not None and len(value) != len(set(value)):
+            raise ValueError("排序項目不得重複。")
+        return value
 
 
 @router.get("/playlists")
-async def get_playlists(
+def get_playlists(
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
     token_store: CredentialStore = Depends(get_playlist_credential_store),
     client_factory: YtmusicClientFactory | None = Depends(get_playlist_client_factory),
@@ -94,8 +121,7 @@ async def get_playlists(
     location: Optional[str] = None,
 ):
     try:
-        playlists = await run_in_threadpool(
-            fetch_user_playlists,
+        playlists = fetch_user_playlists(
             context,
             language=language,
             location=location,
@@ -113,7 +139,7 @@ async def get_playlists(
 
 
 @router.post("/preview")
-async def preview_sort(
+def preview_sort(
     input_data: SortPreviewInput,
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
     token_store: CredentialStore = Depends(get_playlist_credential_store),
@@ -126,8 +152,7 @@ async def preview_sort(
         needs_year_fallback = any(
             k.field in ("year", "release_year", "release_date", "album") for k in input_data.sort_keys
         )
-        original_items = await run_in_threadpool(
-            fetch_playlist_items_for_sort,
+        original_items = fetch_playlist_items_for_sort(
             context,
             input_data.playlist_id,
             fetch_album_details=input_data.fetch_album_details,
@@ -148,6 +173,7 @@ async def preview_sort(
             owner_sub=context.owner_sub,
             youtube_slot=context.slot,
             operation="youtube.playlist_sort",
+            youtube_channel_id=getattr(context, "channel_id", None) or "",
             playlist_id=input_data.playlist_id,
             playlist=snapshot,
         )
@@ -192,15 +218,23 @@ async def preview_sort(
         raise http_error(500, "PREVIEW_FAILED", "產生排序預覽失敗，請稍後再試。") from e
 
 
-async def _apply_sort(
+def _apply_sort(
     input_data: SortApplyInput,
     recorder=None,
-    context: YouTubeRequestContext = Depends(require_ytmusic_context),
-    rate_limit=Depends(enforce_workflow_rate_limit),
-    token_store: CredentialStore = Depends(get_playlist_credential_store),
-    client_factory: YtmusicClientFactory | None = Depends(get_playlist_client_factory),
+    *,
+    context: YouTubeRequestContext,
+    rate_limit=None,
+    token_store: CredentialStore = credential_store,
+    client_factory: YtmusicClientFactory | None = None,
 ):
+    del rate_limit
     try:
+        if input_data.use_youtube_api and getattr(context, "credentials", object()) is None:
+            raise http_error(
+                403,
+                "youtube_not_connected",
+                "尚未連結可用的 YouTube 頻道 Google 帳號，請至「YouTube 設定」完成授權。",
+            )
         has_full_sorted_ids = bool(input_data.sorted_item_ids)
         needs_album = any(
             k.field in ("album", "track_number", "track", "year", "release_year", "release_date")
@@ -208,8 +242,7 @@ async def _apply_sort(
         )
         fetch_album = needs_album if not has_full_sorted_ids else False
 
-        original_items = await run_in_threadpool(
-            fetch_playlist_items_for_sort,
+        original_items = fetch_playlist_items_for_sort(
             context,
             input_data.playlist_id,
             fetch_album_details=fetch_album,
@@ -226,6 +259,7 @@ async def _apply_sort(
             owner_sub=context.owner_sub,
             youtube_slot=context.slot,
             operation="youtube.playlist_sort",
+            youtube_channel_id=getattr(context, "channel_id", None) or "",
             playlist_id=input_data.playlist_id,
             playlist=snapshot,
         ):
@@ -235,12 +269,15 @@ async def _apply_sort(
                 "預覽已過期或播放清單內容已變更，尚未寫入任何資料。請重新讀取預覽後再執行。",
             )
 
-        if input_data.sorted_item_ids and len(input_data.sorted_item_ids) == len(original_items):
+        if input_data.sorted_item_ids is not None:
             items_by_id = {item["playlist_item_id"]: item for item in original_items}
-            sorted_items = [items_by_id[item_id] for item_id in input_data.sorted_item_ids if item_id in items_by_id]
-            if len(sorted_items) != len(original_items):
-                sort_keys_dict = [{"field": k.field, "direction": k.direction} for k in input_data.sort_keys]
-                sorted_items = sort_items(original_items, sort_keys_dict)
+            if (
+                len(input_data.sorted_item_ids) != len(original_items)
+                or len(set(input_data.sorted_item_ids)) != len(original_items)
+                or set(input_data.sorted_item_ids) != set(items_by_id)
+            ):
+                raise http_error(400, "invalid_sorted_item_ids", "排序項目清單與播放清單內容不一致。")
+            sorted_items = [items_by_id[item_id] for item_id in input_data.sorted_item_ids]
         else:
             sort_keys_dict = [{"field": k.field, "direction": k.direction} for k in input_data.sort_keys]
             sorted_items = sort_items(original_items, sort_keys_dict)
@@ -255,13 +292,16 @@ async def _apply_sort(
                 recorder.id,
                 lambda operation: operation["plan"].update(
                     validated_order=[
-                        {"playlist_item_id": item["playlist_item_id"], "video_id": item.get("video_id")}
+                        {
+                            "playlist_item_id": item["playlist_item_id"],
+                            "video_id": item.get("video_id"),
+                            "has_set_video_id": bool(item.get("has_set_video_id", True)),
+                        }
                         for item in sorted_items
                     ]
                 ),
             )
-        result = await run_in_threadpool(
-            apply_sort_to_playlist,
+        result = apply_sort_to_playlist(
             context,
             input_data.playlist_id,
             preview["items"],
@@ -300,7 +340,7 @@ async def _apply_sort(
 
 
 @router.post("/apply")
-async def apply_sort(
+def apply_sort(
     input_data: SortApplyInput,
     context: YouTubeRequestContext = Depends(require_ytmusic_context),
     rate_limit=Depends(enforce_workflow_rate_limit),
@@ -309,7 +349,7 @@ async def apply_sort(
     operations: OperationStore = Depends(get_operation_store),
 ):
     if not isinstance(operations, OperationStore):
-        return await _apply_sort(
+        return _apply_sort(
             input_data, context=context, rate_limit=rate_limit, token_store=token_store, client_factory=client_factory
         )
     operation, recorder = start_operation(
@@ -323,7 +363,7 @@ async def apply_sort(
         return {**operation["result"], "operation_id": operation["id"]}
     try:
         with recording(recorder):
-            result = await _apply_sort(
+            result = _apply_sort(
                 input_data,
                 recorder,
                 context=context,

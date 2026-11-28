@@ -54,11 +54,13 @@ const manifest = {
   routes: [
     {
       path: PATHS.ytmusicPlaylistSort.slice(1),
+      title: 'YouTube Music 播放清單排序',
       component: lazy(() => import('../../pages/PlaylistSortPage')),
       getProps: ({ pageProps }) => pageProps,
     },
     {
       path: PATHS.ytmusicSettings.slice(1),
+      title: 'YouTube Music 設定',
       component: lazy(() => import('../../pages/YtmusicSettingsPage')),
       getProps: ({ pageProps }) => pageProps,
     },

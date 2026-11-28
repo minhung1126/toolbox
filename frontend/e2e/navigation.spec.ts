@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Route } from '@playwright/test';
 import { mockAuthenticatedBackend, toolCatalog } from './fixtures';
 
 test('missing capabilities show their own authorization destinations without hiding tools', async ({ page }) => {
@@ -120,7 +120,7 @@ test('a delayed settings refresh does not undo a newer sidebar toggle', async ({
   let releaseRefresh: (() => void) | undefined;
   const savedNavigation: Array<{ sidebarCollapsed?: boolean }> = [];
   await mockAuthenticatedBackend(page, {
-    '/api/v1/settings/work-state': async (route) => {
+    '/api/v1/settings/work-state': async (route: Route) => {
       if (route.request().method() === 'PUT') {
         const { key, value } = route.request().postDataJSON();
         if (key === 'navigation') savedNavigation.push(value);

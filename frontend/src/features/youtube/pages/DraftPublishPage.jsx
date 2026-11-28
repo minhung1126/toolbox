@@ -185,6 +185,7 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
     requestLock.current = true;
     setBusy(true);
     setError('');
+    const previousOperationRef = draft.operation_ref;
     const request = {
       ...payload(),
       request_id: crypto.randomUUID(),
@@ -219,11 +220,30 @@ function DraftEditor({ account, auth, videoType, sysSettings }) {
       });
       setPreview(null);
     } catch (caught) {
-      if (!mounted.current) return;
-      if ([400, 401, 403, 422, 503].includes(caught.status) || caught.code === 'stale_preview')
-        persist({ ...draftRef.current, pending: undefined });
+      const definiteNotAccepted =
+        (typeof caught?.status === 'number' && caught.status >= 400 && caught.status < 500) || caught?.status === 503;
+      const clearedDraft = definiteNotAccepted
+        ? { ...draftRef.current, pending: undefined, operation_ref: previousOperationRef }
+        : null;
+      if (!mounted.current) {
+        if (clearedDraft) {
+          try {
+            savePublishDraft(clearedDraft);
+          } catch {
+            // Ignore storage failures after unmount (e.g., 401 session-expired unmount).
+          }
+        }
+        return;
+      }
+      if (clearedDraft) {
+        persist(clearedDraft);
+      }
       setPreview(null);
-      setError(`${caught.message} 受理結果不明時保留原請求 ID，請重新查詢；手動內容仍保留。`);
+      setError(
+        definiteNotAccepted
+          ? `${caught.message} 尚未建立發布作業，手動內容仍保留。`
+          : `${caught.message} 受理結果不明時保留原請求 ID，請重新查詢；手動內容仍保留。`
+      );
     } finally {
       requestLock.current = false;
       if (mounted.current) {

@@ -20,7 +20,6 @@ import { readSharedTeamPersonFilter } from '../../../utils/teamPersonFilterStora
 import { sortVideosByUploadTime } from '../../../utils/videoOrder';
 import { getYoutubeAuthorizationFingerprint, youtubeIsConnected, youtubePreferredUiSlot } from '../model/routing';
 import { legacyPersonKey, parsePersonKey, personKey } from '../../sheets/model/personOptions';
-import { YOUTUBE_COPY } from '../../../utils/youtubeCopy';
 import {
   DEFAULT_COLUMNS,
   getBatchPreviewStatus,
@@ -28,7 +27,13 @@ import {
   resolveDraftConfig,
 } from '../../../utils/batchPreview';
 
-export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast }: BatchWorkflowOptions) {
+export function useBatchUpdateWorkflow({
+  sysSettings,
+  authUser,
+  onSharedFilterSaved,
+  videoType,
+  toast,
+}: BatchWorkflowOptions) {
   const activeSlot = youtubePreferredUiSlot(authUser?.youtube);
   const youtubeConnected = youtubeIsConnected(authUser?.youtube);
   const authorizationKey = useMemo(() => {
@@ -71,8 +76,6 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     loadingPreview,
     previewError,
     batchPreview,
-    previewToken,
-    previewSnapshot,
     previewFingerprint,
     videos,
     assignments,
@@ -95,7 +98,6 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     hydrated,
     draftAutosaveStatus,
     playlistAutosaveStatus,
-    awaitingReconciliation,
   } = state;
   const {
     setSpreadsheetId,
@@ -214,6 +216,8 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     query: personQuery,
     selectedPeople,
     ready: filterPersistenceReady,
+    initialSavedFilter: sharedFilter,
+    onSaved: onSharedFilterSaved,
     onError: setConfigSaveError,
   });
 
@@ -244,7 +248,21 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     setBulkPerson('');
     setQuotaEstimate(null);
     restoreVideoOptionsRef.current = false;
-  }, []);
+  }, [
+    dispatchWorkflow,
+    setAssignments,
+    setBulkPerson,
+    setErrorMsg,
+    setEstimateLoading,
+    setLoadingVideos,
+    setPlaylistFallbackReason,
+    setPlaylistSource,
+    setQuotaEstimate,
+    setResult,
+    setSelectedVideoIds,
+    setVideos,
+    setYoutubeRoutingInfo,
+  ]);
 
   const { clearConfigSaveError, scheduleDraftSave, schedulePlaylistSave, saveDraftConfig } = useBatchConfigPersistence({
     state,
@@ -287,7 +305,18 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
         selectedPeople: config.selectedPeople,
       });
     },
-    [resetSelection]
+    [
+      resetSelection,
+      setAppliedSpreadsheetId,
+      setAssignments,
+      setBulkPerson,
+      setDescriptionColumn,
+      setPlaylistId,
+      setSourceReady,
+      setSpreadsheetId,
+      setTitleColumn,
+      setWorksheetName,
+    ]
   );
 
   useEffect(() => {
@@ -372,7 +401,24 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     authUser?.email,
     authUser?.sub,
     defaults,
+    dispatchWorkflow,
     persistedDefaults,
+    setAssignments,
+    setBatchPreview,
+    setBulkPerson,
+    setColumns,
+    setConfigSaveError,
+    setHydrated,
+    setPreviewError,
+    setPreviewFingerprint,
+    setPreviewSnapshot,
+    setPreviewToken,
+    setRandomPreview,
+    setSelectedVideoIds,
+    setSourceError,
+    setSourceReady,
+    setVideos,
+    setWorksheets,
     sharedFilter,
     videoType,
     remembered.assignments,
@@ -388,7 +434,7 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
       setPlaylistId(sharedPlaylistId);
       invalidateLoadedVideos();
     }
-  }, [invalidateLoadedVideos, persistedDefaults.default_playlist_id, playlistId]);
+  }, [invalidateLoadedVideos, persistedDefaults.default_playlist_id, playlistId, setPlaylistId]);
 
   useEffect(() => {
     if (!hydrated) return undefined;
@@ -411,7 +457,17 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     if (nextColumns.length && !nextColumns.includes(descriptionColumn)) {
       setDescriptionColumn(nextColumns.includes(defaults.description) ? defaults.description : nextColumns[0]);
     }
-  }, [worksheets, worksheetName, titleColumn, descriptionColumn, defaults.title, defaults.description]);
+  }, [
+    worksheets,
+    worksheetName,
+    titleColumn,
+    descriptionColumn,
+    defaults.title,
+    defaults.description,
+    setColumns,
+    setDescriptionColumn,
+    setTitleColumn,
+  ]);
 
   const allPersonKeys = useMemo(() => teamPeople.map(personKey), [teamPeople]);
   const availablePeople = useMemo(
@@ -470,6 +526,9 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     randomPreviewTeam,
     titleColumn,
     descriptionColumn,
+    setPreviewError,
+    setRandomPreview,
+    setRandomPreviewLoading,
   ]);
 
   useEffect(() => {
@@ -502,6 +561,9 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     titleColumn,
     descriptionColumn,
     loadRandomPreview,
+    setPreviewError,
+    setRandomPreview,
+    setRandomPreviewLoading,
   ]);
 
   const loadSheetResources = useCallback(
@@ -567,6 +629,16 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
       defaults.worksheet,
       invalidateLoadedVideos,
       clearConfigSaveError,
+      setAppliedSpreadsheetId,
+      setErrorMsg,
+      setLoadingSheet,
+      setPreviewError,
+      setRandomPreview,
+      setSourceError,
+      setSourceReady,
+      setSourceRevision,
+      setWorksheetName,
+      setWorksheets,
       spreadsheetId,
       toast,
       worksheetName,
@@ -626,7 +698,16 @@ export function useBatchUpdateWorkflow({ sysSettings, authUser, videoType, toast
     setPreviewSnapshot(null);
     setPreviewFingerprint('');
     setConfirmOpen(false);
-  }, [batchPreview, currentPreviewFingerprint, previewFingerprint]);
+  }, [
+    batchPreview,
+    currentPreviewFingerprint,
+    previewFingerprint,
+    setBatchPreview,
+    setConfirmOpen,
+    setPreviewFingerprint,
+    setPreviewSnapshot,
+    setPreviewToken,
+  ]);
 
   const handleLoadVideos = async () => {
     if (

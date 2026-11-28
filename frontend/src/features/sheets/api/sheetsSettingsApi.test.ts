@@ -18,7 +18,7 @@ describe('sheetsSettingsApi', () => {
 
   it('forwards Sheets OAuth operations and preserves API response shapes', async () => {
     const authUrl = { auth_url: 'https://accounts.google.com/o/oauth2/auth?sheets=1' };
-    const disconnected = { status: 'sheets_disconnected' };
+    const disconnected = { status: 'sheets_disconnected' as const };
     vi.mocked(api.getSheetsAuthUrl).mockResolvedValueOnce(authUrl);
     vi.mocked(api.disconnectSheets).mockResolvedValueOnce(disconnected);
 
@@ -31,7 +31,7 @@ describe('sheetsSettingsApi', () => {
 
   it('forwards account scoped shared setting reads and updates', async () => {
     const settings = { default_spreadsheet_id: 'spreadsheet-1' };
-    const updated = { status: 'success', settings };
+    const updated = { status: 'success' as const, settings };
     vi.mocked(api.getSharedSettings).mockResolvedValueOnce(settings);
     vi.mocked(api.updateSharedSettings).mockResolvedValueOnce(updated);
 
@@ -44,7 +44,7 @@ describe('sheetsSettingsApi', () => {
 
   it('trims source values before saving and accepts the normalized confirmation', async () => {
     const source = 'https://docs.google.com/spreadsheets/d/sheet-1/edit';
-    const updated = { status: 'success', settings: { default_spreadsheet_id: source } };
+    const updated = { status: 'success' as const, settings: { default_spreadsheet_id: source } };
     vi.mocked(api.updateSharedSettings).mockResolvedValueOnce(updated);
 
     await expect(sheetsSettingsApi.updateSettings({ default_spreadsheet_id: `  ${source}  ` })).resolves.toBe(updated);
@@ -52,12 +52,12 @@ describe('sheetsSettingsApi', () => {
   });
 
   it('rejects malformed responses and mismatched write confirmations', async () => {
-    vi.mocked(api.getSharedSettings).mockResolvedValueOnce({});
+    vi.mocked(api.getSharedSettings).mockResolvedValueOnce({} as never);
     vi.mocked(api.updateSharedSettings).mockResolvedValueOnce({
       status: 'success',
       settings: { default_spreadsheet_id: 'previous-sheet' },
     });
-    vi.mocked(api.disconnectSheets).mockResolvedValueOnce({});
+    vi.mocked(api.disconnectSheets).mockResolvedValueOnce({} as never);
 
     await expect(sheetsSettingsApi.getSettings()).rejects.toMatchObject({ code: 'sheets_settings_response_invalid' });
     await expect(sheetsSettingsApi.updateSettings({ default_spreadsheet_id: 'new-sheet' })).rejects.toMatchObject({

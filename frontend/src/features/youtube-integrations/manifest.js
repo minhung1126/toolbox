@@ -61,26 +61,31 @@ const manifest = {
   routes: [
     {
       path: `${PATHS.youtubeSettings.slice(1)}/*`,
+      title: 'YouTube 授權組合',
       component: lazy(() => import('../../layouts/YouTubeSettingsLayout')),
       children: [
         { index: true, redirectTo: 'connections' },
         {
           path: 'connections',
+          title: 'YouTube 授權組合',
           component: lazy(() => import('../../pages/YoutubeConnectionsPage')),
           getProps: ({ pageProps }) => pageProps,
         },
         {
           path: 'routing',
+          title: 'YouTube 路由模式',
           component: lazy(() => import('../../pages/YoutubeRoutingPage')),
           getProps: ({ pageProps }) => pageProps,
         },
         {
           path: 'quota',
+          title: 'YouTube 配額設定',
           component: lazy(() => import('../../pages/YoutubeQuotaPage')),
           getProps: ({ pageProps }) => pageProps,
         },
         {
           path: 'playlist',
+          title: '預設播放清單',
           component: lazy(() => import('../../pages/YoutubePlaylistSettingsPage')),
           getProps: ({ pageProps }) => pageProps,
         },

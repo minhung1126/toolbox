@@ -1,26 +1,19 @@
 import { youtubeIsConnected } from '../features/youtube/model/routing';
 import { PATHS } from '../routes/paths';
 
-const YOUTUBE_REQUIREMENTS = Object.freeze({
-  'creator-tools': {
-    key: 'youtube-channel',
-    label: 'YouTube 頻道',
-    settingsPath: PATHS.youtubeConnections,
-    connected: (authUser) => youtubeIsConnected(authUser?.youtube),
-  },
-  'youtube-integrations': {
-    key: 'youtube-channel',
-    label: 'YouTube 頻道',
-    settingsPath: PATHS.youtubeConnections,
-    connected: (authUser) => youtubeIsConnected(authUser?.youtube),
-  },
-  'youtube-music': {
-    key: 'youtube-music',
-    label: 'YouTube Music',
-    settingsPath: PATHS.ytmusicSettings,
-    connected: (authUser) =>
-      Boolean(authUser?.authorizations?.ytmusic?.connected) || youtubeIsConnected(authUser?.youtube),
-  },
+const YOUTUBE_CHANNEL_REQUIREMENT = Object.freeze({
+  key: 'youtube-channel',
+  label: 'YouTube 頻道',
+  settingsPath: PATHS.youtubeConnections,
+  connected: (authUser) => youtubeIsConnected(authUser?.youtube),
+});
+
+const YOUTUBE_MUSIC_REQUIREMENT = Object.freeze({
+  key: 'youtube-music',
+  label: 'YouTube Music',
+  settingsPath: PATHS.ytmusicSettings,
+  connected: (authUser) =>
+    Boolean(authUser?.authorizations?.ytmusic?.connected) || youtubeIsConnected(authUser?.youtube),
 });
 
 const SHEETS_REQUIREMENT = Object.freeze({
@@ -33,7 +26,9 @@ const SHEETS_REQUIREMENT = Object.freeze({
 
 function requirementFor(toolId, scope) {
   if (scope === 'sheets_readonly') return SHEETS_REQUIREMENT;
-  if (scope === 'youtube') return YOUTUBE_REQUIREMENTS[toolId];
+  if (scope === 'youtube') {
+    return toolId === 'youtube-music' ? YOUTUBE_MUSIC_REQUIREMENT : YOUTUBE_CHANNEL_REQUIREMENT;
+  }
   return null;
 }
 

@@ -11,16 +11,16 @@ describe('workStateApi', () => {
 
   it('preserves feature-specific state and forwards updates without changing the wire contract', async () => {
     const value = { filters: ['a', 'b'], nested: { enabled: true }, optional: null };
-    const response = { version: 1, state: { newTool: value } };
-    api.getWorkState.mockResolvedValue(response);
-    api.updateWorkState.mockResolvedValue(response);
+    const response = { version: 1 as const, state: { newTool: value } };
+    vi.mocked(api.getWorkState).mockResolvedValue(response);
+    vi.mocked(api.updateWorkState).mockResolvedValue(response);
     await expect(workStateApi.get()).resolves.toBe(response);
     await expect(workStateApi.update('newTool', value)).resolves.toBe(response);
     expect(api.updateWorkState).toHaveBeenCalledWith('newTool', value);
   });
 
   it('accepts unversioned legacy responses', async () => {
-    api.getWorkState.mockResolvedValue({ state: {} });
+    vi.mocked(api.getWorkState).mockResolvedValue({ state: {} });
     await expect(workStateApi.get()).resolves.toEqual({ state: {} });
   });
 
@@ -33,27 +33,30 @@ describe('workStateApi', () => {
     { state: { tool: [] } },
     { version: 2, state: {} },
   ])('rejects malformed or unsupported responses: %j', async (response) => {
-    api.getWorkState.mockResolvedValue(response);
-    api.updateWorkState.mockResolvedValue(response);
+    vi.mocked(api.getWorkState).mockResolvedValue(response as never);
+    vi.mocked(api.updateWorkState).mockResolvedValue(response as never);
     await expect(workStateApi.get()).rejects.toThrow('帳號工作狀態回應格式不正確');
     await expect(workStateApi.update('navigation', {})).rejects.toThrow('帳號工作狀態回應格式不正確');
   });
 
   it('preserves transport errors for the existing retry flow', async () => {
     const error = new Error('連線失敗');
-    api.getWorkState.mockRejectedValue(error);
-    api.updateWorkState.mockRejectedValue(error);
+    vi.mocked(api.getWorkState).mockRejectedValue(error);
+    vi.mocked(api.updateWorkState).mockRejectedValue(error);
     await expect(workStateApi.get()).rejects.toBe(error);
     await expect(workStateApi.update('navigation', {})).rejects.toBe(error);
   });
 
   it('rejects a write response that omits or changes the submitted value', async () => {
-    api.updateWorkState.mockResolvedValueOnce({ version: 1, state: {} });
+    vi.mocked(api.updateWorkState).mockResolvedValueOnce({ version: 1, state: {} });
     await expect(workStateApi.update('navigation', { sidebarCollapsed: true })).rejects.toThrow(
       '帳號工作狀態寫入結果不一致'
     );
 
-    api.updateWorkState.mockResolvedValueOnce({ version: 1, state: { navigation: { sidebarCollapsed: false } } });
+    vi.mocked(api.updateWorkState).mockResolvedValueOnce({
+      version: 1,
+      state: { navigation: { sidebarCollapsed: false } },
+    });
     await expect(workStateApi.update('navigation', { sidebarCollapsed: true })).rejects.toThrow(
       '帳號工作狀態寫入結果不一致'
     );

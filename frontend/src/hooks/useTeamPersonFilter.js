@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { sheetsFilterApi } from '../features/sheets/api/sheetsFilterApi';
-import { legacyPersonKey, personKey } from '../features/sheets/model/personOptions';
+import { legacyPersonKey } from '../features/sheets/model/personOptions';
 
 export default function useTeamPersonFilter({
   source = '',
@@ -60,11 +60,8 @@ export default function useTeamPersonFilter({
       .then((result) => {
         if (requestRef.current !== requestId) return;
         const nextPeople = result.people || [];
-        const available = new Set(nextPeople.map(personKey));
         setTeams(result.teams);
         setPeople(nextPeople);
-        setSelectedTeams((current) => current.filter((team) => result.teams.includes(team)));
-        setSelectedPeople((current) => current.filter((key) => available.has(key)));
         setReadyKey(contextKey);
       })
       .catch((err) => {

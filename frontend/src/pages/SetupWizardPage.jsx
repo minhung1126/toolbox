@@ -128,7 +128,12 @@ export default function SetupWizardPage() {
     );
   }
 
-  if (setupStatus?.setup_completed && setupStatus?.is_configured) {
+  if (
+    setupStatus?.setup_locked ||
+    setupStatus?.setup_completed ||
+    setupStatus?.is_configured ||
+    setupStatus?.has_admin
+  ) {
     return (
       <div className="auth-page">
         <div className="login-card">

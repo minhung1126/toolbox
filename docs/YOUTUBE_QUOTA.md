@@ -15,10 +15,8 @@ Google 官方目前說明：YouTube Data API 專案對搜尋、影片上傳等�
 | `videos.update` | 50 | 更新影片資訊或公開狀態 |
 | `playlistItems.delete` | 50 | 從播放清單移除影片 |
 | `channels.list` | 1 | OAuth 頻道驗證 |
-| `playlists.list` | 1 | 上傳前驗證共用 To-Post |
-| `playlistItems.insert` | 50 | 將影片加入共用 To-Post |
-
-Drive 上傳另有獨立的 `video_uploads` bucket：`videos.insert` 每部預設計 1 unit，每個 slot 預設每日 100 部。這個 bucket 與 General ledger 分開保存：`data/youtube_quota_uploads_usage.json`、`data/youtube_quota_uploads_usage.secondary.json`。
+| `playlists.list` | 1 | 讀取播放清單資訊（歌單排序等） |
+| `playlistItems.insert` | 50 | 新增播放清單項目（歌單排序等） |
 
 每取得一頁資料就會算一次請求成本。即使請求無效，官方也規定至少會消耗一個配額單位。
 
@@ -36,10 +34,6 @@ Drive 上傳另有獨立的 `video_uploads` bucket：`videos.insert` 每部預�
 - 系統預設專案配額為 10,000 單位，安全預留預設為 1,000 單位；登入後可在 YouTube 設定頁按授權組合調整。
 - Google 回傳 HTTP 403 且錯誤原因為 `quotaExceeded`、`dailyLimitExceeded` 或 `dailyLimitExceededUnreg` 時，該授權組合會標記為已確認用完，新的請求會停止，直到官方重設。
 - Auto routing 會在新的 workflow 開始時優先檢查 Primary；若本次保守成本無法由 Primary 的安全可用額度支應，會選用 Secondary。若執行途中 provider 或本地 ledger 回報 quota 不足，Auto 模式會在安全的單一操作邊界切換另一個 slot 並重試，不需要使用者重新按兩次。
-- Drive 上傳預覽會同時檢查 `video_uploads` 與 General 兩個 bucket；工作建立後先使用預選 slot，執行途中 quota 失敗時會自動切換另一個已驗證同頻道的 slot。每部影片只在取得 YouTube ID 後才保存為已上傳，重試時已有 ID 的項目只重試 playlist insertion。
-- Drive 上傳完整流程的 General 保守成本是 `2 + 50 × insertion_count`：預覽時一次 `playlists.list`、建立工作前再驗證一次，之後每個 To-Post 插入各 50 單位；`video_uploads` 則只計 `1 × new_upload_count`。因此 resume-only 工作（`new_upload_count = 0`）不會誤扣 `video_uploads`。
-- 上傳預覽回傳的 `quota.preview_read`、`quota.job_required`、`quota.total` 與 `quota.create_can_execute` 是分階段契約；前端必須依 `job_required` 與兩個 bucket 的可用量判斷是否能建立工作，不可把已花費的預覽讀取再次加總。建立工作時仍會重新驗證 quota、slot、Drive snapshot 與播放清單。
-- 若 playlist insertion 的回應中斷，工作會保存已取得的 YouTube ID，重試前先以 `playlistItems.list` reconciliation 尋找既有項目，找到時不會重複插入；該 reconciliation 讀取也會經過 General quota ledger，配額不足時工作會安全暫停。
 - `quotaExceeded` 或本地安全上限只會封鎖目前 slot；目前 Auto workflow 會先嘗試另一個 slot，兩個 slot 都不可用時才暫停或回傳 quota 錯誤。下一個 workflow 仍會重新評估，Primary 恢復且足夠時會再次優先使用 Primary。
 - YouTube 設定也支援手動模式；手動模式只使用目前作用中的 slot，不會自動 fallback。
 - 配額日界線依 `America/Los_Angeles` 的午夜計算；前端同時顯示 Pacific Time 與瀏覽器本地時間。

@@ -18,14 +18,14 @@ describe('sheetsCopyApi', () => {
       spreadsheet_title: '工作簿',
       worksheets: [{ title: '工作表1', columns: ['標題', '說明'] }],
     };
-    api.getSpreadsheetMetadata.mockResolvedValue(metadata);
+    vi.mocked(api.getSpreadsheetMetadata).mockResolvedValue(metadata);
 
     await expect(sheetsCopyApi.getSpreadsheetMetadata('sheet-123')).resolves.toEqual(metadata);
     expect(api.getSpreadsheetMetadata).toHaveBeenCalledWith('sheet-123');
   });
 
   it('rejects malformed spreadsheet metadata instead of hiding the contract error', async () => {
-    api.getSpreadsheetMetadata.mockResolvedValue({ worksheets: [{ title: '工作表1' }] });
+    vi.mocked(api.getSpreadsheetMetadata).mockResolvedValue({ worksheets: [{ title: '工作表1' }] } as never);
 
     await expect(sheetsCopyApi.getSpreadsheetMetadata('sheet-123')).rejects.toThrow('試算表工作表欄位回應格式不正確。');
   });
@@ -37,19 +37,19 @@ describe('sheetsCopyApi', () => {
       columns: [{ key: 'column_0', label: '標題', index: 0 }],
       rows: [{ row_number: 2, cells: ['影片'], team: '', person: '', person_option: '' }],
     };
-    api.getCopyableSheetTable.mockResolvedValue(table);
+    vi.mocked(api.getCopyableSheetTable).mockResolvedValue(table);
 
     await expect(sheetsCopyApi.getCopyableSheetTable('sheet-123', '工作表1')).resolves.toEqual(table);
     expect(api.getCopyableSheetTable).toHaveBeenCalledWith('sheet-123', '工作表1');
   });
 
   it('rejects malformed copyable rows before they reach page state', async () => {
-    api.getCopyableSheetTable.mockResolvedValue({
+    vi.mocked(api.getCopyableSheetTable).mockResolvedValue({
       spreadsheet_id: 'sheet-123',
       worksheet_name: '工作表1',
       columns: [],
       rows: [{ row_number: '2', cells: [] }],
-    });
+    } as never);
 
     await expect(sheetsCopyApi.getCopyableSheetTable('sheet-123', '工作表1')).rejects.toThrow(
       '工作表資料列回應格式不正確。'

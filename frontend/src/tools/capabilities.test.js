@@ -56,8 +56,11 @@ describe('tool capability presentation', () => {
     ).toEqual([]);
   });
 
-  it('rejects unknown scope mappings rather than treating them as granted', () => {
-    expect(() => validateToolScopes('system-utility', ['youtube'])).toThrow('能力需求不受支援');
+  it('maps youtube scope dynamically for any plugin while rejecting unknown scopes', () => {
+    expect(() => validateToolScopes('custom-youtube-plugin', ['youtube'])).not.toThrow();
+    expect(getMissingToolCapabilities(tool('custom-youtube-plugin', ['youtube']), {})).toEqual([
+      { key: 'youtube-channel', label: 'YouTube 頻道', settingsPath: PATHS.youtubeConnections },
+    ]);
     expect(() => validateToolScopes('creator-tools', ['unknown-scope'])).toThrow('能力需求不受支援');
   });
 

@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -17,6 +18,7 @@ from backend.app.api.ffmpeg_generator import (
     safe_quote_filename,
     seconds_to_hhmmss,
 )
+from backend.app.core.dependencies import require_login_credentials
 from backend.app.main import create_app
 
 CASES = json.loads(
@@ -28,7 +30,14 @@ CMD_UNSUPPORTED_CHARACTERS = ("%", "!", '"')
 
 @pytest.fixture
 def client():
-    return TestClient(create_app())
+    return TestClient(create_app(dependency_overrides={require_login_credentials: lambda: SimpleNamespace(valid=True)}))
+
+
+def test_ffmpeg_endpoints_require_authentication():
+    anonymous = TestClient(create_app())
+    assert anonymous.get("/api/v1/ffmpeg-generator/presets").status_code == 401
+    assert anonymous.post("/api/v1/ffmpeg-generator/parse-time", json={"seconds": 10}).status_code == 401
+    assert anonymous.post("/api/v1/ffmpeg-generator/build", json={}).status_code == 401
 
 
 def test_seconds_to_hhmmss_and_parse():

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link, MemoryRouter } from 'react-router-dom';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App, { ErrorBoundary, hasVersionMismatch } from './App';
@@ -31,10 +32,38 @@ vi.mock('./components/Navbar', () => ({
   ),
 }));
 vi.mock('./pages/DashboardPage', () => ({ default: () => <div data-testid="dashboard-page">dashboard</div> }));
-vi.mock('./pages/BatchUpdatePage', () => ({ default: () => <div>batch</div> }));
+vi.mock('./pages/BatchUpdatePage', () => ({
+  default: ({ sysSettings }) => (
+    <div data-testid="batch-page">{JSON.stringify(sysSettings?.shared_team_person_filter || {})}</div>
+  ),
+}));
 vi.mock('./pages/PublishCleanerPage', () => ({ default: () => <div>publish</div> }));
-vi.mock('./pages/SheetCopyPage', () => ({ default: () => <div>sheet copy</div> }));
+vi.mock('./pages/SheetCopyPage', () => ({
+  default: ({ sysSettings, onSharedFilterSaved }) => (
+    <div data-testid="sheet-copy-page">
+      <span>{JSON.stringify(sysSettings?.shared_team_person_filter || {})}</span>
+      <button
+        type="button"
+        onClick={() =>
+          onSharedFilterSaved?.({
+            configured: true,
+            team: '',
+            teams: ['Team A'],
+            query: '',
+            selected_people: ['person:["Team A","person","Alice"]'],
+          })
+        }
+      >
+        模擬更新共用篩選
+      </button>
+      <Link to="/youtube/drafts/videos">前往 Video 快速套用</Link>
+    </div>
+  ),
+}));
 vi.mock('./pages/YouTubeSettingsPage', () => ({ default: () => <div>youtube settings</div> }));
+vi.mock('./pages/GoogleSheetSettingsPage', () => ({ default: () => <div>sheets settings</div> }));
+vi.mock('./pages/YtmusicSettingsPage', () => ({ default: () => <div>ytmusic settings</div> }));
+vi.mock('./pages/PlaylistSortPage', () => ({ default: () => <div>playlist sort</div> }));
 vi.mock('./pages/ApiHealthPage', () => ({ default: () => <div>api health</div> }));
 vi.mock('./pages/LoginPage', () => ({
   default: ({ initialError }) => <div data-testid="login-page">{initialError || '登入頁'}</div>,
@@ -91,6 +120,7 @@ describe('App recovery state', () => {
     vi.restoreAllMocks();
     vi.useRealTimers();
     setDocumentHidden(false);
+    window.history.replaceState({}, '', '/');
   });
 
   it('shows reconnecting on an initial network failure instead of a blank or login page', async () => {
@@ -242,6 +272,78 @@ describe('App recovery state', () => {
     expect(hasVersionMismatch('sha-a', 'sha-b')).toBe(true);
     expect(hasVersionMismatch('sha-a', 'sha-a')).toBe(false);
     expect(hasVersionMismatch('', 'sha-a')).toBe(false);
+  });
+
+  it('checks backend version during initial load without waiting for resume', async () => {
+    api.getUserStatus.mockResolvedValue(userResponse);
+    api.getHealth.mockResolvedValue({ commit_sha: 'new-initial-sha' });
+
+    render(<App />);
+
+    expect(await screen.findByTestId('dashboard-page')).toBeInTheDocument();
+    expect(await screen.findByText('Toolbox 已更新，請重新載入。')).toBeInTheDocument();
+    expect(api.getHealth).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    {
+      hash: `#auth_error=${encodeURIComponent('此 Google 帳號未列入系統允許名單，無法登入。')}`,
+      authenticated: false,
+      expected: '此 Google 帳號未列入系統允許名單，無法登入。',
+    },
+    {
+      hash: `#youtube_auth_error=${encodeURIComponent('Primary 與 Secondary 槽位必須管理同一個 YouTube 頻道。')}`,
+      authenticated: true,
+      expected: 'Primary 與 Secondary 槽位必須管理同一個 YouTube 頻道。',
+    },
+    {
+      hash: `#sheets_auth_error=${encodeURIComponent('<img src=x onerror=alert(1)>')}`,
+      authenticated: true,
+      expected: 'Google 試算表授權失敗，請重新嘗試。',
+    },
+    {
+      hash: `#ytmusic_auth_error=${encodeURIComponent('YouTube Music 授權已拒絕')}`,
+      authenticated: true,
+      expected: 'YouTube Music 授權已拒絕',
+    },
+  ])(
+    'surfaces sanitized OAuth callback error messages from URL hash ($hash)',
+    async ({ hash, authenticated, expected }) => {
+      api.getUserStatus.mockResolvedValue(authenticated ? userResponse : { authenticated: false });
+      window.history.replaceState({}, '', `/login${hash}`);
+
+      render(<App />);
+
+      expect((await screen.findAllByText(expected)).length).toBeGreaterThanOrEqual(1);
+      expect(window.location.hash).toBe('');
+    }
+  );
+
+  it('propagates saved shared_team_person_filter across SPA navigation without stale cache overwrite', async () => {
+    api.getUserStatus.mockResolvedValue(userResponse);
+    api.getTeamPersonFilter.mockResolvedValue({
+      configured: true,
+      team: '',
+      teams: ['Old Team'],
+      query: '',
+      selected_people: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/sheets/copy']}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('sheet-copy-page')).toBeInTheDocument();
+    expect(screen.getByTestId('sheet-copy-page')).toHaveTextContent('Old Team');
+
+    fireEvent.click(screen.getByRole('button', { name: '模擬更新共用篩選' }));
+    fireEvent.click(screen.getByRole('link', { name: '前往 Video 快速套用' }));
+
+    expect(await screen.findByTestId('batch-page')).toBeInTheDocument();
+    expect(screen.getByTestId('batch-page')).toHaveTextContent('Team A');
+    expect(screen.getByTestId('batch-page')).not.toHaveTextContent('Old Team');
   });
 });
 

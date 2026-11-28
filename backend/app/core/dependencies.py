@@ -20,11 +20,9 @@ from backend.app.core.session_store import get_session_store, session_store
 from backend.app.core.youtube_context import YouTubeRequestContext
 from backend.app.core.youtube_routing import choose_youtube_slot, estimate_youtube_request_units
 from backend.app.services.google_auth import (
-    get_drive_credentials,
     get_login_credentials,
     get_sheets_credentials,
     get_ytmusic_credentials,
-    has_drive_read_scope,
     has_sheets_scope,
     has_youtube_scope,
 )
@@ -76,9 +74,10 @@ def get_authenticated_session(request: Request) -> AuthenticatedSession:
         raise http_error(401, "login_required", "控制台登入已失效，請重新登入 Google 帳號。")
 
     email = str((user or {}).get("email") or "").strip().casefold()
-    if (get_settings(settings).allowed_google_emails or get_settings(settings).allowlist_required) and not get_settings(
-        settings
-    ).is_google_email_allowed(email):
+    config = get_settings(settings)
+    if (config.allowed_google_emails or config.allowlist_required or email) and not config.is_google_email_allowed(
+        email
+    ):
         logger.warning("Revoked or disallowed user attempted API access: %s", email)
         raise http_error(403, "access_denied", "此 Google 帳號未列入系統允許名單，存取遭拒。")
 
@@ -176,27 +175,6 @@ def require_sheets_credentials(
     return creds
 
 
-def require_drive_credentials(
-    request: Request,
-    owner_sub: str = Depends(require_account_subject),
-) -> Credentials:
-    """
-    Extract and validate Google Drive credentials for the authenticated user.
-    Raises 403 if Google Drive authorization has not been granted.
-    """
-    session_id = request.cookies.get(get_settings(settings).session_cookie_name)
-    creds = get_drive_credentials(session_id=session_id, owner_sub=owner_sub)
-    if not creds or not creds.valid or not has_drive_read_scope(creds):
-        logger.warning("Drive API access attempted without valid Drive authorization (sub=%s)", owner_sub)
-        raise http_error(
-            403,
-            "google_drive_scope_required",
-            "Google Drive 權限不足，請重新授權 Google Drive。",
-            reauthorization_required=True,
-        )
-    return creds
-
-
 async def _safe_read_request_json(request: Request) -> dict[str, Any]:
     if request.method in {"GET", "HEAD", "OPTIONS"}:
         return {}
@@ -207,13 +185,20 @@ async def _safe_read_request_json(request: Request) -> dict[str, Any]:
         return {}
 
 
-async def require_youtube_context(request: Request) -> YouTubeRequestContext:
-    """Resolve one quota-aware YouTube slot once at request start."""
-    auth_session = get_authenticated_session(request)
+def _require_authenticated_session(request: Request) -> AuthenticatedSession:
+    """Sync wrapper so FastAPI runs session/credential/OAuth checks in the threadpool."""
+    return get_authenticated_session(request)
+
+
+def _resolve_youtube_context(
+    request: Request,
+    *,
+    auth_session: AuthenticatedSession,
+    body: dict[str, Any],
+) -> YouTubeRequestContext:
     session_id = auth_session.session_id
     owner_sub = auth_session.subject
 
-    body = await _safe_read_request_json(request)
     default_playlist_id = get_account_setting(owner_sub, "default_playlist_id", "")
     slot_hint = _get_preview_slot_hint(request.url.path, body)
     estimated_units = estimate_youtube_request_units(
@@ -241,27 +226,43 @@ async def require_youtube_context(request: Request) -> YouTubeRequestContext:
     )
 
 
-async def require_ytmusic_context(request: Request) -> YouTubeRequestContext:
+def require_youtube_context(
+    request: Request,
+    auth_session: AuthenticatedSession = Depends(_require_authenticated_session),
+    body: dict[str, Any] = Depends(_safe_read_request_json),
+) -> YouTubeRequestContext:
+    """Resolve one quota-aware YouTube slot once at request start."""
+    return _resolve_youtube_context(
+        request,
+        auth_session=auth_session,
+        body=body if isinstance(body, dict) else {},
+    )
+
+
+def require_ytmusic_context(
+    request: Request,
+    auth_session: AuthenticatedSession = Depends(_require_authenticated_session),
+    body: dict[str, Any] = Depends(_safe_read_request_json),
+) -> YouTubeRequestContext:
     """Resolve dedicated YouTube Music credentials and context.
 
     Prefers dedicated YouTube Music authorization. Falls back to YouTube context if available.
     Raises 403 if neither is authorized.
     """
-    auth_session = get_authenticated_session(request)
     session_id = auth_session.session_id
     owner_sub = auth_session.subject
+    parsed_body = body if isinstance(body, dict) else {}
 
+    store = get_credential_store(credential_store)
     ytmusic_creds = get_ytmusic_credentials(session_id=session_id, owner_sub=owner_sub)
     if ytmusic_creds and ytmusic_creds.valid and has_youtube_scope(ytmusic_creds):
-        ytmusic_public = get_credential_store(credential_store).get_ytmusic_public(owner_sub) or {}
+        ytmusic_public = store.get_ytmusic_public(owner_sub) or {}
         channel_id = ytmusic_public.get("channel_id")
         limiter = get_youtube_quota_tracker("primary")
 
-        body = await _safe_read_request_json(request)
-
         estimated_units = estimate_youtube_request_units(
             request.url.path,
-            body if isinstance(body, dict) else {},
+            parsed_body,
         )
 
         logger.info(
@@ -282,16 +283,42 @@ async def require_ytmusic_context(request: Request) -> YouTubeRequestContext:
             session_id=session_id,
         )
 
-    try:
-        return await require_youtube_context(request)
-    except HTTPException:
-        logger.warning("YouTube Music access attempted without authorization (sub=%s)", owner_sub)
-        raise http_error(
-            403,
-            "ytmusic_scope_required",
-            "YouTube Music 權限不足，請先授權 YouTube Music 帳號。",
-            reauthorization_required=True,
+    has_custom_token = bool(store.get_ytmusic_custom_token(owner_sub))
+    requires_data_api = bool(parsed_body.get("use_youtube_api") or parsed_body.get("allow_quota_fallback"))
+    if has_custom_token and not requires_data_api:
+        ytmusic_public = store.get_ytmusic_public(owner_sub) or {}
+        channel_id = ytmusic_public.get("channel_id")
+        logger.info("YouTube Music request routed with custom token (channel=%s)", channel_id)
+        return YouTubeRequestContext(
+            slot="primary",
+            credentials=None,
+            quota_limiter=get_youtube_quota_tracker("primary"),
+            owner_sub=owner_sub,
+            channel_id=channel_id,
+            routing_mode="ytmusic_custom_token",
+            selection_reason="ytmusic_custom_token",
+            estimated_units=0,
+            preferred_slot="primary",
+            session_id=session_id,
         )
+
+    try:
+        return _resolve_youtube_context(
+            request,
+            auth_session=auth_session,
+            body=parsed_body,
+        )
+    except HTTPException as exc:
+        detail_code = exc.detail.get("code") if isinstance(exc.detail, dict) else None
+        if exc.status_code == 403 or detail_code == "youtube_slot_not_configured":
+            logger.warning("YouTube Music access attempted without authorization (sub=%s)", owner_sub)
+            raise http_error(
+                403,
+                "ytmusic_scope_required",
+                "YouTube Music 權限不足，請先授權 YouTube Music 帳號。",
+                reauthorization_required=True,
+            ) from exc
+        raise
 
 
 __all__ = [
@@ -300,7 +327,6 @@ __all__ = [
     "get_authenticated_session",
     "require_account_email",
     "require_account_subject",
-    "require_drive_credentials",
     "require_login_credentials",
     "require_sheets_credentials",
     "require_youtube_context",

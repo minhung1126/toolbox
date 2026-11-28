@@ -74,23 +74,31 @@ const manifest = {
     },
   ],
   routes: [
-    { path: PATHS.operations.slice(1), component: lazy(() => import('../../pages/OperationsPage')) },
+    {
+      path: PATHS.operations.slice(1),
+      title: '作業紀錄與對帳',
+      component: lazy(() => import('../../pages/OperationsPage')),
+    },
     {
       path: PATHS.systemHealth.slice(1),
+      title: 'API 健康度',
       component: lazy(() => import('../../pages/ApiHealthPage')),
       getProps: ({ authUser }) => ({ authUser }),
     },
     {
       path: PATHS.systemInfo.slice(1),
+      title: '系統／部署資訊',
       component: lazy(() => import('../../pages/SystemInfoPage')),
       getProps: ({ sysSettings }) => ({ sysSettings }),
     },
     {
       path: PATHS.componentShowcase.slice(1),
+      title: '共用元件展示',
       component: lazy(() => import('../../pages/ComponentShowcasePage')),
     },
     {
       path: PATHS.systemSettings.slice(1),
+      title: '系統安全與白名單',
       component: lazy(() => import('../../pages/SystemSettingsPage')),
       getProps: ({ pageProps }) => pageProps,
     },

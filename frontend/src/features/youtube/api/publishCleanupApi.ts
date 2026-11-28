@@ -4,7 +4,7 @@ export type * from './publishCleanupTypes';
 
 const statuses = ['succeeded', 'skipped', 'failed', 'not_attempted', 'needs_reconciliation'] as const;
 const privacies = ['public', 'private', 'unlisted', 'unknown'] as const;
-const record = (value: unknown): value is Record<string, any> =>
+const record = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const count = (value: unknown): value is number => Number.isInteger(value) && Number(value) >= 0;
 const text = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
@@ -18,7 +18,8 @@ function item(value: unknown): value is CleanupItem {
     typeof value.title === 'string' &&
     typeof value.description === 'string' &&
     typeof value.reason === 'string' &&
-    privacies.includes(value.observed_privacy) &&
+    typeof value.observed_privacy === 'string' &&
+    (privacies as readonly string[]).includes(value.observed_privacy) &&
     typeof value.candidate === 'boolean'
   );
 }
@@ -51,13 +52,15 @@ export function parseCleanupPreview(value: unknown, playlistId: string): Cleanup
     !record(value.counts)
   )
     fail();
+  const counts = value.counts;
+  const items = value.items as CleanupItem[];
   if (
     !privacies.every(
       (privacy) =>
-        count(value.counts[privacy]) &&
-        value.counts[privacy] === value.items.filter((row: CleanupItem) => row.observed_privacy === privacy).length
+        count(counts[privacy]) &&
+        counts[privacy] === items.filter((row: CleanupItem) => row.observed_privacy === privacy).length
     ) ||
-    !value.items.every(
+    !items.every(
       (row: CleanupItem) => row.playlist_id === playlistId && (!row.candidate || row.observed_privacy === 'public')
     )
   )
@@ -73,8 +76,10 @@ export function parseCleanupPreview(value: unknown, playlistId: string): Cleanup
     JSON.stringify(snapshot.items) !== JSON.stringify(value.items)
   )
     fail();
-  return value as CleanupPreview;
+  return value as unknown as CleanupPreview;
 }
+
+type CleanupResultRow = CleanupItem & { status: (typeof statuses)[number] };
 
 export function parseCleanupResult(value: unknown, expected: CleanupItem[]): PublishCleanupResult {
   if (
@@ -88,26 +93,25 @@ export function parseCleanupResult(value: unknown, expected: CleanupItem[]): Pub
     value.total_count !== expected.length ||
     value.results.length !== expected.length ||
     !unique(value.results) ||
-    !value.results.every(
-      (row: unknown, index: number) =>
-        item(row) && identity(row) === identity(expected[index]) && statuses.includes((row as any).status)
-    )
+    !value.results.every((row: unknown, index: number): row is CleanupResultRow => {
+      if (!item(row) || identity(row) !== identity(expected[index])) return false;
+      const status = (row as unknown as Record<string, unknown>).status;
+      return typeof status === 'string' && (statuses as readonly string[]).includes(status);
+    })
   )
     fail();
+  const rows = value.results as CleanupResultRow[];
   if (
     !statuses.every(
       (status) =>
         count(value[`${status}_count`]) &&
-        value[`${status}_count`] === value.results.filter((row: any) => row.status === status).length
+        value[`${status}_count`] === rows.filter((row) => row.status === status).length
     )
   )
     fail();
-  if (
-    value.completed !==
-    !value.results.some((row: any) => ['failed', 'not_attempted', 'needs_reconciliation'].includes(row.status))
-  )
+  if (value.completed !== !rows.some((row) => ['failed', 'not_attempted', 'needs_reconciliation'].includes(row.status)))
     fail();
-  return value as PublishCleanupResult;
+  return value as unknown as PublishCleanupResult;
 }
 
 export const publishCleanupApi: PublishCleanupApi = {
@@ -118,6 +122,6 @@ export const publishCleanupApi: PublishCleanupApi = {
   async cleanupPublicItems(playlistId, options) {
     const snapshot = options.previewSnapshot;
     if (!record(snapshot) || snapshot.version !== 2 || !Array.isArray(snapshot.items)) fail();
-    return parseCleanupResult(await api.cleanupPublicItems(playlistId, options), snapshot.items);
+    return parseCleanupResult(await api.cleanupPublicItems(playlistId, options), snapshot.items as CleanupItem[]);
   },
 };

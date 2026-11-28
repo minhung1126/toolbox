@@ -59,6 +59,7 @@ YOUTUBE_AUXILIARY_QUOTA_METHODS: dict[str, dict[str, Any]] = {
     "channels.list": {"bucket": GENERAL_BUCKET, "cost": 1},
     # Kept separate from the legacy registry so existing callers that inspect
     # the general workflow methods retain their stable shape.
+    "playlists.insert": {"bucket": GENERAL_BUCKET, "cost": 50},
     "playlistItems.insert": {"bucket": GENERAL_BUCKET, "cost": 50},
     "playlistItems.update": {"bucket": GENERAL_BUCKET, "cost": 50},
     "playlists.list": {"bucket": GENERAL_BUCKET, "cost": 1},
@@ -338,9 +339,11 @@ class YouTubeQuotaLimiter:
 
     @staticmethod
     def _is_breaker_active(data: Mapping[str, Any], now: datetime) -> bool:
+        if str(data.get("state") or "") != "confirmed_exhausted":
+            return False
         blocked_until = data.get("blocked_until")
         if not blocked_until:
-            return False
+            return True
         try:
             until = datetime.fromisoformat(str(blocked_until))
             if until.tzinfo is None:
@@ -377,7 +380,7 @@ class YouTubeQuotaLimiter:
                 limit, buffer = self.configured_values()
                 used = int(data["estimated_used_units"] or 0)
                 policy_cap = max(limit - buffer, 0)
-                if str(data["state"]) == "confirmed_exhausted":
+                if self._is_breaker_active(data, current_utc):
                     raise self._unavailable(
                         code="youtube_quota_exhausted",
                         method=method,
@@ -386,26 +389,7 @@ class YouTubeQuotaLimiter:
                         confirmed=True,
                         message="Google 已回報今日 YouTube API 配額用完。",
                     )
-                if self._is_breaker_active(data, current_utc):
-                    raise self._unavailable(
-                        code="youtube_quota_safety_blocked",
-                        method=method,
-                        reset_at=reset,
-                        reason=str(data.get("blocked_reason") or "safety_cap_reached"),
-                        confirmed=False,
-                        message="Toolbox 已達 YouTube API 安全上限，新的請求將等待官方配額重設。",
-                    )
                 if used + cost > policy_cap:
-                    data.update(
-                        {
-                            "state": "safety_blocked",
-                            "blocked_reason": "safety_cap_reached",
-                            "blocked_until": reset,
-                            "last_error_method": method,
-                            "updated_at": iso_with_offset(current_utc),
-                        }
-                    )
-                    self._save_unlocked(data)
                     raise self._unavailable(
                         code="youtube_quota_safety_blocked",
                         method=method,
@@ -583,14 +567,27 @@ class YouTubeQuotaLimiter:
         limit, buffer = self.configured_values()
         used = int(data.get("estimated_used_units") or 0)
         policy_cap = max(limit - buffer, 0)
-        confirmed = str(data.get("state")) == "confirmed_exhausted"
-        safety_blocked = str(data.get("state")) == "safety_blocked" and self._is_breaker_active(data, current_utc)
-        effective = 0 if confirmed or safety_blocked else max(policy_cap - used, 0)
+        confirmed = self._is_breaker_active(data, current_utc)
+        if confirmed:
+            state = "confirmed_exhausted"
+            effective = 0
+            blocked_reason = data.get("blocked_reason")
+            blocked_until = data.get("blocked_until")
+        elif used >= policy_cap:
+            state = "safety_blocked"
+            effective = 0
+            blocked_reason = "safety_cap_reached"
+            blocked_until = None
+        else:
+            state = "warning" if used >= max(int(limit * 0.8), 1) else "normal"
+            effective = max(policy_cap - used, 0)
+            blocked_reason = None
+            blocked_until = None
         return {
             "slot": self.slot,
             "quota_date": data.get("quota_date"),
             "bucket": data.get("bucket", GENERAL_BUCKET),
-            "state": data.get("state", "normal"),
+            "state": state,
             "official_default_limit": OFFICIAL_DEFAULT_LIMIT,
             "configured_project_limit": limit,
             "estimated_used_units": used,
@@ -600,8 +597,8 @@ class YouTubeQuotaLimiter:
             "effective_available_units": effective,
             "usage_percent": round((used / limit * 100), 2) if limit else 0,
             "confirmed_by_google": confirmed,
-            "blocked_reason": data.get("blocked_reason"),
-            "blocked_until": data.get("blocked_until"),
+            "blocked_reason": blocked_reason,
+            "blocked_until": blocked_until,
             "confirmed_exhausted_at": data.get("confirmed_exhausted_at"),
             "last_http_status": data.get("last_http_status"),
             "last_error_reason": data.get("last_error_reason"),
@@ -629,14 +626,15 @@ class YouTubeQuotaLimiter:
             try:
                 data = self._load_current_unlocked(current_utc)
                 limit, buffer = self.configured_values()
-                if str(data["state"]) in {"normal", "warning"} and int(data.get("estimated_used_units") or 0) >= max(
-                    limit - buffer, 0
-                ):
+                used = int(data.get("estimated_used_units") or 0)
+                policy_cap = max(limit - buffer, 0)
+                if str(data["state"]) == "safety_blocked" and used < policy_cap:
                     data.update(
                         {
-                            "state": "safety_blocked",
-                            "blocked_reason": "safety_cap_reached",
-                            "blocked_until": iso_with_offset(next_reset_at(current_utc)),
+                            "configured_limit": limit,
+                            "state": "warning" if used >= max(int(limit * 0.8), 1) else "normal",
+                            "blocked_reason": None,
+                            "blocked_until": None,
                             "updated_at": iso_with_offset(current_utc),
                         }
                     )

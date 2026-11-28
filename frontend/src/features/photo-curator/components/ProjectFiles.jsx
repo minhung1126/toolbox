@@ -56,8 +56,10 @@ export default function ProjectFiles() {
               accept="image/*"
               onChange={(event) => {
                 const files = Array.from(event.target.files || []);
-                session.setPhotos((photos) => matchProjectFiles(photos, files));
                 event.target.value = '';
+                if (!files.length) return;
+                const matchedPhotos = matchProjectFiles(session.photos, files);
+                session.setPhotos(matchedPhotos);
               }}
             />
           </label>
@@ -75,22 +77,24 @@ export default function ProjectFiles() {
             accept="image/*"
             onChange={(event) => {
               const file = event.target.files?.[0];
-              if (file)
-                session.setPhotos((photos) =>
-                  photos.map((item) =>
-                    item.id === photo.id
-                      ? {
-                          ...item,
-                          name: file.name,
-                          size: file.size,
-                          lastModified: file.lastModified,
-                          file,
-                          previewUrl: URL.createObjectURL(file),
-                          missing: false,
-                        }
-                      : item
-                  )
-                );
+              event.target.value = '';
+              if (!file) return;
+              const previewUrl = URL.createObjectURL(file);
+              session.setPhotos((photos) =>
+                photos.map((item) =>
+                  item.id === photo.id
+                    ? {
+                        ...item,
+                        name: file.name,
+                        size: file.size,
+                        lastModified: file.lastModified,
+                        file,
+                        previewUrl,
+                        missing: false,
+                      }
+                    : item
+                )
+              );
             }}
           />
         </label>

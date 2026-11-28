@@ -9,7 +9,8 @@ const headers: (keyof ExportRow)[] = ['id', 'title', 'status', 'reason', 'url'];
 export function resultsCsv(rows: ExportRow[]): string {
   const cell = (value: string) => {
     // Neutralize spreadsheet formulas, including leading whitespace/control characters.
-    const safe = /^[\s\u0000-\u001f]*[=+@-]/.test(value) ? `'${value}` : value;
+    const firstVisible = Array.from(value).find((ch) => ch.charCodeAt(0) > 32 && !/\s/.test(ch));
+    const safe = firstVisible && ['=', '+', '@', '-'].includes(firstVisible) ? `'${value}` : value;
     return `"${safe.replaceAll('"', '""')}"`;
   };
   return (

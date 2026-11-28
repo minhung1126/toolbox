@@ -7,8 +7,8 @@ vi.mock('../../../services/api', () => ({
 }));
 
 const usage = () => ({
-  slot: 'primary',
-  state: 'normal',
+  slot: 'primary' as const,
+  state: 'normal' as const,
   official_default_limit: 10000,
   configured_project_limit: 12000,
   estimated_used_units: 3820,

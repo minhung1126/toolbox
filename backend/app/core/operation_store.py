@@ -6,8 +6,10 @@ including after a crash; uncertain writes require provider reconciliation.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -17,41 +19,122 @@ from pathlib import Path
 
 from backend.app.core.data_paths import data_directory
 from backend.app.core.error_contract import http_error
+from backend.app.core.persistence import secure_chmod
 from backend.app.core.youtube_operation_state import change_progress, initial_progress, project_operation, write_targets
 
 STATES = {"prepared", "running", "completed", "partial", "needs_reconciliation", "failed_before_write"}
+EXECUTOR_HEARTBEAT_TTL_SECONDS = 30.0
 
 
 class OperationStore:
     def __init__(self, path: Path | None = None):
-        self.path = path or data_directory() / "operations.sqlite3"
+        self.path = Path(path) if path is not None else data_directory() / "operations.sqlite3"
         self.active = set()
         self.active_lock = threading.RLock()
+        self._initialized = False
+        self._init_lock = threading.Lock()
+
+    @staticmethod
+    def _precreate_secure_file(file_path: Path) -> None:
+        if not file_path.exists():
+            flags = os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                fd = os.open(file_path, flags, 0o600)
+            except FileExistsError:
+                pass
+            else:
+                os.close(fd)
+        secure_chmod(file_path, 0o600)
+
+    def _secure_wal_sidecars(self) -> None:
+        for suffix in ("-wal", "-shm"):
+            sidecar = Path(f"{self.path}{suffix}")
+            with contextlib.suppress(OSError):
+                if sidecar.exists():
+                    secure_chmod(sidecar, 0o600)
+
+    def _ensure_initialized(self) -> None:
+        if self._initialized:
+            return
+        with self._init_lock:
+            if self._initialized:
+                return
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self._precreate_secure_file(self.path)
+            db = sqlite3.connect(self.path, timeout=20)
+            db.row_factory = sqlite3.Row
+            try:
+                db.execute("PRAGMA busy_timeout = 20000")
+                for attempt in range(10):
+                    try:
+                        mode = db.execute("PRAGMA journal_mode").fetchone()[0]
+                        if str(mode).lower() != "wal":
+                            db.execute("PRAGMA journal_mode=WAL")
+                        break
+                    except sqlite3.OperationalError as exc:
+                        if "locked" not in str(exc).lower() or attempt == 9:
+                            raise
+                        time.sleep(0.02 * (attempt + 1))
+                db.execute("BEGIN IMMEDIATE")
+                version = db.execute("PRAGMA user_version").fetchone()[0]
+                if version not in (0, 1, 2):
+                    raise ValueError("Unsupported operation journal version")
+                if version < 2:
+                    self._migrate(db, version)
+                db.execute("CREATE TABLE IF NOT EXISTS youtube_projection_meta (version INTEGER PRIMARY KEY)")
+                if not db.execute("SELECT 1 FROM youtube_projection_meta WHERE version=1").fetchone():
+                    for row in db.execute("SELECT document FROM operations ORDER BY rowid").fetchall():
+                        project_operation(db, json.loads(row[0]))
+                    db.execute("INSERT INTO youtube_projection_meta VALUES (1)")
+                db.commit()
+                self._initialized = True
+            except BaseException:
+                db.rollback()
+                raise
+            finally:
+                try:
+                    self._secure_wal_sidecars()
+                finally:
+                    db.close()
+            secure_chmod(self.path, 0o600)
+
+    @contextmanager
+    def _read_connection(self):
+        self._ensure_initialized()
+        db = sqlite3.connect(self.path, timeout=20)
+        db.row_factory = sqlite3.Row
+        try:
+            db.execute("PRAGMA query_only = ON")
+            db.execute("BEGIN DEFERRED")
+            self._secure_wal_sidecars()
+            yield db
+        finally:
+            with contextlib.suppress(sqlite3.Error):
+                db.rollback()
+            try:
+                self._secure_wal_sidecars()
+            finally:
+                db.close()
 
     @contextmanager
     def transaction(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._ensure_initialized()
         db = sqlite3.connect(self.path, timeout=20)
         db.row_factory = sqlite3.Row
         try:
             db.execute("BEGIN IMMEDIATE")
-            version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2):
-                raise ValueError("Unsupported operation journal version")
-            if version < 2:
-                self._migrate(db, version)
-            db.execute("CREATE TABLE IF NOT EXISTS youtube_projection_meta (version INTEGER PRIMARY KEY)")
-            if not db.execute("SELECT 1 FROM youtube_projection_meta WHERE version=1").fetchone():
-                for row in db.execute("SELECT document FROM operations ORDER BY rowid").fetchall():
-                    project_operation(db, json.loads(row[0]))
-                db.execute("INSERT INTO youtube_projection_meta VALUES (1)")
+            self._secure_wal_sidecars()
             yield db
             db.commit()
         except BaseException:
-            db.rollback()
+            with contextlib.suppress(sqlite3.Error):
+                db.rollback()
             raise
         finally:
-            db.close()
+            try:
+                self._secure_wal_sidecars()
+            finally:
+                db.close()
 
     @staticmethod
     def _migrate(db, version):
@@ -114,14 +197,52 @@ class OperationStore:
         OperationStore._sync_targets(db, operation)
         project_operation(db, operation)
 
+    @staticmethod
+    def _is_zero_write_pre_failure(operation: dict) -> bool:
+        return (
+            operation.get("state") == "failed_before_write"
+            and not operation.get("outcome_unknown")
+            and all(item.get("state") == "failed_before_write" for item in operation.get("items", []))
+            and not any(
+                row.get("status") in {"running", "needs_reconciliation"}
+                for row in (operation.get("progress") or {}).get("rows", [])
+            )
+        )
+
+    @staticmethod
+    def _is_reconciled_zero_success_failure(operation: dict) -> bool:
+        if operation.get("state") != "partial" or operation.get("outcome_unknown"):
+            return False
+        items = operation.get("items") or []
+        if not all(item.get("state") in {"failed", "failed_before_write"} for item in items):
+            return False
+        progress_rows = (operation.get("progress") or {}).get("rows") or []
+        if not all(row.get("status") in {"failed", "failed_before_write"} for row in progress_rows):
+            return False
+        result = operation.get("result")
+        if isinstance(result, dict):
+            result_rows = result.get("results")
+            if isinstance(result_rows, list) and not all(
+                row.get("status") in {"failed", "failed_before_write"} for row in result_rows
+            ):
+                return False
+            if int(result.get("succeeded") or 0) != 0 or int(result.get("succeeded_count") or 0) != 0:
+                return False
+        return True
+
+    @classmethod
+    def _is_retryable_failed_operation(cls, operation: dict) -> bool:
+        return cls._is_zero_write_pre_failure(operation) or cls._is_reconciled_zero_success_failure(operation)
+
     def claim(self, owner, kind, payload, *, channel_id=None, progress_plan=None, executor_id=None, acceptance=None):
         original = payload.model_dump(mode="json")
-        request_id = original.pop("request_id", None)
+        raw_request_id = original.pop("request_id", None)
+        had_explicit_request_id = bool(raw_request_id)
         digest = hashlib.sha256(
             json.dumps({"input": original, "channel_id": channel_id}, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()
         # Old synchronous callers get a deterministic ID for the same signed plan.
-        request_id = request_id or digest
+        request_id = raw_request_id or digest
         plan = {key: value for key, value in original.items() if key != "preview_token"}
         with self.transaction() as db:
             row = db.execute(
@@ -131,13 +252,21 @@ class OperationStore:
             if row:
                 if row["digest"] != digest:
                     raise http_error(409, "operation_input_changed", "同一請求 ID 的輸入版本已變更，請重新預覽。")
-                return json.loads(row["document"]), False
-            # A different request ID must not bypass a claim for the same confirmed plan.
-            row = db.execute(
-                "SELECT document FROM operations WHERE owner=? AND kind=? AND digest=?", (owner, kind, digest)
-            ).fetchone()
-            if row:
                 existing = json.loads(row["document"])
+                if not (not had_explicit_request_id and self._is_retryable_failed_operation(existing)):
+                    return existing, False
+                request_id = f"{digest}:{uuid.uuid4().hex}"
+            # A different request ID (or omitted request_id retrying past a 0-write pre-failure
+            # or reconciled 0-success partial failure) must not bypass an active, completed,
+            # partially succeeded, or uncertain claim for the same confirmed plan.
+            rows = db.execute(
+                "SELECT document FROM operations WHERE owner=? AND kind=? AND digest=? ORDER BY rowid DESC",
+                (owner, kind, digest),
+            ).fetchall()
+            for candidate_row in rows:
+                existing = json.loads(candidate_row["document"])
+                if self._is_retryable_failed_operation(existing):
+                    continue
                 db.execute(
                     "INSERT INTO operation_requests VALUES (?,?,?,?,?)",
                     (owner, kind, request_id, existing["id"], digest),
@@ -192,14 +321,14 @@ class OperationStore:
             return operation, True
 
     def get(self, owner, operation_id):
-        with self.transaction() as db:
+        with self._read_connection() as db:
             row = db.execute("SELECT document FROM operations WHERE owner=? AND id=?", (owner, operation_id)).fetchone()
             if not row:
                 raise http_error(404, "operation_not_found", "找不到此作業紀錄。")
             return json.loads(row["document"])
 
     def list(self, owner):
-        with self.transaction() as db:
+        with self._read_connection() as db:
             rows = db.execute(
                 "SELECT document FROM operations WHERE owner=? ORDER BY rowid DESC LIMIT 100", (owner,)
             ).fetchall()
@@ -220,7 +349,7 @@ class OperationStore:
 
     def draft_publish_attempts(self, owner, channel_id):
         """Include all prior attempts, so older uncertain writes cannot be bypassed."""
-        with self.transaction() as db:
+        with self._read_connection() as db:
             rows = db.execute(
                 "SELECT document FROM operations WHERE owner=? AND channel_id=? AND kind='youtube.metadata_publish'",
                 (owner, channel_id),
@@ -229,7 +358,7 @@ class OperationStore:
 
     def youtube_metadata_attempts(self, owner, channel_id):
         """Read the full history; the recent-operations UI's 100-row limit must not hide successes."""
-        with self.transaction() as db:
+        with self._read_connection() as db:
             rows = db.execute(
                 "SELECT document FROM operations WHERE owner=? AND kind IN ('youtube.metadata_update', 'youtube.metadata_publish')",
                 (owner,),
@@ -238,27 +367,44 @@ class OperationStore:
 
     def backup(self, destination: Path):
         # sqlite backup takes a consistent snapshot, including concurrent committed writes.
-        with self.transaction():
-            pass
-        with sqlite3.connect(self.path) as source, sqlite3.connect(destination) as target:
+        self._ensure_initialized()
+        dest = Path(destination)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        self._precreate_secure_file(dest)
+        with (
+            contextlib.closing(sqlite3.connect(self.path, timeout=20)) as source,
+            contextlib.closing(sqlite3.connect(dest, timeout=20)) as target,
+        ):
             source.backup(target)
+            target.commit()
+            self._secure_wal_sidecars()
+        secure_chmod(dest, 0o600)
 
     def restore(self, source: Path):
         """Offline maintenance only; validate the backup before touching the current journal."""
-        with sqlite3.connect(f"file:{source}?mode=ro", uri=True) as backup:
-            if (
-                backup.execute("PRAGMA user_version").fetchone()[0] not in (1, 2)
-                or backup.execute("PRAGMA integrity_check").fetchone()[0] != "ok"
-            ):
-                raise ValueError("Invalid operation backup")
-            rows = backup.execute("SELECT document FROM operations").fetchall()
-            if any(json.loads(row[0]).get("version") not in (1, 2) for row in rows):
-                raise ValueError("Invalid operation document version")
-            with sqlite3.connect(self.path) as target:
-                backup.backup(target)
+        source_uri = f"{Path(source).resolve().as_uri()}?mode=ro"
+        with self._init_lock:
+            with contextlib.closing(sqlite3.connect(source_uri, uri=True, timeout=20)) as backup:
+                if (
+                    backup.execute("PRAGMA user_version").fetchone()[0] not in (1, 2)
+                    or backup.execute("PRAGMA integrity_check").fetchone()[0] != "ok"
+                ):
+                    raise ValueError("Invalid operation backup")
+                rows = backup.execute("SELECT document FROM operations").fetchall()
+                if any(json.loads(row[0]).get("version") not in (1, 2) for row in rows):
+                    raise ValueError("Invalid operation document version")
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                self._precreate_secure_file(self.path)
+                with contextlib.closing(sqlite3.connect(self.path, timeout=20)) as target:
+                    backup.backup(target)
+                    target.commit()
+                    self._secure_wal_sidecars()
+            secure_chmod(self.path, 0o600)
+            self._secure_wal_sidecars()
+            self._initialized = False
 
     def find_request(self, owner, channel_id, request_id, *, kind="youtube.metadata_publish"):
-        with self.transaction() as db:
+        with self._read_connection() as db:
             row = db.execute(
                 "SELECT o.document FROM operation_requests r JOIN operations o ON o.id=r.operation_id WHERE r.owner=? AND r.kind=? AND r.request_id=? AND o.channel_id=?",
                 (owner, kind, request_id, channel_id),
@@ -268,7 +414,7 @@ class OperationStore:
             return json.loads(row[0])
 
     def find_stage(self, owner, channel_id, stage_id):
-        with self.transaction() as db:
+        with self._read_connection() as db:
             rows = db.execute(
                 "SELECT document FROM operations WHERE owner=? AND channel_id=? AND stage_id=? AND kind='youtube.metadata_publish'",
                 (owner, channel_id, stage_id),
@@ -285,7 +431,7 @@ class OperationStore:
         return self.update(owner, operation_id, lambda op: change_progress(op, video_id, **changes))
 
     def assert_targets_available(self, owner, channel_id, video_ids, *, operation_id=None):
-        with self.transaction() as db:
+        with self._read_connection() as db:
             for video_id in video_ids:
                 if db.execute(
                     "SELECT 1 FROM youtube_write_targets WHERE owner=? AND channel_id=? AND video_id=? AND operation_id!=?",
@@ -295,10 +441,19 @@ class OperationStore:
                         409, "operation_requires_reconciliation", "此影片已有執行中或待核對作業，請先核對結果。"
                     )
 
-    def executor_alive(self, executor_id):
-        with self.transaction() as db:
-            row = db.execute("SELECT state FROM operation_executors WHERE id=?", (executor_id,)).fetchone()
-            return bool(row and row[0] == "active")
+    def executor_alive(self, executor_id, *, max_age_seconds: float = EXECUTOR_HEARTBEAT_TTL_SECONDS):
+        with self._read_connection() as db:
+            row = db.execute(
+                "SELECT state, heartbeat FROM operation_executors WHERE id=?",
+                (executor_id,),
+            ).fetchone()
+            if not row or row["state"] != "active":
+                return False
+            try:
+                heartbeat = float(row["heartbeat"])
+            except (TypeError, ValueError):
+                return False
+            return (time.time() - heartbeat) <= max_age_seconds
 
     def existing(self, owner, kind, payload, channel_id):
         original = payload.model_dump(mode="json")
@@ -306,7 +461,7 @@ class OperationStore:
         digest = hashlib.sha256(
             json.dumps({"input": original, "channel_id": channel_id}, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()
-        with self.transaction() as db:
+        with self._read_connection() as db:
             row = db.execute(
                 "SELECT o.document, r.digest FROM operation_requests r JOIN operations o ON o.id=r.operation_id WHERE r.owner=? AND r.kind=? AND r.request_id=?",
                 (owner, kind, request_id),
@@ -314,10 +469,16 @@ class OperationStore:
             if row and row["digest"] != digest:
                 raise http_error(409, "operation_input_changed", "同一請求 ID 的輸入版本已變更，請重新預覽。")
             if not row:
-                row = db.execute(
-                    "SELECT document FROM operations WHERE owner=? AND kind=? AND digest=?", (owner, kind, digest)
-                ).fetchone()
-            return json.loads(row["document"]) if row else None
+                rows = db.execute(
+                    "SELECT document FROM operations WHERE owner=? AND kind=? AND digest=? ORDER BY rowid DESC",
+                    (owner, kind, digest),
+                ).fetchall()
+                for candidate_row in rows:
+                    candidate = json.loads(candidate_row["document"])
+                    if not self._is_retryable_failed_operation(candidate):
+                        return candidate
+                return None
+            return json.loads(row["document"])
 
     def recover_lost_executor_jobs(self):
         """Only call while holding the exclusive runner file lock; never replay a write."""
@@ -350,7 +511,7 @@ class OperationStore:
                 self._save(db, op)
 
     def video_processing_states(self, owner, channel_id, video_ids):
-        with self.transaction() as db:
+        with self._read_connection() as db:
             result = {}
             for video_id in dict.fromkeys(video_ids):
                 row = db.execute(
@@ -379,7 +540,7 @@ class OperationStore:
             return result
 
     def cleanup_states(self, owner, channel_id, playlist_id):
-        with self.transaction() as db:
+        with self._read_connection() as db:
             return [
                 json.loads(row[0])
                 for row in db.execute(

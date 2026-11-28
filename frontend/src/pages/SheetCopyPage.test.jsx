@@ -89,6 +89,58 @@ describe('SheetCopyPage work-state persistence', () => {
       autoCollapse: false,
     });
   });
+
+  it('waits for workState ready before hydrating or saving, and hydrates late server state without overwriting it', async () => {
+    const { rerender } = render(
+      <AccountWorkStateProvider initialState={{}} ready={false}>
+        <SheetCopyPage sysSettings={{ shared_team_person_filter: {} }} />
+      </AccountWorkStateProvider>
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(api.updateWorkState).not.toHaveBeenCalled();
+
+    rerender(
+      <AccountWorkStateProvider
+        initialState={{
+          sheet_copy: {
+            spreadsheetId: '',
+            worksheetName: '',
+            visibleKeys: [],
+            query: 'hydrated query',
+            autoCollapse: true,
+          },
+        }}
+        ready={true}
+      >
+        <SheetCopyPage sysSettings={{ shared_team_person_filter: {} }} />
+      </AccountWorkStateProvider>
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+
+    expect(screen.getByLabelText('自動折疊內容格子')).toBeChecked();
+    expect(screen.getByLabelText('搜尋表格內容')).toHaveValue('hydrated query');
+    expect(api.updateWorkState).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByLabelText('自動折疊內容格子'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(450);
+    });
+
+    expect(api.updateWorkState).toHaveBeenCalledTimes(1);
+    expect(api.updateWorkState).toHaveBeenCalledWith('sheet_copy', {
+      spreadsheetId: '',
+      worksheetName: '',
+      visibleKeys: [],
+      query: 'hydrated query',
+      autoCollapse: false,
+    });
+  });
 });
 
 describe('SheetCopyPage row dismissal and restoration', () => {

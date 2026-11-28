@@ -1,5 +1,5 @@
 import { personKey } from '../src/features/sheets/model/personOptions';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Request, type Route } from '@playwright/test';
 import JSZip from 'jszip';
 import { readFile } from 'node:fs/promises';
 
@@ -502,7 +502,7 @@ test('Playlist Sort previews and confirms creation of a sorted playlist', async 
     '/api/v1/playlist-sort/apply': {
       mode: 'new_playlist',
       new_playlist_id: 'playlist-sorted',
-      new_playlist_url: 'https://music.youtube.example/playlist?list=playlist-sorted',
+      new_playlist_url: 'https://music.youtube.com/playlist?list=playlist-sorted',
       total: 3,
       moved: 3,
       succeeded: 3,
@@ -561,7 +561,7 @@ test('YouTube drafts preserve manual edits through reload and publish after fina
       },
     },
     '/api/v1/settings/system': { default_spreadsheet_id: 'sheet-a', default_playlist_id: 'playlist-a' },
-    '/api/v1/settings/youtube-drafts': async (route) => {
+    '/api/v1/settings/youtube-drafts': async (route: Route) => {
       await new Promise((resolve) => setTimeout(resolve, 150));
       await route.fulfill({
         status: 200,
@@ -640,7 +640,7 @@ test('YouTube drafts preserve manual edits through reload and publish after fina
     .locator('.video-card-assignment select')
     .first()
     .selectOption(personKey({ team: '團體 A', person: '人物甲', kind: 'person' }));
-  const writes = [];
+  const writes: Request[] = [];
   page.on('request', (request) => {
     if (request.url().endsWith('/youtube/drafts/publish-jobs')) writes.push(request);
   });
@@ -705,7 +705,7 @@ test('cleanup previews exact public items and only removes members after confirm
     '/api/v1/settings/system': { default_playlist_id: 'playlist-cleanup' },
     '/api/v1/youtube/cleanup-preview': { ...snapshot, total_count: 3, candidate_count: 2, counts: { public: 2, private: 1, unlisted: 0, unknown: 0 }, preview_token: 'cleanup-token', preview_snapshot: snapshot },
     '/api/v1/youtube/quota-estimate': { projected_units: 165 },
-    '/api/v1/youtube/publish-and-cleanup': async route => {
+    '/api/v1/youtube/publish-and-cleanup': async (route: Route) => {
       writes += 1;
       expect(route.request().postDataJSON()).toMatchObject({ version: 2, mode: 'cleanup_only', preview_token: 'cleanup-token', preview_snapshot: snapshot });
       await route.fulfill({ json: { version: 2, mode: 'cleanup_only', operation: 'youtube.publish_cleanup', operation_id: 'cleanup-operation', completed: true, total_count: 3, succeeded_count: 2, skipped_count: 1, failed_count: 0, not_attempted_count: 0, needs_reconciliation_count: 0, quota_blocked: false, results: items.map(row => ({ ...row, status: row.candidate ? 'succeeded' : 'skipped' })) } });
@@ -770,9 +770,9 @@ test('Sticky Notes autosaves edits, toggles pin state, and deletes through its A
     updated_at: '2026-09-24T00:00:00Z',
   };
   await mockAuthenticatedBackend(page, {
-    '/api/v1/notes': async (route) =>
+    '/api/v1/notes': async (route: Route) =>
       route.fulfill({ status: 200, json: { notes: note ? [note] : [], total: note ? 1 : 0 } }),
-    '/api/v1/notes/e2e-note-1': async (route) => {
+    '/api/v1/notes/e2e-note-1': async (route: Route) => {
       if (route.request().method() === 'PUT' && note) {
         note = { ...note, ...route.request().postDataJSON() };
         await route.fulfill({ status: 200, json: { note, status: 'updated' } });
@@ -822,7 +822,7 @@ test('Sticky Notes reconciles an ambiguous create without sending a duplicate', 
   let createRequests = 0;
 
   await mockAuthenticatedBackend(page, {
-    '/api/v1/notes': async (route) => {
+    '/api/v1/notes': async (route: Route) => {
       if (route.request().method() === 'POST') {
         createRequests += 1;
         created = true;

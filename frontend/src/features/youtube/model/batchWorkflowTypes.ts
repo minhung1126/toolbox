@@ -1,4 +1,5 @@
 import type { YoutubeDraftVideoType } from '../api/youtubeBatchTypes';
+import type { SharedTeamPersonFilterResponse } from '../../sheets/api/sheetsFilterTypes';
 import type { YoutubeRoutingState } from './routing';
 import type { readSharedTeamPersonFilter } from '../../../utils/teamPersonFilterStorage';
 export interface BatchConfig {
@@ -19,6 +20,7 @@ export interface BatchWorkflowOptions {
     shared_team_person_filter?: Parameters<typeof readSharedTeamPersonFilter>[0];
   };
   authUser?: { sub?: string; email?: string; youtube?: YoutubeRoutingState } | null;
+  onSharedFilterSaved?: (savedFilter: SharedTeamPersonFilterResponse) => void;
   videoType: YoutubeDraftVideoType;
   toast: { warning(message: string): void; success(message: string): void; error(message: string): void };
 }

@@ -33,7 +33,7 @@ export const PATHS = Object.freeze({
   setup: '/setup',
 });
 
-const RETURN_PATH_ALIASES = Object.freeze({
+export const RETURN_PATH_ALIASES = Object.freeze({
   [PATHS.youtubeSettings]: PATHS.youtubeConnections,
   [PATHS.youtubePlaylistSort]: PATHS.ytmusicPlaylistSort,
   [PATHS.settings]: PATHS.googleSettings,

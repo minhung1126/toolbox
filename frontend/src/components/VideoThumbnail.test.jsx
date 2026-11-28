@@ -11,10 +11,24 @@ describe('VideoThumbnail', () => {
     expect(img).toHaveAttribute('referrerPolicy', 'no-referrer');
   });
 
-  it('upgrades http to https to prevent mixed content', () => {
-    render(<VideoThumbnail src="http://i.ytimg.com/vi/test/hqdefault.jpg" alt="HTTP影片" />);
+  it('upgrades http (case-insensitive) to https to prevent mixed content', () => {
+    render(<VideoThumbnail src="HTTP://i.ytimg.com/vi/test/hqdefault.jpg" alt="HTTP影片" />);
     const img = screen.getByAltText('HTTP影片');
     expect(img).toHaveAttribute('src', 'https://i.ytimg.com/vi/test/hqdefault.jpg');
+  });
+
+  it.each([
+    'javascript:alert(1)',
+    'data:image/svg+xml,<svg></svg>',
+    'https://user:pass@example.com/thumb.jpg',
+    'not-a-valid-url',
+  ])('rejects unsafe thumbnail URL (%s) and falls back safely', (unsafeUrl) => {
+    const { rerender } = render(<VideoThumbnail src={unsafeUrl} videoId="vid/123" alt="安全測試" />);
+    const img = screen.getByAltText('安全測試');
+    expect(img).toHaveAttribute('src', 'https://i.ytimg.com/vi/vid%2F123/hqdefault.jpg');
+
+    rerender(<VideoThumbnail src={unsafeUrl} videoId="" alt="無安全縮圖" />);
+    expect(screen.getByText('無縮圖')).toBeInTheDocument();
   });
 
   it('falls back to hqdefault and then mqdefault on image error if videoId is provided', () => {

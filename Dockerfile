@@ -36,7 +36,8 @@ FROM python:3.11-slim@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627a
 WORKDIR /app
 
 # 3.1 執行期標準環境變數（禁止寫入 .pyc、無緩衝日誌輸出、啟用虛擬環境與模組解析路徑）
-ENV PYTHONDONTWRITEBYTECODE=1 \
+ENV ENVIRONMENT=production \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
     PATH="/opt/venv/bin:$PATH" \
@@ -59,6 +60,15 @@ COPY backend/ ./backend/
 ARG APP_COMMIT_SHA=development
 ENV APP_COMMIT_SHA=${APP_COMMIT_SHA}
 
+# Run as non-root user; /app/data must be writable (mount a persistent volume)
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --home-dir /app app \
+    && chown -R app:app /app/data
+USER app
+
 EXPOSE 8000
 
-CMD ["sh", "-c", "exec uvicorn backend.app.main:app --host \"${BIND_HOST}\" --port \"${PORT}\""]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD ["python", "-c", "import os,urllib.request;urllib.request.urlopen('http://127.0.0.1:%s/api/v1/health' % os.environ.get('PORT','8000'), timeout=3)"]
+
+CMD ["sh", "-c", "exec uvicorn backend.app.main:app --host \"${BIND_HOST}\" --port \"${PORT}\" --workers 1"]

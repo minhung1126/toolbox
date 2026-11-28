@@ -37,6 +37,7 @@ const manifest = {
   routes: [
     {
       path: PATHS.photoCurator.slice(1),
+      title: 'Instagram 貼文排版',
       component: lazy(() => import('../../pages/PhotoCuratorPage')),
       getProps: ({ pageProps }) => pageProps,
     },

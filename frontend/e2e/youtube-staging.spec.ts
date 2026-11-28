@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 import { draftPublishResponses, mockAuthenticatedBackend } from './fixtures';
 import { personKey } from '../src/features/sheets/model/personOptions';
 
@@ -37,7 +37,7 @@ async function mockStagingBackend(page: Page, { failFirstPrepare = false, failFi
     },
     '/api/v1/sheets/parse-options': { teams: ['Team'], people: [{ team: 'Team', person: 'Alice', kind: 'person' }] },
     '/api/v1/sheets/random-member-preview': { person: 'Alice', values: {} },
-    '/api/v1/youtube/playlist-items': async (route) => {
+    '/api/v1/youtube/playlist-items': async (route: Route) => {
       readCalls += 1;
       if (failFirstRead && readCalls === 1) {
         await route.fulfill({
@@ -59,7 +59,7 @@ async function mockStagingBackend(page: Page, { failFirstPrepare = false, failFi
     },
     '/api/v1/youtube/edit-status': { channel_id: 'channel-e2e', statuses: { applied: 'applied', new: 'unknown' } },
     ...fakes,
-    '/api/v1/youtube/drafts/prepare': async (route) => {
+    '/api/v1/youtube/drafts/prepare': async (route: Route) => {
       prepareCalls += 1;
       if (failFirstPrepare && prepareCalls === 1) {
         await route.fulfill({ status: 504, json: { detail: { code: 'timeout', message: '測試連線逾時，請重試' } } });
@@ -67,7 +67,7 @@ async function mockStagingBackend(page: Page, { failFirstPrepare = false, failFi
       }
       await fakes['/api/v1/youtube/drafts/prepare'](route);
     },
-    '/api/v1/youtube/drafts/publish-jobs': async (route) => {
+    '/api/v1/youtube/drafts/publish-jobs': async (route: Route) => {
       writes += 1;
       await fakes['/api/v1/youtube/drafts/publish-jobs'](route);
     },

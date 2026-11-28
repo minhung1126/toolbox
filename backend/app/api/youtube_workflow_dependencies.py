@@ -168,6 +168,7 @@ def _verify_playlist_preview_token(
         owner_sub=context.owner_sub,
         youtube_slot=token_slot or context.slot,
         operation=operation,
+        youtube_channel_id=context.channel_id or "",
         playlist_id=playlist_id,
         playlist=expected_playlist,
     ):

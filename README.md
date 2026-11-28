@@ -35,7 +35,7 @@ toolbox/
 │   ├── api/                 # /api/v1/ 路由入口
 │   ├── tools/               # 工具箱模組擴充目錄 (ToolRegistry, Plugin 規格與內建外掛)
 │   ├── core/                # 共享底層 (安全加密、設定、Session、配額限制器)
-│   └── services/            # 核心服務 (Google Auth, Drive, Sheets, YouTube)
+│   └── services/            # 核心服務 (Google Auth, Sheets, YouTube)
 ├── frontend/src/
 │   ├── tools/               # 前端模組化工具目錄與動態導覽配置
 │   ├── pages/               # 各工具頁面

@@ -1,11 +1,11 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 import { mockAuthenticatedBackend } from './fixtures';
 import { PATHS } from '../src/routes/paths';
 
 async function mockDashboardState(page: Page) {
   const state: Record<string, Record<string, unknown>> = {};
   await mockAuthenticatedBackend(page, {
-    '/api/v1/settings/work-state': async (route) => {
+    '/api/v1/settings/work-state': async (route: Route) => {
       if (route.request().method() === 'PUT') {
         const { key, value } = route.request().postDataJSON();
         state[key] = value;

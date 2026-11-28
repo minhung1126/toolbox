@@ -95,6 +95,66 @@ def test_system_secrets_setup_pin_lifecycle(tmp_path: Path):
     assert not (tmp_path / ".setup_pin").is_file()
 
 
+def test_verify_setup_pin_no_lazy_generation_and_rotates_after_five_failures(tmp_path):
+    mgr = SystemSecretsManager(
+        data_dir=tmp_path,
+        secrets_file=tmp_path / ".secrets.json",
+        credentials_file=tmp_path / "system_credentials.json",
+        pin_file=tmp_path / ".setup_pin",
+    )
+
+    # Must NOT lazily generate a PIN during verification
+    assert mgr.verify_setup_pin("123456") is False
+    assert not (tmp_path / ".setup_pin").exists()
+
+    first_pin = mgr.get_or_create_setup_pin()
+    # 4 failures keep the existing PIN valid
+    for _ in range(4):
+        assert mgr.verify_setup_pin("000000") is False
+    assert mgr.verify_setup_pin(first_pin) is True
+
+    # 5 consecutive failures across reloads invalidate old PIN and rotate to a new one
+    for _ in range(4):
+        assert mgr.verify_setup_pin("000000") is False
+    reloaded = SystemSecretsManager(
+        data_dir=tmp_path,
+        secrets_file=tmp_path / ".secrets.json",
+        credentials_file=tmp_path / "system_credentials.json",
+        pin_file=tmp_path / ".setup_pin",
+    )
+    assert reloaded.verify_setup_pin("000000") is False
+    rotated_pin = (tmp_path / ".setup_pin").read_text(encoding="utf-8").strip()
+    assert rotated_pin != first_pin
+    assert reloaded.verify_setup_pin(first_pin) is False
+    assert reloaded.verify_setup_pin(rotated_pin) is True
+
+
+def test_settings_sync_dynamic_config_falls_back_to_env_baseline_on_clear(tmp_path):
+    mgr = SystemSecretsManager(tmp_path)
+    runtime = RuntimeConfig(tmp_path / "runtime.json")
+    s = Settings(
+        _env_file=None,
+        runtime_store=runtime,
+        secrets_store=mgr,
+        GOOGLE_CLIENT_ID="env-client-id",
+        GOOGLE_CLIENT_SECRET="env-client-secret",
+        YOUTUBE_OAUTH_PRIMARY_LABEL="Env Primary",
+    )
+    mgr.update_credentials({"google_client_id": "dyn-id", "google_client_secret": "dyn-secret"})
+    runtime.set("youtube_oauth_primary_label", "Dynamic Primary")
+    s.sync_dynamic_config()
+    assert s.GOOGLE_CLIENT_ID == "dyn-id"
+    assert s.GOOGLE_CLIENT_SECRET == "dyn-secret"
+    assert s.YOUTUBE_OAUTH_PRIMARY_LABEL == "Dynamic Primary"
+
+    mgr.update_credentials({"google_client_id": "", "google_client_secret": ""})
+    runtime.set("youtube_oauth_primary_label", "")
+    s.sync_dynamic_config()
+    assert s.GOOGLE_CLIENT_ID == "env-client-id"
+    assert s.GOOGLE_CLIENT_SECRET == "env-client-secret"
+    assert s.YOUTUBE_OAUTH_PRIMARY_LABEL == "Env Primary"
+
+
 def test_runtime_config_allowlist_helpers(tmp_path: Path):
     config = RuntimeConfig(config_path=tmp_path / "runtime_config.json")
     assert config.get_allowed_emails() == []

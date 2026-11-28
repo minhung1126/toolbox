@@ -14,12 +14,11 @@ Toolbox 是一個高擴充性的多功能模組化工具箱平台，採用 FastA
   - `data/` 目錄在容器中必須掛載持久化磁碟（包含加密憑證、Session、配額帳本、工作台狀態與工具資料庫）。
 - **模組化解耦授權**：
   - 控制台登入限縮為純身分認證（`openid`, `userinfo.email`, `userinfo.profile`）。
-  - 第三方服務（Google 試算表 `spreadsheets.readonly`、Google 雲端硬碟 `drive.readonly`、YouTube 創作者頻道 `youtube`、YouTube Music 個人音樂庫 `youtube`）採獨立解耦授權。
+  - 第三方服務（Google 試算表 `spreadsheets.readonly`、YouTube 創作者頻道 `youtube`、YouTube Music 個人音樂庫 `youtube`）採獨立解耦授權。
   - FastAPI 認證依賴注入分別使用：
     - `require_login_credentials`：控制台身分登入驗證。
     - `require_account_subject`：解析登入帳號唯一 ID (OIDC `sub`)，用於多用戶資料隔離。
     - `require_sheets_credentials`：試算表讀取權限（具備 legacy 憑證自動 fallback 相容）。
-    - `require_drive_credentials`：雲端硬碟讀取權限（具備 legacy 憑證自動 fallback 相容）。
     - `require_youtube_context`：YouTube 創作者頻道操作與配額槽位選擇。
     - `require_ytmusic_context`：YouTube Music 專屬音樂授權（具備 YouTube 頻道與 legacy 憑證自動 fallback 相容）。
 - **日誌與錯誤標準化**：

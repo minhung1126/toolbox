@@ -6,12 +6,17 @@ import re
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
+from backend.app.core.dependencies import require_login_credentials
 from backend.app.core.error_contract import http_error
 
-router = APIRouter(prefix="/ffmpeg-generator", tags=["FFmpeg Generator"])
+router = APIRouter(
+    prefix="/ffmpeg-generator",
+    tags=["FFmpeg Generator"],
+    dependencies=[Depends(require_login_credentials)],
+)
 
 
 class FfmpegPreset(BaseModel):

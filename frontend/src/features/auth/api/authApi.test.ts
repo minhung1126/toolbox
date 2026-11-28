@@ -32,7 +32,7 @@ describe('authApi response contracts', () => {
   });
 
   it('rejects malformed and off-domain login responses', async () => {
-    vi.mocked(api.getAuthConfig).mockResolvedValueOnce({});
+    vi.mocked(api.getAuthConfig).mockResolvedValueOnce({} as never);
     vi.mocked(api.getAuthUrl).mockResolvedValueOnce({ auth_url: 'https://example.test/login' });
     await expect(authApi.getLoginConfig()).rejects.toBeInstanceOf(AuthContractError);
     await expect(authApi.getLoginUrl()).rejects.toBeInstanceOf(AuthContractError);
@@ -40,7 +40,7 @@ describe('authApi response contracts', () => {
 
   it('does not report setup success when its confirmation is missing', async () => {
     const request = { googleClientId: 'client', googleClientSecret: 'secret', adminEmail: 'admin@example.test' };
-    vi.mocked(api.performSetup).mockResolvedValueOnce({});
+    vi.mocked(api.performSetup).mockResolvedValueOnce({} as never);
     await expect(authApi.performSetup(request)).rejects.toBeInstanceOf(AuthContractError);
     vi.mocked(api.performSetup).mockResolvedValueOnce({
       status: 'success',

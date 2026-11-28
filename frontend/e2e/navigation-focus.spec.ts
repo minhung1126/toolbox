@@ -1,14 +1,27 @@
 import { test, expect } from '@playwright/test';
 import { mockAuthenticatedBackend } from './fixtures';
+
+interface FocusTraceEntry {
+  type: string;
+  time: number;
+  key: string;
+  shift: boolean;
+  active: string | undefined;
+  target: string | null;
+}
+
+type FocusWindow = Window & { __focusTrace: FocusTraceEntry[] };
+
 test('drawer traps keyboard focus during its opening animation', async ({ page }, testInfo) => {
   await page.addInitScript(() => {
-    (window as any).__focusTrace = [];
+    const win = window as unknown as FocusWindow;
+    win.__focusTrace = [];
     for (const type of ['keydown', 'focusin', 'focusout'])
       document.addEventListener(
         type,
         (event) => {
           const active = document.activeElement as HTMLElement;
-          (window as any).__focusTrace.push({
+          win.__focusTrace.push({
             type,
             time: performance.now(),
             key: (event as KeyboardEvent).key,
@@ -33,7 +46,7 @@ test('drawer traps keyboard focus during its opening animation', async ({ page }
     await expect(page.getByRole('button', { name: '登出控制台' })).toBeFocused();
   } finally {
     await testInfo.attach('focus-events.json', {
-      body: JSON.stringify(await page.evaluate(() => (window as any).__focusTrace)),
+      body: JSON.stringify(await page.evaluate(() => (window as unknown as FocusWindow).__focusTrace)),
       contentType: 'application/json',
     });
   }

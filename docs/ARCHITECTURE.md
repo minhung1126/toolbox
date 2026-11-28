@@ -25,7 +25,7 @@ Toolbox 採用 **「平台核心 (Platform Core) + 工具外掛 (Tool Plugins)�
 │  - Credential Store (AES)   │└──────────────┬──────────────┘
 │  - Session Store            │               │
 │  - Account State Store      │               ├─► Creator Tools Plugin
-│  - Google OIDC Identity Auth│               │   (YouTube, Sheets, Drive)
+│  - Google OIDC Identity Auth│               │   (YouTube, Sheets)
 └─────────────────────────────┘               ├─► System Utility Plugin
                                               │   (API Health, Deployment Info)
                                               └─► [Future Tools...]
@@ -172,7 +172,7 @@ export default manifest;
 
 ## 3. 模組化授權架構 (Decoupled Authentication)
 
-Toolbox 將過去綁定在一起的授權模型徹底解耦為 4 個完全獨立的維度：
+Toolbox 將過去綁定在一起的授權模型徹底解耦為 3 個完全獨立的維度：
 
 1. **控制台身分登入 (Identity)**:
    - 僅請求 `openid`、`email`、`profile`。
@@ -181,13 +181,11 @@ Toolbox 將過去綁定在一起的授權模型徹底解耦為 4 個完全獨立
 2. **Google 試算表授權 (Google Sheets)**:
    - 請求 `spreadsheets.readonly`。
    - 僅在用戶進入試算表相關功能時於設定頁或面板中獨立授權。
-3. **Google 雲端硬碟授權 (Google Drive)**:
-   - 請求 `drive.readonly`。
-4. **YouTube 頻道授權 (YouTube Data API)**:
+3. **YouTube 頻道授權 (YouTube Data API)**:
    - 請求 `youtube` scope。
    - 獨立支援 Primary 與 Secondary 雙槽位，配備自動切換與配額保護。
 
-> **向下相容性**: 若舊帳號之登入憑證已包含 Sheets 或 Drive 權限，後端依賴注入 (`require_sheets_credentials` / `require_drive_credentials`) 會自動 Fallback，無須強制舊用戶重新登入。
+> **向下相容性**: 若舊帳號之登入憑證已包含 Sheets 權限，後端依賴注入 (`require_sheets_credentials`) 會自動 Fallback，無須強制舊用戶重新登入。
 
 ---
 

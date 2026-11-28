@@ -3,8 +3,8 @@ from __future__ import annotations
 import concurrent.futures
 import logging
 import re
-from collections import Counter
-from functools import lru_cache
+import threading
+from collections import Counter, OrderedDict
 from typing import Any
 
 try:
@@ -43,6 +43,12 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_YTMUSIC_LANGUAGE = "zh_TW"
 DEFAULT_YTMUSIC_LOCATION = "TW"
+YOUTUBE_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+MAX_YTDLP_FALLBACK_TRACKS = 50
+YTDLP_CACHE_MAXSIZE = 500
+
+_YTDLP_VIDEO_DATE_CACHE: OrderedDict[tuple[str, str], dict[str, Any]] = OrderedDict()
+_YTDLP_VIDEO_DATE_LOCK = threading.Lock()
 
 
 LOCALE_PRESETS: dict[str, dict[str, str]] = {
@@ -112,15 +118,22 @@ def resolve_ytmusic_locale(
     return resolved_lang, resolved_loc
 
 
-@lru_cache(maxsize=500)
 def get_ytdlp_video_date(video_id: str, language: str = "zh-TW") -> dict[str, Any]:
     """Fetch exact release_date and year for a YouTube video using yt-dlp.
 
-    Results are cached (LRU, max 500 entries) to avoid repeated network calls.
+    Results are cached (LRU, max 500 entries) only when non-empty to avoid caching transient failures.
     Returns dict with keys: release_date (e.g. '2023-05-12'), year (int), upload_date (str).
     """
-    if not video_id or yt_dlp is None:
+    clean_id = str(video_id or "").strip()
+    if not clean_id or not YOUTUBE_VIDEO_ID_RE.match(clean_id) or yt_dlp is None:
         return {}
+
+    cache_key = (clean_id, str(language or "zh-TW"))
+    with _YTDLP_VIDEO_DATE_LOCK:
+        cached = _YTDLP_VIDEO_DATE_CACHE.get(cache_key)
+        if cached is not None:
+            _YTDLP_VIDEO_DATE_CACHE.move_to_end(cache_key)
+            return dict(cached)
 
     ydl_opts = {
         "quiet": True,
@@ -134,7 +147,7 @@ def get_ytdlp_video_date(video_id: str, language: str = "zh-TW") -> dict[str, An
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_id, download=False)
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={clean_id}", download=False)
             if not info or not isinstance(info, dict):
                 return {}
 
@@ -155,7 +168,7 @@ def get_ytdlp_video_date(video_id: str, language: str = "zh-TW") -> dict[str, An
             raw_artist = info.get("artist") or info.get("uploader") or info.get("channel")
             norm_artist = normalize_artist_name(raw_artist) if raw_artist else None
 
-            return {
+            result = {
                 "release_date": release_date,
                 "year": year,
                 "upload_date": str(info.get("upload_date") or ""),
@@ -163,9 +176,24 @@ def get_ytdlp_video_date(video_id: str, language: str = "zh-TW") -> dict[str, An
                 "track_number": info.get("track_number"),
                 "artist": norm_artist,
             }
+            if any(result.values()):
+                with _YTDLP_VIDEO_DATE_LOCK:
+                    _YTDLP_VIDEO_DATE_CACHE[cache_key] = dict(result)
+                    _YTDLP_VIDEO_DATE_CACHE.move_to_end(cache_key)
+                    while len(_YTDLP_VIDEO_DATE_CACHE) > YTDLP_CACHE_MAXSIZE:
+                        _YTDLP_VIDEO_DATE_CACHE.popitem(last=False)
+            return result
     except Exception as exc:
-        logger.warning("yt-dlp metadata extraction failed for video %s: %s", video_id, type(exc).__name__)
+        logger.warning("yt-dlp metadata extraction failed for video %s: %s", clean_id, type(exc).__name__)
         return {}
+
+
+def _clear_ytdlp_video_date_cache() -> None:
+    with _YTDLP_VIDEO_DATE_LOCK:
+        _YTDLP_VIDEO_DATE_CACHE.clear()
+
+
+get_ytdlp_video_date.cache_clear = _clear_ytdlp_video_date_cache  # type: ignore[attr-defined]
 
 
 def enrich_tracks_with_ytdlp_fallback(
@@ -173,6 +201,7 @@ def enrich_tracks_with_ytdlp_fallback(
     check_same_year: bool = True,
     max_workers: int = 8,
     language: str = "zh-TW",
+    max_candidates: int = MAX_YTDLP_FALLBACK_TRACKS,
 ) -> list[dict[str, Any]]:
     """Enrich tracks with precise release_date / year using yt-dlp fallback.
 
@@ -213,7 +242,8 @@ def enrich_tracks_with_ytdlp_fallback(
         elif is_same_year and not has_release_date:
             low_priority_candidates.append(trk)
 
-    candidates = high_priority_candidates + low_priority_candidates
+    limit = max(int(max_candidates), 0)
+    candidates = (high_priority_candidates + low_priority_candidates)[:limit]
 
     if not candidates:
         return tracks

@@ -31,7 +31,7 @@ export function useBatchConfigPersistence({ state, setters, authUser, videoType,
   }, [accountKey]);
   const clearConfigSaveError = useCallback(() => {
     setConfigSaveError('');
-  }, []);
+  }, [setConfigSaveError]);
 
   const scheduleDraftSave = useCallback(
     (overrides: Partial<BatchConfig> = {}) => {
@@ -66,7 +66,18 @@ export function useBatchConfigPersistence({ state, setters, authUser, videoType,
         }
       }, 800);
     },
-    [accountKey, authUser, descriptionColumn, playlistId, spreadsheetId, titleColumn, videoType, worksheetName]
+    [
+      accountKey,
+      authUser,
+      descriptionColumn,
+      playlistId,
+      setConfigSaveError,
+      setDraftAutosaveStatus,
+      spreadsheetId,
+      titleColumn,
+      videoType,
+      worksheetName,
+    ]
   );
 
   const schedulePlaylistSave = useCallback(
@@ -93,7 +104,7 @@ export function useBatchConfigPersistence({ state, setters, authUser, videoType,
         }
       }, 800);
     },
-    [accountKey, authUser, scheduleDraftSave]
+    [accountKey, authUser, scheduleDraftSave, setPlaylistAutosaveStatus]
   );
 
   const saveDraftConfig = useCallback(async () => {
@@ -127,6 +138,9 @@ export function useBatchConfigPersistence({ state, setters, authUser, videoType,
     authUser,
     descriptionColumn,
     playlistId,
+    setConfigSaveError,
+    setConfigSaving,
+    setDraftAutosaveStatus,
     spreadsheetId,
     titleColumn,
     toast,

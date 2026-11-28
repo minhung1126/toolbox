@@ -67,7 +67,7 @@ def test_unknown_write_is_durable_and_never_replayed_after_restart(tmp_path):
 
 def test_backup_restore_and_version_rejection_leave_existing_json_untouched(tmp_path):
     existing = tmp_path / "notes.json"
-    existing.write_text('{"version":1,"users":{}}')
+    existing.write_text('{"version":1,"users":{}}', encoding="utf-8")
     store = OperationStore(tmp_path / "operations.sqlite3")
     store.claim("one", "youtube.metadata_update", Plan())
     backup = tmp_path / "journal.backup"
@@ -75,7 +75,7 @@ def test_backup_restore_and_version_rejection_leave_existing_json_untouched(tmp_
     store.claim("two", "youtube.metadata_update", Plan())
     store.restore(backup)
     assert len(store.list("one")) == 1 and store.list("two") == []
-    assert existing.read_text() == '{"version":1,"users":{}}'
+    assert existing.read_text(encoding="utf-8") == '{"version":1,"users":{}}'
     import sqlite3
 
     with sqlite3.connect(backup) as db:

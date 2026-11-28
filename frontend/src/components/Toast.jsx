@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
 
 const ToastContext = createContext(null);
@@ -6,19 +6,34 @@ const ICONS = { success: CheckCircle2, error: XCircle, warning: AlertTriangle, i
 
 function ToastItem({ toast, onRemove }) {
   const [exiting, setExiting] = useState(false);
+  const exitTimerRef = useRef(null);
   const Icon = ICONS[toast.type] || Info;
 
   useEffect(() => {
     const timer = setTimeout(() => {
+      if (exitTimerRef.current) return;
       setExiting(true);
-      setTimeout(() => onRemove(toast.id), 300);
+      exitTimerRef.current = setTimeout(() => {
+        exitTimerRef.current = null;
+        onRemove(toast.id);
+      }, 300);
     }, toast.duration || 4000);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      if (exitTimerRef.current) {
+        clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = null;
+      }
+    };
   }, [toast, onRemove]);
 
   const close = () => {
+    if (exitTimerRef.current) return;
     setExiting(true);
-    setTimeout(() => onRemove(toast.id), 300);
+    exitTimerRef.current = setTimeout(() => {
+      exitTimerRef.current = null;
+      onRemove(toast.id);
+    }, 300);
   };
 
   return (

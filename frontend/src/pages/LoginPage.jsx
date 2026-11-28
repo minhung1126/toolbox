@@ -76,7 +76,7 @@ export default function LoginPage({ initialError, returnTo }) {
 
         {/* Description */}
         <p className="login-description">
-          歡迎使用 Toolbox 控制台。請使用 Google 帳號登入系統；Google 試算表、Google 雲端硬碟與 YouTube
+          歡迎使用 Toolbox 控制台。請使用 Google 帳號登入系統；Google 試算表與 YouTube
           頻道授權皆已獨立拆開，可在登入後於各自對應頁面中依需要授權。
         </p>
 
@@ -89,7 +89,7 @@ export default function LoginPage({ initialError, returnTo }) {
           <div className="feature-item">
             <CheckCircle2 size={18} className="feature-icon" />
             <span>
-              <strong>模組化權限拆分</strong>：Google 試算表、雲端硬碟、YouTube 頻道分別獨立授權
+              <strong>模組化權限拆分</strong>：Google 試算表、YouTube 頻道分別獨立授權
             </span>
           </div>
           <div className="feature-item">
@@ -156,8 +156,7 @@ export default function LoginPage({ initialError, returnTo }) {
         </div>
 
         <p className="login-footer">
-          點擊登入會使用 Google OAuth 2.0 登入控制台；各項工具功能（試算表、雲端硬碟、YouTube
-          等）可在登入後分別獨立授權。
+          點擊登入會使用 Google OAuth 2.0 登入控制台；各項工具功能（試算表、YouTube 等）可在登入後分別獨立授權。
         </p>
       </Card>
     </div>

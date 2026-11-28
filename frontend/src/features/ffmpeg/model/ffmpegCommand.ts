@@ -58,7 +58,14 @@ export function buildTrimSummary({
 
 export function quoteFilename(name: unknown, shell: 'bash' | 'powershell' | 'cmd' = 'bash'): string {
   const value = typeof name === 'string' ? name : '';
-  if (/[\x00-\x1f\x7f]/.test(value)) throw new Error('不可包含換行或控制字元。');
+  if (
+    Array.from(value).some((ch) => {
+      const code = ch.charCodeAt(0);
+      return code < 32 || code === 127;
+    })
+  ) {
+    throw new Error('不可包含換行或控制字元。');
+  }
   if (shell === 'cmd') {
     if (/[%!"]/.test(value)) throw new Error('CMD 無法可靠保留 %、! 或雙引號；請改用 Bash 或 PowerShell。');
     return '"' + value.replace(/(\\+)$/, '$1$1') + '"';

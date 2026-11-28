@@ -10,8 +10,12 @@ export interface LoginAuthUrlResponse {
 export interface SetupStatusResponse {
   is_configured: boolean;
   setup_completed: boolean;
+  setup_locked?: boolean;
   needs_pin: boolean;
+  has_admin?: boolean;
+  public_base_url?: string;
   redirect_uri: string;
+  environment?: string;
   development_pin?: string | null;
 }
 

@@ -143,6 +143,7 @@ export function useBatchExecution({
     }
   }, [
     dispatchWorkflow,
+    playlistRequestRef,
     setBatchPreview,
     setErrorMsg,
     setLoadingPreview,

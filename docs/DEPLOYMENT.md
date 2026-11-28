@@ -148,7 +148,6 @@ foreach ($asset in $assets) {
 
 ## 停機、資料隔離與回退驗收
 
-Weverse 停機停止接單並等待最多 20 秒。逾時工作標記 `interrupted`，取消尚未執行的上傳，正在進行的 provider I/O 會在返回後停止後續操作。Compose 設定 `stop_grace_period: 45s`；Python 執行緒無法強制終止已開始的網路呼叫，因此最後由容器終止程序。重啟後必須先查 YouTube Studio 核對，不能直接重送中斷工作。
 
 `TOOLBOX_DATA_DIR` 可指定資料根目錄；未設定仍是專案 `data/`（容器 `/app/data`），原 JSON 格式與檔名保持相容。pytest 會自行使用暫存目錄並阻擋第三方網路；正式啟動時不要把測試暫存路徑放進 `.env`。
 

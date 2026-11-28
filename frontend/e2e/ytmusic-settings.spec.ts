@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Route } from '@playwright/test';
 import { mockAuthenticatedBackend } from './fixtures';
 
 test('YouTube Music does not show token validation success for a malformed response', async ({ page }) => {
@@ -16,7 +16,7 @@ test('YouTube Music does not show token validation success for a malformed respo
 
 test('YouTube Music does not report a preference saved after the work-state write fails', async ({ page }) => {
   await mockAuthenticatedBackend(page, {
-    '/api/v1/settings/work-state': async (route) => {
+    '/api/v1/settings/work-state': async (route: Route) => {
       if (route.request().method() === 'PUT') {
         await route.fulfill({
           status: 500,

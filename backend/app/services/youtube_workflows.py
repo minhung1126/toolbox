@@ -85,7 +85,9 @@ class YoutubeWorkflowService:
                 if not person or person == "不編輯":
                     status = "skipped"
                     reason = "未指定人物"
-                elif not detail:
+                elif not detail or (
+                    youtube_context.channel_id and snippet.get("channelId") != youtube_context.channel_id
+                ):
                     status = "skipped"
                     reason = "找不到指定的 YouTube 影片，或目前帳號無權存取。"
                 else:
@@ -116,6 +118,7 @@ class YoutubeWorkflowService:
                 owner_sub=youtube_context.owner_sub,
                 youtube_slot=youtube_context.slot,
                 operation="youtube.batch_update",
+                youtube_channel_id=youtube_context.channel_id or "",
                 playlist_id=playlist_id,
                 playlist=playlist_state,
                 sheet=sheet_state,
@@ -251,17 +254,10 @@ class YoutubeWorkflowService:
                 payload,
                 youtube_context=youtube_context,
                 active_context=active_context,
-                sheet_creds=sheet_creds,
-                prepared=prepared,
                 sheet_state=sheet_state,
-                spreadsheet_id=spreadsheet_id,
                 playlist_id=playlist_id,
                 initial_playlist_state=initial_playlist_state,
-                requested_video_ids=requested_video_ids,
-                details_map=details_map,
                 request_state=request_state,
-                attempted_slots=attempted_slots,
-                fallback_estimate=fallback_estimate,
             )
             return self._execute_batch_plan(prepared, details_map, active_context, attempted_slots)
 
@@ -283,17 +279,10 @@ class YoutubeWorkflowService:
         *,
         youtube_context: YouTubeRequestContext,
         active_context: YouTubeRequestContext,
-        sheet_creds: Credentials,
-        prepared: list[dict[str, Any]],
         sheet_state: dict[str, Any],
-        spreadsheet_id: str,
         playlist_id: str,
         initial_playlist_state: dict[str, Any],
-        requested_video_ids: list[str],
-        details_map: dict[str, Any],
         request_state: str,
-        attempted_slots: set[str],
-        fallback_estimate: int,
     ) -> YouTubeRequestContext:
         submitted_preview_snapshot = payload.preview_snapshot if isinstance(payload.preview_snapshot, dict) else {}
         preview_slot = self.ports.preview_slot(submitted_preview_snapshot, youtube_context.slot)
@@ -305,45 +294,13 @@ class YoutubeWorkflowService:
             owner_sub=youtube_context.owner_sub,
             youtube_slot=preview_slot,
             operation="youtube.batch_update",
+            youtube_channel_id=active_context.channel_id or youtube_context.channel_id or "",
             playlist_id=playlist_id,
             playlist=initial_playlist_state,
             sheet=sheet_state,
             request_digest=request_state,
         ):
             raise self.ports.stale_preview_exception()
-        pending_video_ids = [item["video_id"] for item in prepared if item["status"] == "pending"]
-        if pending_video_ids:
-            current_headers = self.ports.get_sheet_headers(sheet_creds, spreadsheet_id, payload.worksheet_name)
-            current_rows = self.ports.get_all_rows_for_sheet(sheet_creds, spreadsheet_id, payload.worksheet_name)
-            if (
-                self.ports.sheet_snapshot(spreadsheet_id, payload.worksheet_name, current_headers, current_rows)
-                != sheet_state
-            ):
-                raise self.ports.stale_preview_exception()
-            if playlist_id:
-                active_context, current_playlist_items = self.ports.run_youtube_operation_with_quota_fallback(
-                    active_context,
-                    lambda context: self.ports.fetch_playlist_items(context, playlist_id),
-                    estimated_units=fallback_estimate,
-                    attempted_slots=attempted_slots,
-                )
-                if self.ports.playlist_snapshot(current_playlist_items) != initial_playlist_state:
-                    raise self.ports.stale_preview_exception()
-                if not set(requested_video_ids).issubset(
-                    set(self.ports.playlist_snapshot(current_playlist_items)["video_ids"])
-                ):
-                    raise self.ports.stale_preview_exception()
-            else:
-                active_context, current_details = self.ports.run_youtube_operation_with_quota_fallback(
-                    active_context,
-                    lambda context: self.ports.fetch_video_details(context, pending_video_ids),
-                    estimated_units=fallback_estimate,
-                    attempted_slots=attempted_slots,
-                )
-                if {item.get("id") for item in current_details if item.get("id")} != {
-                    item_id for item_id in details_map if item_id in pending_video_ids
-                }:
-                    raise self.ports.stale_preview_exception()
         return active_context
 
     def _prepare_batch_plan(self, active_assignments, sheet_rows, normalized_team, title_column, description_column):
@@ -373,9 +330,15 @@ class YoutubeWorkflowService:
         quota_error: Optional[YouTubeQuotaUnavailable] = None
         for item in prepared:
             detail = details_map.get(item["video_id"])
-            missing_video = item["status"] == "pending" and (not detail)
-            skipped = item["status"] != "pending" or missing_video
             snippet = (detail or {}).get("snippet") or {}
+            channel_mismatch = bool(
+                item["status"] == "pending"
+                and detail
+                and active_context.channel_id
+                and snippet.get("channelId") != active_context.channel_id
+            )
+            missing_video = item["status"] == "pending" and (not detail)
+            skipped = item["status"] != "pending" or missing_video or channel_mismatch
             base_result = {
                 "video_id": item["video_id"],
                 "youtube_slot": active_context.slot,
@@ -386,7 +349,14 @@ class YoutubeWorkflowService:
             }
             if skipped:
                 skipped_error = None
-                if missing_video:
+                if channel_mismatch:
+                    skipped_error = self.ports.http_error(
+                        403,
+                        "youtube_channel_mismatch",
+                        "此影片不屬於目前授權的 YouTube 頻道。",
+                        youtube_slot=active_context.slot,
+                    ).detail
+                elif missing_video:
                     skipped_error = self.ports.http_error(
                         404,
                         "youtube_not_found",
@@ -397,7 +367,12 @@ class YoutubeWorkflowService:
                     {
                         **base_result,
                         "status": "skipped",
-                        "reason": item.get("reason") or "YouTube 找不到此影片或目前帳號無權存取。",
+                        "reason": item.get("reason")
+                        or (
+                            "此影片不屬於目前授權的 YouTube 頻道。"
+                            if channel_mismatch
+                            else "YouTube 找不到此影片或目前帳號無權存取。"
+                        ),
                         "error": skipped_error,
                     }
                 )
@@ -433,7 +408,11 @@ class YoutubeWorkflowService:
                 fallback_context = self.ports.switch_youtube_context(
                     active_context, estimated_units=50, attempted_slots=attempted_slots
                 )
-                if fallback_context is not None:
+                if fallback_context is not None and (
+                    not fallback_context.channel_id
+                    or not active_context.channel_id
+                    or fallback_context.channel_id == active_context.channel_id
+                ):
                     attempted_slots.add(fallback_context.slot)
                     active_context = fallback_context
                     fallback_result = {**base_result, "youtube_slot": active_context.slot}

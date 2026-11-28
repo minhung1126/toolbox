@@ -76,7 +76,7 @@ class RuntimeConfig:
 
     def _save(self):
         try:
-            atomic_write_json(self._path, self._data)
+            atomic_write_json(self._path, self._data, fsync=True)
         except Exception:
             self._data = deepcopy(self._persisted_data)
             raise
@@ -88,6 +88,11 @@ class RuntimeConfig:
         except Exception as exc:
             logger.error("Failed to sync dynamic settings config: %s", type(exc).__name__)
             raise
+
+    def get_persisted(self, key: str, default: Any = None) -> Any:
+        with self._lock:
+            self._ensure_loaded()
+            return self._data.get(key, default)
 
     def get(self, key: str, default: Any = "") -> Any:
         with self._lock:

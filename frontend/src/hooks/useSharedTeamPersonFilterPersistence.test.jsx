@@ -73,4 +73,104 @@ describe('useSharedTeamPersonFilterPersistence', () => {
     expect(result.current.error).toBe('');
     expect(onError).toHaveBeenLastCalledWith('');
   });
+
+  it('skips initial PUT when initialSavedFilter matches current values and invokes onSaved on subsequent updates', async () => {
+    const onSaved = vi.fn();
+    const serverFilter = {
+      configured: true,
+      team: '團體 A',
+      teams: ['團體 A'],
+      query: '',
+      selected_people: [legacyPersonKey('甲', '團體 A')],
+    };
+    const savedResponse = {
+      configured: true,
+      team: '團體 A',
+      teams: ['團體 A', '團體 B'],
+      query: '',
+      selected_people: [legacyPersonKey('甲', '團體 A')],
+    };
+    api.updateTeamPersonFilter.mockResolvedValue(savedResponse);
+
+    const { rerender } = renderHook((props) => useSharedTeamPersonFilterPersistence(props), {
+      initialProps: {
+        team: '團體 A',
+        teams: ['團體 A'],
+        query: '',
+        selectedPeople: [legacyPersonKey('甲', '團體 A')],
+        initialSavedFilter: serverFilter,
+        onSaved,
+        ready: false,
+      },
+    });
+
+    rerender({
+      team: '團體 A',
+      teams: ['團體 A'],
+      query: '',
+      selectedPeople: [legacyPersonKey('甲', '團體 A')],
+      initialSavedFilter: serverFilter,
+      onSaved,
+      ready: true,
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+    expect(api.updateTeamPersonFilter).not.toHaveBeenCalled();
+
+    rerender({
+      team: '團體 A',
+      teams: ['團體 A', '團體 B'],
+      query: '',
+      selectedPeople: [legacyPersonKey('甲', '團體 A')],
+      initialSavedFilter: serverFilter,
+      onSaved,
+      ready: true,
+    });
+
+    await waitFor(() => expect(api.updateTeamPersonFilter).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    expect(onSaved).toHaveBeenCalledWith(savedResponse);
+  });
+
+  it('flushes dirty debounced changes on unmount', async () => {
+    const onSaved = vi.fn();
+    const serverFilter = { configured: true, team: '', teams: [], query: '', selected_people: [] };
+    const savedResponse = {
+      configured: true,
+      team: '',
+      teams: ['團體 A'],
+      query: '',
+      selected_people: [legacyPersonKey('甲', '團體 A')],
+    };
+    api.updateTeamPersonFilter.mockResolvedValueOnce(savedResponse);
+
+    const { rerender, unmount } = renderHook((props) => useSharedTeamPersonFilterPersistence(props), {
+      initialProps: {
+        team: '',
+        teams: [],
+        query: '',
+        selectedPeople: [],
+        initialSavedFilter: serverFilter,
+        onSaved,
+        ready: true,
+      },
+    });
+
+    rerender({
+      team: '',
+      teams: ['團體 A'],
+      query: '',
+      selectedPeople: [legacyPersonKey('甲', '團體 A')],
+      initialSavedFilter: serverFilter,
+      onSaved,
+      ready: true,
+    });
+
+    expect(api.updateTeamPersonFilter).not.toHaveBeenCalled();
+    unmount();
+
+    await waitFor(() => expect(api.updateTeamPersonFilter).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(savedResponse));
+  });
 });

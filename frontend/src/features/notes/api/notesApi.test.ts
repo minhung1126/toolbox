@@ -24,10 +24,10 @@ describe('notesApi', () => {
       created_at: '2026-09-24T00:00:00Z',
       updated_at: '2026-09-24T00:00:00Z',
     };
-    api.getNotes.mockResolvedValue({ notes: [note], total: 1 });
-    api.createNote.mockResolvedValue({ note, status: 'created' });
-    api.updateNote.mockResolvedValue({ note, status: 'updated' });
-    api.deleteNote.mockResolvedValue({ deleted: true, note_id: note.id });
+    vi.mocked(api.getNotes).mockResolvedValue({ notes: [note], total: 1 });
+    vi.mocked(api.createNote).mockResolvedValue({ note, status: 'created' });
+    vi.mocked(api.updateNote).mockResolvedValue({ note, status: 'updated' });
+    vi.mocked(api.deleteNote).mockResolvedValue({ deleted: true, note_id: note.id });
 
     await expect(notesApi.getNotes('Draft')).resolves.toEqual({ notes: [note], total: 1 });
     await expect(notesApi.createNote({ content: 'Draft' })).resolves.toMatchObject({ status: 'created' });

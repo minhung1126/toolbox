@@ -1069,4 +1069,21 @@ describe('playlist write result ownership', () => {
     expect(hook.result.current.state.applyResult).toBeNull();
     if (boundary === 'switch') expect(hook.result.current.state.applying).toBe(false);
   });
+
+  it('reads ApiError.details.code and details.message on apply failure', async () => {
+    api.applyPlaylistSort.mockRejectedValueOnce(
+      Object.assign(new Error(''), {
+        status: 401,
+        code: 'request_failed',
+        details: { code: 'TOKEN_FALLBACK_BLOCKED', message: 'Browser cookie expired' },
+      })
+    );
+    const hook = setup();
+    await act(async () => {
+      await hook.result.current.handleApplyConfirm();
+    });
+    expect(hook.result.current.state.strictFallbackPrompt).toEqual(
+      expect.objectContaining({ message: 'Browser cookie expired' })
+    );
+  });
 });

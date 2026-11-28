@@ -82,6 +82,37 @@ describe('useTeamPersonFilter', () => {
     expect(result.current.selectedPeople).toEqual([personKey(a)]);
     expect(result.current.ready).toBe(false);
   });
+
+  it('preserves selectedTeams and selectedPeople from other worksheets when switching worksheets', async () => {
+    const apiClient = {
+      parseSheetOptions: vi
+        .fn()
+        .mockResolvedValueOnce({ teams: ['A', 'B'], people: [a, b] })
+        .mockResolvedValueOnce({ teams: ['A'], people: [a] }),
+    };
+    const { result, rerender } = renderHook(
+      (props) =>
+        useTeamPersonFilter({
+          source: 'sheet',
+          ...props,
+          initialTeams: ['A', 'B'],
+          initialSelectedPeople: [personKey(a), personKey(b)],
+          apiClient,
+        }),
+      { initialProps: { worksheetName: 'sheet1' } }
+    );
+
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.selectedTeams).toEqual(['A', 'B']);
+    expect(result.current.selectedPeople).toEqual([personKey(a), personKey(b)]);
+
+    rerender({ worksheetName: 'sheet2' });
+    await waitFor(() => expect(result.current.teams).toEqual(['A']));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    expect(result.current.selectedTeams).toEqual(['A', 'B']);
+    expect(result.current.selectedPeople).toEqual([personKey(a), personKey(b)]);
+  });
 });
 
 it('honors an explicitly empty team filter while retaining the legacy migration team', () => {

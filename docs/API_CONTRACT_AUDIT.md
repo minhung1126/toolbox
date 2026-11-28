@@ -10,7 +10,7 @@
 | `/settings/youtube-drafts` | 讀取需有 video、shorts 設定；更新須確認類型與寫入欄位。沿用舊 playlist ID 是後端既有相容行為。 |
 | `/settings/youtube-playlist` | Creator 工作流共用設定 API 的確認驗證。 |
 | `/youtube/video-metadata` | 單片更新須回傳成功狀態、影片 ID、標題與描述，才顯示成功。 |
-| 批次預覽、執行、發布清理、YT Music 排序、Weverse 上傳、便利貼 | 沿用已有快照、計數、工作 ID 及結果驗證；未重複實作。 |
+| 批次預覽、執行、發布清理、YT Music 排序、便利貼 | 沿用已有快照、計數、工作 ID 及結果驗證；未重複實作。 |
 
 Timeout／網路錯誤由底層 request 傳遞；UI 不會在例外路徑顯示成功。單元測試包括有效、缺欄與錯誤值；CI 執行 Vitest、typecheck、build 和假 provider E2E。
 

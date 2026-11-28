@@ -7,6 +7,7 @@ import unicodedata
 from typing import Any
 
 from backend.app.core.credential_store import CredentialStore
+from backend.app.core.error_contract import http_error
 from backend.app.core.youtube_context import YouTubeRequestContext
 from backend.app.services.operation_journal import tracked_write
 from backend.app.services.playlist_write_outcome import PlaylistWriteNotStarted, PlaylistWriteOutcomeUnknown
@@ -93,6 +94,8 @@ def fetch_user_playlists(
         logger.debug("ytmusic_service.fetch_ytmusic_playlists fallback to Data API: %s", type(exc).__name__)
 
     # Fallback to Google YouTube Data API v3
+    if getattr(context, "credentials", object()) is None:
+        return []
     hl = lang.replace("_", "-")
     service = get_youtube_service(context)
     playlists = []
@@ -157,6 +160,7 @@ def fetch_playlist_items_for_sort(
         location=location,
     )
     items: list[dict[str, Any]] = []
+    ytm_error: Exception | None = None
     try:
         ytm_items = fetch_ytmusic_playlist_tracks(
             playlist_id=playlist_id,
@@ -171,10 +175,15 @@ def fetch_playlist_items_for_sort(
             logger.info("Retrieved %d tracks for playlist %s via YouTube Music client", len(ytm_items), playlist_id)
             items = ytm_items
     except Exception as exc:
+        ytm_error = exc
         logger.debug("ytmusic_service.fetch_ytmusic_playlist_tracks fallback to Data API: %s", type(exc).__name__)
 
     # Fallback to Google YouTube Data API v3 if ytm_items empty
     if not items:
+        if getattr(context, "credentials", object()) is None:
+            if ytm_error is not None:
+                raise ytm_error
+            return []
         hl = lang.replace("_", "-")
         raw_items = fetch_playlist_items(context, playlist_id)
         if not raw_items:
@@ -220,11 +229,7 @@ def fetch_playlist_items_for_sort(
             )
         items = result
 
-    # Automatically enrich dateless tracks (e.g. videos or tracks without release_date)
-    has_dateless_tracks = any(
-        (not trk.get("year") and not trk.get("release_date")) or trk.get("album") == "影片" for trk in items
-    )
-    if (use_ytdlp_fallback or has_dateless_tracks) and items:
+    if use_ytdlp_fallback and items:
         try:
             items = enrich_tracks_with_ytdlp_fallback(
                 items,
@@ -632,6 +637,12 @@ def apply_sort_to_playlist(
             )
 
     # Google YouTube Data API v3 update
+    if getattr(context, "credentials", object()) is None:
+        raise http_error(
+            403,
+            "youtube_not_connected",
+            "尚未連結可用的 YouTube 頻道 Google 帳號，請至「YouTube 設定」完成授權。",
+        )
     service = get_youtube_service(context)
 
     if mode == "new_playlist":
@@ -736,11 +747,11 @@ def apply_sort_to_playlist(
         item.get("playlist_item_id") in existing_data_ids for item in sorted_items
     )
     id_map: dict[str, str] = {}
+    orig_list = original_items or sorted(
+        [it for it in sorted_items], key=lambda x: x.get("original_position", x.get("position", 0))
+    )
 
     if not all_valid_data_ids and raw_playlist_items:
-        orig_list = original_items or sorted(
-            [it for it in sorted_items], key=lambda x: x.get("original_position", x.get("position", 0))
-        )
         data_items_by_vid: dict[str, list[dict[str, Any]]] = {}
         for r in raw_playlist_items:
             vid = r.get("snippet", {}).get("resourceId", {}).get("videoId")
@@ -760,64 +771,70 @@ def apply_sort_to_playlist(
                 if orig_pos is not None and 0 <= orig_pos < len(raw_playlist_items):
                     id_map[orig_id] = raw_playlist_items[orig_pos]["id"]
 
+    if raw_playlist_items:
+        current_ids = [r["id"] for r in raw_playlist_items if isinstance(r, dict) and "id" in r]
+    else:
+        current_ids = [id_map.get(orig.get("playlist_item_id"), orig.get("playlist_item_id")) for orig in orig_list]
+
     moved_count = 0
     succeeded = 0
     failed = 0
     failed_items = []
     quota_used = 0
 
-    for item in sorted_items:
-        if item.get("status") == "moved" or item.get("new_position", item.get("position")) != item.get(
-            "original_position", item.get("position")
-        ):
-            moved_count += 1
-            raw_id = item.get("playlist_item_id")
-            target_id = id_map.get(raw_id, raw_id)
-            target_pos = item.get("new_position", item.get("position"))
+    for target_pos, item in enumerate(sorted_items):
+        raw_id = item.get("playlist_item_id")
+        target_id = id_map.get(raw_id, raw_id)
+        if target_pos < len(current_ids) and current_ids[target_pos] == target_id:
+            continue
+        moved_count += 1
 
-            try:
-                request = service.playlistItems().update(
-                    part="snippet",
-                    body={
-                        "id": target_id,
-                        "snippet": {
-                            "playlistId": playlist_id,
-                            "resourceId": {"kind": "youtube#video", "videoId": item["video_id"]},
-                            "position": target_pos,
-                        },
+        try:
+            request = service.playlistItems().update(
+                part="snippet",
+                body={
+                    "id": target_id,
+                    "snippet": {
+                        "playlistId": playlist_id,
+                        "resourceId": {"kind": "youtube#video", "videoId": item["video_id"]},
+                        "position": target_pos,
                     },
-                )
-                tracked_write(
-                    "playlistItems.update",
-                    str(target_id),
-                    lambda: _execute_with_quota(request, "playlistItems.update", context),
-                    {"playlist_id": playlist_id, "position": target_pos},
-                )
-                succeeded += 1
-                quota_used += 50
-            except YouTubeQuotaUnavailable:
-                logger.warning(
-                    "YouTube quota exceeded while sorting playlist %s at item %s (resolved id: %s)",
-                    playlist_id,
-                    raw_id,
-                    target_id,
-                )
-                raise
-            except Exception as e:
-                logger.error(
-                    "Failed to update playlist item %s (resolved id: %s): %s",
-                    raw_id,
-                    target_id,
-                    type(e).__name__,
-                )
-                failed += 1
-                failed_items.append(
-                    {
-                        "playlist_item_id": raw_id,
-                        "resolved_id": target_id,
-                        "error": "更新曲目失敗，請至 YouTube Studio 核對。",
-                    }
-                )
+                },
+            )
+            tracked_write(
+                "playlistItems.update",
+                str(target_id),
+                lambda: _execute_with_quota(request, "playlistItems.update", context),
+                {"playlist_id": playlist_id, "position": target_pos},
+            )
+            succeeded += 1
+            quota_used += 50
+            if target_id in current_ids:
+                current_ids.pop(current_ids.index(target_id))
+                current_ids.insert(min(target_pos, len(current_ids)), target_id)
+        except YouTubeQuotaUnavailable:
+            logger.warning(
+                "YouTube quota exceeded while sorting playlist %s at item %s (resolved id: %s)",
+                playlist_id,
+                raw_id,
+                target_id,
+            )
+            raise
+        except Exception as e:
+            logger.error(
+                "Failed to update playlist item %s (resolved id: %s): %s",
+                raw_id,
+                target_id,
+                type(e).__name__,
+            )
+            failed += 1
+            failed_items.append(
+                {
+                    "playlist_item_id": raw_id,
+                    "resolved_id": target_id,
+                    "error": "更新曲目失敗，請至 YouTube Studio 核對。",
+                }
+            )
 
     return {
         "operation": "playlist_sort",

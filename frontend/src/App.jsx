@@ -5,7 +5,7 @@ import { StatusMessage } from './components/StatusMessage';
 import { api } from './services/api';
 import { workStateApi } from './features/settings/api/workStateApi';
 import { sheetsFilterApi } from './features/sheets/api/sheetsFilterApi';
-import { clearAuthHash, parseAuthHash } from './utils/authHash';
+import { clearAuthHash, parseAuthHash, sanitizeAuthHashMessage } from './utils/authHash';
 import { usePageResume } from './hooks/usePageResume';
 import AppRoutes from './routes/AppRoutes';
 import { consumeOAuthReturnPath } from './utils/authReturnPath';
@@ -96,6 +96,7 @@ export function AppContent() {
   const initStartedRef = useRef(false);
   const sidebarTouchedRef = useRef(false);
   const settingsRequestIdRef = useRef(0);
+  const sharedFilterVersionRef = useRef(0);
   const toast = useToast();
 
   const setSidebarCollapsedByUser = useCallback((nextValue) => {
@@ -112,6 +113,7 @@ export function AppContent() {
     const nextSubject = nextUser?.sub || nextUser?.email || null;
     if (currentSubject !== nextSubject) {
       sidebarTouchedRef.current = false;
+      sharedFilterVersionRef.current += 1;
       setWorkState({});
       setWorkStateReady(false);
       setSidebarCollapsed(false);
@@ -182,6 +184,7 @@ export function AppContent() {
 
   const fetchSettings = useCallback(async () => {
     const requestId = ++settingsRequestIdRef.current;
+    const sharedFilterVersionAtStart = sharedFilterVersionRef.current;
     const requestSubject = authUserRef.current?.sub || authUserRef.current?.email || null;
     setSettingsRefreshing(true);
     try {
@@ -216,7 +219,9 @@ export function AppContent() {
         ...(system || {}),
         ...(shared || {}),
         ...(youtube || {}),
-        ...(teamPersonFilter ? { shared_team_person_filter: teamPersonFilter } : {}),
+        ...(teamPersonFilter && sharedFilterVersionAtStart === sharedFilterVersionRef.current
+          ? { shared_team_person_filter: teamPersonFilter }
+          : {}),
       }));
 
       if (workStateResponse) {
@@ -252,6 +257,15 @@ export function AppContent() {
     } finally {
       if (requestId === settingsRequestIdRef.current) setSettingsRefreshing(false);
     }
+  }, []);
+
+  const handleSharedTeamPersonFilterSaved = useCallback((savedFilter) => {
+    if (!authUserRef.current || !savedFilter || typeof savedFilter !== 'object') return;
+    sharedFilterVersionRef.current += 1;
+    setSysSettings((current) => ({
+      ...current,
+      shared_team_person_filter: savedFilter,
+    }));
   }, []);
 
   const checkBackendVersion = useCallback(async () => {
@@ -296,6 +310,7 @@ export function AppContent() {
         const authResult = parseAuthHash();
         if (authResult) clearAuthHash();
         clearPageRecoveryParam();
+        void checkBackendVersion();
         const user = await fetchUser({ source: 'initial' });
         if (authResult?.type === 'google_success') {
           toast.success('控制台 Google 登入成功');
@@ -316,37 +331,27 @@ export function AppContent() {
           await fetchUser({ source: 'ytmusic-oauth-callback' });
           setOauthReturnPath(consumeOAuthReturnPath('ytmusic', PATHS.ytmusicPlaylistSort));
           if (user) await fetchSettings();
-        } else if (authResult?.type === 'drive_success') {
-          toast.success('Google 雲端硬碟授權成功');
-          await fetchUser({ source: 'drive-oauth-callback' });
-          setOauthReturnPath(consumeOAuthReturnPath('drive', PATHS.dashboard));
-          if (user) await fetchSettings();
         } else if (authResult?.type === 'google_error') {
-          const message = '控制台 Google 登入失敗，請重新嘗試。';
+          const message = sanitizeAuthHashMessage(authResult.value, '控制台 Google 登入失敗，請重新嘗試。');
           consumeOAuthReturnPath('google', PATHS.dashboard);
           updateAuthUser(null);
           setAuthStatus(AUTH_STATUS.UNAUTHENTICATED);
           setAuthError(message);
           toast.error(message);
         } else if (authResult?.type === 'sheets_error') {
-          const message = 'Google 試算表授權失敗，請重新嘗試。';
+          const message = sanitizeAuthHashMessage(authResult.value, 'Google 試算表授權失敗，請重新嘗試。');
           toast.error(message);
           setOauthReturnPath(consumeOAuthReturnPath('sheets', PATHS.sheetSettings));
           if (user) await fetchSettings();
         } else if (authResult?.type === 'youtube_error') {
-          const message = 'YouTube 頻道 Google 授權失敗，請重新嘗試。';
+          const message = sanitizeAuthHashMessage(authResult.value, 'YouTube 頻道 Google 授權失敗，請重新嘗試。');
           toast.error(message);
           setOauthReturnPath(consumeOAuthReturnPath('youtube', PATHS.youtubeConnections));
           if (user) await fetchSettings();
         } else if (authResult?.type === 'ytmusic_error') {
-          const message = 'YouTube Music 授權失敗，請重新嘗試。';
+          const message = sanitizeAuthHashMessage(authResult.value, 'YouTube Music 授權失敗，請重新嘗試。');
           toast.error(message);
           setOauthReturnPath(consumeOAuthReturnPath('ytmusic', PATHS.ytmusicPlaylistSort));
-          if (user) await fetchSettings();
-        } else if (authResult?.type === 'drive_error') {
-          const message = 'Google 雲端硬碟授權失敗，請重新嘗試。';
-          toast.error(message);
-          setOauthReturnPath(consumeOAuthReturnPath('drive', PATHS.dashboard));
           if (user) await fetchSettings();
         } else if (user) {
           await fetchSettings();
@@ -360,7 +365,7 @@ export function AppContent() {
       }
     };
     init();
-  }, [fetchSettings, fetchUser, setAuthStatus, toast, updateAuthUser]);
+  }, [checkBackendVersion, fetchSettings, fetchUser, setAuthStatus, toast, updateAuthUser]);
 
   useEffect(() => {
     const handleSessionExpired = () => {
@@ -412,6 +417,7 @@ export function AppContent() {
       oauthReturnPath={oauthReturnPath}
       clearOAuthReturnPath={() => setOauthReturnPath(null)}
       sysSettings={sysSettings}
+      onSharedFilterSaved={handleSharedTeamPersonFilterSaved}
     />
   );
 }

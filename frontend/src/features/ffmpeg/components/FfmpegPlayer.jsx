@@ -53,9 +53,13 @@ export default function FfmpegPlayer({ workflow }) {
               type="button"
               className="btn btn-secondary btn-xs"
               onClick={() => {
-                setVideoFile(null);
-                setVideoUrl('');
-                setVideoError(null);
+                if (workflow.clearVideo) {
+                  workflow.clearVideo();
+                } else {
+                  setVideoFile(null);
+                  setVideoUrl('');
+                  setVideoError(null);
+                }
               }}
             >
               更換影片

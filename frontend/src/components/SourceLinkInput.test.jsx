@@ -7,7 +7,6 @@ describe('SourceLinkInput', () => {
     expect(sourceUrlFromValue('sheet-123', 'spreadsheet')).toBe(
       'https://docs.google.com/spreadsheets/d/sheet-123/edit'
     );
-    expect(sourceUrlFromValue('folder-456', 'drive-folder')).toBe('https://drive.google.com/drive/folders/folder-456');
     expect(sourceUrlFromValue('playlist-789', 'youtube-playlist')).toBe(
       'https://www.youtube.com/playlist?list=playlist-789'
     );

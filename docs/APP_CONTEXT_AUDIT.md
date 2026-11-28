@@ -1,6 +1,6 @@
 # App 組裝與相容 context（#6）
 
-匯入 `backend.app.main` 只組裝預設 FastAPI app；設定金鑰及動態設定在 lifespan 或首個 HTTP 請求時初始化。`create_app()` 仍依既有行為在組裝時初始化其設定。SessionStore、CredentialStore 與 Settings 的模組預設實例均延遲產生金鑰；Weverse store 的建構只解析路徑及建立記憶體鎖。UploadWorker 的 executor 在工作啟動時建立。
+匯入 `backend.app.main` 只組裝預設 FastAPI app；設定金鑰及動態設定在 lifespan 或首個 HTTP 請求時初始化。`create_app()` 仍依既有行為在組裝時初始化其設定。SessionStore、CredentialStore 與 Settings 的模組預設實例均延遲產生金鑰；
 
 | 資料流 | 明確依賴與尚存的相容 fallback |
 | --- | --- |

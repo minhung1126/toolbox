@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from fastapi.testclient import TestClient
 
 from backend.app import main
+from backend.app.core.operation_store import OperationStore
 from backend.app.tools.base import ToolMetadata, ToolPlugin, ToolRoute
 from backend.app.tools.builtin import register_builtin_tools
 from backend.app.tools.registry import ToolRegistry, tool_registry
@@ -206,3 +207,57 @@ def test_disabled_plugin_is_listed_but_never_started_or_mounted():
     assert plugin.started is False
     assert registry.health_check()["disabled-plugin"] == {"status": "disabled"}
     assert registry.runtime_statuses()["disabled-plugin"] == "disabled"
+
+
+def test_lifespan_runs_registry_shutdown_when_runner_start_fails(tmp_path):
+    registry = ToolRegistry()
+
+    class LifecyclePlugin(ToolPlugin):
+        def __init__(self):
+            self.startup_called = False
+            self.shutdown_called = False
+
+        @property
+        def metadata(self) -> ToolMetadata:
+            return ToolMetadata(
+                id="lifecycle-plugin",
+                name="Lifecycle Plugin",
+                title="生命週期外掛",
+                description="Lifespan cleanup test",
+                entry_url="/lifecycle",
+            )
+
+        async def on_startup(self, app):
+            del app
+            self.startup_called = True
+
+        async def on_shutdown(self, app):
+            del app
+            self.shutdown_called = True
+
+    class FailingRunner:
+        def __init__(self):
+            self.shutdown_called = False
+
+        def start(self):
+            raise RuntimeError("runner start failed")
+
+        def shutdown(self):
+            self.shutdown_called = True
+
+    plugin = LifecyclePlugin()
+    registry.register(plugin)
+    failing_runner = FailingRunner()
+    app = main.create_app(
+        registry=registry,
+        youtube_publish_runner=failing_runner,
+        operation_store=OperationStore(tmp_path / "ops.sqlite3"),
+    )
+
+    with pytest.raises(RuntimeError, match="runner start failed"):
+        with TestClient(app):
+            pass
+
+    assert plugin.startup_called is True
+    assert plugin.shutdown_called is True
+    assert failing_runner.shutdown_called is True

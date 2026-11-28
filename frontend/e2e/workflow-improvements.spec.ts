@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { mockAuthenticatedBackend, toolCatalog } from './fixtures';
 import { writeFile } from 'node:fs/promises';
+type ClipboardWindow = Window & { __copied?: string };
+
 for (const width of [390, 768, 1440]) {
   test(`multi-cell clipboard failure and preview at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
@@ -14,7 +16,7 @@ for (const width of [390, 768, 1440]) {
               first = false;
               throw new Error('clipboard denied');
             }
-            (window as any).__copied = text;
+            (window as unknown as ClipboardWindow).__copied = text;
           },
         },
       });
@@ -49,7 +51,7 @@ for (const width of [390, 768, 1440]) {
     await expect(page.getByText(/複製失敗：clipboard denied/)).toBeVisible();
     await copy.click();
     await expect(page.getByText('已複製 2 列已選內容到剪貼簿', { exact: true })).toBeVisible();
-    expect(await page.evaluate(() => (window as any).__copied)).toBe('"中文\n換行"\t\n第三列\t最後');
+    expect(await page.evaluate(() => (window as unknown as ClipboardWindow).__copied)).toBe('"中文\n換行"\t\n第三列\t最後');
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
   });
 }

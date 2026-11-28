@@ -1,8 +1,10 @@
 import { ResultExport } from '../../../shared/ui/ResultExport';
 import { ExternalLink } from 'lucide-react';
 import { StatusMessage } from '../../../components/StatusMessage';
+import { isValidYoutubePlaylistUrl } from '../api/playlistSortApi';
 import type { PlaylistSortApplyResponse } from '../api/types';
 export default function PlaylistSortResult({ applyResult }: { applyResult: PlaylistSortApplyResponse }) {
+  const safePlaylistUrl = isValidYoutubePlaylistUrl(applyResult.new_playlist_url) ? applyResult.new_playlist_url : '';
   return (
     <section className="glass-panel card-padding">
       <ResultExport
@@ -13,14 +15,14 @@ export default function PlaylistSortResult({ applyResult }: { applyResult: Playl
             title: `成功 ${applyResult.succeeded}／失敗 ${applyResult.failed}／總數 ${applyResult.total}`,
             status: applyResult.failed ? 'partial' : 'completed',
             reason: '成功項目僅提供總數；以下為需核對的曲目。',
-            url: applyResult.new_playlist_url || '',
+            url: safePlaylistUrl,
           },
           ...applyResult.failed_items.map((item) => ({
             id: item.playlist_item_id || item.video_id || '',
             title: '',
             status: 'failed',
             reason: item.error,
-            url: item.video_id ? `https://youtu.be/${item.video_id}` : '',
+            url: item.video_id ? `https://youtu.be/${encodeURIComponent(item.video_id)}` : '',
           })),
         ]}
       />
@@ -53,10 +55,10 @@ export default function PlaylistSortResult({ applyResult }: { applyResult: Playl
               </ul>
             </div>
           )}
-          {applyResult.new_playlist_url && (
+          {safePlaylistUrl && (
             <div className="playlist-sort-result-link-row">
               <a
-                href={applyResult.new_playlist_url}
+                href={safePlaylistUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn btn-secondary btn-sm playlist-sort-auth-action"

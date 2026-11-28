@@ -1,9 +1,9 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Route } from '@playwright/test';
 import { mockAuthenticatedBackend } from './fixtures';
 
 test('shared confirmation styles preserve responsive layout and keyboard dismissal', async ({ page }) => {
   await mockAuthenticatedBackend(page, {
-    '/api/v1/notes': async (route) =>
+    '/api/v1/notes': async (route: Route) =>
       route.fulfill({
         status: 200,
         json: {

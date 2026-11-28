@@ -1,7 +1,11 @@
-import { expect, test, type TestInfo } from '@playwright/test';
+import { expect, test, type Route, type TestInfo } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import { mockAuthenticatedBackend, draftPublishResponses } from './fixtures';
 import { personKey } from '../src/features/sheets/model/personOptions';
+
+type BenchmarkWindow = Window & {
+  __benchmark: { clicks: number; settingsNavigations: number; clipboard: string[] };
+};
 
 async function saveMetrics(info: TestInfo, data: { body: string; contentType: string }) {
   await writeFile(info.outputPath('workflow-metrics.json'), data.body);
@@ -13,13 +17,14 @@ for (const scenario of ['copy-six-cells', 'repeat-video-update', 'recover-video-
   test(`workflow benchmark ${scenario}`, async ({ page }, testInfo) => {
     let reads = 0;
     await page.addInitScript(() => {
-      (window as any).__benchmark = { clicks: 0, settingsNavigations: 0, clipboard: [] };
-      document.addEventListener('click', () => (window as any).__benchmark.clicks++, true);
+      const win = window as unknown as BenchmarkWindow;
+      win.__benchmark = { clicks: 0, settingsNavigations: 0, clipboard: [] };
+      document.addEventListener('click', () => win.__benchmark.clicks++, true);
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
         value: {
           writeText: async (text: string) => {
-            (window as any).__benchmark.clipboard.push(text);
+            win.__benchmark.clipboard.push(text);
           },
         },
       });
@@ -67,7 +72,7 @@ for (const scenario of ['copy-six-cells', 'repeat-video-update', 'recover-video-
         })),
       },
       '/api/v1/sheets/random-member-preview': { team: 'Team', person: '甲', values: {} },
-      '/api/v1/youtube/playlist-items': async (route) => {
+      '/api/v1/youtube/playlist-items': async (route: Route) => {
         if (++reads === 1 && scenario === 'recover-video-read') {
           await route.fulfill({
             status: 503,
@@ -91,7 +96,7 @@ for (const scenario of ['copy-six-cells', 'repeat-video-update', 'recover-video-
     if (scenario === 'copy-six-cells') {
       await expect(page.locator('.sheet-copy-cell')).toHaveCount(6);
       await page.evaluate(() => {
-        (window as any).__benchmark.clicks = 0;
+        (window as unknown as BenchmarkWindow).__benchmark.clicks = 0;
       });
       const started = performance.now();
       if (await page.getByLabel('選取第 2 列', { exact: true }).count()) {
@@ -101,7 +106,7 @@ for (const scenario of ['copy-six-cells', 'repeat-video-update', 'recover-video-
       } else {
         for (const cell of await page.locator('.sheet-copy-cell').all()) await cell.click();
       }
-      const data = await page.evaluate(() => (window as any).__benchmark);
+      const data = await page.evaluate(() => (window as unknown as BenchmarkWindow).__benchmark);
       expect(data.clipboard.length).toBeGreaterThan(0);
       await saveMetrics(testInfo, {
         body: JSON.stringify({
@@ -118,7 +123,7 @@ for (const scenario of ['copy-six-cells', 'repeat-video-update', 'recover-video-
       const read = page.getByRole('button', { name: '讀取 Video 草稿影片', exact: true });
       await expect(read).toBeEnabled();
       await page.evaluate(() => {
-        (window as any).__benchmark.clicks = 0;
+        (window as unknown as BenchmarkWindow).__benchmark.clicks = 0;
       });
       const started = performance.now();
       await read.click();
@@ -133,7 +138,7 @@ for (const scenario of ['copy-six-cells', 'repeat-video-update', 'recover-video-
       await page.getByRole('button', { name: '確認編輯並公開', exact: true }).click();
       await page.getByRole('dialog').getByRole('button', { name: '確認編輯並公開', exact: true }).click();
       await expect(page.getByRole('article').first()).toContainText('已寫入 YouTube');
-      const data = await page.evaluate(() => (window as any).__benchmark);
+      const data = await page.evaluate(() => (window as unknown as BenchmarkWindow).__benchmark);
       await saveMetrics(testInfo, {
         body: JSON.stringify({
           version: 1,

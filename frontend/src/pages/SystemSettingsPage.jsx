@@ -264,7 +264,7 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
         </div>
 
         <p className="section-desc">
-          用於控制台登入驗證、Google 試算表讀取與 Google 雲端硬碟讀取。所有 Client Secret
+          用於控制台登入驗證、Google 試算表讀取與 YouTube Music 授權。所有 Client Secret
           皆在後端加密儲存，前端絕不接收明文密鑰。
         </p>
 
@@ -366,6 +366,11 @@ export default function SystemSettingsPage({ sysSettings = {} }) {
                 {googleCreds.configured ? (
                   <span className="system-settings-status-text system-settings-status-text-success">
                     ✓ 已配置並正常運作
+                    {googleCreds.source === 'env'
+                      ? '（來源：.env 環境變數）'
+                      : googleCreds.source === 'dynamic'
+                        ? '（來源：系統保險庫）'
+                        : ''}
                   </span>
                 ) : (
                   <span className="system-settings-status-text system-settings-status-text-danger">尚未完成設定</span>

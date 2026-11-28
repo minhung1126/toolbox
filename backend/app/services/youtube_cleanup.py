@@ -96,6 +96,7 @@ class ToPostCleanupWorkflow:
             owner_sub=context.owner_sub,
             youtube_slot=context.slot,
             operation="youtube.cleanup_only",
+            youtube_channel_id=context.channel_id or "",
             request_digest=self.ports.input_digest(snapshot),
         )
         counts = {
@@ -131,6 +132,7 @@ class ToPostCleanupWorkflow:
             owner_sub=context.owner_sub,
             youtube_slot=snapshot.get("youtube_slot", ""),
             operation="youtube.cleanup_only",
+            youtube_channel_id=context.channel_id or "",
             request_digest=self.ports.input_digest(snapshot),
         ):
             raise self.ports.stale_preview_exception()

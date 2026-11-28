@@ -66,13 +66,15 @@ async def lifespan(app: FastAPI):
         oauth_client_context(app.state.oauth_client_factories),
     ):
         _initialize_app_config(app)
-        await app.state.tool_registry.run_startup(app)
-        app.state.youtube_publish_runner.start()
         try:
+            await app.state.tool_registry.run_startup(app)
+            app.state.youtube_publish_runner.start()
             yield
         finally:
-            app.state.youtube_publish_runner.shutdown()
-            await app.state.tool_registry.run_shutdown(app)
+            try:
+                app.state.youtube_publish_runner.shutdown()
+            finally:
+                await app.state.tool_registry.run_shutdown(app)
 
 
 async def request_validation_error_handler(request: Request, exc: RequestValidationError):
@@ -130,7 +132,7 @@ async def security_headers(request, call_next):
         "media-src 'self' data: blob:; "
         "style-src 'self' 'unsafe-inline'; script-src 'self'",
     )
-    if get_settings(settings).is_production:
+    if get_settings(settings).is_strict_security:
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     cache_control = frontend_cache_control(request.url.path, response.headers.get("content-type"))
     if cache_control:
@@ -139,7 +141,9 @@ async def security_headers(request, call_next):
 
 
 def health_check(request: Request = None):
-    registry = request.app.state.tool_registry if request is not None else tool_registry
+    app_state = getattr(getattr(request, "app", None), "state", None)
+    app_registry = getattr(app_state, "tool_registry", None)
+    registry = app_registry if app_registry is not None else tool_registry
     google_oauth_ready = bool(get_settings(settings).GOOGLE_CLIENT_ID and get_settings(settings).GOOGLE_CLIENT_SECRET)
     youtube_primary = get_settings(settings).youtube_oauth_slot("primary")
     youtube_secondary = get_settings(settings).youtube_oauth_slot("secondary")
@@ -295,6 +299,7 @@ def create_app(
         client_factory=google_client_factory,
         service=None,
         credential_loader=youtube_publish_credential_loader,
+        oauth_client_factories=oauth_client_factories,
     )
     job_adapters.setdefault("_switch_youtube_context", runtime.fallback)
     runtime.service = create_youtube_workflow_service(job_adapters)
@@ -310,7 +315,7 @@ def create_app(
     application.middleware("http")(security_headers)
     application.get("/api/v1/health")(health_check)
     origins = {config.frontend_url, config.base_url}
-    if not config.is_production:
+    if not config.is_strict_security:
         origins.update(
             {
                 "http://localhost:3000",

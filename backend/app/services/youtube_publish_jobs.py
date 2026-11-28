@@ -25,10 +25,31 @@ from backend.app.services.google_auth import (
     has_youtube_scope,
 )
 from backend.app.services.google_clients import google_client_context
+from backend.app.services.oauth_clients import oauth_client_context
 from backend.app.services.operation_journal import Recorder, public_operation, recording
 from backend.app.services.youtube_draft_publish import DraftPublishWorkflow
 
 logger = logging.getLogger(__name__)
+HEARTBEAT_INTERVAL_SECONDS = 5.0
+
+if os.name == "nt":
+    import msvcrt
+
+    def _lock_nonblocking(handle) -> None:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+
+    def _unlock_file(handle) -> None:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+else:
+    import fcntl
+
+    def _lock_nonblocking(handle) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def _unlock_file(handle) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 @dataclass(frozen=True)
@@ -42,10 +63,22 @@ class JobIdentity:
 class PublishJobRuntime:
     """Explicit app resources; a queued job contains no Request or credentials."""
 
-    def __init__(self, *, config, credentials, accounts, trackers, client_factory, service, credential_loader=None):
+    def __init__(
+        self,
+        *,
+        config,
+        credentials,
+        accounts,
+        trackers,
+        client_factory,
+        service,
+        credential_loader=None,
+        oauth_client_factories=None,
+    ):
         self.config, self.credentials, self.accounts = config, credentials, accounts
         self.trackers, self.client_factory, self.service = trackers, client_factory, service
         self.credential_loader = credential_loader
+        self.oauth_client_factories = oauth_client_factories
 
     @contextmanager
     def scope(self):
@@ -59,13 +92,22 @@ class PublishJobRuntime:
             stack.enter_context(account_state_context(self.accounts))
             stack.enter_context(youtube_quota_context(self.trackers))
             stack.enter_context(google_client_context(self.client_factory))
+            stack.enter_context(oauth_client_context(self.oauth_client_factories))
             yield
 
     def _youtube_context(self, identity):
         from backend.app.services.youtube_quota_service import get_youtube_quota_tracker
 
         public = self.credentials.get_youtube_public(identity.owner, slot=identity.slot) or {}
-        token = self.credentials.get_youtube_credentials(identity.owner, slot=identity.slot)
+        try:
+            token = self.credentials.get_youtube_credentials(identity.owner, slot=identity.slot)
+        except RuntimeError:
+            logger.warning(
+                "Stored youtube:%s credentials could not be decrypted for subject %s",
+                identity.slot,
+                identity.owner,
+            )
+            raise http_error(403, "youtube_scope_required", "YouTube 授權已失效，請重新連線。") from None
         if not token or public.get("channel_id") != identity.channel_id:
             raise http_error(403, "youtube_authorization_changed", "YouTube 授權或頻道已變更，尚未寫入，請重新預覽。")
         creds = build_credentials_from_dict(
@@ -86,8 +128,10 @@ class PublishJobRuntime:
         if self.credential_loader is not None:
             return self.credential_loader(identity)
         public = self.credentials.get_google_public(identity.owner) or {}
-        email = (public.get("user") or {}).get("email") or public.get("email")
-        if self.config.allowlist_required and (not email or not self.config.is_google_email_allowed(email)):
+        email = str((public.get("user") or {}).get("email") or public.get("email") or "").strip().casefold()
+        if (
+            self.config.allowed_google_emails or self.config.allowlist_required or email
+        ) and not self.config.is_google_email_allowed(email):
             raise http_error(403, "access_denied", "目前帳號未列於允許名單。")
         context = self._youtube_context(identity)
         sheets = get_sheets_credentials(owner_sub=identity.owner)
@@ -125,6 +169,18 @@ class YouTubePublishRunner:
         self.stop_event = threading.Event()
         self.thread = self.heartbeat_thread = self.file_lock = None
 
+    def _release_file_lock(self) -> None:
+        handle = self.file_lock
+        self.file_lock = None
+        if handle is None:
+            return
+        try:
+            _unlock_file(handle)
+        except OSError:
+            pass
+        finally:
+            handle.close()
+
     def start(self):
         with self.lock:
             if self.accepting:
@@ -132,18 +188,13 @@ class YouTubePublishRunner:
             self.store.path.parent.mkdir(parents=True, exist_ok=True)
             handle = open(self.store.path.with_suffix(".runner.lock"), "a+b")
             try:
-                if os.name == "nt":
-                    import msvcrt
-
-                    handle.seek(0)
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-                else:
-                    import fcntl
-
-                    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                _lock_nonblocking(handle)
             except OSError:
                 handle.close()
                 raise RuntimeError("YouTube publish runner requires one process per operation store") from None
+            except BaseException:
+                handle.close()
+                raise
             self.file_lock = handle
             try:
                 self.store.recover_lost_executor_jobs()
@@ -161,15 +212,22 @@ class YouTubePublishRunner:
                 self.thread.start()
                 self.heartbeat_thread.start()
             except BaseException:
-                handle.close()
-                self.file_lock = None
                 self.accepting = False
+                self.stop_event.set()
+                if self.thread and self.thread.is_alive():
+                    self.thread.join(timeout=self.shutdown_timeout)
+                if self.heartbeat_thread and self.heartbeat_thread.is_alive():
+                    self.heartbeat_thread.join(timeout=1)
+                self._release_file_lock()
                 raise
 
     def _heartbeat(self):
-        while not self.stop_event.wait(5):
-            with self.store.transaction() as db:
-                db.execute("UPDATE operation_executors SET heartbeat=? WHERE id=?", (time.time(), self.id))
+        while not self.stop_event.wait(HEARTBEAT_INTERVAL_SECONDS):
+            try:
+                with self.store.transaction() as db:
+                    db.execute("UPDATE operation_executors SET heartbeat=? WHERE id=?", (time.time(), self.id))
+            except Exception as exc:
+                logger.warning("Publish runner heartbeat update failed: %s", type(exc).__name__)
 
     def submit(self, payload, context):
         kind = "youtube.metadata_publish"
@@ -267,24 +325,36 @@ class YouTubePublishRunner:
                     self.capacity.release()
                     self.queue.task_done()
         finally:
-            with self.store.transaction() as db:
-                db.execute("UPDATE operation_executors SET state='stopped' WHERE id=?", (self.id,))
-            if self.file_lock:
-                self.file_lock.close()
-                self.file_lock = None
+            try:
+                with self.store.transaction() as db:
+                    db.execute("UPDATE operation_executors SET state='stopped' WHERE id=?", (self.id,))
+            except Exception as exc:
+                logger.warning("Failed to mark publish executor stopped: %s", type(exc).__name__)
+            finally:
+                self._release_file_lock()
 
     def shutdown(self):
         with self.lock:
             self.accepting = False
-            while True:
-                try:
-                    owner, operation_id = self.queue.get_nowait()
-                except queue.Empty:
-                    break
-                Recorder(self.store, self.store.get(owner, operation_id)).finish(failed=True)
-                self.capacity.release()
-                self.queue.task_done()
-            self.stop_event.set()
+            try:
+                while True:
+                    try:
+                        owner, operation_id = self.queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    try:
+                        Recorder(self.store, self.store.get(owner, operation_id)).finish(failed=True)
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to mark queued publish operation %s as failed during shutdown: %s",
+                            operation_id,
+                            type(exc).__name__,
+                        )
+                    finally:
+                        self.capacity.release()
+                        self.queue.task_done()
+            finally:
+                self.stop_event.set()
         if self.thread:
             self.thread.join(timeout=self.shutdown_timeout)
         if self.heartbeat_thread:

@@ -19,7 +19,7 @@ from backend.app.core.config import get_settings, normalize_youtube_slot, settin
 from backend.app.core.dependencies import require_account_subject, require_login_credentials
 from backend.app.core.error_contract import http_error
 from backend.app.core.runtime_config import get_runtime_config, runtime_config
-from backend.app.core.system_secrets import get_system_secrets, system_secrets
+from backend.app.core.system_secrets import get_system_secrets, resolve_secret_update, system_secrets
 from backend.app.core.youtube_input import normalize_playlist_id
 
 logger = logging.getLogger(__name__)
@@ -219,6 +219,7 @@ class YouTubeSlotConfigUpdateModel(BaseModel):
     client_id: Optional[str] = Field(default=None, max_length=512)
     client_secret: Optional[str] = Field(default=None, max_length=512)
     use_system_google_oauth: Optional[bool] = None
+    clear_credentials: Optional[bool] = None
 
 
 @router.put("/youtube-slots/{slot}")
@@ -229,29 +230,45 @@ def update_youtube_slot_config(
 ):
     """Update YouTube slot label, enabled state, or OAuth client credentials."""
     del creds
-    slot_name = normalize_youtube_slot(slot)
+    try:
+        slot_name = normalize_youtube_slot(slot)
+    except ValueError as exc:
+        raise http_error(400, "youtube_slot_invalid", "不支援的 YouTube OAuth slot。") from exc
     if payload.label is not None:
         get_runtime_config(runtime_config).set(f"youtube_oauth_{slot_name}_label", payload.label.strip())
     if slot_name == "secondary" and payload.enabled is not None:
         get_runtime_config(runtime_config).set("youtube_oauth_secondary_enabled", bool(payload.enabled))
 
-    updates = {}
-    if slot_name == "primary" and payload.use_system_google_oauth:
-        updates["youtube_primary_client_id"] = get_settings(settings).GOOGLE_CLIENT_ID
-        updates["youtube_primary_client_secret"] = get_settings(settings).GOOGLE_CLIENT_SECRET
+    current_settings = get_settings(settings)
+    secrets_mgr = get_system_secrets(system_secrets)
+    updates: dict[str, str] = {}
+    if payload.clear_credentials:
+        updates[f"youtube_{slot_name}_client_id"] = ""
+        updates[f"youtube_{slot_name}_client_secret"] = ""
+    elif slot_name == "primary" and payload.use_system_google_oauth:
+        updates["youtube_primary_client_id"] = current_settings.GOOGLE_CLIENT_ID
+        updates["youtube_primary_client_secret"] = current_settings.GOOGLE_CLIENT_SECRET
     else:
         if payload.client_id is not None:
             updates[f"youtube_{slot_name}_client_id"] = payload.client_id.strip()
         if payload.client_secret is not None:
-            clean_secret = payload.client_secret.strip()
-            if not clean_secret.startswith("****") and clean_secret != "********":
-                updates[f"youtube_{slot_name}_client_secret"] = clean_secret
+            stored_creds = secrets_mgr.get_credentials(ignore_decrypt_errors=True)
+            secret_field = f"youtube_{slot_name}_client_secret"
+            current_secret = (
+                stored_creds.get(secret_field) or current_settings.youtube_oauth_slot(slot_name).client_secret
+            )
+            try:
+                resolved_secret = resolve_secret_update(payload.client_secret, current_secret)
+            except ValueError as exc:
+                raise http_error(400, "masked_secret_rejected", str(exc)) from exc
+            if resolved_secret is not None:
+                updates[secret_field] = resolved_secret
 
     if updates:
-        get_system_secrets(system_secrets).update_credentials(updates)
+        secrets_mgr.update_credentials(updates)
 
-    get_settings(settings).sync_dynamic_config()
-    slot_config = get_settings(settings).youtube_oauth_slot(slot_name)
+    current_settings.sync_dynamic_config()
+    slot_config = current_settings.youtube_oauth_slot(slot_name)
     limit, buffer = get_runtime_config(runtime_config).get_youtube_quota_settings(slot_name)
     return {
         "status": "success",

@@ -14,6 +14,7 @@ class VideoEditStatusInput(BaseModel):
 
 
 class VideoMetadataUpdateInput(BaseModel):
+    request_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
     video_id: str = Field(min_length=1, max_length=128)
     title: str = Field(min_length=1, max_length=100)
     description: str = Field(default="", max_length=5000)

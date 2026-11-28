@@ -7,14 +7,34 @@ const YOUTUBE_WORKFLOW_TIMEOUT_MS = 10 * 60_000;
 const SESSION_EXPIRED_DEDUP_MS = 1_000;
 let lastSessionExpiredNotificationAt = 0;
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 export class ApiError extends Error {
-  constructor(message, { status = 0, code = 'request_failed', details = null, retryAfter = null } = {}) {
+  constructor(
+    message,
+    {
+      status = 0,
+      code = 'request_failed',
+      details = null,
+      retryAfter = null,
+      retryable,
+      fieldErrors,
+      field_errors,
+    } = {}
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.details = details;
     this.retryAfter = retryAfter;
+    this.retryable = typeof retryable === 'boolean' ? retryable : Boolean(details?.retryable);
+    const resolvedFieldErrors =
+      fieldErrors ?? field_errors ?? (isPlainObject(details?.field_errors) ? details.field_errors : {});
+    this.fieldErrors = resolvedFieldErrors;
+    this.field_errors = resolvedFieldErrors;
   }
 }
 
@@ -57,17 +77,35 @@ function payloadRetryAfter(data, response) {
   return parseRetryAfter(headerValue ?? bodyValue);
 }
 
+function isSafeApiText(value) {
+  return typeof value === 'string' && Boolean(value.trim()) && !/<\/?[a-z][^>]*>/i.test(value);
+}
+
+function firstFieldErrorMessage(fieldErrors) {
+  if (!isPlainObject(fieldErrors)) return '';
+  for (const value of Object.values(fieldErrors)) {
+    if (isSafeApiText(value)) return value.trim();
+    if (Array.isArray(value)) {
+      const first = value.find((item) => isSafeApiText(item));
+      if (first) return first.trim();
+    }
+  }
+  return '';
+}
+
 function responseMessage(data, status, retryAfter = null) {
   const detail = data?.detail;
+  const detailObj = payloadDetail(data);
   const rawText = typeof data?.__raw_response_text === 'string' ? data.__raw_response_text.trim() : '';
   const safeRawText = rawText && !/<\/?[a-z][^>]*>/i.test(rawText) ? rawText : '';
-  const chineseMessage = [
+  const structuredMessage = [
     typeof detail === 'string' ? detail : '',
-    detail && typeof detail === 'object' ? detail.message : '',
+    detailObj?.message,
     data?.message,
-    safeRawText,
-  ].find((candidate) => typeof candidate === 'string' && candidate.trim() && /[\u4e00-\u9fff]/.test(candidate));
-  if (chineseMessage) return chineseMessage.trim();
+    firstFieldErrorMessage(detailObj?.field_errors ?? data?.field_errors),
+  ].find((candidate) => isSafeApiText(candidate));
+  if (structuredMessage) return structuredMessage.trim();
+  if (safeRawText && /[\u4e00-\u9fff]/.test(safeRawText)) return safeRawText;
   if (status === 401) return '登入已逾時，請重新登入後再試。';
   if (status === 403) return '目前帳號沒有執行此操作的權限。';
   if (status === 429) {
@@ -185,9 +223,9 @@ async function request(endpoint, options = {}) {
       if (fetchOptions.signal?.aborted) {
         throw error;
       }
-      throw new ApiError('連線逾時，請確認網路後按「重試」。', { code: 'timeout' });
+      throw new ApiError('連線逾時，請確認網路後按「重試」。', { code: 'timeout', retryable: true });
     }
-    throw new ApiError('目前無法連線到 Toolbox，請確認服務與網路後重試。', { code: 'network_error' });
+    throw new ApiError('目前無法連線到 Toolbox，請確認服務與網路後重試。', { code: 'network_error', retryable: true });
   } finally {
     window.clearTimeout(timeout);
     if (callerAbortListener && fetchOptions.signal) {
@@ -221,8 +259,6 @@ export const api = {
   getAuthUrl: () => request('/auth/url'),
   getSheetsAuthUrl: () => request('/auth/sheets/url'),
   disconnectSheets: () => request('/auth/sheets/disconnect', { method: 'POST' }),
-  getDriveAuthUrl: () => request('/auth/drive/url'),
-  disconnectDrive: () => request('/auth/drive/disconnect', { method: 'POST' }),
   getYtmusicAuthUrl: () => request('/auth/ytmusic/url'),
   disconnectYtmusic: () => request('/auth/ytmusic/disconnect', { method: 'POST' }),
   getYoutubeAuthUrl: (slot = 'primary') => request(`/auth/youtube/${encodeURIComponent(slot)}/url`),
@@ -527,8 +563,12 @@ export const api = {
     language = null,
     location = null,
     allowQuotaFallback = false,
-  }) =>
-    request('/playlist-sort/apply', {
+    requestId = null,
+    request_id = null,
+  }) => {
+    const rawRequestId = requestId ?? request_id;
+    const resolvedRequestId = typeof rawRequestId === 'string' ? rawRequestId.trim() : '';
+    return request('/playlist-sort/apply', {
       method: 'POST',
       timeoutMs: YOUTUBE_WORKFLOW_TIMEOUT_MS,
       body: JSON.stringify({
@@ -542,8 +582,10 @@ export const api = {
         language,
         location,
         allow_quota_fallback: allowQuotaFallback,
+        ...(resolvedRequestId ? { request_id: resolvedRequestId } : {}),
       }),
-    }),
+    });
+  },
   saveYtmusicCustomToken: (token) =>
     request('/auth/ytmusic/custom-token', {
       method: 'POST',

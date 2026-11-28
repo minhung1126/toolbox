@@ -13,4 +13,25 @@ module.exports = {
     'react/react-in-jsx-scope': 'off',
     'react-hooks/exhaustive-deps': 'error',
   },
+  overrides: [
+    {
+      files: ['*.ts', '*.tsx'],
+      parser: '@typescript-eslint/parser',
+      plugins: ['@typescript-eslint', 'react', 'react-hooks'],
+      extends: [
+        'eslint:recommended',
+        'plugin:@typescript-eslint/recommended',
+        'plugin:react/recommended',
+        'plugin:react-hooks/recommended',
+      ],
+      rules: {
+        'no-undef': 'off',
+        'no-unused-vars': 'off',
+        '@typescript-eslint/no-unused-vars': ['error', { ignoreRestSiblings: true, argsIgnorePattern: '^_' }],
+        'react/prop-types': 'off',
+        'react/react-in-jsx-scope': 'off',
+        'react-hooks/exhaustive-deps': 'error',
+      },
+    },
+  ],
 };

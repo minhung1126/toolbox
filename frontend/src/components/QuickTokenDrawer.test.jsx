@@ -1,11 +1,12 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import QuickTokenDrawer from './QuickTokenDrawer';
 import { ytmusicSettingsApi } from '../features/ytmusic/api/ytmusicSettingsApi';
 import { ToastProvider } from './Toast';
 
-vi.mock('../features/ytmusic/api/ytmusicSettingsApi', () => ({
+vi.mock('../features/ytmusic/api/ytmusicSettingsApi', async (importOriginal) => ({
+  ...(await importOriginal()),
   ytmusicSettingsApi: {
     validate: vi.fn(),
     save: vi.fn(),
@@ -109,17 +110,55 @@ describe('QuickTokenDrawer', () => {
     });
   });
 
-  it('clears token when clear button is clicked', async () => {
+  it('requires ConfirmDialog before clearing token and supports cancelling', async () => {
     ytmusicSettingsApi.clear.mockResolvedValueOnce({ status: 'success', message: 'cleared' });
     const onTokenCleared = vi.fn();
 
     renderDrawer({ hasCustomToken: true, onTokenCleared });
-    const clearBtn = screen.getByRole('button', { name: /清除/ });
-    fireEvent.click(clearBtn);
+    fireEvent.click(screen.getByRole('button', { name: /清除/ }));
+
+    expect(ytmusicSettingsApi.clear).not.toHaveBeenCalled();
+    const dialog = screen.getByRole('dialog', { name: '清除自訂 Token' });
+    expect(dialog).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '取消', exact: true }));
+    expect(ytmusicSettingsApi.clear).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /清除/ }));
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: '清除自訂 Token' })).getByRole('button', { name: '確認清除' })
+    );
 
     await waitFor(() => {
-      expect(ytmusicSettingsApi.clear).toHaveBeenCalled();
-      expect(onTokenCleared).toHaveBeenCalled();
+      expect(ytmusicSettingsApi.clear).toHaveBeenCalledTimes(1);
+      expect(onTokenCleared).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('warns instead of reporting clear failure when post-clear refresh fails, and locks on ambiguous errors', async () => {
+    ytmusicSettingsApi.clear.mockResolvedValueOnce({ status: 'success' });
+    const onTokenCleared = vi.fn().mockRejectedValueOnce(new Error('refresh failed'));
+
+    renderDrawer({ hasCustomToken: true, onTokenCleared });
+    fireEvent.click(screen.getByRole('button', { name: /清除/ }));
+    fireEvent.click(screen.getByRole('button', { name: '確認清除' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Token 已清除，但授權狀態無法重新讀取；請重新整理頁面。')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/清除 Token 失敗/)).not.toBeInTheDocument();
+
+    ytmusicSettingsApi.clear.mockRejectedValueOnce({ status: 500, message: 'server error' });
+    onTokenCleared.mockRejectedValueOnce(new Error('still failing'));
+
+    fireEvent.click(screen.getByRole('button', { name: /清除/ }));
+    fireEvent.click(screen.getByRole('button', { name: '確認清除' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('無法確認 Token 變更結果')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: /清除/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /儲存並啟用 0 配額模式/ })).toBeDisabled();
   });
 });
