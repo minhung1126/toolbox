@@ -5,8 +5,6 @@ from fastapi.testclient import TestClient
 from backend.app.api.photo_curator import _sanitize_md
 from backend.app.core.dependencies import require_login_credentials
 from backend.app.main import create_app
-from backend.app.tools.builtin.photo_curator import PhotoCuratorPlugin
-from backend.app.tools.registry import tool_registry
 
 
 def _authed_client():
@@ -17,15 +15,6 @@ def test_photo_curator_endpoints_require_authentication():
     client = TestClient(create_app())
     assert client.get("/api/v1/photo-curator/presets").status_code == 401
     assert client.post("/api/v1/photo-curator/checklist", json={}).status_code == 401
-
-
-def test_photo_curator_plugin_metadata():
-    plugin = PhotoCuratorPlugin()
-    assert plugin.metadata.id == "photo-curator"
-    assert plugin.metadata.name == "Photo Curator"
-    assert plugin.metadata.status == "active"
-    assert plugin.metadata.entry_url == "/photo-curator"
-    assert tool_registry.get("photo-curator") is not None
 
 
 def test_photo_curator_presets_api():

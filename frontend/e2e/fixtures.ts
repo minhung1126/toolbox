@@ -70,7 +70,7 @@ export const toolCatalog = getAllTools().map((tool) => ({
 
 export async function mockAuthenticatedBackend(page: Page, responseOverrides: RouteOverrides = {}) {
   const workState: Record<string, unknown> = {};
-  await page.route('**/api/v1/**', async (route: Route) => {
+  await page.context().route('**/api/v1/**', async (route: Route) => {
     const path = new URL(route.request().url()).pathname;
     const responses: RouteOverrides = {
       '/api/v1/auth/user': {

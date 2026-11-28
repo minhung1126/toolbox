@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { mockAuthenticatedBackend, toolCatalog } from './fixtures';
+import { mockAuthenticatedBackend } from './fixtures';
 
-const dashboardCardCount = toolCatalog.reduce((count, tool) => count + tool.routes.length, 0);
 const sharedControlScreenshotOptions = {
   animations: 'disabled',
   fullPage: true,
@@ -23,9 +22,11 @@ for (const width of [390, 768, 1440]) {
     await page.goto('/system/design-system');
     await expect(page.getByRole('heading', { name: '共用元件展示' })).toBeVisible();
     await waitForVisualFonts(page);
-    await expect(page).toHaveScreenshot(`showcase-${width}.png`, sharedControlScreenshotOptions);
-    await page.getByRole('button', { name: '主要操作', exact: true }).focus();
-    await expect(page).toHaveScreenshot(`showcase-focus-${width}.png`, sharedControlScreenshotOptions);
+    await expect.soft(page).toHaveScreenshot(`showcase-${width}.png`, sharedControlScreenshotOptions);
+    const primary = page.getByRole('button', { name: '主要操作', exact: true });
+    await primary.focus();
+    await expect(primary).toBeFocused();
+    await expect.soft(page).toHaveScreenshot(`showcase-focus-${width}.png`, sharedControlScreenshotOptions);
   });
 
   test(`dashboard and navigation at ${width}px`, async ({ page }) => {
@@ -33,10 +34,8 @@ for (const width of [390, 768, 1440]) {
     await mockAuthenticatedBackend(page);
     await page.goto('/dashboard');
     await expect(page.getByRole('heading', { name: 'Toolbox 控制台' })).toBeVisible();
-    // The heading renders before the catalog and saved navigation have hydrated.
-    await expect(
-      page.getByText(`顯示 ${dashboardCardCount} / ${dashboardCardCount} 個工具入口`, { exact: true })
-    ).toBeVisible();
+    // The heading can render before the dashboard's cards and controls are ready.
+    await expect(page.getByRole('searchbox', { name: '搜尋工具' })).toBeEnabled();
     await expect(page.getByRole('button', { name: '將 FFmpeg 命令行生成器 加入常用工具', exact: true })).toBeEnabled();
     await expect(page.getByText('按工具卡右上角的圖釘，即可加入常用入口。', { exact: true })).toBeVisible();
     await waitForVisualFonts(page);

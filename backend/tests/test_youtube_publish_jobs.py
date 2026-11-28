@@ -1,8 +1,11 @@
 """HTTP 202, observable progress and crash/ownership boundaries with a fake provider."""
 
 import copy
+import subprocess
+import sys
 import threading
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -144,11 +147,34 @@ def test_new_previews_and_sync_api_share_atomic_video_target_protection(job_harn
         release.set()
 
 
-def test_exclusive_runner_and_restart_recover_only_state_without_replay(job_harness, tmp_path):
+def test_exclusive_runner_and_restart_recover_only_state_without_replay(job_harness):
     h, runner = job_harness
     other = YouTubePublishRunner(OperationStore(h.store.path), runner.runtime)
     with pytest.raises(RuntimeError, match="one process"):
         other.start()
+    contender = """
+import sys
+from pathlib import Path
+from backend.app.core.operation_store import OperationStore
+from backend.app.services.youtube_publish_jobs import YouTubePublishRunner
+
+runner = YouTubePublishRunner(OperationStore(Path(sys.argv[1])), runtime=None)
+try:
+    runner.start()
+except RuntimeError as error:
+    assert "one process" in str(error)
+else:
+    runner.shutdown()
+    raise AssertionError("A second process acquired the active runner lock")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", contender, str(h.store.path)],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
     runner.shutdown()
     h.provider.videos_by_id["three"] = video("three")
     h.provider.members.append("three")

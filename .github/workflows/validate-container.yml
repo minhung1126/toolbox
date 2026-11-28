@@ -2,6 +2,10 @@ name: Validate container
 
 on:
   workflow_call:
+    inputs:
+      repeat_browser_regressions:
+        type: boolean
+        default: false
   pull_request:
     branches: [main]
     paths:
@@ -58,18 +62,38 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Test frontend
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Check frontend formatting, lint and types
         working-directory: frontend
         run: |
-          npm ci
           npm run format:check
           npm run lint
           npm run lint:styles
           npm run typecheck
-          npm test -- --run
-          npm run build
-          npx playwright install --with-deps chromium
-          npm run test:e2e
+
+      - name: Run frontend unit and component tests
+        working-directory: frontend
+        run: npm test -- --run
+
+      - name: Build frontend for browser tests
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run functional browser tests
+        working-directory: frontend
+        run: npx playwright test
+
+      - name: Repeat responsive and recovery cases
+        if: inputs.repeat_browser_regressions
+        working-directory: frontend
+        run: npx playwright test --grep '@responsive|@recovery' --repeat-each=3 --retries=0 --output test-results/e2e-repeat
 
       - name: Audit frontend production dependencies
         working-directory: frontend
@@ -88,12 +112,14 @@ jobs:
           path: frontend/audit-report.json
           if-no-files-found: ignore
 
-      - name: Upload responsive layout screenshots
+      - name: Upload functional browser results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: responsive-layout-screenshots
-          path: frontend/test-results/**/*.png
+          path: |
+            frontend/test-results/e2e/
+            frontend/test-results/e2e-repeat/
           if-no-files-found: ignore
 
       - name: Validate Docker and Compose

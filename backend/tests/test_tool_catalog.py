@@ -1,6 +1,7 @@
 import re
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
@@ -15,7 +16,7 @@ def test_tool_catalog_lists_registered_tools():
     assert response.status_code == 200
     data = response.json()
     assert data["platform"] == "Toolbox"
-    assert data["total_tools"] >= 1
+    assert data["total_tools"] == len(data["tools"])
     tool_ids = [t["id"] for t in data["tools"]]
     assert "creator-tools" in tool_ids
     assert "sheets-tools" in tool_ids
@@ -25,17 +26,26 @@ def test_tool_catalog_lists_registered_tools():
     assert "youtube-music" in tool_ids
 
 
-def test_tool_catalog_get_tool_detail():
+@pytest.mark.parametrize(
+    ("tool_id", "name", "entry_url"),
+    [
+        ("creator-tools", "Creator Tools", "/dashboard"),
+        ("ffmpeg-generator", "FFmpeg Generator", "/ffmpeg-generator"),
+        ("photo-curator", "Photo Curator", "/photo-curator"),
+    ],
+)
+def test_tool_catalog_get_tool_detail(tool_id, name, entry_url):
     client = TestClient(app)
     response = client.get(
-        "/api/v1/tools/creator-tools",
+        f"/api/v1/tools/{tool_id}",
         headers={"Origin": "http://localhost:3000"},
     )
     assert response.status_code == 200
     data = response.json()
     assert data["found"] is True
-    assert data["tool"]["name"] == "Creator Tools"
-    assert len(data["tool"]["routes"]) > 0
+    tool = data["tool"]
+    assert (tool["id"], tool["name"], tool["status"], tool["entry_url"]) == (tool_id, name, "active", entry_url)
+    assert tool["routes"]
 
 
 def test_tool_catalog_get_ytmusic_detail():

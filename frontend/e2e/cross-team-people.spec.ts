@@ -68,7 +68,7 @@ async function setup(page: Page) {
 }
 
 for (const width of [390, 768, 1440]) {
-  test(`cross-team sheet selection, filters, undo and reload at ${width}px`, async ({ page }) => {
+  test(`cross-team sheet selection, filters, undo and reload at ${width}px`, { tag: '@recovery' }, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     const savedFilter = await setup(page);
     await page.goto('/sheets/copy');
@@ -106,7 +106,7 @@ for (const width of [390, 768, 1440]) {
     await panel.getByRole('checkbox', { name: '乙 Team B' }).check();
     await expect.poll(() => savedFilter().selected_people).toEqual([personKey(people[0]), personKey(people[1])]);
     await expect.poll(() => savedFilter().query).toBe('');
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(panel.getByRole('checkbox', { name: '甲 Team A' })).toBeChecked();
     await expect(panel.getByRole('checkbox', { name: '乙 Team B' })).toBeChecked();
     await expect(page.getByText('2 列結果', { exact: true })).toBeVisible();

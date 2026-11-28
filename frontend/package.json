@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:e2e": "npm run build && playwright test",
-    "test:visual": "npm run build && playwright test --config playwright.visual.config.ts"
+    "test:visual": "npm run build && playwright test --config playwright.visual.config.ts",
+    "test:benchmark": "npm run build && playwright test --config playwright.benchmark.config.ts"
   },
   "dependencies": {
     "jszip": "^3.10.2",

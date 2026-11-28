@@ -15,32 +15,28 @@
   gap: var(--space-2);
 }
 
-.draft-publish-copy h2 {
-  font-size: var(--font-size-page-title);
-  font-weight: 700;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
+.draft-publish-copy h2,
 .draft-publish-description {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
   color: var(--text-main);
   font-size: 1rem;
+  font-weight: 400;
   line-height: 1.75;
+  letter-spacing: normal;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .draft-publish-heading {
+  --draft-thumbnail-width: min(40%, 12rem);
+
   display: grid;
-  grid-template-columns: 4rem minmax(0, 1fr) auto;
+  grid-template-columns: var(--draft-thumbnail-width) minmax(0, 1fr) auto;
   align-items: flex-start;
   gap: var(--space-3);
 }
 
-.draft-publish-thumbnail {
-  width: 4rem;
-  max-width: 100%;
+.draft-publish-heading .draft-publish-thumbnail {
+  width: 100%;
   height: auto;
   aspect-ratio: 16 / 9;
   object-fit: cover;
@@ -97,4 +93,15 @@
 
 .draft-publish-final-description {
   min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .draft-publish-heading {
+    grid-template-columns: var(--draft-thumbnail-width) minmax(0, 1fr);
+  }
+
+  .draft-publish-heading > .ui-button {
+    grid-column: 2;
+    justify-self: end;
+  }
 }

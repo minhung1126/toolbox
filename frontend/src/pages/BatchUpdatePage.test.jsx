@@ -5,13 +5,14 @@ const memberKey = personKey({ team: '團體 A', person: '人物甲', kind: 'pers
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BatchUpdatePage, { buildBatchPreview } from './BatchUpdatePage';
+import BatchUpdateConfirmationContent from '../components/batch/BatchUpdateConfirmationContent';
 import BatchPreviewItem from '../components/batch/BatchPreviewItem';
 import { createSavedDraft, savePublishDraft, loadPublishDraft } from '../features/youtube/model/draftPublishStorage';
 import { useBatchUpdateWorkflow } from '../features/youtube/hooks/useBatchUpdateWorkflow';
 
 describe('BatchPreviewItem', () => {
-  it('uses the kebab-case class for items that will be updated', () => {
-    const { container } = render(
+  it('shows the planned change with the current and next values', () => {
+    render(
       <BatchPreviewItem
         item={{
           videoId: 'video-1',
@@ -24,8 +25,22 @@ describe('BatchPreviewItem', () => {
       />
     );
 
-    expect(container.querySelector('article')).toHaveClass('batch-preview-item-will-update');
+    expect(screen.getByText('將更新', { exact: true })).toBeVisible();
+    expect(screen.getByRole('heading', { name: '目前內容' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: '更新後內容' })).toBeVisible();
+    expect(screen.getByText('新標題', { exact: true })).toBeVisible();
   });
+});
+
+it('explains the scope of a metadata update before confirmation', () => {
+  render(
+    <BatchUpdateConfirmationContent
+      batchPreview={[{ videoId: 'video-1' }, { videoId: 'video-2' }]}
+      previewCounts={{ willUpdate: 1, unchanged: 0, skipped: 1, failed: 0 }}
+    />
+  );
+  expect(screen.getByRole('region', { name: '更新內容' })).toHaveTextContent(/只會更新標題與描述/);
+  expect(screen.getByText(/沒有變更或失敗的影片不會送出更新/)).toBeVisible();
 });
 
 const mocks = vi.hoisted(() => ({

@@ -86,12 +86,8 @@ class BuildCommandResponse(BaseModel):
     breakdown: List[CommandParamExplanation]
 
 
-PRESET_TEMPLATES = [
-    FfmpegPreset(**item)
-    for item in json.loads(
-        (Path(__file__).parents[1] / "resources/ffmpeg-presets.v1.json").read_text(encoding="utf-8")
-    )["presets"]
-]
+PRESET_PATH = Path(__file__).parents[1] / "resources/ffmpeg-presets.v1.json"
+PRESET_TEMPLATES = [FfmpegPreset(**item) for item in json.loads(PRESET_PATH.read_text(encoding="utf-8"))["presets"]]
 
 
 def seconds_to_hhmmss(total_seconds: float) -> str:

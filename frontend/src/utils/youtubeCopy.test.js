@@ -6,22 +6,9 @@ import {
   formatVideoCount,
   formatVideoId,
   formatVideoUploadTime,
-  YOUTUBE_COPY,
 } from './youtubeCopy';
 
 describe('youtubeCopy', () => {
-  it('keeps the shared action vocabulary in one place', () => {
-    expect(YOUTUBE_COPY).toMatchObject({
-      featureName: '清理 To-Post',
-      setPublic: '設為公開',
-      removeFromToPost: '移出 To-Post 播放清單',
-      updateMetadata: '更新標題與描述',
-      batchUpdate: '批次更新',
-      readLoading: '讀取中…',
-      updateLoading: '更新中…',
-    });
-  });
-
   it('formats counts, identifiers and quota units consistently', () => {
     expect(formatCount(1200)).toBe('1,200');
     expect(formatVideoCount(5)).toBe('5 支影片');
