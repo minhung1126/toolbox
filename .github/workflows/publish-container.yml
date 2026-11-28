@@ -110,9 +110,37 @@ jobs:
           cache-to: type=gha,mode=max,scope=container-build
 
       - name: Push version tag after successful image push
+        id: push_tag
         uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: patch
           release_branches: main
           create_annotated_tag: true
+
+      - name: Create GitHub release
+        if: steps.push_tag.outputs.new_tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ steps.push_tag.outputs.new_tag }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          CHANGELOG: ${{ steps.push_tag.outputs.changelog }}
+        run: |
+          if gh release view "$NEW_TAG" >/dev/null 2>&1; then
+            echo "Release $NEW_TAG already exists, skipping."
+            exit 0
+          fi
+          {
+            if [ -n "$CHANGELOG" ]; then
+              printf '%s\n\n' "$CHANGELOG"
+            fi
+            printf '容器映像：`%s:%s`（`latest` 已同步更新）。\n\n' "$IMAGE_NAME" "$NEW_TAG"
+            printf '[提交 %s](%s/%s/commit/%s) · [發布驗證](%s/%s/actions/runs/%s)\n' \
+              "${GITHUB_SHA::7}" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_SHA" \
+              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+          } > release-notes.md
+          gh release create "$NEW_TAG" \
+            --verify-tag \
+            --title "$NEW_TAG" \
+            --notes-file release-notes.md
+          rm -f release-notes.md
